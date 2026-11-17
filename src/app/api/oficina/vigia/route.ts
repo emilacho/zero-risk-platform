@@ -7,7 +7,7 @@
  */
 import { NextResponse } from 'next/server'
 import { checkLlaveDeLaSala, esObjeto, puertosReales } from '@/lib/oficina/ruta'
-import { revisarPasosMuertos, vencerBandeja, vencerMesasPorPlazo } from '@/lib/oficina/vigia'
+import { revisarEsperasDeLaCadena, revisarPasosMuertos, vencerBandeja, vencerMesasPorPlazo } from '@/lib/oficina/vigia'
 import { reintentoDeLaCadena } from '@/lib/oficina/reintento-adaptador'
 import { reintentarLosPendientes } from '@/lib/notas-del-dueno/ruta'
 import { cerrarDecisionesReemplazadas } from '@/lib/oficina/cerrar-decisiones-reemplazadas'
@@ -34,6 +34,8 @@ export async function POST(request: Request) {
     const v = await vencerBandeja(db, ahora)
     const m = await revisarPasosMuertos(P, db, ahora)
     const plazo = await vencerMesasPorPlazo(P, db, ahora)
+    // eslabones 1 y 3 de #1150 · las piezas que esperan a la cadena (nunca lanza ni frena al vigía)
+    const esperas = await revisarEsperasDeLaCadena(P, db)
     // el segundo cerebro: cada vuelta del reloj también sube al cerebro las notas del dueño que quedaron pendientes (solo con la bandera encendida; nunca frena al vigía)
     const notas = process.env.NOTAS_DEL_DUENO === '1' ? await reintentarLosPendientes(request) : undefined
     // ③ el reintento de piezas va DESPUÉS de lo demás y nunca lanza: si falla, el vencimiento de la bandeja y los pasos muertos ya quedaron hechos
@@ -41,7 +43,7 @@ export async function POST(request: Request) {
     const purga = await purgarTextosViejos(db, ahora)
     // solo lo vigente pide firma: nunca lanza ni frena al vigía. Se apaga con DECISIONES_REEMPLAZADAS=apagado, sin publicar nada
     const reemplazadas = process.env.DECISIONES_REEMPLAZADAS === 'apagado' ? { cerradas: [], error: null } : await cerrarDecisionesReemplazadas(db, ahora)
-    return NextResponse.json({ accion: 'vigilado', decisiones_reemplazadas: reemplazadas.cerradas.length, ...(reemplazadas.error ? { decisiones_reemplazadas_error: reemplazadas.error } : {}), ...(purga.error ? { purga_de_textos_error: purga.error } : {}), vencidas: v.vencidas, mesas_vencidas_por_plazo: plazo.vencidas, reanudar: m.reanudar, fallidos: m.fallidos, cierres: m.cierres, ...(m.sin_dato ? { pasos_sin_dato: m.sin_dato } : {}), ...(notas ? { notas_del_dueno: notas } : {}), reintento }, { status: 200 })
+    return NextResponse.json({ accion: 'vigilado', esperas_de_la_cadena: esperas.revisados, ...(esperas.error ? { esperas_de_la_cadena_error: esperas.error } : {}), decisiones_reemplazadas: reemplazadas.cerradas.length, ...(reemplazadas.error ? { decisiones_reemplazadas_error: reemplazadas.error } : {}), ...(purga.error ? { purga_de_textos_error: purga.error } : {}), vencidas: v.vencidas, mesas_vencidas_por_plazo: plazo.vencidas, reanudar: m.reanudar, fallidos: m.fallidos, cierres: m.cierres, ...(m.sin_dato ? { pasos_sin_dato: m.sin_dato } : {}), ...(notas ? { notas_del_dueno: notas } : {}), reintento }, { status: 200 })
   } catch (e) {
     return NextResponse.json({ error: 'oficina_error', detalle: e instanceof Error ? e.message : String(e) }, { status: 500 })
   }

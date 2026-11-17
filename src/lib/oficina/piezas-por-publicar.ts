@@ -27,12 +27,16 @@ export const FAMILIAS_QUE_NO_SON_PIEZAS: ReadonlySet<string> = new Set(Object.va
 export const MARGEN_DE_PUBLICACION_MS = 48 * 60 * 60 * 1000
 /** un encargo que terminó así y NUNCA dejó fila en la bandeja no produjo nada que publicar */
 const NUNCA_PRODUJO = new Set(['fallido', 'cerrado_por_tope'])
+/** eslabones 1 y 3 de #1150 · el encargo `cerrado` que la cadena dejó `reemplazada` o `frenada` no publica NUNCA (sin bandeja, a propósito); el `esperando` SÍ puede publicarse: frena */
+const LA_CADENA_NO_LA_SUELTA = new Set(['reemplazada', 'frenada'])
+/** el veredicto de la espera, leído sin traer todo el estado del motor */
+const COLUMNA_VEREDICTO = 'veredicto_de_la_cadena:estado_del_motor->artefactos->espera_de_la_cadena->datos->>veredicto'
 
 export type MotivoQueFrena = 'espera_al_dueno' | 'aprobada_fecha_futura' | 'aprobada_sin_fecha' | 'fecha_ilegible' | 'sin_bandeja' | 'bandeja_no_encontrada' | 'estado_desconocido'
 export type MotivoQueNoFrena = 'descartada' | 'archivada' | 'nunca_produjo' | 'se_asume_publicada'
 export type Veredicto = { frena: true; motivo: MotivoQueFrena } | { frena: false; motivo: MotivoQueNoFrena; publicada_en?: string }
 
-export interface EncargoLeido { id: string; parte_id: string | null; brief_id: string | null; familia: string | null; estado: string; hitl_queue_id: string | null; sala_ref: unknown }
+export interface EncargoLeido { id: string; parte_id: string | null; brief_id: string | null; familia: string | null; estado: string; hitl_queue_id: string | null; sala_ref: unknown; veredicto_de_la_cadena?: string | null }
 export interface BandejaLeida { id: string; status: string; archivada_en: string | null }
 
 /** la fecha de la FILA DEL CALENDARIO que el encargo guardó (`sala_ref.fila.fecha`, AAAA-MM-DD) · null si no hay fila · 'ilegible' si no es una fecha */
@@ -45,8 +49,8 @@ export function fechaDeLaFila(salaRef: unknown): string | null | 'ilegible' {
 }
 
 /** LA regla (una sola función) · encargo (con su fila del calendario) + su fila de bandeja (undefined = no se encontró) */
-export function clasificarPieza(e: Pick<EncargoLeido, 'estado' | 'hitl_queue_id' | 'sala_ref'>, b: BandejaLeida | undefined, ahora: Date): Veredicto {
-  if (!e.hitl_queue_id) return NUNCA_PRODUJO.has(e.estado) ? { frena: false, motivo: 'nunca_produjo' } : { frena: true, motivo: 'sin_bandeja' }
+export function clasificarPieza(e: Pick<EncargoLeido, 'estado' | 'hitl_queue_id' | 'sala_ref' | 'veredicto_de_la_cadena'>, b: BandejaLeida | undefined, ahora: Date): Veredicto {
+  if (!e.hitl_queue_id) return NUNCA_PRODUJO.has(e.estado) || LA_CADENA_NO_LA_SUELTA.has(String(e.veredicto_de_la_cadena ?? '')) ? { frena: false, motivo: 'nunca_produjo' } : { frena: true, motivo: 'sin_bandeja' }
   if (!b) return { frena: true, motivo: 'bandeja_no_encontrada' }
   if (b.archivada_en) return { frena: false, motivo: 'archivada' }
   if (b.status === 'rejected' || b.status === 'expired') return { frena: false, motivo: 'descartada' }
@@ -72,7 +76,7 @@ function ok<T>(r: { data: T; error: { message: string } | null }, que: string): 
  * Con `campana_id`, solo las de esa campaña (por su parte) y las que no se pueden ubicar.
  */
 export async function piezasPorPublicar(db: Db, p: { client_id: string; campana_id: string | null }, ahora: Date): Promise<ResultadoDeLaGuarda> {
-  const encargos = ((ok(await db.from('oficina_encargos').select('id, parte_id, brief_id, familia, estado, hitl_queue_id, sala_ref').eq('client_id', p.client_id).eq('dry_run', false).eq('prueba', false).is('archivada_en', null), 'leer los encargos') as EncargoLeido[] | null) ?? [])
+  const encargos = ((ok(await db.from('oficina_encargos').select(`id, parte_id, brief_id, familia, estado, hitl_queue_id, sala_ref, ${COLUMNA_VEREDICTO}`).eq('client_id', p.client_id).eq('dry_run', false).eq('prueba', false).is('archivada_en', null), 'leer los encargos') as EncargoLeido[] | null) ?? [])
     .filter((e) => !FAMILIAS_QUE_NO_SON_PIEZAS.has(String(e.familia)))
   if (!encargos.length) return { frenan: [], se_asumen_publicadas: [] }
 

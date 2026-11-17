@@ -158,7 +158,12 @@ export interface PuertoDeLaCadena {
   entregarFallidos?(p: { campana_id: string; version: number; encargo_id: string; texto: string | null; costo_usd: number; motivo: string | null }): Promise<EntregaALaCadena>
   /** 17-nov · la mesa de la gran idea responde, como creadora, a una corrección de la jefatura sobre una idea del banco; la cadena la VERIFICA por código antes de escribir. Opcional */
   entregarBanco?(p: { campana_id: string; version: number; encargo_id: string; texto: string | null; costo_usd: number; motivo: string | null }): Promise<EntregaALaCadena>
+  /** 17-nov · eslabón 1 de #1150 · el receptor de correcciones (en proceso, sin `autorizarLlamada`): la misma respuesta que la ruta (`201` · `200 ya_estaba` · `200 va_a: 'pieza'` · `400` · `500`); nunca lanza */
+  devolverCorreccion?(cuerpo: Record<string, unknown>): Promise<RespuestaDeLaCadena>
+  /** 17-nov · eslabón 3 de #1150 · las correcciones de un encargo, cada una con `para_la_pieza`; nunca lanza */
+  correccionesDelEncargo?(encargoId: string): Promise<RespuestaDeLaCadena>
 }
+export interface RespuestaDeLaCadena { status: number; cuerpo: Record<string, unknown> }
 
 /** lo que el brazo de video contesta al enviar: en dry_run el puerto NO sale a la red y devuelve `simulado` */
 export type EnvioDeVideo =
@@ -226,7 +231,8 @@ export interface Puertos {
   fuentes(clientId: string): Promise<FuentesCompletas | { error: string }>
   /** 17-nov · Sprint 3 · T1b · el registro de permisos de persona real del cliente (`oficina_permisos_persona_real`) · gratis. Sin el método o con error: nadie tiene permiso (lo seguro) */
   permisosDePersonaReal?(clientId: string): Promise<import('./video/permisos').PermisoDePersonaReal[] | { error: string }>
-  parte(parteId: string, clientId: string): Promise<{ texto: string } | null>
+  /** `campana_id` = la campaña de la cadena a la que llega el parte (`provenance_tag.campana_id`), si la tiene (eslabón 1 de #1150) */
+  parte(parteId: string, clientId: string): Promise<{ texto: string; campana_id?: string | null } | null>
   /** el plan de trabajo del que sale la parte (su texto), o null si no se puede leer; solo lectura */
   plan(planId: string, clientId: string): Promise<string | null>
   /** genera UNA imagen (1024×1024, calidad explícita); con `foto` (una foto PROPIA del cliente, sprint 1 · mejora 3) la edita sobre ella para conservar el producto real; en dry_run NO llama al proveedor */
