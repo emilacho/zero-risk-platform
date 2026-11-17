@@ -38,6 +38,12 @@ describe('la regla · una foto propia con personas solo viaja con su permiso vig
     expect(motivoDelPermiso(permiso({ vence_en: '2026-11-17' }), 'video', HOY)).toBeNull()
     expect(motivoDelPermiso(permiso({ vence_en: null }), 'video', HOY)).toBeNull()
   })
+  it('🔴 el día del vencimiento es el del CLIENTE (nota de CC7): a las 22:00 en Guayaquil del 17 todavía vale, aunque en UTC ya sea 18', () => {
+    const noche = new Date('2026-11-18T03:00:00Z')
+    expect(fotosConPermiso([foto('con-ana', true)], [permiso({ vence_en: '2026-11-17' })], 'video', noche, 'America/Guayaquil').retiradas).toEqual([])
+    expect(fotosConPermiso([foto('con-ana', true)], [permiso({ vence_en: '2026-11-17' })], 'video', noche).retiradas[0].motivo).toBe('permiso_vencido')
+    expect(fotosConPermiso([foto('con-ana', true)], [permiso({ vence_en: '2026-11-17' })], 'video', noche, 'zona/inventada').retiradas[0].motivo).toBe('permiso_vencido')
+  })
   it('🔴 registro que no se pudo leer (null): ninguna foto con personas viaja; las demás sí', () => {
     const r = fotosConPermiso(FOTOS, null, 'video', HOY)
     expect(r.fotos.map((f) => f.id)).toEqual(['plato', 'sin-etiqueta'])

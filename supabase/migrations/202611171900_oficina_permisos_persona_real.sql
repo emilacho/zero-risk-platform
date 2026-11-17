@@ -7,7 +7,8 @@ begin;
 
 create table if not exists public.oficina_permisos_persona_real (
   id uuid primary key default gen_random_uuid(),
-  client_id uuid not null references public.clients(id) on delete cascade,
+  -- restrict: borrar un cliente NO borra sus constancias de consentimiento (primero se exportan y se decide)
+  client_id uuid not null references public.clients(id) on delete restrict,
   persona text not null check (char_length(btrim(persona)) between 1 and 200),
   fotos text[] not null default '{}' check (cardinality(fotos) <= 200),
   alcance text[] not null check (cardinality(alcance) >= 1 and alcance <@ array['imagen', 'video', 'voz']::text[]),

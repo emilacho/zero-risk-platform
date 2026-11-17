@@ -6,6 +6,7 @@
  *  · Sin permiso, la pieza NO la usa y lo DECLARA (artefacto del encargo + hoja de publicar). No bloquea la pieza ni pide revisión humana nueva.
  *  · Si el registro no se pudo leer, se hace lo seguro: ninguna foto con personas viaja, y se declara por qué.
  *  · Una foto sin la etiqueta (`con_personas` vacío) o sin personas no pide permiso: lo decide la etiqueta del curador.
+ *  · El vencimiento se cuenta en el día del CLIENTE (su zona), inclusive. El registro se lee al ABRIR el encargo: una revocación vale para los encargos que abran después.
  * Puro: sin base, sin red, sin modelo. Agnóstico: no sabe de rubros ni de clientes.
  */
 import type { FotoEtiquetada } from '../fotos'
@@ -38,13 +39,17 @@ export interface FotoRetirada {
   persona?: string
 }
 
-const diaDe = (d: Date): string => d.toISOString().slice(0, 10)
+/** el día de hoy EN LA ZONA DEL CLIENTE (AAAA-MM-DD) · sin zona o con una zona inválida, el de UTC */
+export function diaDe(d: Date, zona?: string | null): string {
+  if (zona) { try { return new Intl.DateTimeFormat('en-CA', { timeZone: zona, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d) } catch { /* zona inválida: UTC */ } }
+  return d.toISOString().slice(0, 10)
+}
 
 /** por qué un permiso NO sirve para `alcance` hoy (null = sirve) */
-export function motivoDelPermiso(p: PermisoDePersonaReal, alcance: AlcanceDePermiso, hoy: Date): Exclude<MotivoDeRetiro, 'sin_permiso' | 'registro_no_leido'> | null {
+export function motivoDelPermiso(p: PermisoDePersonaReal, alcance: AlcanceDePermiso, hoy: Date, zona?: string | null): Exclude<MotivoDeRetiro, 'sin_permiso' | 'registro_no_leido'> | null {
   if (p.revocado_en) return 'permiso_revocado'
   if (!String(p.evidencia ?? '').trim()) return 'sin_evidencia'
-  if (p.vence_en && String(p.vence_en).slice(0, 10) < diaDe(hoy)) return 'permiso_vencido'
+  if (p.vence_en && String(p.vence_en).slice(0, 10) < diaDe(hoy, zona)) return 'permiso_vencido'
   if (!Array.isArray(p.alcance) || !p.alcance.includes(alcance)) return 'sin_alcance'
   return null
 }
@@ -56,7 +61,7 @@ const CERCANIA: MotivoDeRetiro[] = ['sin_alcance', 'permiso_vencido', 'sin_evide
  * las fotos que pueden viajar a la pieza · `permisos` null = el registro no se pudo leer (lo seguro: ninguna foto con personas)
  * Devuelve las que quedan (en su orden) y las retiradas con su motivo.
  */
-export function fotosConPermiso(fotos: FotoEtiquetada[], permisos: PermisoDePersonaReal[] | null, alcance: AlcanceDePermiso, hoy: Date): { fotos: FotoEtiquetada[]; retiradas: FotoRetirada[] } {
+export function fotosConPermiso(fotos: FotoEtiquetada[], permisos: PermisoDePersonaReal[] | null, alcance: AlcanceDePermiso, hoy: Date, /** la zona del cliente: el día del vencimiento es el SUYO */ zona?: string | null): { fotos: FotoEtiquetada[]; retiradas: FotoRetirada[] } {
   const quedan: FotoEtiquetada[] = []
   const retiradas: FotoRetirada[] = []
   for (const f of fotos) {
@@ -64,8 +69,8 @@ export function fotosConPermiso(fotos: FotoEtiquetada[], permisos: PermisoDePers
     if (permisos === null) { retiradas.push({ foto_id: f.id, motivo: 'registro_no_leido' }); continue }
     const suyos = permisos.filter((p) => Array.isArray(p.fotos) && p.fotos.includes(f.id))
     if (!suyos.length) { retiradas.push({ foto_id: f.id, motivo: 'sin_permiso' }); continue }
-    if (suyos.some((p) => motivoDelPermiso(p, alcance, hoy) === null)) { quedan.push(f); continue }
-    const motivos = suyos.map((p) => ({ p, m: motivoDelPermiso(p, alcance, hoy)! })).sort((a, b) => CERCANIA.indexOf(a.m) - CERCANIA.indexOf(b.m))
+    if (suyos.some((p) => motivoDelPermiso(p, alcance, hoy, zona) === null)) { quedan.push(f); continue }
+    const motivos = suyos.map((p) => ({ p, m: motivoDelPermiso(p, alcance, hoy, zona)! })).sort((a, b) => CERCANIA.indexOf(a.m) - CERCANIA.indexOf(b.m))
     retiradas.push({ foto_id: f.id, motivo: motivos[0].m, persona: motivos[0].p.persona })
   }
   return { fotos: quedan, retiradas }

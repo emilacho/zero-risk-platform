@@ -108,7 +108,7 @@ async function abrir(P: Puertos, enc: Encargo, pl: Plantilla): Promise<SalidaCod
   // 17-nov · Sprint 3 · T1b · decisión Lenovo (B): una foto propia con personas reales solo viaja con su permiso registrado. Se filtra AQUÍ, una vez: la mesa, la cotización,
   //   el pedido, las fichas de personaje y las imágenes clave leen estas fotos. Lo retirado se declara; la pieza sigue (sin revisión humana nueva)
   const permisos = await permisosDelCliente(P, enc.client_id)
-  const pf = fotosConPermiso(fu.fotos ?? [], permisos, 'video', P.ahora())
+  const pf = fotosConPermiso(fu.fotos ?? [], permisos, 'video', P.ahora(), fu.zona)
   fu.fotos = pf.fotos
   const aviso_personas = avisoDePersonasReales(pf.retiradas)
   const parte = await P.parte(enc.parte_id, enc.client_id)

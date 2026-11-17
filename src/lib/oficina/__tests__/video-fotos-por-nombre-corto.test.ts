@@ -158,8 +158,8 @@ async function jugarVideo(C: Cliente, guiones: string[], plantilla: Plantilla = 
   const M = crearMemoria({ parte: parteDe(C), plantilla, fuentes: { fotos: C.fotos } })
   const MS = crearMesaEnMemoria(DIRECTORIO_VIDEO)
   M.P.mesa = MS
-  // 17-nov · T1b · estas pruebas miden los nombres cortos, no los permisos: las fotos con personas del cliente tienen su permiso de video vigente
-  M.P.permisosDePersonaReal = async () => [{ id: 'perm-1', persona: 'equipo del local', fotos: C.fotos.filter((f) => f.con_personas === true).map((f) => f.id), alcance: ['video'], vence_en: null, evidencia: 'contrato de prueba' }]
+  // 17-nov · T1b · estas pruebas miden los nombres cortos, no los permisos: todas las fotos del cliente tienen su permiso de video vigente
+  M.P.permisosDePersonaReal = async () => [{ id: 'perm-1', persona: 'equipo del local', fotos: C.fotos.map((f) => f.id), alcance: ['video'], vence_en: null, evidencia: 'contrato de prueba' }]
   const enviados: Array<Record<string, unknown>> = []
   M.P.video = brazoSimulado(enviados)
   const a = await abrirEncargo(M.P, { cuerpo: { parte_id: PARTE, brief_id: C.fila, dry_run: true, familia: 'video_mesa' }, client_id: C.client, target_step_id: TARGET_STEP_PRODUCIR })
