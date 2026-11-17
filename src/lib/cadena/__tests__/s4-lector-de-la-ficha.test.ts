@@ -203,6 +203,20 @@ describe('el paso del lector · bordes', () => {
   })
 })
 
+describe('el armador de la cadena (construir.mjs)', () => {
+  type Flujo = { nodes: Array<{ name: string }>; connections: Record<string, { main: Array<Array<{ node: string }>> }> }
+  const armar = async (ids: Record<string, string>) => ((await import(/* @vite-ignore */ pathToFileURL(join(RAIZ, 'scripts', 'worker-staging', 'cadena', 'construir.mjs')).href)) as { construirFlujos: (o: { ids: Record<string, string> }) => Record<string, Flujo> }).construirFlujos({ ids })
+  const BASE = { estrategia: 'E', calendario: 'C', fechas: 'F', puerta: 'P' }
+  it('🔴 sin el id del lector, la puerta sale como antes (sin 2b y «2 · ¿Sigue?» → fechas); con su id, el lector va en medio', async () => {
+    const sin = (await armar(BASE))['cadena-puerta'], con = (await armar({ ...BASE, fichas: 'FIC' }))['cadena-puerta']
+    expect(sin.nodes.filter((n) => n.name.startsWith('2b'))).toEqual([])
+    expect(sin.connections['2 · ¿Sigue?'].main.map((r) => r.map((x) => x.node))).toEqual([['3 · Fechas · expandir'], ['Cable · armar']])
+    expect(con.connections['2 · ¿Sigue?'].main.map((r) => r.map((x) => x.node))).toEqual([['2b · Entrada de las fichas'], ['Cable · armar']])
+    expect(con.connections['2b · Seguir'].main[0].map((x) => x.node)).toEqual(['3 · Fechas · expandir'])
+    expect(con.nodes.length - sin.nodes.length).toBe(3)
+  })
+})
+
 describe('el parche de la puerta VIVA (respaldo 17-nov)', () => {
   type Flujo = { nodes: Array<{ name: string; type: string; parameters: Record<string, any>; onError?: string }>; connections: Record<string, { main: Array<Array<{ node: string }>> }> }
   const cargar = async () => (await import(/* @vite-ignore */ pathToFileURL(join(RAIZ, 'scripts', 'worker-staging', 'cadena', 'construir-s4-fichas-puerta.mjs')).href)) as { construirFlujo: (f: Flujo, id: string) => Flujo; NODOS: Record<string, string> }

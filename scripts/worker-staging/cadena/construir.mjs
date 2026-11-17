@@ -214,9 +214,13 @@ export function flujoDeLaPuerta(ids = IDS_DE_RELLENO) {
   f.add(codigo('2 · ¿Estrategia?', 'puerta-estrategia-resultado.js'), 13, -2)
   f.add(si('2 · ¿Sigue?', '$json.sigue === true'), 14, -2)
   // 17-nov · Sprint 4 · A entrega 2 · el lector de las fichas: después de la estrategia, antes de las fechas · NO es reja (un fallo sigue de largo)
-  f.add(codigo('2b · Entrada de las fichas', 'puerta-fichas-entrada.js'), 14, -5)
-  f.add({ ...subflujo('2b · Fichas (sub-flujo)', ids.fichas ?? IDS_DE_RELLENO.fichas), onError: 'continueRegularOutput' }, 15, -5)
-  f.add(codigo('2b · Seguir', 'puerta-fichas-seguir.js'), 16, -5)
+  // Solo entra si se da su id (`ids.fichas`): quien arma la puerta sin él la obtiene como antes, byte a byte
+  const conLector = typeof ids.fichas === 'string' && ids.fichas.trim() !== ''
+  if (conLector) {
+    f.add(codigo('2b · Entrada de las fichas', 'puerta-fichas-entrada.js'), 14, -5)
+    f.add({ ...subflujo('2b · Fichas (sub-flujo)', ids.fichas), onError: 'continueRegularOutput' }, 15, -5)
+    f.add(codigo('2b · Seguir', 'puerta-fichas-seguir.js'), 16, -5)
+  }
   f.add(codigo('3 · Fechas · expandir', 'puerta-fechas-expandir.js'), 15, -3)
   f.add(si('3 · Fechas · ¿hay?', '$json.hay_fechas === true'), 16, -3)
   f.add(codigo('3 · Fechas · una por tipo', 'puerta-fechas-explotar.js'), 17, -4)
@@ -253,8 +257,11 @@ export function flujoDeLaPuerta(ids = IDS_DE_RELLENO) {
   f.unir('1 · Abrir campaña', '1 · ¿Abierta?'); f.unir('1 · ¿Abierta?', '1 · ¿Sigue?')
   f.unir('1 · ¿Sigue?', '2 · Entrada de la estrategia', 0); f.unir('1 · ¿Sigue?', 'Cable · armar', 1)
   f.unir('2 · Entrada de la estrategia', '2 · Estrategia (sub-flujo)'); f.unir('2 · Estrategia (sub-flujo)', '2 · ¿Estrategia?'); f.unir('2 · ¿Estrategia?', '2 · ¿Sigue?')
-  f.unir('2 · ¿Sigue?', '2b · Entrada de las fichas', 0); f.unir('2 · ¿Sigue?', 'Cable · armar', 1)
-  f.unir('2b · Entrada de las fichas', '2b · Fichas (sub-flujo)'); f.unir('2b · Fichas (sub-flujo)', '2b · Seguir'); f.unir('2b · Seguir', '3 · Fechas · expandir')
+  if (conLector) {
+    f.unir('2 · ¿Sigue?', '2b · Entrada de las fichas', 0)
+    f.unir('2b · Entrada de las fichas', '2b · Fichas (sub-flujo)'); f.unir('2b · Fichas (sub-flujo)', '2b · Seguir'); f.unir('2b · Seguir', '3 · Fechas · expandir')
+  } else f.unir('2 · ¿Sigue?', '3 · Fechas · expandir', 0)
+  f.unir('2 · ¿Sigue?', 'Cable · armar', 1)
   f.unir('3 · Fechas · expandir', '3 · Fechas · ¿hay?')
   f.unir('3 · Fechas · ¿hay?', '3 · Fechas · una por tipo', 0); f.unir('3 · Fechas · ¿hay?', '4 · Entrada del calendario', 1)
   f.unir('3 · Fechas · una por tipo', '3 · Fechas (sub-flujo)'); f.unir('3 · Fechas (sub-flujo)', '3 · Juntar'); f.unir('3 · Juntar', '4 · Entrada del calendario')
