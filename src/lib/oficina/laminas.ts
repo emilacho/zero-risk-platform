@@ -22,7 +22,7 @@ export interface ImagenDeRef { origen: 'real' | 'generada'; url: string; foto_id
 /** comparable: sin tildes, mayúsculas ni puntuación, espacios colapsados (un recorte literal sobrevive a eso, una paráfrasis no) */
 export const comparable = (s: string): string => normalizar(s).replace(/[^a-z0-9ñ$%@#]+/g, ' ').trim()
 
-const ficha = (id: string, donde: string, gravedad: Ficha['gravedad'], que: string, contra_que: string, propuesta: string): Ficha => ({ id, origen: 'chequeo', donde, gravedad, estado: 'abierta', que, contra_que, propuesta })
+const ficha = (id: string, donde: string, gravedad: Ficha['gravedad'], que: string, contra_que: string, propuesta: string): Ficha => ({ id, origen: 'chequeo', donde, gravedad, estado: 'abierta', que, contra_que, propuesta, ...(gravedad === 'bloquea' ? { dura: true as const } : {}) }) // regla dura 7 (láminas y kit)
 const CAMPOS = ['eyebrow', 'headline', 'body', 'cta'] as const
 
 // ── el texto de las láminas es del autor ─────────────────────────────────────────────

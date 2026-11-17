@@ -97,7 +97,9 @@ describe('LA MESA · carrusel · punta a punta con equipo simulado', () => {
     M.P.revisor = async (p) => { M.llamadas.revisor++; M.llamadas.revisorPedidos.push(p.texto); return { ok: true, texto: 'TEXTO_VISIBLE: "CERTIFICADO ISO 9001"\nMARCAS: ninguna\nPERSONAS: 0\nTEXTO_AJENO: sí\nDATO_SIN_VERIFICAR: sí', costo_usd: 0.02, modelo: 'obs' } }
     const { ultima } = await jugar(M, id, a)
     expect(M.encargos.get(id)!.estado_del_motor.fichas.some((f) => f.id === 'observador-hook' && f.gravedad === 'bloquea')).toBe(true)
-    expect(ultima.cuerpo.con_desacuerdo).toBe(true)
+    // revisión 2 · punto 8 · la imagen que muestra algo no pedido vuelve a su creador; si queda, es una observación DECLARADA (no «con desacuerdo»)
+    expect(ultima.cuerpo.con_desacuerdo).toBe(false)
+    expect(ultima.cuerpo.observaciones).toEqual(expect.arrayContaining([expect.stringMatching(/«hook» muestra algo que la pieza no pidió/)]))
     expect(M.llamadas.revisorPedidos[0]).toMatch(/NO la evalúes/)
   })
 

@@ -23,7 +23,8 @@ const CASOS = {
     { caso: 'sin-fichas-gpt-falla-401', sim: { fichas: 'ninguna', gpt: 'falla_401' }, ...R('sin_segunda_mirada', { sin_segunda_mirada: true }), sin: ['correccion', 'decision'], saltos: [1, 1] },
     { caso: 'sugerencia-gpt-ok', sim: { fichas: 'sugerencia', gpt: 'ok', toma: 'todo' }, ...R('limpia'), con: ['decision'], sin: ['correccion'], saltos: [2, 3] },
     { caso: 'bloquea-toma-todo-gpt-ok', sim: { fichas: 'bloquea', gpt: 'ok', toma: 'todo' }, ...R('limpia'), con: ['correccion', 'decision'], saltos: [3, 5] },
-    { caso: 'bloquea-toma-nada-gpt-ok', sim: { fichas: 'bloquea', gpt: 'ok', toma: 'nada' }, ...R('con_desacuerdo', { con_desacuerdo: true }), con: ['correccion'], saltos: [2, 5] },
+    { caso: 'bloquea-toma-nada-gpt-ok', sim: { fichas: 'bloquea', gpt: 'ok', toma: 'nada' }, ...R('limpia'), // revisión 2 = A · el criterio no tomado es observación declarada
+      con: ['correccion'], saltos: [2, 5] },
     { caso: 'bloquea-toma-todo-gpt-vacio', sim: { fichas: 'bloquea', gpt: 'vacio', toma: 'todo' }, ...R('limpia'), con: ['correccion'], sin: ['decision'], saltos: [2, 3] },
     { caso: 'bloquea-gpt-falla-red', sim: { fichas: 'bloquea', gpt: 'falla_red', toma: 'todo' }, marcas: { sin_segunda_mirada: true }, con: ['correccion'], sin: ['decision'], saltos: [2, 3] },
     { caso: 'bloquea-formato-roto-una-vez', sim: { fichas: 'bloquea', gpt: 'vacio', toma: 'todo', productor: 'formato_roto' }, ...R('limpia'), con: ['correccion'], saltos: [3, 4] },
@@ -34,8 +35,8 @@ const CASOS = {
   brief: [
     { caso: 'sin-fichas', sim: { fichas: 'ninguna', gpt: 'vacio' }, ...R('limpia'), sin: ['correccion', 'decision'], saltos: [1, 1] },
     { caso: 'sin-fichas-gpt-ok', sim: { fichas: 'ninguna', gpt: 'ok' }, sin: ['correccion', 'decision'], saltos: [1, 1] },
-    // brief «solo marca» (F17): su ficha que bloquea no tiene camino de corrección ⇒ `con_desacuerdo` (así lo dice `cierre.ts`) y NO hay correccion ni decision
-    { caso: 'bloquea-solo-marca', sim: { fichas: 'bloquea', gpt: 'ok' }, ...R('con_desacuerdo', { con_desacuerdo: true }), sin: ['correccion', 'decision'], saltos: [1, 1] },
+    // brief «solo marca» (F17): su ficha que bloquea no tiene camino de corrección ⇒ revisión 2 = A · observación declarada (antes `con_desacuerdo`) y NO hay correccion ni decision
+    { caso: 'bloquea-solo-marca', sim: { fichas: 'bloquea', gpt: 'ok' }, ...R('limpia'), sin: ['correccion', 'decision'], saltos: [1, 1] },
     { caso: 'gpt-falla-red', sim: { fichas: 'ninguna', gpt: 'falla_red' }, ...R('sin_segunda_mirada', { sin_segunda_mirada: true }), sin: ['correccion', 'decision'], saltos: [1, 1] },
   ],
   calendario: [

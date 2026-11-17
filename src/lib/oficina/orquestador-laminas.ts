@@ -105,7 +105,7 @@ export function armarPedidoL(pl: Plantilla, paso: Paso, e: Estado, extra?: { fic
  */
 export function sinLecturaDeMirarL(paso: Paso, e: Estado, errores: string[]): ResultadoDePaso {
   const motivo = errores.slice(0, 2).join(' · ')
-  if (paso.clave === 'reimagen_mirar') return { costo_usd: 0, fichas: [fichaNueva(`reimagen-sin-lectura-${e.pasos_ejecutados}`, 'chequeo', 'imagen', 'sugerencia', `no se pudo leer lo que el curador dijo de la imagen nueva (${motivo}): se queda la anterior`, 'formato de la observación', 'una persona decide si se rehace')] }
+  if (paso.clave === 'reimagen_mirar') return { costo_usd: 0, fichas: [fichaNueva(`reimagen-sin-lectura-${e.pasos_ejecutados}`, 'chequeo', 'imagen', 'sugerencia', `no se pudo leer lo que el curador dijo de la imagen nueva (${motivo}): se queda la anterior`, 'formato de la observación', 'queda declarado: la re-imagen fue la vuelta de su creador')] }
   const mostradas = imagenesAMirarL(e)
   const aceptadas: Record<string, number[]> = { ...((datos(e, 'observacion_imagen')?.aceptadas ?? {}) as Record<string, number[]>) }
   for (const m of mostradas) aceptadas[m.ref] = [...new Set([...(aceptadas[m.ref] ?? []), m.indice])]
@@ -113,7 +113,7 @@ export function sinLecturaDeMirarL(paso: Paso, e: Estado, errores: string[]): Re
   return {
     costo_usd: 0,
     artefacto: { observaciones: [], aceptadas, preferencia: [], veredicto: { pasan: mostradas.map((m) => m.indice), porImagen: [], regenerar: false, refs_sin_imagen: refsSin }, sin_lectura: true },
-    fichas: [fichaNueva(`mirar-sin-lectura-${e.pasos_ejecutados}`, 'chequeo', 'imagen', 'bloquea', `nadie pudo confirmar que las imágenes cumplen el brief: la respuesta del curador no se pudo leer dos veces (${motivo}); las imágenes siguen en la pieza sin juzgar`, 'formato de la observación', 'una persona mira las imágenes antes de aprobar')],
+    fichas: [fichaNueva(`mirar-sin-lectura-${e.pasos_ejecutados}`, 'chequeo', 'imagen', 'bloquea', `nadie pudo confirmar que las imágenes cumplen el brief: la respuesta del curador no se pudo leer dos veces (${motivo}); las imágenes siguen en la pieza sin juzgar`, 'formato de la observación', 'su creador ya tuvo su reintento: queda declarado y la pieza sigue')],
     reemplazar_fichas: { origen: 'chequeo', donde: 'imagen' },
   }
 }
@@ -202,7 +202,7 @@ function chequearPromptsRef(e: Estado, pl: Plantilla, esRe = false): SalidaCodig
   const ninguno = gen.length > 0 && gen.every((r) => !porRef[r].prompts.length)
   if (esRe) {
     // la re-imagen no bloquea nada: lo que no cumple se queda como estaba y se dice
-    return { res: { costo_usd: 0, artefacto: { por_ref: porRef, ninguno }, fichas: ninguno ? [fichaNueva(`reimagen-prompts-ninguno-${e.pasos_ejecutados}`, 'chequeo', 'imagen', 'sugerencia', 'ningún prompt de la re-imagen cumple las reglas del brief: se quedan las imágenes anteriores', 'reglas de imagen del brief', 'una persona decide si se rehacen')] : [] } }
+    return { res: { costo_usd: 0, artefacto: { por_ref: porRef, ninguno }, fichas: ninguno ? [fichaNueva(`reimagen-prompts-ninguno-${e.pasos_ejecutados}`, 'chequeo', 'imagen', 'sugerencia', 'ningún prompt de la re-imagen cumple las reglas del brief: se quedan las imágenes anteriores', 'reglas de imagen del brief', 'queda declarado: la re-imagen fue la vuelta de su creador')] : [] } }
   }
   const repeticion = (e.vueltas['chequear_prompts'] ?? 0) >= 1
   return {
@@ -350,7 +350,7 @@ function chequeos(pl: Plantilla, e: Estado): SalidaCodigoL {
   }
   // LA MESA: el largo nunca rechaza una pieza (el dibujo se ajusta al texto con un piso legible): lo largo queda como aviso, no como bloqueo
   // (T7 de CC#3) …pero la ficha queda VISIBLE y abierta: viaja a la jefatura como marca heredada con el rótulo «texto muy largo para la lámina»
-  if (pl.limites.mesa === true) for (const f of todasFichas) if (/\d+ caracteres/.test(f.que ?? '') && f.gravedad === 'bloquea') { f.gravedad = 'sugerencia'; f.que = `texto muy largo para la lámina (el dibujo baja la letra hasta el piso legible): ${f.que ?? ''}` }
+  if (pl.limites.mesa === true) for (const f of todasFichas) if (/\d+ caracteres/.test(f.que ?? '') && f.gravedad === 'bloquea') { f.gravedad = 'sugerencia'; delete f.dura; f.que = `texto muy largo para la lámina (el dibujo baja la letra hasta el piso legible): ${f.que ?? ''}` }
   const prefijo = `chk${e.pasos_ejecutados}`
   return { res: { costo_usd: 0, artefacto: { fichas: todasFichas.length }, fichas: todasFichas.map((f, i) => ({ ...f, id: `${prefijo}-${i}` })), reemplazar_fichas: { origen: 'chequeo', donde: ['texto', 'hashtags', 'laminas', 'estructura'] } } }
 }
@@ -433,7 +433,7 @@ async function empaquetar(P: Puertos, enc: Encargo): Promise<SalidaCodigoL> {
     fichasTodas.push(...chequeosDeEntrega(grupo, fila, { pie_de_foto: '', hashtags: [] }, manG))
     if (fila) for (const c of copia) {
       const el = b.elementos.find((x) => x.ref === refDelElemento(c.ref))
-      if (el && el.destino === destino && (c.acompanamiento ?? '').length > fila.texto_max) fichasTodas.push({ id: `ent-txt-${c.ref}`, origen: 'chequeo', donde: 'texto', gravedad: fila.verificado ? 'bloquea' : 'sugerencia', estado: 'abierta', que: `el acompañamiento de «${c.ref}» tiene ${(c.acompanamiento ?? '').length} caracteres y el límite de ${destino} es ${fila.texto_max}`, contra_que: 'especificación del formato', propuesta: 'acortar' })
+      if (el && el.destino === destino && (c.acompanamiento ?? '').length > fila.texto_max) fichasTodas.push({ id: `ent-txt-${c.ref}`, origen: 'chequeo', donde: 'texto', gravedad: fila.verificado ? 'bloquea' : 'sugerencia', ...(fila.verificado ? { dura: true as const } : {}), estado: 'abierta', que: `el acompañamiento de «${c.ref}» tiene ${(c.acompanamiento ?? '').length} caracteres y el límite de ${destino} es ${fila.texto_max}`, contra_que: 'especificación del formato', propuesta: 'acortar' })
     }
   }
   hojaTexto = `# Publicar a mano · ${b.brief.id} · kit de ${N} láminas\nCada lámina lleva en su nombre el día y la hora; la hora es la del cliente${zona ? ` (${zona})` : ' (la zona del cliente no está registrada: confirmarla)'}.\n${enc.imagen_generada ? '⚠️ Alguna imagen es GENERADA, no una foto real del cliente.\n' : ''}\n## Orden de publicación\n${lineas.join('\n')}\n\n## Pasos por destino\n${[...filas.entries()].map(([clave, fila]) => `### ${clave}\n${(fila?.pasos_publicacion ?? ['(sin especificación de formato)']).map((x, i) => `${i + 1}. ${x}`).join('\n')}`).join('\n\n')}\n`
@@ -580,7 +580,7 @@ function mirar(v: Record<string, unknown>, b: BaseL, e: Estado, pl: Plantilla, e
     const nuevas: Record<string, number[]> = {}
     for (const i of ver.pasan) { const ref = refDeIndice(e, i); if (ref) nuevas[ref] = [...(nuevas[ref] ?? []), i] }
     const fallidas = refsDeLaReImagen(e).filter((r) => !nuevas[r]?.length)
-    const fichasRe = fallidas.map((r) => fichaNueva(`reimagen-no-cumplio-${r}-${e.pasos_ejecutados}`, 'chequeo', 'imagen', 'sugerencia', `la imagen nueva de «${r}» (re-imagen que pidió la opinión) no cumple el brief: se queda la anterior`, 'reglas de imagen del brief', 'una persona decide si se rehace'))
+    const fichasRe = fallidas.map((r) => fichaNueva(`reimagen-no-cumplio-${r}-${e.pasos_ejecutados}`, 'chequeo', 'imagen', 'sugerencia', `la imagen nueva de «${r}» (re-imagen que pidió la opinión) no cumple el brief: se queda la anterior`, 'reglas de imagen del brief', 'queda declarado: la re-imagen fue la vuelta de su creador'))
     if (!Object.keys(nuevas).length) return { res: { costo_usd: 0, fichas: fichasRe } }
     return { res: { costo_usd: 0, artefacto: { observaciones: filtradas, aceptadas: { ...aceptadas, ...nuevas }, preferencia: v.preferencia, veredicto: { pasan: ver.pasan, porImagen: ver.porImagen, regenerar: false, refs_sin_imagen: [] } }, fichas: fichasRe } }
   }

@@ -103,7 +103,8 @@ describe('CEGUERA · el pedido al revisor externo no trae fichas ni hilo (3 rubr
 describe('EL AVISO AGREGADO · uno por revisión que no cierra limpia, ninguno si cierra limpia', () => {
   it.each([
     ['limpia', { fichas: 'ninguna', gpt: 'vacio' }, 0],
-    ['con desacuerdo', { fichas: 'bloquea', toma: 'nada', gpt: 'vacio' }, 1],
+    // revisión 2 = A · lo de criterio no tomado se declara: 0 avisos (CC7: «solo observaciones = 0 alertas»)
+    ['criterio no tomado', { fichas: 'bloquea', toma: 'nada', gpt: 'vacio' }, 0],
     ['sin segunda mirada', { fichas: 'ninguna', gpt: 'falla_red' }, 1],
     ['las dos marcas', { fichas: 'bloquea', toma: 'nada', gpt: 'falla_red' }, 1],
     ['fallida (formato roto siempre)', { fichas: 'bloquea', gpt: 'vacio', productor: 'formato_roto_siempre' }, 1],

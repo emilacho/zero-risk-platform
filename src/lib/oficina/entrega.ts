@@ -86,7 +86,7 @@ export function manifiesto(archivos: ArchivoDeEntrega[], meta: Record<string, un
 export function chequeosDeEntrega(archivos: ArchivoDeEntrega[], fila: FilaDeFormato | null, p: { pie_de_foto: string; hashtags: string[] }, man: ReturnType<typeof manifiesto>): Ficha[] {
   const f: Ficha[] = []
   let n = 0
-  const nueva = (gravedad: Ficha['gravedad'], que: string, contra_que: string, propuesta: string, donde = 'entrega') => f.push({ id: `ent-${n++}`, origen: 'chequeo', donde, gravedad, estado: 'abierta', que, contra_que, propuesta })
+  const nueva = (gravedad: Ficha['gravedad'], que: string, contra_que: string, propuesta: string, donde = 'entrega') => f.push({ id: `ent-${n++}`, origen: 'chequeo', donde, gravedad, estado: 'abierta', que, contra_que, propuesta, ...(gravedad === 'bloquea' ? { dura: true as const } : {}) }) // regla dura 6 (formato de la red)
   if (!fila) { nueva('bloquea', 'no hay especificación técnica para este formato y red', 'tabla de formatos de entrega', 'agregar la fila del formato antes de empaquetar'); return f }
   const avisa: Ficha['gravedad'] = fila.verificado ? 'bloquea' : 'sugerencia'
   if (archivos.length < fila.n_min || archivos.length > fila.n_max) nueva('bloquea', `${archivos.length} archivo(s); el formato admite de ${fila.n_min} a ${fila.n_max}`, 'especificación del formato', 'ajustar la cantidad')

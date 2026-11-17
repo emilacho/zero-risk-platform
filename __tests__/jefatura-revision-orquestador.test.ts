@@ -141,13 +141,14 @@ describe('pieza · el orden firmado: jefe → corrige el dueño → GPT ciego �
     const id = String(c.aperturas[0].cuerpo.revision_id)
     expect(rastro.llamadasAlRevisor[0].contexto).toEqual({ revision_id: id, n: 2, client_id: 'cliente-prueba' })
   })
-  it('regla 2: la corrección de fondo NO tomada = con_desacuerdo; sin otra vuelta (un solo turno de corrección) y UN solo aviso', async () => {
+  it('regla 2 (revisión 2 = A): la corrección de criterio NO tomada = observación declarada; sin otra vuelta, sin «con desacuerdo» y SIN aviso', async () => {
     const { P, rastro } = puertosDePrueba()
     const c = await correr(P, sobre('pieza', { simulacion: { fichas: 'bloquea', toma: 'nada' } }))
-    expect(c.final.cuerpo.resultado).toBe('con_desacuerdo')
+    expect(c.final.cuerpo.resultado).toBe('limpia')
     expect(pasosDe(c).filter((p) => p === 'correccion:content-creator')).toHaveLength(1)
-    expect(sal(c).desacuerdos.length).toBe(1)
-    expect(rastro.avisos).toHaveLength(1)
+    expect(sal(c).desacuerdos).toEqual([])
+    expect(sal(c).observaciones.length).toBe(1)
+    expect(rastro.avisos).toHaveLength(0)
   })
   it('regla 3: un hallazgo de GPT NO tomado lleva su razón y NO es desacuerdo', async () => {
     const { P } = puertosDePrueba()
@@ -183,11 +184,12 @@ describe('pieza · el orden firmado: jefe → corrige el dueño → GPT ciego �
     const c = await correr(P, sobre('pieza', { simulacion: { gpt: 'falla_401' } }))
     expect(c.final.cuerpo.resultado).toBe('sin_segunda_mirada')
   })
-  it('las dos marcas pueden venir juntas: con desacuerdo Y sin segunda mirada (resultado: con_desacuerdo; un solo aviso)', async () => {
+  it('criterio no tomado Y sin segunda mirada: solo avisa la falla real (sin segunda mirada), una vez · lo de criterio se declara', async () => {
     const { P, rastro } = puertosDePrueba()
     const c = await correr(P, sobre('pieza', { simulacion: { fichas: 'bloquea', toma: 'nada', gpt: 'falla_red' } }))
-    expect(sal(c).marcas).toEqual({ con_desacuerdo: true, sin_segunda_mirada: true })
-    expect(c.final.cuerpo.resultado).toBe('con_desacuerdo')
+    expect(sal(c).marcas).toEqual({ con_desacuerdo: false, sin_segunda_mirada: true })
+    expect(c.final.cuerpo.resultado).toBe('sin_segunda_mirada')
+    expect(sal(c).observaciones.length).toBe(1)
     expect(rastro.avisos).toHaveLength(1)
   })
   it('GPT con respuesta vacía no es «sin segunda mirada» (contestó) y no hay decisión', async () => {
@@ -205,12 +207,13 @@ describe('pieza · el orden firmado: jefe → corrige el dueño → GPT ciego �
 })
 
 describe('brief = solo marca (F17)', () => {
-  it('con ficha que bloquea: sin corrección ni decisión; con_desacuerdo y UN aviso; las fichas se guardan', async () => {
+  it('con ficha que bloquea: sin corrección ni decisión; revisión 2 = A · observación declarada, SIN aviso; las fichas se guardan', async () => {
     const { P, rastro } = puertosDePrueba()
     const c = await correr(P, sobre('brief', { simulacion: { fichas: 'bloquea' } }))
     expect(pasosDe(c)).toEqual(['revision_fondo'])
-    expect(c.final.cuerpo.resultado).toBe('con_desacuerdo')
-    expect(rastro.avisos).toHaveLength(1)
+    expect(c.final.cuerpo.resultado).toBe('limpia')
+    expect(sal(c).observaciones.length).toBeGreaterThan(0)
+    expect(rastro.avisos).toHaveLength(0)
     expect(sal(c).respuestas.some((x: any) => x.origen === 'jefe' && x.estado === 'abierta')).toBe(true)
   })
   it('sin fichas: limpia y sin avisos; un parte entero es UNA revisión', async () => {
@@ -258,10 +261,11 @@ describe('plan (F16 + F20): A → B (corrección) → C (decisión), sin otra vu
     expect(pasosDe(c)).toEqual(['revision_fondo', 'correccion:campaign-brief-agent'])
     expect(sal(c).versiones.map((v: any) => v.etiqueta)).toEqual(['A', 'B'])
   })
-  it('bloquea y el redactor NO la toma: con_desacuerdo, el plan A sigue (sin versión nueva)', async () => {
+  it('bloquea y el redactor NO la toma: el plan A sigue (sin versión nueva) · revisión 2 = A · la observación viaja para la tarjeta de aprobación de Emilio', async () => {
     const { P } = puertosDePrueba()
     const c = await correr(P, sobre('plan', { simulacion: { fichas: 'bloquea', toma: 'nada', gpt: 'vacio' } }))
-    expect(c.final.cuerpo.resultado).toBe('con_desacuerdo')
+    expect(c.final.cuerpo.resultado).toBe('limpia')
+    expect(sal(c).observaciones).toEqual([expect.stringMatching(/\(no tomada: .+\)$/)])
     expect(sal(c).versiones).toHaveLength(1)
   })
   it('a la corrección le llega el PEDIDO ORIGINAL, el plan A, SOLO las fichas que bloquean y las tres líneas (sin ficha de sugerencia ni opinión de GPT)', async () => {
@@ -406,7 +410,7 @@ describe('regla 5, 6 y topes: formato roto, productor muerto, cierre por tope', 
     const { P } = puertosDePrueba()
     const c = await correr(P, sobre('pieza', { simulacion: { fichas: 'bloquea', reentrega: 'ninguna' } }))
     expect(pasosDe(c)).toEqual(['revision_fondo'])
-    expect(c.final.cuerpo.resultado).toBe('con_desacuerdo')
+    expect(c.final.cuerpo.resultado).toBe('limpia')
   })
 })
 

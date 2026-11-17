@@ -93,6 +93,11 @@ export interface Ficha {
   contra_que?: string
   propuesta?: string
   razon?: string
+  /**
+   * REGLA DURA de la lista firmada por Emilio (DECISION-EMILIO reglas duras · 17-nov): SOLO la pone el código de cada regla (chequeos 1-5 · entrega 6 · láminas 7 · D1-D3).
+   * Al cierre, solo una ficha dura abierta frena la pieza; lo demás que «bloquea» hace volver al creador y, si queda, es una observación declarada.
+   */
+  dura?: true
 }
 
 export interface Artefacto {

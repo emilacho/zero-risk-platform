@@ -6,6 +6,7 @@
  * Reglas de oficio: `dry_run` explícito (en dry_run no se llama a ningún proveedor ni se escribe salida/bandeja); la oficina APAGADA no abre encargos (409); un fallo de formato tras el
  * reintento cierra el encargo como `fallido` (visible, nunca relleno); un fallo de Slack nunca frena nada; nadie pregunta al cliente.
  */
+import { ARTEFACTO_ESPERA_DE_LA_CADENA, RESULTADO_ESPERANDO_A_LA_CADENA, RESULTADO_REEMPLAZADA, consultarLaCadena } from './espera-de-la-cadena'
 import crypto from 'node:crypto'
 import { CABECERA_SALTAR_EDITOR } from '../cadena/constantes'
 import { datos, fichaNueva, opinionExterna, reglasParaPrompts, reglasVisuales } from './ayudas'
@@ -17,10 +18,14 @@ import { encajarAProporcion } from './encaje'
 import { aUtc, chequeosDeEntrega, cuandoSePublica, manifiesto, nombreDeArchivo, textoParaCopiar, leerMedidas, type ArchivoDeEntrega } from './entrega'
 import { armarPedidoAlRevisor } from './ciego'
 import type { SalidaDeRevision } from '../jefatura/revision/contrato'
-import { aplicarSalidaDeJefatura, aplicarSinRevisar, costoDeLaJefatura, datosDeLaJefatura, metadataDeLaJefatura, prefijoDeLaBandeja, revisionIncompleta, sobreDeLaRevision } from './paso-jefatura'
+import { fichasAlCierre, marcaDeObservaciones } from './reglas-duras'
+import { aplicarSalidaDeJefatura, aplicarSinRevisar, costoDeLaJefatura, datosDeLaJefatura, llavesYaDevueltas, metadataDeLaJefatura, prefijoDeLaBandeja, reglasDurasNoTomadas, revisionIncompleta, sobreDeLaRevision, type OpcionesDeAplicacion } from './paso-jefatura'
+import { contextoDeLaFicha, fichaDeLaHoja } from './sentido-contra-la-ficha'
+import { chequeosExactos, fichaConCierreVivo } from './exactos-de-la-ficha'
+import { fechaDeLaFila } from './piezas-por-publicar'
 import { previueloDeLaminas } from './identidad-visual'
 import { armarPedidoL, contextoDeRevisorL, decisionDeReImagenL, ejecutarCodigoL, familiaDeLaminas, procesarValorL, resumenDeCierreL, saltoL, sinLecturaDeMirarL } from './orquestador-laminas'
-import { armarPedidoV, cabeLaVuelta, contextoDeRevisorV, costoDeVolver, ejecutarCodigoV, quedaVueltaDelPaso, enviarVideo, familiaDeVideo, procesarValorV, resumenDeCierreV, sinLecturaDeMirarV, sinLecturaDeRevisarImagenesClaveV } from './orquestador-video'
+import { armarPedidoV, cabeLaVuelta, contextoDeRevisorV, costoDeVolver, ejecutarCodigoV, quedaVueltaDelPaso, enviarVideo, familiaDeVideo, procesarValorV, resumenDeCierreV, sinLecturaDeMirarV, sinLecturaDeRevisarImagenesClaveV, TOPE_POR_VIDEO } from './orquestador-video'
 import { FUNCION_BORRADOR_VIDEO } from './video/borradores'
 import { alLlegarAlPaso, decidir, FUNCION_APROBAR_PROPUESTAS, metadataDeAvisosDeConcepto, TURNO_DEL_DUENO, type DecisionDelDueno } from './video/aprobacion'
 import { PASO_MIRAR_VIDEO } from './video/mirada'
@@ -236,12 +241,14 @@ export async function avanzar(P: Puertos, encargoId: string): Promise<Respuesta>
       }
       if (paso.tipo === 'jefatura') {
         // J8a · la pieza ya pasó los chequeos duros: se abre UNA revisión en la jefatura y se espera su cierre
-        const material = familiaDeLaminas(pl) ? contextoDeRevisorL(pl, e) : familiaDeVideo(pl) ? contextoDeRevisorV(pl, e) : contextoDelRevisor(contexto(e))
+        const material = materialDeLaRevision(pl, e)
         // 01-nov · un revisor nunca tiene menos contexto que quien escribe; si el puerto falla, se dice y la revisión sigue
         const carpeta = P.carpetaParaRevisar ? await P.carpetaParaRevisar(String(enc.client_id)).catch((x: unknown) => [{ titulo: 'La carpeta del cliente', funcion: 'lo que el negocio sabe', texto: `(no se pudo leer: ${x instanceof Error ? x.message : String(x)}. No lo tomes como que no existe.)` }]) : []
         // 17-nov · coherencia con los hechos: el bloque de Cerebro (o el aviso de que no lo hay) va SIEMPRE como un documento más del revisor
         const hechos = contextoDeHechos(P.hechosDelNegocio ? await P.hechosDelNegocio(String(enc.client_id)).catch((x: unknown) => ({ no_se_pudo_leer: x instanceof Error ? x.message : String(x) })) : null)
-        const sobre = sobreDeLaRevision(enc, pl, e, { pieza: material.pieza, imagenes: material.imagenes, contexto: [...material.contexto, ...carpeta, hechos] })
+        // cambio 4 · la ficha de la oferta, tal cual la trae la hoja: SOLO si la hay (sin ficha el pedido queda como antes)
+        const ficha = contextoDeLaFicha(fichaDeLaHoja(briefDe(e)?.texto))
+        const sobre = sobreDeLaRevision(enc, pl, e, { pieza: material.pieza, imagenes: material.imagenes, contexto: [...material.contexto, ...carpeta, hechos, ...(ficha ? [ficha] : [])] })
         const ap = P.jefatura ? await P.jefatura(sobre) : ({ estado: 'error', motivo: 'el puerto de la jefatura no está configurado' } as const)
         if (ap.estado === 'esperando') {
           const n = turnoDe(e)
@@ -250,7 +257,7 @@ export async function avanzar(P: Puertos, encargoId: string): Promise<Respuesta>
           return r(200, { accion: 'esperar_jefatura', turno: { n, paso: paso.clave, tipo: 'jefatura', dispatch_key }, revision_id: ap.revision_id })
         }
         if (ap.estado !== 'cerrada') await P.avisar({ canal: 'alertas', encargo_id: enc.id, texto: `⚠️ La jefatura no revisó la pieza · ${enc.brief_id}: ${ap.motivo}; sigue a la bandeja marcada «sin revisar»`, dry_run: enc.dry_run })
-        const res = ap.estado === 'cerrada' ? aplicarSalidaDeJefatura(pl, e, ap.salida, { reImagen: reImagenDe(pl, e), puedeVolverALaMesa: puedeVolverALaMesa(pl, paso, e) }) : aplicarSinRevisar(ap.motivo)
+        const res = ap.estado === 'cerrada' ? aplicarSalidaDeJefatura(pl, e, ap.salida, { reImagen: reImagenDe(pl, e), puedeVolverALaMesa: puedeVolverALaMesa(pl, paso, e), sentido: await sentidoDe(P, enc, e, material.pieza) }) : aplicarSinRevisar(ap.motivo)
         enc = await aplicar(P, enc, pl, sig.indice, res, { vuelta: sig.vuelta, turno: { paso: paso.clave, tipo: 'jefatura', agente: null, dispatch_key: null, cost_usd: res.costo_usd } })
         continue
       }
@@ -286,6 +293,27 @@ const reImagenDe = (pl: Plantilla, e: Estado) => (tomada: { razon: string } | nu
  * 17-nov · GO Lenovo (d) · ¿la pieza puede volver a la mesa desde el paso `jefatura`? Solo si la plantilla lo declara (`vuelve_a` a la mesa), le queda la vuelta y cabe en el tope
  * contando lo que costó ESTA revisión (la vuelta repite la mesa y lo que sigue, incluida otra revisión). Sin `vuelve_a`, nunca (la pieza va a la bandeja como siempre).
  */
+/** lo que ve el revisor de la jefatura (la misma función para abrir la revisión y para aplicar lo que vuelve) */
+function materialDeLaRevision(pl: Plantilla, e: Estado) {
+  return familiaDeLaminas(pl) ? contextoDeRevisorL(pl, e) : familiaDeVideo(pl) ? contextoDeRevisorV(pl, e) : contextoDelRevisor(contexto(e))
+}
+/** la hoja de la pieza (el brief leído); un encargo sin ella no tiene ficha */
+const briefDe = (e: Estado): BriefLeido | null => (datos(e, 'encargo') as unknown as Partial<Base> | undefined)?.brief ?? null
+/** cambio 4 · lo que la aplicación necesita para el sentido: la ficha de la hoja, la pieza, la fila (la del calendario o, si no viaja, el brief, que es su id) y lo ya devuelto */
+async function sentidoDe(P: Pick<Puertos, 'hechosPorOferta'>, enc: Pick<Encargo, 'id' | 'brief_id' | 'sala_ref' | 'client_id'>, e: Estado, textoDeLaPieza: string): Promise<OpcionesDeAplicacion['sentido']> {
+  const fila = (enc.sala_ref?.fila as { id?: unknown } | undefined)?.id
+  // firma de Emilio · si la revisión anterior mandó correcciones a la mesa, esta revisión lee lo que respondió el creador (la mesa guardó sus líneas al cerrar)
+  const enviadas = datosDeLaJefatura(e)?.sentido?.enviadas ?? []
+  const lineas = datos(e, 'mesa')?.respuestas_a_la_jefatura
+  const previas = enviadas.length ? { enviadas, lineasDeRespuesta: Array.isArray(lineas) ? lineas.filter((l): l is string => typeof l === 'string') : [] } : null
+  // D1 · un cierre que el cerebro registró DESPUÉS de armar la hoja también frena (solo lectura de los hechos vivos; si no se puede, vale el de la hoja y se declara)
+  const deLaHoja = fichaDeLaHoja(briefDe(e)?.texto)
+  const conHechos = deLaHoja.estado === 'con_ficha' && deLaHoja.oferta && !deLaHoja.cierre
+  const hechos = conHechos && P.hechosPorOferta ? await P.hechosPorOferta(String(enc.client_id)).catch(() => null) : null
+  const vivo = fichaConCierreVivo(deLaHoja, hechos, fechaDeLaFila(enc.sala_ref))
+  return { ficha: vivo.ficha, declarado: vivo.declarado, textoDeLaPieza, filaId: typeof fila === 'string' && fila ? fila : enc.brief_id || null, encargoId: enc.id, yaDevueltas: llavesYaDevueltas(e), exactos: chequeosExactos, previas }
+}
+
 export function puedeVolverALaMesa(pl: Plantilla, paso: Paso, e: Estado): ((costo: number) => boolean) | undefined {
   if (paso.vuelve_a?.paso !== 'mesa' || !quedaVueltaDelPaso(paso, e)) return undefined
   return (costo) => cabeLaVuelta(pl, { ...e, gasto_usd: e.gasto_usd + costo }, costoDeVolver(pl, paso))
@@ -304,7 +332,7 @@ export async function recibirJefatura(P: Puertos, encargoId: string, salida: Sal
   const sig = siguientePaso(enc.estado_del_motor, pl)
   if (sig.accion !== 'ejecutar' || sig.paso.tipo !== 'jefatura') return r(409, { error: 'sin_paso_pendiente' })
   const e = enc.estado_del_motor
-  await aplicar(P, enc, pl, sig.indice, aplicarSalidaDeJefatura(pl, e, salida, { reImagen: reImagenDe(pl, e), puedeVolverALaMesa: puedeVolverALaMesa(pl, sig.paso, e) }), { vuelta: sig.vuelta, turno: { paso: sig.paso.clave, tipo: 'jefatura', agente: null, dispatch_key: abierto.dispatch_key, cost_usd: costoDeLaJefatura(salida.costo_usd) } })
+  await aplicar(P, enc, pl, sig.indice, aplicarSalidaDeJefatura(pl, e, salida, { reImagen: reImagenDe(pl, e), puedeVolverALaMesa: puedeVolverALaMesa(pl, sig.paso, e), sentido: await sentidoDe(P, enc, e, materialDeLaRevision(pl, e).pieza) }), { vuelta: sig.vuelta, turno: { paso: sig.paso.clave, tipo: 'jefatura', agente: null, dispatch_key: abierto.dispatch_key, cost_usd: costoDeLaJefatura(salida.costo_usd) } })
   return avanzar(P, enc.id)
 }
 
@@ -438,12 +466,12 @@ function saltoPorFalta(paso: Paso, e: Estado): ResultadoDePaso | null {
  */
 export function sinLecturaDeMirar(paso: Paso, e: Estado, errores: string[]): ResultadoDePaso {
   const motivo = errores.slice(0, 2).join(' · ')
-  if (paso.clave === 'reimagen_mirar') return { costo_usd: 0, fichas: [fichaNueva(`reimagen-sin-lectura-${e.pasos_ejecutados}`, 'chequeo', 'imagen', 'sugerencia', `no se pudo leer lo que el curador dijo de la imagen nueva (${motivo}): se queda la anterior`, 'formato de la observación', 'una persona decide si se rehace')] }
+  if (paso.clave === 'reimagen_mirar') return { costo_usd: 0, fichas: [fichaNueva(`reimagen-sin-lectura-${e.pasos_ejecutados}`, 'chequeo', 'imagen', 'sugerencia', `no se pudo leer lo que el curador dijo de la imagen nueva (${motivo}): se queda la anterior`, 'formato de la observación', 'queda declarado: la re-imagen fue la vuelta de su creador')] }
   const items = imagenesAMirar(e)
   return {
     costo_usd: 0,
     artefacto: { observaciones: [], preferencia: [], veredicto: { pasan: items.map((i) => i.indice), porImagen: [], regenerar: false }, sin_lectura: true },
-    fichas: [fichaNueva(`mirar-sin-lectura-${e.pasos_ejecutados}`, 'chequeo', 'imagen', 'bloquea', `nadie pudo confirmar que la imagen cumple el brief: la respuesta del curador no se pudo leer dos veces (${motivo}); la imagen sigue en la pieza sin juzgar`, 'formato de la observación', 'una persona mira la imagen antes de aprobar')],
+    fichas: [fichaNueva(`mirar-sin-lectura-${e.pasos_ejecutados}`, 'chequeo', 'imagen', 'bloquea', `nadie pudo confirmar que la imagen cumple el brief: la respuesta del curador no se pudo leer dos veces (${motivo}); la imagen sigue en la pieza sin juzgar`, 'formato de la observación', 'su creador ya tuvo su reintento: queda declarado y la pieza sigue')],
     reemplazar_fichas: { origen: 'chequeo', donde: 'imagen' },
   }
 }
@@ -483,7 +511,7 @@ async function ejecutarCodigo(P: Puertos, enc: Encargo, pl: Plantilla, paso: Pas
       const fichasDeAviso = ch.avisos.map((a, n) => fichaNueva(`prompts-aviso-${e.pasos_ejecutados}-${n}`, 'chequeo', 'imagen', 'sugerencia', a, 'palabras declaradas por norma, por el dueño o por el brief', 'revisar si corresponde'))
       const esRe = paso.clave.startsWith('reimagen_')
       const repeticion = (e.vueltas['chequear_prompts'] ?? 0) >= 1
-      if (esRe && ch.ninguno) return { res: { costo_usd: 0, artefacto: { indices: [], ninguno: true, fallan: ch.fallan, prompts: [] }, fichas: [fichaNueva(`reimagen-prompts-ninguno-${e.pasos_ejecutados}`, 'chequeo', 'imagen', 'sugerencia', 'ningún prompt de la re-imagen cumple las reglas del brief: se queda la imagen anterior', 'reglas de imagen del brief', 'una persona decide si se rehace')] } }
+      if (esRe && ch.ninguno) return { res: { costo_usd: 0, artefacto: { indices: [], ninguno: true, fallan: ch.fallan, prompts: [] }, fichas: [fichaNueva(`reimagen-prompts-ninguno-${e.pasos_ejecutados}`, 'chequeo', 'imagen', 'sugerencia', 'ningún prompt de la re-imagen cumple las reglas del brief: se queda la imagen anterior', 'reglas de imagen del brief', 'queda declarado: la re-imagen fue la vuelta de su creador')] } }
       const res: ResultadoDePaso = {
         costo_usd: 0,
         artefacto: { indices: ch.pasan, ninguno: ch.ninguno, fallan: ch.fallan, prompts: ch.pasan.map((i) => prompts[i]) },
@@ -959,7 +987,7 @@ function procesarValor(paso: Paso, v: Record<string, unknown>, enc: Encargo, e: 
       const puede = !esRe && modo === 'generada' && (e.vueltas['mirar'] ?? 0) < Number(pl.pasos.find((p) => p.clave === 'mirar')?.vuelve_a?.max ?? 0)
       const ver = veredictoDeImagenes(filtradas, reglasVisuales(e, b.brief), b.F.propios, puede, { exigirDato: reglasDeInvencion(pl.limites) !== null, esGenerada: () => modo === 'generada' })
       // re-imagen que no cumple el brief: NO se pisa la observación ni la imagen anterior (se queda la que estaba) y se dice
-      if (esRe && ver.pasan.length === 0) return { res: { costo_usd: 0, fichas: [fichaNueva(`reimagen-no-cumplio-${e.pasos_ejecutados}`, 'chequeo', 'imagen', 'sugerencia', 'la imagen nueva (re-imagen que pidió la opinión) no cumple el brief: se queda la anterior', 'reglas de imagen del brief', 'una persona decide si se rehace')] } }
+      if (esRe && ver.pasan.length === 0) return { res: { costo_usd: 0, fichas: [fichaNueva(`reimagen-no-cumplio-${e.pasos_ejecutados}`, 'chequeo', 'imagen', 'sugerencia', 'la imagen nueva (re-imagen que pidió la opinión) no cumple el brief: se queda la anterior', 'reglas de imagen del brief', 'queda declarado: la re-imagen fue la vuelta de su creador')] } }
       const fichas: Ficha[] = []
       if (ver.pasan.length === 0 && !ver.regenerar) fichas.push(fichaNueva(`mirar-${e.pasos_ejecutados}`, 'chequeo', 'imagen', 'bloquea', `ninguna imagen cumple el brief: ${ver.porImagen.flatMap((x) => x.fallas.map((f) => f.detalle)).slice(0, 4).join(' · ') || 'sin observaciones'}`, 'reglas de imagen del brief', 'la pieza sale sin imagen o con la mejor disponible, declarado'))
       return { res: { costo_usd: 0, artefacto: { observaciones: filtradas, preferencia: v.preferencia, veredicto: ver }, fichas, reemplazar_fichas: { origen: 'chequeo', donde: 'imagen' } } }
@@ -1010,7 +1038,7 @@ export async function fallar(P: Puertos, enc: Encargo, motivo: string, corte?: O
   const e = conCausaDelFallo(enc.estado_del_motor, motivo, P.ahora(), corte)
   enc = { ...enc, estado_del_motor: e }
   // 31-oct · la mesa de brief o de concepto que falla se lo dice a la cadena (que sigue con lo que tenga o pide a un humano); jamás deja a la campaña esperando
-  if (enc.familia === 'brief_mesa' || enc.familia === 'concepto_mesa' || enc.familia === 'reubicacion_mesa' || enc.familia === 'fallidos_mesa') {
+  if (enc.familia === 'brief_mesa' || enc.familia === 'concepto_mesa' || enc.familia === 'reubicacion_mesa' || enc.familia === 'fallidos_mesa' || enc.familia === 'banco_mesa') {
     const { entregarALaCadena } = await import('./mesa/de-la-cadena')
     await P.avisar({ canal: 'alertas', encargo_id: enc.id, texto: `🛑 La mesa de la cadena falló · ${enc.brief_id}: ${motivo}`, dry_run: enc.dry_run })
     return entregarALaCadena(P, enc, { texto: null, motivo: `fallo: ${motivo}`.slice(0, 300), estado: 'fallido' })
@@ -1043,37 +1071,72 @@ export async function cerrar(P: Puertos, enc: Encargo, pl: Plantilla, parcial: b
   const e = enc.estado_del_motor
   // salas 2 y 3: el resumen de lo que va a la salida y a la bandeja sale de las láminas; el video, del guion y del video (null para el post de la sala 1)
   const lam = resumenDeCierreL(enc, e, pl) ?? resumenDeCierreV(enc, e, pl)
-  const abiertasQueBloquean = e.fichas.filter((f) => f.gravedad === 'bloquea' && (f.estado === 'abierta' || f.estado === 'no_tomada'))
-  // J8a · una revisión incompleta (fallida o cortada por tope) o que no pudo abrirse NO se pierde: la pieza va a la bandeja marcada y una persona la mira antes de aprobarla
-  const conDesacuerdo = abiertasQueBloquean.length > 0 || parcial || revisionIncompleta(e)
+  // REVISIÓN 2 · el único lugar que decide (`fichasAlCierre`): frena SOLO una regla dura de la lista que sigue rota; la devuelta a la cadena va «con desacuerdo»;
+  //   lo demás (criterio de cualquier agente, lo que antes «decidía una persona», la revisión incompleta o sin revisar) es una OBSERVACIÓN DECLARADA: la pieza sigue
+  const cierre = fichasAlCierre(e)
+  let conDesacuerdo = cierre.en_la_cadena.length > 0 || parcial
   const estadoFinal: Encargo['estado'] = parcial ? 'cerrado_por_tope' : 'cerrado'
   const pz = datos(e, 'pieza_post')
   const fin = datos(e, 'imagen_final')
   const ent = datos(e, 'entrega')
   const b = datos(e, 'encargo') ? base(e) : null
   const generada = lam ? lam.generada : fin?.origen === 'generada'
+  // RESPUESTA-LENOVO 17-nov punto 3 · una regla dura que sigue rota tras la vuelta FRENA (ver abajo)
+  const frenoDuro = cierre.frenan
+  // ESLABONES 1 y 3 de #1150 · lo devuelto a la cadena: el receptor dice qué hace la pieza. Solo `sigue` la deja ir a la bandeja;
+  //   reemplazada / frenada / esperando: ni salida ni bandeja. El que espera queda `cerrado` con `esperando_a_la_cadena` y lo vuelve a mirar el vigía
+  const cadena = cierre.en_la_cadena.length ? await consultarLaCadena(P, enc, e) : null
+  if (cadena) {
+    // CERTIFICACION-CC7 punto 4 · la pieza que ya FRENA por su propia regla dura no sale nunca: la devolución igual llegó al receptor (corrige la cadena),
+    //   pero el encargo NO queda pendiente de la cadena · el vigía no lo vuelve a correr y su alarma de freno sale UNA vez
+    if (frenoDuro.length) cadena.espera.pendiente = false
+    const antes = e.artefactos[ARTEFACTO_ESPERA_DE_LA_CADENA]
+    e.artefactos[ARTEFACTO_ESPERA_DE_LA_CADENA] = { version: (antes?.version ?? 0) + 1, version_consumida: antes?.version_consumida ?? 0, datos: cadena.espera as unknown as Record<string, unknown> }
+    for (const a of cadena.alarmas) await P.avisar({ canal: a.canal, encargo_id: enc.id, texto: a.texto, dry_run: enc.dry_run })
+    if (cadena.veredicto === 'sigue') conDesacuerdo = parcial
+    else if (!frenoDuro.length) {
+      const frenada = cadena.veredicto === 'frenada'
+      await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: e, gasto_usd: enc.gasto_usd, estado: estadoFinal, con_desacuerdo: frenada, imagen_generada: generada, salida_output_id: null, hitl_queue_id: null })
+      const resultado = cadena.veredicto === 'esperando' ? RESULTADO_ESPERANDO_A_LA_CADENA : cadena.veredicto === 'reemplazada' ? RESULTADO_REEMPLAZADA : 'con_desacuerdo'
+      return r(200, { accion: 'cerrado', estado: estadoFinal, con_desacuerdo: frenada, ...(frenada ? { frenada: true } : {}), para_la_pieza: cadena.veredicto, simulado: enc.dry_run, gasto_usd: e.gasto_usd, output_id: null, hitl_queue_id: null, resultado_para_la_sala: resultado, sala_ref: enc.sala_ref })
+    }
+  }
   let output_id: string | null = null, hitl_id: string | null = null
-  const desacuerdos = [...abiertasQueBloquean.map((f) => `${f.donde}: ${f.que ?? ''}`), ...(revisionIncompleta(e) ? [datosDeLaJefatura(e)?.sin_revisar ? 'revisión: sin revisar (la jefatura no abrió o no contestó)' : `revisión: incompleta (${datosDeLaJefatura(e)?.resultado})`] : [])]
-  if (!enc.dry_run && (pz || lam) && b) {
+  // RESPUESTA-LENOVO 17-nov punto 3 · una regla dura que sigue rota tras la vuelta FRENA: la pieza no va a la salida ni a la bandeja (nadie la aprueba encima) y sale UNA alarma con el motivo
+  const desacuerdos = [...cierre.frenan, ...(cadena?.veredicto === 'sigue' ? [] : cierre.en_la_cadena)].map((f) => `${f.donde}: ${f.que ?? ''}`)
+  const observaciones = [...(cadena?.veredicto === 'sigue' ? cadena.observaciones : []), ...cierre.observaciones.map((f) => `${f.donde}: ${f.que ?? ''}`), ...(revisionIncompleta(e) ? [datosDeLaJefatura(e)?.sin_revisar ? 'revisión: sin revisar (la jefatura no abrió o no contestó)' : `revisión: incompleta (${datosDeLaJefatura(e)?.resultado})`] : [])]
+  if (!enc.dry_run && (pz || lam) && b && !frenoDuro.length) {
     // la opinión libre del revisor externo viaja con la pieza, rotulada como OPINIÓN (y lo que el autor decidió con ella)
     const opinion = opinionExterna(e)
     const sinSegunda = datos(e, 'fichas_externas')?.sin_revision === true
     const contenido = { ...(lam ? lam.contenido : { pie_de_foto: pz!.pie_de_foto, hashtags: pz!.hashtags, llamado: pz!.llamado ?? null, nota_para_quien_publica: pz!.nota_para_quien_publica ?? null, imagen: fin ?? null, entrega: ent ? { urls: ent.urls, expires_at: ent.expires_at } : null }), ...(opinion ? { opinion_externa: opinion } : {}) }
     // de dónde viene cada imagen (foto propia · cercana · generada · tipográfica): solo con la plantilla que lo pide
     const origenes = marcaDeOrigenActiva(pl.limites) ? origenesDeImagenes(e, pl.limites) : null
-    const metadata = { origen: 'oficina', ...(sinSegunda ? { sin_segunda_mirada: true } : {}), familia: enc.familia, parte_id: enc.parte_id, brief_id: enc.brief_id, oficina_encargo_id: enc.id, imagen_generada: generada, con_desacuerdo: conDesacuerdo, desacuerdos, ...(opinion ? { opinion_externa: { texto: opinion.texto.slice(0, 2000), modelo: opinion.modelo, el_autor: opinion.el_autor, por_dueno: opinion.por_dueno } } : {}), ...(imagenPorRehacer(e) ? { imagen_por_rehacer: true } : {}), ...(datos(e, 'respuesta_imagen')?.re_imagen === true ? { re_imagen_hecha: true } : {}), ...metadataDeLaJefatura(e), ...(origenes ? { origen_de_imagenes: origenes.por_imagen, origen_de_imagenes_resumen: origenes.resumen } : {}), ...metadataDeAvisosDeConcepto(e) }
+    const metadata = { origen: 'oficina', ...(sinSegunda ? { sin_segunda_mirada: true } : {}), familia: enc.familia, parte_id: enc.parte_id, brief_id: enc.brief_id, oficina_encargo_id: enc.id, imagen_generada: generada, con_desacuerdo: conDesacuerdo, desacuerdos, ...(observaciones.length ? { observaciones } : {}), ...(opinion ? { opinion_externa: { texto: opinion.texto.slice(0, 2000), modelo: opinion.modelo, el_autor: opinion.el_autor, por_dueno: opinion.por_dueno } } : {}), ...(imagenPorRehacer(e) ? { imagen_por_rehacer: true } : {}), ...(datos(e, 'respuesta_imagen')?.re_imagen === true ? { re_imagen_hecha: true } : {}), ...metadataDeLaJefatura(e), ...(origenes ? { origen_de_imagenes: origenes.por_imagen, origen_de_imagenes_resumen: origenes.resumen } : {}), ...metadataDeAvisosDeConcepto(e) }
     const s = await P.salida({ client_id: enc.client_id, titulo: lam ? lam.titulo : `Pieza ${enc.brief_id} · ${b.brief.red}`, contenido, metadata })
     if (s.ok) {
       output_id = s.output_id
-      const q = await P.bandeja({ client_id: enc.client_id, output_id, titulo: prefijoDeLaBandeja(e) + (sinSegunda ? '⚠️ SIN SEGUNDA MIRADA · ' : '') + (imagenPorRehacer(e) ? '🖼️ IMAGEN POR REHACER (decide una persona) · ' : '') + (lam ? lam.tituloBandeja : `Aprobación · Pieza ${enc.brief_id} · ${b.brief.red} · versión ${e.artefactos['pieza_post']?.version ?? 1} · ${b.F.cliente_nombre}`), vista_previa: (origenes?.resumen ? `🖼️ ${origenes.resumen} — ` : '') + (lam ? lam.vista_previa : String(pz!.pie_de_foto ?? '').slice(0, 280)), metadata: { ...metadata, costo_usd: e.gasto_usd, enlace_entrega: ent ? ent.urls : null }, expires_at: lam ? lam.expires_at : (ent?.expires_at as string | null | undefined) ?? null })
+      const q = await P.bandeja({ client_id: enc.client_id, output_id, titulo: prefijoDeLaBandeja(e) + marcaDeObservaciones(cierre.observaciones) + (sinSegunda ? '⚠️ SIN SEGUNDA MIRADA · ' : '') + (imagenPorRehacer(e) ? '🖼️ IMAGEN POR REHACER (declarado) · ' : '') + (lam ? lam.tituloBandeja : `Aprobación · Pieza ${enc.brief_id} · ${b.brief.red} · versión ${e.artefactos['pieza_post']?.version ?? 1} · ${b.F.cliente_nombre}`), vista_previa: (origenes?.resumen ? `🖼️ ${origenes.resumen} — ` : '') + (lam ? lam.vista_previa : String(pz!.pie_de_foto ?? '').slice(0, 280)), metadata: { ...metadata, costo_usd: e.gasto_usd, enlace_entrega: ent ? ent.urls : null }, expires_at: lam ? lam.expires_at : (ent?.expires_at as string | null | undefined) ?? null })
       if (q.ok) hitl_id = q.id
     }
   }
   await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: e, gasto_usd: enc.gasto_usd, estado: estadoFinal, con_desacuerdo: conDesacuerdo, imagen_generada: generada, salida_output_id: output_id, hitl_queue_id: hitl_id })
+  // revisión 2 · pregunta 4 · el video que cobró más que su tope: alarma de gasto (sin bloquear, sin persona); si además frena, va DENTRO de la misma alarma del freno
+  const sobreTope = e.fichas.filter((f) => f.contra_que === TOPE_POR_VIDEO)
+  const textoDelGasto = sobreTope.length ? `💸 Gasto sobre el tope · ${enc.brief_id}: ${sobreTope[0].que ?? ''}.` : ''
+  if (frenoDuro.length) {
+    // una alarma por incidente: si el cierre fue por tope (ya avisó a #alertas) o es la versión 2 o más del mismo brief, va al hilo (ADENDA 2 de CC7 a #1148)
+    const nt = reglasDurasNoTomadas(e)
+    const motivos = [...nt.map((h) => `${h.destino}: ${h.que}`), ...frenoDuro.filter((f) => !f.id.startsWith('sentido-no-tomada-')).map((f) => `${f.donde}: ${f.que ?? ''}`)]
+    await P.avisar({ canal: parcial || enc.version_encargo >= 2 ? 'hilo' : 'alertas', encargo_id: enc.id, texto: `🛑 Pieza frenada · ${enc.brief_id}: regla dura no tomada tras la vuelta — ${motivos.slice(0, 3).join(' | ')}. No se publica (firma de Emilio: se toma sí o sí).${textoDelGasto ? ` ${textoDelGasto}` : ''}`, dry_run: enc.dry_run })
+    return r(200, { accion: 'cerrado', estado: estadoFinal, con_desacuerdo: true, frenada: true, simulado: enc.dry_run, gasto_usd: e.gasto_usd, output_id: null, hitl_queue_id: null, resultado_para_la_sala: 'con_desacuerdo', sala_ref: enc.sala_ref, desacuerdos, ...(observaciones.length ? { observaciones } : {}) })
+  }
+  // la alarma de gasto sola (la pieza sigue): las versiones 2+ y el cierre por tope (ya avisó) van al hilo
+  if (textoDelGasto) await P.avisar({ canal: parcial || enc.version_encargo >= 2 ? 'hilo' : 'alertas', encargo_id: enc.id, texto: `${textoDelGasto} La pieza sigue (el dinero ya se gastó).`, dry_run: enc.dry_run })
   await P.avisar({ canal: 'hilo', encargo_id: enc.id, texto: conDesacuerdo ? `⚠️ Con desacuerdo · ${enc.brief_id}${nota ? ` · ${nota}` : ''}` : `✅ En la bandeja · ${enc.brief_id} · US$ ${e.gasto_usd.toFixed(3)}`, dry_run: enc.dry_run })
   if (conDesacuerdo && !parcial) await P.avisar({ canal: 'alertas', encargo_id: enc.id, texto: `⚠️ Encargo con desacuerdo · ${enc.brief_id}: ${desacuerdos.slice(0, 3).join(' | ')}`, dry_run: enc.dry_run })
   return r(200, {
     accion: 'cerrado', estado: estadoFinal, con_desacuerdo: conDesacuerdo, simulado: enc.dry_run, gasto_usd: e.gasto_usd, output_id, hitl_queue_id: hitl_id,
-    resultado_para_la_sala: parcial ? 'cerrado_por_tope' : conDesacuerdo ? 'con_desacuerdo' : 'encargo_en_bandeja', sala_ref: enc.sala_ref, desacuerdos,
+    resultado_para_la_sala: parcial ? 'cerrado_por_tope' : conDesacuerdo ? 'con_desacuerdo' : 'encargo_en_bandeja', sala_ref: enc.sala_ref, desacuerdos, ...(observaciones.length ? { observaciones } : {}),
   })
 }

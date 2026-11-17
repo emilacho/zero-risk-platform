@@ -42,8 +42,8 @@ export async function observarImagenes(P: Puertos, enc: Encargo, _pl: Plantilla)
     const motivos = o.rechazadas.filter((x) => x.ref === ref).map((x) => x.motivo)
     const sinJuicio = o.rechazadas.filter((x) => x.ref === ref).every((x) => o.sin_lectura.includes(x.indice))
     return sinJuicio
-      ? fichaNueva(`observador-${ref}`, 'chequeo', 'imagen', 'bloquea', `la imagen de «${ref}» no se pudo juzgar (${motivos[0]}): no se aprueba sola y una persona decide`, 'juicio del observador de imagen', 'mirarla y decidir, o rehacerla')
-      : fichaNueva(`observador-${ref}`, 'chequeo', 'imagen', 'bloquea', `la imagen de «${ref}» muestra algo que la pieza no pidió (${motivos[0]}): no se usa y una persona decide`, 'juicio del observador de imagen', 'rehacer la imagen o quitarla')
+      ? fichaNueva(`observador-${ref}`, 'chequeo', 'imagen', 'bloquea', `la imagen de «${ref}» no se pudo juzgar (${motivos[0]}): no se aprueba sola · queda declarado y la pieza sigue sin ella`, 'juicio del observador de imagen', 'mirarla y decidir, o rehacerla')
+      : fichaNueva(`observador-${ref}`, 'chequeo', 'imagen', 'bloquea', `la imagen de «${ref}» muestra algo que la pieza no pidió (${motivos[0]}): no se usa · queda declarado y la pieza sigue sin ella`, 'juicio del observador de imagen', 'rehacer la imagen o quitarla')
   })
   const avisos = enc.dry_run === true && o.sin_lectura.length ? [fichaNueva('observador-sin-lectura', 'chequeo', 'imagen', 'sugerencia', `ensayo: el observador no mira en seco; ${o.sin_lectura.length} imagen(es) quedan sin juicio de texto ajeno ni de dato sin verificar (en real no pasarían solas)`)] : []
   return {

@@ -20,6 +20,7 @@ import { armarTarea, ASIENTOS_CON_METODO, pedidoDeAgente, seccionDeMetodo, type 
 import { condicionesDeLaPieza, direccionDe, especialistasPertinentes, ingenieroDePrompts, porteroDe } from './directorio'
 import { condicionesDelVideo } from './condiciones-de-video'
 import { FORMATO_DE_PIEZA, destinatarioDe, leerRespuestaSobreNotas, quitarLineasDeNotas, rastroDeLasNotas, seccionDeNotasDelDueno, tareaParaConsultar } from './aprendizaje'
+import { separarRespuestas } from '../sentido-contra-la-ficha'
 import { tableroParaLaJefatura } from './libro'
 import { siguienteDeLaMesa, techoDe, type ContextoDeLaMesa } from './planificador'
 import { traducirPieza, hayImagenesAGenerar, pedidoDeImagen, type ConceptoDeImagen, type OpcionesDeTraduccion, type Traduccion } from './traductor'
@@ -278,7 +279,7 @@ export async function avanzarMesa(P: Puertos, enc0: Encargo, pl: Plantilla, indi
       const portero = porteroDe(est.directorio_congelado)?.agente
       est = { ...est, marcas: { ...est.marcas, apertura_enriquecida: true } }
       // 10-nov · la mesa de reubicación decide fechas con lo que la cadena le pasa: NO abre con el cerebro (no se toca el cerebro)
-      if (P.cerebro && portero && est.tipo !== 'reubicacion' && est.tipo !== 'fallidos') {
+      if (P.cerebro && portero && est.tipo !== 'reubicacion' && est.tipo !== 'fallidos' && est.tipo !== 'banco') {
         let que: string
         if (est.tipo === 'brief' || est.tipo === 'concepto') que = pedidoDeAperturaDeLaCadena(est.tipo, marcoDe(enc.estado_del_motor)?.cliente_nombre || 'este cliente')
         else {
@@ -352,9 +353,9 @@ export async function avanzarMesa(P: Puertos, enc0: Encargo, pl: Plantilla, indi
 
     if (acc.accion === 'material') {
       const nPedidos = Number(est.marcas.pedidos_de_material ?? 0)
-      if (!P.cerebro || nPedidos >= MAX_PEDIDOS_DE_MATERIAL || est.tipo === 'reubicacion' || est.tipo === 'fallidos') {
+      if (!P.cerebro || nPedidos >= MAX_PEDIDOS_DE_MATERIAL || est.tipo === 'reubicacion' || est.tipo === 'fallidos' || est.tipo === 'banco') {
         // sin portero (o con el cupo gastado) el pedido se contesta con «sin dato»: nunca se queda colgado ni se inventa
-        await P.mesa.aportar(aporteNuevo(enc, porteroDe(est.directorio_congelado)?.agente ?? 'portero', acc.de, 'material', est.tipo === 'reubicacion' ? '(la mesa de reubicación no pide material al cerebro: decide con el marco de la cadena)' : est.tipo === 'fallidos' ? '(la revisión de fallidos no pide material al cerebro: decide con el marco de la cadena)' : P.cerebro ? '(se agotó el cupo de pedidos de material de esta pieza)' : '(el portero del cerebro no está disponible)', { responde_a: acc.pedido_id, profundidad: 1 }))
+        await P.mesa.aportar(aporteNuevo(enc, porteroDe(est.directorio_congelado)?.agente ?? 'portero', acc.de, 'material', est.tipo === 'reubicacion' ? '(la mesa de reubicación no pide material al cerebro: decide con el marco de la cadena)' : est.tipo === 'fallidos' ? '(la revisión de fallidos no pide material al cerebro: decide con el marco de la cadena)' : est.tipo === 'banco' ? '(la corrección del banco no pide material al cerebro: decide con el marco de la cadena)' : P.cerebro ? '(se agotó el cupo de pedidos de material de esta pieza)' : '(el portero del cerebro no está disponible)', { responde_a: acc.pedido_id, profundidad: 1 }))
         continue
       }
       const ped = libro.find((a) => a.id === acc.pedido_id)
@@ -396,7 +397,10 @@ async function cerrarLaMesa(P: Puertos, enc: Encargo, pl: Plantilla, indice: num
     const entregada = forzado ? await entregarPorTopeDeLaMesa(P, enc, `la mesa no alcanzó a integrar la pieza (${forzado})`) : null
     return entregada ?? fallar(P, enc, `la mesa no produjo ninguna pieza${forzado ? ` (${forzado})` : ''}`)
   }
-  const textoPieza = quitarLineasDeNotas(ult.texto)
+  // cambio 4 · firma de Emilio · la dirección responde las correcciones de la jefatura en líneas propias: se guardan aparte y NO salen en la pieza (sin ellas, el texto es el mismo)
+  const resp = separarRespuestas(ult.texto)
+  if (resp.lineas.length) est = { ...est, respuestas_a_la_jefatura: resp.lineas }
+  const textoPieza = quitarLineasDeNotas(resp.pieza)
   const b = baseDeLaminas(enc.estado_del_motor)
   const maxLaminas = Number(pl.limites?.laminas_max)
   // 17-nov · GO Lenovo (a) · el máximo de cuadros por elemento del kit es dato de la plantilla (sin dato, el traductor usa 10)
@@ -565,12 +569,12 @@ async function aTextoParaLaJefatura(P: Puertos, enc: Encargo, est: EstadoMesa, t
   if (!enc.dry_run) {
     const s = await P.salida({ client_id: enc.client_id, titulo: `Pieza ${enc.brief_id} (texto de la mesa, sin dibujar)`, contenido: { pieza_texto: texto, motivo }, metadata: { origen: 'oficina', familia: enc.familia, oficina_encargo_id: enc.id, brief_id: enc.brief_id, con_desacuerdo: true, desacuerdos: [`mesa: ${motivo}`], sin_dibujar: true, ...(porTope ? { cerrado_por_tope: true } : {}) } })
     if (s.ok) {
-      const q = await P.bandeja({ client_id: enc.client_id, output_id: s.output_id, titulo: `⚠️ SIN DIBUJAR (decide una persona) · Pieza ${enc.brief_id}`, vista_previa: texto.slice(0, 280), metadata: { oficina_encargo_id: enc.id, costo_usd: e.gasto_usd, sin_dibujar: true, motivo }, expires_at: null })
+      const q = await P.bandeja({ client_id: enc.client_id, output_id: s.output_id, titulo: `⚠️ SIN DIBUJAR (declarado) · Pieza ${enc.brief_id}`, vista_previa: texto.slice(0, 280), metadata: { oficina_encargo_id: enc.id, costo_usd: e.gasto_usd, sin_dibujar: true, motivo }, expires_at: null })
       salida = { ...salida, output_id: s.output_id, hitl_queue_id: q.ok ? q.id : null }
     }
   }
   await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: conMesa(e, { ...est, fase: 'cerrada', pieza_texto: texto }), gasto_usd: e.gasto_usd, estado: estadoFinal, con_desacuerdo: true, salida_output_id: (salida.output_id as string | undefined) ?? null, hitl_queue_id: (salida.hitl_queue_id as string | undefined) ?? null })
-  await P.avisar({ canal: 'alertas', encargo_id: enc.id, texto: porTope ? `🛑 Cierre por tope · ${enc.brief_id}: ${motivo}; el texto de la mesa quedó en la bandeja para una persona (no se perdió la pieza)` : `⚠️ La mesa no pudo traducir la pieza ${enc.brief_id} a láminas (${motivo}); el texto quedó en la bandeja para una persona`, dry_run: enc.dry_run })
+  await P.avisar({ canal: 'alertas', encargo_id: enc.id, texto: porTope ? `🛑 Cierre por tope · ${enc.brief_id}: ${motivo}; el texto de la mesa quedó en la bandeja, declarado «sin dibujar» (no se perdió la pieza)` : `⚠️ La mesa no pudo traducir la pieza ${enc.brief_id} a láminas (${motivo}); el texto quedó en la bandeja, declarado «sin dibujar»`, dry_run: enc.dry_run })
   return r(200, { accion: 'cerrado', estado: estadoFinal, con_desacuerdo: true, sin_dibujar: true, motivo, simulado: enc.dry_run, gasto_usd: e.gasto_usd, resultado_para_la_sala: porTope ? 'cerrado_por_tope' : 'con_desacuerdo', sala_ref: enc.sala_ref, desacuerdos: [`mesa: ${motivo}`], output_id: (salida.output_id as string | undefined) ?? null, hitl_queue_id: (salida.hitl_queue_id as string | undefined) ?? null })
 }
 

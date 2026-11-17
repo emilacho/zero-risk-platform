@@ -5,9 +5,9 @@ import zlib from 'node:zlib'
 import { POST_IMG } from '../plantillas/post-img'
 import { CARRUSEL_IG_V1 } from '../plantillas/carrusel-ig-v1'
 import { KIT_HISTORIAS } from '../plantillas/kit-historias'
-import { BRIEF_MESA, CARRUSEL_MESA, CONCEPTO_MESA, FALLIDOS_MESA, KIT_MESA, REUBICACION_MESA } from '../plantillas/mesa'
+import { BANCO_MESA, BRIEF_MESA, CARRUSEL_MESA, CONCEPTO_MESA, FALLIDOS_MESA, KIT_MESA, REUBICACION_MESA } from '../plantillas/mesa'
 import { VIDEO_MESA } from '../plantillas/video-mesa'
-const CLASE_DEL_CODIGO: Record<string, string | undefined> = Object.fromEntries([POST_IMG, CARRUSEL_IG_V1, KIT_HISTORIAS, CARRUSEL_MESA, KIT_MESA, BRIEF_MESA, CONCEPTO_MESA, REUBICACION_MESA, FALLIDOS_MESA, VIDEO_MESA].map((p) => [p.familia, p.clase]))
+const CLASE_DEL_CODIGO: Record<string, string | undefined> = Object.fromEntries([POST_IMG, CARRUSEL_IG_V1, KIT_HISTORIAS, CARRUSEL_MESA, KIT_MESA, BRIEF_MESA, CONCEPTO_MESA, REUBICACION_MESA, FALLIDOS_MESA, BANCO_MESA, VIDEO_MESA].map((p) => [p.familia, p.clase]))
 import { avanzar, recibirResultado, type Respuesta } from '../orquestador'
 import type { Almacen, Cambios, Encargo, FuentesCompletas, PedidoDeRender, Puertos, TurnoRegistrado , ResultadoRevisor } from '../puertos'
 import type { FotoEtiquetada } from '../fotos'
@@ -46,7 +46,9 @@ const PASOS = ['Descargar las imágenes', 'Crear la publicación', 'Pegar el tex
 export const FORMATO_CARRUSEL: FilaDeFormato = { red: 'instagram', formato: 'carrusel', ancho: 1080, alto: 1350, tipos_archivo: ['png', 'jpeg'], peso_max_mb: 8, n_min: 2, n_max: 10, texto_max: 2200, hashtags_max: 30, pasos_publicacion: PASOS, verificado: false }
 export const FORMATO_HISTORIA: FilaDeFormato = { red: 'instagram', formato: 'historia', ancho: 1080, alto: 1920, tipos_archivo: ['png', 'jpeg'], peso_max_mb: 8, n_min: 1, n_max: 30, texto_max: 2200, hashtags_max: 30, pasos_publicacion: PASOS, verificado: false }
 export const FORMATO_ESTADO: FilaDeFormato = { red: 'whatsapp', formato: 'estado', ancho: 1080, alto: 1920, tipos_archivo: ['png', 'jpeg'], peso_max_mb: 8, n_min: 1, n_max: 30, texto_max: 700, hashtags_max: 10, pasos_publicacion: PASOS, verificado: false }
-const FORMATOS = [FORMATO_1X1, FORMATO_CARRUSEL, FORMATO_HISTORIA, FORMATO_ESTADO]
+// el reel, igual que la fila de producción (`oficina_entrega_formatos` · instagram/reel · mp4 · 1080×1920 · leída el 17-nov): sin ella la regla 6 frena el video
+export const FORMATO_REEL: FilaDeFormato = { red: 'instagram', formato: 'reel', ancho: 1080, alto: 1920, tipos_archivo: ['mp4'], peso_max_mb: 8, n_min: 1, n_max: 1, texto_max: 2200, hashtags_max: 30, pasos_publicacion: PASOS, verificado: false }
+const FORMATOS = [FORMATO_1X1, FORMATO_CARRUSEL, FORMATO_HISTORIA, FORMATO_ESTADO, FORMATO_REEL]
 
 export interface Memoria {
   P: Puertos

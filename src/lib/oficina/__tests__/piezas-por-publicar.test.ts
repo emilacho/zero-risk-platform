@@ -28,7 +28,14 @@ function base(tablas: Record<string, Fila[]>, o: { fallar?: string } = {}) {
         then: (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) => {
           if (o.fallar === tabla) return Promise.resolve({ data: null, error: { message: 'statement timeout' } }).then(res, rej)
           // como la base real: SOLO las columnas pedidas
-          const data = (tablas[tabla] ?? []).filter((f) => filtros.every((fn) => fn(f))).map((f) => Object.fromEntries(cols.map((c) => [c, f[c]])))
+          // «alias:col->a->>b» como PostgREST: el alias trae el valor del camino (texto en el último ->>)
+          const valor = (f: Fila, c: string): [string, unknown] => {
+            const i = c.indexOf(':'); if (i < 0) return [c, f[c]]
+            const [col, ...camino] = c.slice(i + 1).split(/->>?/)
+            let v: unknown = f[col]; for (const k of camino) v = v && typeof v === 'object' ? (v as Fila)[k] : undefined
+            return [c.slice(0, i), v === undefined || v === null ? null : c.includes('->>') ? String(v) : v]
+          }
+          const data = (tablas[tabla] ?? []).filter((f) => filtros.every((fn) => fn(f))).map((f) => Object.fromEntries(cols.map((c) => valor(f, c))))
           return Promise.resolve({ data, error: null }).then(res, rej)
         },
       }
@@ -205,5 +212,19 @@ describe('lecturas acotadas (línea 5 de CC7) · la bandeja archivada leída de 
   it('una pieza pendiente cuya fila de bandeja está ARCHIVADA no frena (la columna se lee de la base)', async () => {
     const t = { oficina_encargos: [enc({ id: 'p', hitl_queue_id: 'h' })], hitl_queue: [band({ id: 'h', status: 'pending', archivada_en: '2026-11-02T00:00:00Z' })], client_historical_outputs: [] }
     expect((await piezasPorPublicar(base(t), { client_id: SEG, campana_id: null }, AHORA)).frenan).toEqual([])
+  })
+})
+
+describe('eslabones 1 y 3 de #1150 · la pieza que la cadena retiene (cerrado, sin bandeja)', () => {
+  const conEspera = (id: string, veredicto: string) => enc({ id, estado_del_motor: { artefactos: { espera_de_la_cadena: { version: 1, datos: { pendiente: veredicto === 'esperando', veredicto } } } } })
+  it('🔴 «esperando» FRENA (todavía puede publicarse); «reemplazada» y «frenada» NO (no se publican nunca); la columna se lee de la base por su camino', async () => {
+    const t = { oficina_encargos: [conEspera('esp', 'esperando'), conEspera('ree', 'reemplazada'), conEspera('fre', 'frenada'), enc({ id: 'sin' })], hitl_queue: [], client_historical_outputs: [] }
+    const r = await piezasPorPublicar(base(t), { client_id: SEG, campana_id: null }, AHORA)
+    expect(r.frenan.map((x) => [x.encargo_id, x.motivo])).toEqual([['esp', 'sin_bandeja'], ['sin', 'sin_bandeja']])
+  })
+  it('puro · el veredicto solo cuenta sin bandeja', () => {
+    expect(clasificarPieza({ estado: 'cerrado', hitl_queue_id: null, sala_ref: null, veredicto_de_la_cadena: 'reemplazada' }, undefined, AHORA)).toEqual({ frena: false, motivo: 'nunca_produjo' })
+    expect(clasificarPieza({ estado: 'cerrado', hitl_queue_id: null, sala_ref: null, veredicto_de_la_cadena: 'esperando' }, undefined, AHORA)).toEqual({ frena: true, motivo: 'sin_bandeja' })
+    expect(clasificarPieza({ estado: 'cerrado', hitl_queue_id: null, sala_ref: null, veredicto_de_la_cadena: 'sigue' }, undefined, AHORA)).toEqual({ frena: true, motivo: 'sin_bandeja' })
   })
 })

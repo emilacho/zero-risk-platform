@@ -48,6 +48,8 @@ export const VOSEO_CON_TILDE = ['mirá', 'hacé', 'andá', 'llamá', 'tenés', '
 
 const ficha = (donde: string, gravedad: Ficha['gravedad'], que: string, contra_que: string, propuesta: string, n: number): Ficha => ({
   id: `chk-${donde}-${n}`, origen: 'chequeo', donde, gravedad, estado: 'abierta', que, contra_que, propuesta,
+  // reglas duras 1 a 5: solo cuando la regla se puede verificar (si no, la ficha ya es sugerencia)
+  ...(gravedad === 'bloquea' ? { dura: true as const } : {}),
 })
 
 /** 02-nov · firma de Emilio: ninguna palabra bloquea. Lo declarado en el manual y lo que el brief prohíbe por su cuenta se avisa con su propio texto; una palabra del manual que el brief solo repite sigue siendo contexto */

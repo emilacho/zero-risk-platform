@@ -248,10 +248,11 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
       return typeof c === 'string' && c.trim() ? c : null
     },
     async parte(parteId, clientId) {
-      const r = (await db.from('client_historical_outputs').select('content').eq('id', parteId).eq('client_id', clientId).eq('output_type', 'campaign_brief_pack').limit(1)) as { data: Fila[] | null; error: { message: string } | null }
+      const r = (await db.from('client_historical_outputs').select('content, provenance_tag').eq('id', parteId).eq('client_id', clientId).eq('output_type', 'campaign_brief_pack').limit(1)) as { data: Fila[] | null; error: { message: string } | null }
       if (r.error) throw new Error(`leer la parte: ${r.error.message}`)
       const c = r.data?.[0]?.content
-      return typeof c === 'string' ? { texto: c } : null
+      const tag = r.data?.[0]?.provenance_tag as { campana_id?: unknown } | null | undefined
+      return typeof c === 'string' ? { texto: c, campana_id: typeof tag?.campana_id === 'string' ? tag.campana_id : null } : null
     },
     async imagen(p): Promise<ResultadoImagen> {
       if (p.dry_run) { const id = `dry-${Math.random().toString(36).slice(2, 10)}`; return { ok: true, url: `${PREFIJO_DRY}${id}.png`, generation_id: id, costo_usd: 0, ...(p.foto ? { referencia: { usada: true, motivo: 'simulado (dry_run)' } } : {}) } }

@@ -9,7 +9,7 @@ import {
 } from '../src/lib/jefatura/revision/formatos'
 import { destinoDeWebhookPermitido } from '../src/lib/jefatura/revision/contrato'
 import { elegirVersion, esProductoDeUnaRevision, etiquetaDeVersion, MAXIMO_DE_VERSIONES, planDeGuardado, PORCENTAJE_MINIMO_DEL_LARGO, provenanceConReemplazo, provenanceDeVersionNueva, resultadoTrasElegir, type EvaluacionDeVersion } from '../src/lib/jefatura/revision/plan'
-import { resolverCierre, textoDelAviso } from '../src/lib/jefatura/revision/cierre'
+import { hayQueAvisar, resolverCierre, textoDelAviso } from '../src/lib/jefatura/revision/cierre'
 import { estadoInicial, fichaNueva } from '../src/lib/revision-comun'
 import { sobre } from './_helpers/jefatura-revision'
 
@@ -234,9 +234,14 @@ describe('cierre (reglas 2, 3, 4)', () => {
   }
   const jefe = (id: string, gravedad: 'bloquea' | 'sugerencia', estado: 'abierta' | 'tomada' | 'no_tomada') => ({ ...fichaNueva(id, 'jefe', 'texto', gravedad, 'q'), estado })
   it('limpia: sin fichas de fondo abiertas', () => { expect(resolverCierre(con([]), { tope: false, fallida: false }).resultado).toBe('limpia') })
-  it('regla 2: una ficha de fondo que bloquea abierta o no tomada = con_desacuerdo', () => {
-    expect(resolverCierre(con([jefe('a', 'bloquea', 'abierta')]), { tope: false, fallida: false }).resultado).toBe('con_desacuerdo')
-    expect(resolverCierre(con([jefe('a', 'bloquea', 'no_tomada')]), { tope: false, fallida: false }).resultado).toBe('con_desacuerdo')
+  it('regla 2 (revisión 2 = A): la de criterio que bloquea abierta o no tomada = observación; solo la DURA es con_desacuerdo', () => {
+    for (const est of ['abierta', 'no_tomada'] as const) {
+      const c = resolverCierre(con([jefe('a', 'bloquea', est)]), { tope: false, fallida: false })
+      expect(c).toMatchObject({ resultado: 'limpia', marcas: { con_desacuerdo: false }, desacuerdos: [] })
+      expect(c.observaciones).toHaveLength(1)
+      expect(hayQueAvisar(c)).toBe(false)
+      expect(resolverCierre(con([{ ...jefe('a', 'bloquea', est), dura: true }]), { tope: false, fallida: false })).toMatchObject({ resultado: 'con_desacuerdo', marcas: { con_desacuerdo: true } })
+    }
     expect(resolverCierre(con([jefe('a', 'bloquea', 'tomada')]), { tope: false, fallida: false }).resultado).toBe('limpia')
   })
   it('una sugerencia del jefe nunca es desacuerdo', () => { expect(resolverCierre(con([jefe('a', 'sugerencia', 'abierta')]), { tope: false, fallida: false }).resultado).toBe('limpia') })
@@ -250,8 +255,8 @@ describe('cierre (reglas 2, 3, 4)', () => {
     const g = { ...fichaNueva('e2', 'externa', 'texto', 'bloquea', 'op'), estado: 'abierta' as const }
     expect(resolverCierre(con([g]), { tope: false, fallida: false }).resultado).toBe('limpia')
   })
-  it('regla 4: sin segunda mirada se marca; con desacuerdo también: las dos marcas viajan', () => {
-    const c = resolverCierre(con([jefe('a', 'bloquea', 'abierta')], { sin_revision: true }), { tope: false, fallida: false })
+  it('regla 4: sin segunda mirada se marca; con desacuerdo (regla dura) también: las dos marcas viajan', () => {
+    const c = resolverCierre(con([{ ...jefe('a', 'bloquea', 'abierta'), dura: true }], { sin_revision: true }), { tope: false, fallida: false })
     expect(c.marcas).toEqual({ con_desacuerdo: true, sin_segunda_mirada: true })
     expect(c.resultado).toBe('con_desacuerdo')
     expect(resolverCierre(con([], { sin_revision: true }), { tope: false, fallida: false }).resultado).toBe('sin_segunda_mirada')
@@ -263,7 +268,7 @@ describe('cierre (reglas 2, 3, 4)', () => {
   it('UN aviso agregado, y ninguno si cierra limpia', () => {
     const limpia = resolverCierre(con([]), { tope: false, fallida: false })
     expect(textoDelAviso(limpia, { tipo: 'plan', artifact_id: 'p1', gasto_usd: 0, simulado: false })).toBe('')
-    const c = resolverCierre(con([jefe('a', 'bloquea', 'abierta'), jefe('b', 'bloquea', 'abierta'), jefe('c', 'bloquea', 'abierta'), jefe('d', 'bloquea', 'abierta')]), { tope: false, fallida: false })
+    const c = resolverCierre(con(['a', 'b', 'c', 'd'].map((x) => ({ ...jefe(x, 'bloquea', 'abierta'), dura: true }))), { tope: false, fallida: false })
     const t = textoDelAviso(c, { tipo: 'plan', artifact_id: 'p1', gasto_usd: 0, simulado: true })
     expect(t).toMatch(/\(seco\)/)
     expect(t).toMatch(/\+1 más/)
