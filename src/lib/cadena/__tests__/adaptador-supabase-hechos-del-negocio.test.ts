@@ -20,14 +20,22 @@ vi.mock('@/lib/avisos/adaptadores', () => ({ dependenciasReales: () => ({}) }))
 
 import { almacenDeSupabase } from '../almacen-supabase'
 
-const HECHO: HechoDelNegocioPorOferta = { oferta: 'brunch', sede_id: null, tipo: 'cierre_retiro', valor: 'se retira el 30-nov', vigente_desde: '2026-11-30', vigente_hasta: null, fuente: 'dueno · cerebro_fichas:f1', fecha_de_la_fuente: '2026-11-17', confianza: 'alta' }
+// 🔴 de CC6: la fuente NO nombra tablas del cerebro (guarda de aislamiento `__tests__/cerebro-paso-2-aislamiento.test.ts`)
+const hecho = (tipo: HechoDelNegocioPorOferta['tipo'], o: Partial<HechoDelNegocioPorOferta> = {}): HechoDelNegocioPorOferta =>
+  ({ oferta: 'brunch', sede_id: null, tipo, valor: `un hecho de ${tipo}`, vigente_desde: null, vigente_hasta: null, fuente: `dueno · ficha:${tipo}`, fecha_de_la_fuente: '2026-11-17', confianza: 'alta', ...o })
+// los 5 tipos (m3 de CC6: con uno solo, filtrar otro tipo no se notaba)
+const HECHOS: HechoDelNegocioPorOferta[] = [
+  hecho('sede', { sede_id: 's1' }), hecho('apertura', { vigente_desde: '2026-11-01' }), hecho('cierre_retiro', { vigente_desde: '2026-11-30' }),
+  hecho('zona_de_entrega', { confianza: 'media' }), hecho('aun_no_existe', { oferta: null, vigente_hasta: '2026-11-19' }),
+]
 beforeEach(() => leer.mockReset())
 
 describe('el adaptador real de los hechos del negocio', () => {
-  it('🔴 lectura ok ⇒ devuelve los hechos tal cual (con su tipo), leídos con la base del adaptador y el cliente pedido', async () => {
-    leer.mockResolvedValue({ estado: 'ok', hechos: [HECHO], sin_dato: [], huecos: [], texto: '', oficina: { hechos: [] } })
+  it('🔴 lectura ok ⇒ devuelve los hechos tal cual, los 5 tipos (con su tipo), leídos con la base del adaptador y el cliente pedido', async () => {
+    leer.mockResolvedValue({ estado: 'ok', hechos: HECHOS, sin_dato: [], huecos: [], texto: '', oficina: { hechos: [] } })
     const r = await almacenDeSupabase().hechosDelNegocio!('cli-1')
-    expect(r).toEqual([HECHO])
+    expect(r).toEqual(HECHOS)
+    expect(r!.map((h) => h.tipo)).toEqual(['sede', 'apertura', 'cierre_retiro', 'zona_de_entrega', 'aun_no_existe'])
     expect(leer).toHaveBeenCalledTimes(1)
     expect(leer.mock.calls[0][0]).toBe(BASE)
     expect(leer.mock.calls[0][1]).toBe('cli-1')
@@ -37,7 +45,7 @@ describe('el adaptador real de los hechos del negocio', () => {
     expect(await almacenDeSupabase().hechosDelNegocio!('cli-1')).toEqual([])
   })
   it('🔴 no se pudo leer (o lectura recortada) ⇒ null: el lector declara «aún no disponibles» y nada se frena', async () => {
-    for (const detalle of ['client_sedes: caída', 'lectura recortada a 2000 filas: los hechos no estarían completos']) {
+    for (const detalle of ['una lectura cayó', 'lectura recortada a 2000 filas: los hechos no estarían completos']) {
       leer.mockResolvedValue({ estado: 'no_se_pudo_leer', detalle })
       expect(await almacenDeSupabase().hechosDelNegocio!('cli-1')).toBeNull()
     }
