@@ -5,6 +5,7 @@
 import { BRIEF_GUIA_NO_REGLA, type ElementoDelKit } from './brief'
 import { AVISO_DEL_CEREBRO, describirReglas, FUNCION_DEL_BRIEF, FUNCION_DEL_MANUAL, FUNCION_DEL_PLAN, FUNCION_DEL_PORTERO, resumenDelEncargo, seccionDelPerfil, type ContextoDePedido } from './pedidos'
 import type { ContextoDelRevisor, ResumenDelEncargo } from './ciego'
+import { rolesSinImagen } from './marcas-de-origen'
 import { LIMITES_DE_LAMINA, LIMITES_DE_ESTRUCTURA } from './salida'
 import { seccionDeImagenSinFoto } from './prompts-sin-invencion'
 import type { Ficha, Limites } from './tipos'
@@ -36,9 +37,11 @@ const llamados = (lim: Record<string, unknown>): string => (typeof lim.llamados_
 /** 17-nov · quitar rejas (filas 5 y 11): la lista de roles del carrusel es DATO de la plantilla (`roles_de_lamina`); sin ella, los roles los nombra la estructura del manual y el brief */
 const roles = (lim: Record<string, unknown>): string => {
   const r = lim.roles_de_lamina
-  return Array.isArray(r) && r.length && r.every((x) => typeof x === 'string' && x.trim())
+  const lista = Array.isArray(r) && r.length && r.every((x) => typeof x === 'string' && x.trim())
     ? `Roles de lámina posibles (el ref de una imagen es un rol): ${r.join(', ')}.`
     : 'Los roles de las láminas los nombra la estructura que pidan el manual y el brief (una palabra corta por lámina: portada, paso, producto, antes, después, cierre…); no hay una lista fija. El ref de una imagen es el rol de la lámina que la lleva.'
+  const sin = rolesSinImagen(lim)
+  return sin.length ? `${lista} Una lámina que va SIN imagen (tipográfica, de marca) lleva el rol ${sin.map((x) => `«${x}»`).join(' o ')}; cualquier otro rol lleva imagen.` : lista
 }
 const recorta = (t: string, n: number) => (t.length > n ? `${t.slice(0, n)}\n[… recortado: ${t.length - n} caracteres más en el manual]` : t)
 const lista = (xs: string[]) => (xs.length ? xs.map((x) => `- ${x}`).join('\n') : '- (ninguno)')

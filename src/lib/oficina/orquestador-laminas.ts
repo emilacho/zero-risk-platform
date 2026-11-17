@@ -6,6 +6,7 @@
  */
 import { candidatasDelEncargo } from './material-fotos'
 import { fotosDeReferencia, fotosPorImagen } from './foto-de-referencia'
+import { rolesSinImagen } from './marcas-de-origen'
 import { datos, fichaNueva, reglasParaPrompts, reglasVisuales } from './ayudas'
 import { elementosDelKit, planDeOrigen, fechaLimiteDelBrief, parsearBrief, prohibePersonas, protagonistasDelBrief, proporcionDelBrief, type BriefLeido, type ElementoDelKit } from './brief'
 import { briefEsDelEncargo, claseDeLaFamilia } from './familia-del-brief'
@@ -548,7 +549,7 @@ function direccionVisual(v: Record<string, unknown>, b: BaseL, e: Estado, pl: Pl
   const maxGen = Number(pl.limites.imagenes_generadas_max ?? 2)
   let generadas = 0
   const generarSiFalta = pl.limites.generar_cuando_no_hay_foto === true
-  const sinImagen = new Set<string>(Array.isArray(pl.limites.roles_sin_imagen) ? (pl.limites.roles_sin_imagen as unknown[]).map(String) : ['cta', 'cierre'])
+  const sinImagen = new Set<string>(rolesSinImagen(pl.limites))
   const efectivas: ImagenDecidida[] = imgs.map((i) => {
     let modo = i.modo, foto = i.foto_id
     // el CÓDIGO decide lo que no se confía al modelo: una foto real tiene que ser una de las candidatas

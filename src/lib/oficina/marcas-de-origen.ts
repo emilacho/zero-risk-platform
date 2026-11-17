@@ -9,12 +9,18 @@ import type { Estado, Limites } from './tipos'
 export type OrigenDeImagen = 'foto_propia' | 'foto_cercana' | 'generada' | 'tipografica' | 'sin_imagen' | 'descartada'
 export const ROTULO_DE_ORIGEN: Record<OrigenDeImagen, string> = { foto_propia: 'foto propia del cliente', foto_cercana: 'material cercano (foto propia que no muestra exactamente lo pedido)', generada: 'imagen generada con IA', tipografica: 'lámina tipográfica de marca', sin_imagen: 'sin imagen', descartada: 'imagen pedida que no se usó (la lámina queda sin imagen)' }
 
+/** los roles de lámina que van SIN imagen (lámina tipográfica de marca): `roles_sin_imagen` de la plantilla; sin el dato, los de siempre. UNA sola fuente: el armado, la marca de origen y los pedidos (que se lo dicen al curador y al diseñador: con roles libres, el nombre importa · 🟡 de CC6 al tramo 4) */
+export const rolesSinImagen = (l: Limites | Record<string, unknown> | undefined): string[] => {
+  const r = (l as Record<string, unknown> | undefined)?.roles_sin_imagen
+  return Array.isArray(r) ? r.map(String) : ['cta', 'cierre']
+}
+
 export const marcaDeOrigenActiva = (l: Limites | Record<string, unknown> | undefined): boolean => !!l && ((l as Record<string, unknown>).generar_cuando_no_hay_foto === true || (l as Record<string, unknown>).material_activo === true || (l as Record<string, unknown>).mesa === true)
 
 export function origenesDeImagenes(e: Estado, limites?: Record<string, unknown>): { por_imagen: Array<{ ref: string; origen: OrigenDeImagen; foto_id?: string; lamina?: number }>; resumen: string } | null {
   const vd = datos(e, 'visual_direction')
   if (!vd) return null
-  const sinImagen = new Set<string>(Array.isArray(limites?.roles_sin_imagen) ? (limites!.roles_sin_imagen as unknown[]).map(String) : ['cta', 'cierre'])
+  const sinImagen = new Set<string>(rolesSinImagen(limites))
   const cercanas = new Set<string>(((datos(e, 'candidatas_foto')?.candidatas ?? []) as Array<{ id: string; cercana?: boolean }>).filter((c) => c.cercana).map((c) => c.id))
   const imgs = Array.isArray(vd.imagenes) ? (vd.imagenes as Array<{ ref: string; modo: string; foto_id?: string }>) : [{ ref: 'imagen', modo: String((vd.decision as { modo?: string } | undefined)?.modo ?? 'ninguna'), foto_id: (vd.decision as { foto_id?: string } | undefined)?.foto_id }]
   // 29-oct (P6) · lo que se PIDIÓ no es lo que se USÓ: cuando ya hay imágenes elegidas, el origen sale de ellas (una foto pedida que se descartó, o una lámina sin imagen, ya no se anuncia como generada)

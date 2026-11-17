@@ -1,3 +1,4 @@
+import { rolesSinImagen } from '../marcas-de-origen'
 import { describe, expect, it } from 'vitest'
 import type { FormatosPorRed } from '@/lib/cadena/tipos'
 import { abrirEncargo, avanzar } from '../orquestador'
@@ -364,6 +365,9 @@ describe('SALA 2 · las imágenes por rol y los 3 controles', () => {
     expect(arte(M, id, 'visual_direction').imagenes.map((i: { ref: string }) => i.ref)).toEqual(['portada'])
     expect(fichas(M, id).some((f) => /no está en la lista de la plantilla/.test(f.que ?? ''))).toBe(false)
     expect(tareas['direccion_visual'][0]).toMatch(/no hay una lista fija/)
+    // 🟡 de CC6: con roles libres, el curador y el diseñador saben qué nombre lleva la lámina SIN imagen (el de la plantilla)
+    expect(tareas['direccion_visual'][0]).toContain('Una lámina que va SIN imagen (tipográfica, de marca) lleva el rol «cta» o «cierre»; cualquier otro rol lleva imagen.')
+    expect(tareas['laminas'][0]).toContain('Una lámina que va SIN imagen (tipográfica, de marca) lleva el rol «cta» o «cierre»; cualquier otro rol lleva imagen.')
     expect(tareas['direccion_visual'][0]).not.toMatch(/hook, problem, reframe/)
   })
   it('🔴 con `roles_de_lamina` en la plantilla (dato), un rol fuera de la lista solo AVISA: ni vuelta ni descarte', async () => {
@@ -825,5 +829,19 @@ describe('reglas rígidas #13 · el dato sin verificar en el carrusel', () => {
       const { M, id } = await correrCon(dato)
       expect(fichas(M, id).some((f) => f.gravedad === 'bloquea' && f.donde === 'imagen')).toBe(true)
     }
+  })
+})
+
+describe('🟡 de CC6 al tramo 4 · los roles SIN imagen salen del dato de la plantilla, en el armado y en los pedidos', () => {
+  it('con `roles_sin_imagen: [«final»]` el pedido nombra «final» (no «cta»/«cierre») y una sola función lo lee para todos', async () => {
+    const pl = { ...CARRUSEL_IG_V1, limites: { ...CARRUSEL_IG_V1.limites, roles_sin_imagen: ['final'] } }
+    const { M, id } = await abierto(pl, BRIEF_CARRUSEL, 'BRF-0100')
+    const { tareas } = await correr(M, id, guionCarrusel())
+    for (const t of [tareas['direccion_visual'][0], tareas['laminas'][0]]) {
+      expect(t).toContain('lleva el rol «final»; cualquier otro rol lleva imagen.')
+      expect(t).not.toMatch(/lleva el rol «cta»/)
+    }
+    expect(rolesSinImagen({ roles_sin_imagen: ['final'] })).toEqual(['final'])
+    expect(rolesSinImagen({})).toEqual(['cta', 'cierre'])
   })
 })
