@@ -33,7 +33,7 @@ import { fotosDeReferencia, type FotoDeReferencia } from './foto-de-referencia'
 import { avisoDeLaRevisionALaMesa, calidadDeLaFase, faseDeProduccion, imagenesClaveVigentes, leerRevisionDeImagenesClave, pedidosDeImagenClave, PASO_IMAGENES_CLAVE, PASO_REVISAR_IMAGENES_CLAVE, SEGUNDOS_PARA_DOS_CUADROS, tareaDeLaRevisionDeImagenesClave, type ImagenClaveDelPlano, type ImagenesClave, type PlanoDeLaHoja } from './video/imagen-clave'
 import { propuestasDe } from './video/aprobacion'
 import { pedidosPorPlano, type PedidoDePlano } from './video/planos'
-import { cotizarYEnviar, encuadrarFotos, leerPlanos, unirClips, type PlanoEnviado } from './video/motor-planos'
+import { cotizarYEnviar, encuadrarFotos, leerPlanos, textoDeLoCobrado, unirClips, type ClipCobrado, type PlanoEnviado } from './video/motor-planos'
 
 /** para la jefatura: qué es el contexto «lo que vio el agente» */
 export const FUNCION_DE_LA_MIRADA = 'lo que un agente con visión vio en los cuadros del video terminado (uno por plano), comparado con el guion y la fila; la imagen manda si no coinciden'
@@ -77,7 +77,7 @@ export interface VideoDelEncargo {
   /** 11-nov · camino B · los clips de cada plano que se unieron (en orden) */
   planos?: Array<{ n: number; request_id: string; costo_usd: number; video_url: string }>
 }
-interface EnvioGuardado { request_id: string; status: string; costo_estimado_usd: number; costo_lista_usd?: number; descuento_pct?: number; enviado_en: string; n: number; /** 11-nov · camino B · un envío por plano */ planos?: PlanoEnviado[] }
+interface EnvioGuardado { request_id: string; status: string; costo_estimado_usd: number; costo_lista_usd?: number; descuento_pct?: number; enviado_en: string; n: number; /** 11-nov · camino B · un envío por plano */ planos?: PlanoEnviado[]; /** 17-nov · §2 de CC7 · el envío falló a mitad: el motivo; se espera a los enviados para anotar lo cobrado y el lote no se une */ lote_incompleto?: string }
 
 /** 11-nov · camino B (GO Lenovo 16:43) · se enciende por la plantilla (`limites.video.plano_por_plano: true`); apagado => camino A (una toma), como hoy */
 export const planoPorPlanoEncendido = (pl: Plantilla): boolean => ((pl.limites.video ?? {}) as { plano_por_plano?: unknown }).plano_por_plano === true
@@ -596,8 +596,19 @@ async function enviarPlanos(P: Puertos, enc: Encargo, paso: Paso, e: Estado, pla
   const en = await encuadrarFotos(P, enc, planos, ahora.getTime())
   if (!en.ok) return { fallido: en.motivo }
   const env = await cotizarYEnviar(P, enc, en.planos, tope, n)
-  if (!env.ok) return { fallido: env.motivo }
+  if (!env.ok && !env.enviados?.length) return { fallido: env.motivo }
   const iso = ahora.toISOString()
+  if (!env.ok) {
+    const enviados = env.enviados!
+    const e2 = conEnvio(e, { request_id: enviados[0].request_id, status: 'queued', costo_estimado_usd: +enviados.reduce((s, x) => s + x.costo_estimado_usd, 0).toFixed(4), enviado_en: iso, n, planos: enviados, lote_incompleto: env.motivo })
+    const dispatch_key = `${enc.id}:${n}`
+    await P.almacen.guardar({
+      encargo_id: enc.id, estado_del_motor: e2, gasto_usd: e2.gasto_usd, estado: 'en_paso',
+      turno: { n, paso: paso.clave, tipo: 'brazo', agente: null, estado: 'corriendo', dispatch_key, cost_usd: 0 },
+      artefacto: { tipo: 'pedido_video', version: e2.artefactos['pedido_video'].version, contenido: e2.artefactos['pedido_video'].datos, sha256: sha(e2.artefactos['pedido_video'].datos), autor: 'sala' },
+    })
+    return { esperar: { accion: 'esperar_brazo', lote_incompleto: true, turno: { n, paso: paso.clave, tipo: 'brazo', dispatch_key, request_id: enviados[0].request_id }, video: { planos: enviados.length, plazo_min: MINUTOS_PARA_ESPERAR_AL_BRAZO } } }
+  }
   if (env.simulado) {
     const v: VideoDelEncargo = { request_id: env.enviados[0].request_id, status: 'simulado', simulado: true, video_url: `${PREFIJO_DRY}video-unido.mp4`, url_proveedor: null, copia: 'simulada', costo_usd: 0, costo_estimado_usd: 0, expires_at: null, enviado_en: iso, terminado_en: iso, planos: env.enviados.map((x) => ({ n: x.n, request_id: x.request_id, costo_usd: 0, video_url: `${PREFIJO_DRY}plano-${x.n}.mp4` })) }
     return { res: { costo_usd: 0, artefacto: v as unknown as Record<string, unknown> } }
@@ -622,7 +633,7 @@ export function gastosDelVideo(res: Extract<ResultadoDelBrazo, { ok: true }>, re
 /** lo que el brazo entregó (o no): lo trae el vigía tras sondear, o una prueba */
 export type ResultadoDelBrazo =
   | { ok: true; status: 'completed'; video_url: string; url_proveedor: string | null; costo_usd: number; expires_at: string | null; copia: 'bucket' | 'solo_proveedor'; aviso: string | null; /** camino B · los clips unidos (cada uno es un gasto en el libro) */ planos?: Array<{ n: number; request_id: string; costo_usd: number; video_url: string }> }
-  | { ok: false; status: string; error: string }
+  | { ok: false; status: string; error: string; /** 17-nov · §2 de CC7 · camino B: lo que el proveedor YA cobró aunque el video falle */ cobrado?: ClipCobrado[] }
 
 /** el brazo terminó: se registra el paso `video` (artefacto + gasto en el libro de la oficina) y el encargo sigue; si falló, cierra FALLIDO visible. IDEMPOTENTE: una entrega repetida solo avanza */
 export async function recibirVideo(P: Puertos, encargoId: string, n: number, res: ResultadoDelBrazo): Promise<Respuesta> {
@@ -642,8 +653,13 @@ export async function recibirVideo(P: Puertos, encargoId: string, n: number, res
   const turnoBase = { n, paso: sig.paso.clave, tipo: 'brazo', agente: null, dispatch_key: abierto.dispatch_key, workflow_execution_id: abierto.workflow_execution_id ?? null }
   const ahora = P.ahora().toISOString()
   if (!res.ok) {
-    await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: e, gasto_usd: e.gasto_usd, turno: { ...turnoBase, estado: 'fallo', cost_usd: 0, error: `${res.status}: ${res.error}`.slice(0, 300) } })
-    return fallar(P, enc, `el brazo de video no entregó (${res.status}): ${res.error}`)
+    // 17-nov · §2 de CC7 · lo que el proveedor YA cobró no se pierde: va al gasto del encargo (tope de campaña, fallidos «que gastaron») y al libro, un gasto por clip
+    const cobrado = (res.cobrado ?? []).filter((c) => c.costo_usd > 0)
+    const suma = +cobrado.reduce((s, c) => s + c.costo_usd, 0).toFixed(4)
+    const e2: Estado = suma ? { ...e, gasto_usd: +(e.gasto_usd + suma).toFixed(4) } : e
+    const gastos = cobrado.map((c) => ({ concepto: 'video' as const, ref_tabla: 'agent_invocations', ref_id: sessionIdDeVideo(c.request_id), cost_usd: c.costo_usd, base: 'usage' as const }))
+    await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: e2, gasto_usd: e2.gasto_usd, turno: { ...turnoBase, estado: 'fallo', cost_usd: suma, error: `${res.status}: ${res.error}`.slice(0, 300) }, ...(gastos.length ? { gastos } : {}) })
+    return fallar(P, { ...enc, estado_del_motor: e2, gasto_usd: e2.gasto_usd }, `el brazo de video no entregó (${res.status}): ${res.error}${textoDeLoCobrado(cobrado)}`)
   }
   const costo = Math.max(0, Number(res.costo_usd) || 0)
   const v: VideoDelEncargo = { request_id, status: 'completed', simulado: false, video_url: res.video_url, url_proveedor: res.url_proveedor, copia: res.copia, costo_usd: costo, costo_estimado_usd: envio?.costo_estimado_usd ?? 0, expires_at: res.expires_at, enviado_en: envio?.enviado_en ?? ahora, terminado_en: ahora, aviso: res.aviso, ...(res.planos ? { planos: res.planos } : {}) }
@@ -698,10 +714,14 @@ export async function sondearPlanos(P: Puertos, enc: Encargo, enviados: PlanoEnv
   const vencido = new Date(inicio).getTime() < ahora.getTime() - MINUTOS_PARA_ESPERAR_AL_BRAZO * 60_000
   const l = leerPlanos(enviados, estados, vencido, MINUTOS_PARA_ESPERAR_AL_BRAZO)
   if (!l.listo) return null
-  if (!l.ok) return { ok: false, status: l.status, error: l.error }
+  const cobradosDe = (cs: Array<{ n: number; request_id: string; costo_usd: number }>): ClipCobrado[] => cs.filter((c) => c.costo_usd > 0).map((c) => ({ n: c.n, request_id: c.request_id, costo_usd: c.costo_usd }))
+  // 17-nov · §2 de CC7 · el envío se cortó a mitad: lote completo o nada · nunca se une, y se anota lo que los enviados cobraron
+  const incompleto = envioDe(enc.estado_del_motor)?.lote_incompleto
+  if (incompleto) return { ok: false, status: 'lote_incompleto', error: incompleto, cobrado: l.ok ? cobradosDe(l.clips) : l.cobrados }
+  if (!l.ok) return { ok: false, status: l.status, error: l.error, cobrado: l.cobrados }
   const ped = datos(enc.estado_del_motor, 'pedido_video')?.pedido as PedidoDeVideoDeLaOficina | undefined
   const u = await unirClips(P, enc, l.clips, ped?.relacion ?? '9:16', ped?.resolucion ?? '720p', ahora.getTime())
-  if (!u.ok) return { ok: false, status: 'no_se_unio', error: u.error }
+  if (!u.ok) return { ok: false, status: 'no_se_unio', error: u.error, cobrado: cobradosDe(l.clips) }
   const costo = +l.clips.reduce((s, c) => s + c.costo_usd, 0).toFixed(4)
   const vence = l.clips.map((c) => c.expires_at).filter((x): x is string => !!x).sort()[0] ?? null
   return { ok: true, status: 'completed', video_url: u.video_url, url_proveedor: null, costo_usd: costo, expires_at: vence, copia: 'bucket', aviso: null, planos: l.clips.map((c) => ({ n: c.n, request_id: c.request_id, costo_usd: c.costo_usd, video_url: c.video_url })) }

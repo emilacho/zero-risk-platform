@@ -129,10 +129,22 @@ describe('cotizar la suma y enviar cada plano', () => {
     expect(!r.ok && r.motivo).toMatch(/plano 2/)
     expect(reg.enviados).toHaveLength(0)
   })
-  it('un envío falla a mitad: el motivo dice cuáles ya se enviaron (y que reabrir no los paga dos veces)', async () => {
+  it('un envío falla a mitad: devuelve lo YA enviado y el motivo dice la verdad (se cobra si termina, el lote incompleto no se une) · §3 de CC7', async () => {
     const { P } = brazo({ falla_envio_en: 2 })
     const r = await cotizarYEnviar(P as never, e, planosDe(FOTOS), 5, 4)
-    expect(!r.ok && r.motivo).toMatch(/plano 2: rechazado · ya se enviaron los planos 1/)
+    expect(r.ok).toBe(false)
+    if (r.ok) return
+    expect(r.motivo).toMatch(/plano 2: rechazado · ya se habían enviado los planos 1: se cobran si terminan, el encargo espera a que terminen para anotar lo cobrado y el lote incompleto no se une/)
+    expect(r.motivo).not.toMatch(/reutiliza|no los paga dos veces/)
+    expect(r.enviados?.map((x) => x.n)).toEqual([1])
+  })
+  it('un envío falla en el PRIMER plano: nada salió (sin «enviados») y no se gastó nada', async () => {
+    const { P } = brazo({ falla_envio_en: 1 })
+    const r = await cotizarYEnviar(P as never, e, planosDe(FOTOS), 5, 4)
+    expect(r.ok).toBe(false)
+    if (r.ok) return
+    expect(r.enviados).toBeUndefined()
+    expect(r.motivo).toMatch(/no se gastó nada/)
   })
   it('en seco: todo simulado, sin cotizar', async () => {
     const { P, reg } = brazo()

@@ -12,6 +12,9 @@ import type { EstadoDelBrazo, Puertos } from '../puertos'
 import type { PedidoDePlano } from './planos'
 import type { PedidoDeVideoDeLaOficina } from './pedido'
 
+/** 17-nov · S2-4 (CC1) · arreglo §2 de CC7: un clip que el proveedor terminó y COBRÓ, aunque el video falle (va al encargo y al libro, uno por clip) */
+export interface ClipCobrado { n: number; request_id: string; costo_usd: number }
+
 /** lo que el paso guarda de cada plano enviado */
 export interface PlanoEnviado { n: number; request_id: string; costo_estimado_usd: number; segundos: number; cortar_a_s: number }
 
@@ -40,7 +43,7 @@ export async function encuadrarFotos(P: Pick<Puertos, 'video' | 'guardarArchivos
 }
 
 /** 2 + 3 · cotiza la suma (gratis) y, si cabe en el tope, envía cada plano · devuelve lo enviado */
-export async function cotizarYEnviar(P: Pick<Puertos, 'video'>, enc: { id: string; client_id: string; dry_run: boolean }, planos: PedidoDePlano[], tope: number, n: number): Promise<{ ok: true; enviados: PlanoEnviado[]; simulado: boolean; costo_estimado_usd: number } | { ok: false; motivo: string }> {
+export async function cotizarYEnviar(P: Pick<Puertos, 'video'>, enc: { id: string; client_id: string; dry_run: boolean }, planos: PedidoDePlano[], tope: number, n: number): Promise<{ ok: true; enviados: PlanoEnviado[]; simulado: boolean; costo_estimado_usd: number } | { ok: false; motivo: string; /** el envío falló a mitad: los planos que YA salieron (se cobran si terminan) */ enviados?: PlanoEnviado[] }> {
   const v = P.video
   if (!v) return { ok: false, motivo: 'el puerto del brazo de video no está configurado' }
   const sinGastar = 'no se gastó nada; el encargo queda recuperable'
@@ -68,8 +71,9 @@ export async function cotizarYEnviar(P: Pick<Puertos, 'video'>, enc: { id: strin
     const queda = +(tope - enviados.reduce((s, x) => s + x.costo_estimado_usd, 0)).toFixed(4)
     const e = await v.enviar({ pedido: comoPedidoDelBrazo(p), client_id: enc.client_id, encargo_id: enc.id, dry_run: false, tope_usd: queda, ...ctx(enc.id, n) })
     if (!e.ok) {
-      const ya = enviados.length ? ` · ya se enviaron los planos ${enviados.map((x) => x.n).join(', ')} (se cobran si terminan; reabrir el encargo los reutiliza, no los paga dos veces)` : ` (${sinGastar})`
-      return { ok: false, motivo: `el brazo de video no aceptó el plano ${p.n}: ${e.error}${ya}` }
+      // §3 de CC7 · el texto dice lo que pasa de verdad: lo enviado se cobra si termina; el encargo espera a que terminen para anotarlo y el lote incompleto no se une
+      if (!enviados.length) return { ok: false, motivo: `el brazo de video no aceptó el plano ${p.n}: ${e.error} (${sinGastar})` }
+      return { ok: false, enviados, motivo: `el brazo de video no aceptó el plano ${p.n}: ${e.error} · ya se habían enviado los planos ${enviados.map((x) => x.n).join(', ')}: se cobran si terminan, el encargo espera a que terminen para anotar lo cobrado y el lote incompleto no se une` }
     }
     enviados.push({ n: p.n, request_id: e.request_id, costo_estimado_usd: e.costo_estimado_usd || costos[i], segundos: p.segundos, cortar_a_s: p.cortar_a_s })
   }
@@ -79,27 +83,42 @@ export async function cotizarYEnviar(P: Pick<Puertos, 'video'>, enc: { id: strin
 /** lo que se sabe de los planos al sondear */
 export type EstadoDeLosPlanos =
   | { listo: false }
-  | { listo: true; ok: false; status: string; error: string }
+  | { listo: true; ok: false; status: string; error: string; /** lo que el proveedor YA terminó y cobró (§2 de CC7) */ cobrados: ClipCobrado[] }
   | { listo: true; ok: true; clips: Array<{ n: number; request_id: string; video_url: string; cortar_a_s: number; costo_usd: number; expires_at: string | null }> }
 
-/** 4 · ¿volvieron todos? · un plano que falla basta para cerrar; uno que quedó solo en el proveedor no se puede unir (el unidor solo baja de nuestro almacén) */
+/**
+ * 4 · ¿volvieron todos? · 17-nov (§2 de CC7) · se espera a TODOS aunque uno ya haya fallado: los que seguían en curso también se cobran y tienen que quedar anotados.
+ * Un plano que falla, o que quedó solo en el proveedor (el unidor solo baja de nuestro almacén), cierra el video; lo que el proveedor terminó va en `cobrados`.
+ */
 export function leerPlanos(enviados: PlanoEnviado[], estados: EstadoDelBrazo[], vencido: boolean, plazoMin: number): EstadoDeLosPlanos {
   const clips: Array<{ n: number; request_id: string; video_url: string; cortar_a_s: number; costo_usd: number; expires_at: string | null }> = []
+  const cobrados: ClipCobrado[] = []
   let pendientes = 0
+  let fallo: { status: string; error: string } | null = null
   for (const [i, p] of enviados.entries()) {
     const st = estados[i]
     if (!st || !st.ok) { pendientes++; continue }
     if (st.simulado) { clips.push({ n: p.n, request_id: p.request_id, video_url: `https://dry.invalid/plano-${p.n}.mp4`, cortar_a_s: p.cortar_a_s, costo_usd: 0, expires_at: null }); continue }
     if (!st.terminal) { pendientes++; continue }
     if ('video_url' in st) {
-      if (st.copia !== 'bucket') return { listo: true, ok: false, status: 'plano_sin_copia', error: `el clip del plano ${p.n} quedó solo en el proveedor (${st.aviso ?? 'sin copia'}): no se puede unir` }
+      if (st.costo_usd > 0) cobrados.push({ n: p.n, request_id: p.request_id, costo_usd: st.costo_usd })
+      if (st.copia !== 'bucket') { fallo ??= { status: 'plano_sin_copia', error: `el clip del plano ${p.n} quedó solo en el proveedor (${st.aviso ?? 'sin copia'}): no se puede unir` }; continue }
       clips.push({ n: p.n, request_id: p.request_id, video_url: st.video_url, cortar_a_s: p.cortar_a_s, costo_usd: st.costo_usd, expires_at: st.expires_at })
       continue
     }
-    return { listo: true, ok: false, status: st.status, error: `el plano ${p.n} no se generó (${st.status}): ${('error' in st ? st.error : null) ?? 'el proveedor no entregó el clip'}` }
+    fallo ??= { status: st.status, error: `el plano ${p.n} no se generó (${st.status}): ${('error' in st ? st.error : null) ?? 'el proveedor no entregó el clip'}` }
   }
-  if (pendientes) return vencido ? { listo: true, ok: false, status: 'sin_vuelta', error: `${pendientes} plano(s) no terminaron en ${plazoMin} min` } : { listo: false }
+  if (pendientes && !vencido) return { listo: false }
+  if (fallo) return { listo: true, ok: false, ...fallo, cobrados }
+  if (pendientes) return { listo: true, ok: false, status: 'sin_vuelta', error: `${pendientes} plano(s) no terminaron en ${plazoMin} min`, cobrados }
   return { listo: true, ok: true, clips: clips.sort((a, b) => a.n - b.n) }
+}
+
+/** lo cobrado en palabras, para el motivo que leen Emilio y el agente de los fallidos · vacío si no se cobró nada */
+export function textoDeLoCobrado(cobrados: ClipCobrado[]): string {
+  if (!cobrados.length) return ''
+  const suma = cobrados.reduce((s, c) => s + c.costo_usd, 0)
+  return ` · ya se cobraron US$ ${suma.toFixed(4)} por ${cobrados.length} clip(s) (planos ${[...cobrados].sort((a, b) => a.n - b.n).map((c) => c.n).join(', ')}): quedan en el gasto del encargo y en el libro`
 }
 
 /** 5 · une los clips (Railway) y guarda el mp4 en el almacén de la oficina · en seco devuelve el simulado sin salir a la red */
