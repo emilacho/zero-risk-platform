@@ -454,7 +454,7 @@ async function finalizarEntrega(P: Puertos, enc: Encargo, png: ArchivoDeEntrega[
 }
 
 // ───────────────────────── lo que cada paso de agente hace con su salida (validadores de código)
-export type ProcesoL = { res?: ResultadoDePaso; fallido?: string; /** mensaje literal para el reintento de formato (lo manda el orquestador mientras queden reintentos) */ reintentar?: string }
+export type ProcesoL = { res?: ResultadoDePaso; fallido?: string; /** mensaje literal para el reintento de formato (lo manda el orquestador mientras queden reintentos) */ reintentar?: string; /** el reintento es SOLO por largo (dato de la plantilla): su tope es `CORRECCIONES_DE_LARGO`, no el de formato */ largo?: true }
 const sin = <T extends { ref: string }>(xs: T[], validos: string[]): T[] => xs.filter((x) => validos.includes(x.ref))
 
 export function procesarValorL(paso: Paso, v: Record<string, unknown>, enc: Encargo, e: Estado, pl: Plantilla, intentos: number): ProcesoL {
@@ -464,7 +464,7 @@ export function procesarValorL(paso: Paso, v: Record<string, unknown>, enc: Enca
   const acortar = (lam: Lamina[]): ProcesoL | null => {
     const largos = largosDeLamina(pl)
     const xs = largos ? largosPasados(lam, largos) : []
-    return xs.length && intentos < CORRECCIONES_DE_LARGO ? { reintentar: pedidoDeAcortarLaminas(xs) } : null
+    return xs.length && intentos < CORRECCIONES_DE_LARGO ? { reintentar: pedidoDeAcortarLaminas(xs), largo: true } : null
   }
   const retry = (problemas: string[]): ProcesoL | null => (problemas.length && quedan ? { reintentar: `Tu respuesta no cumple lo que la sala comprueba por código: ${problemas.slice(0, 6).join(' · ')}. Corrígelo y devuelve solo el JSON del contrato.` } : null)
   switch (paso.clave) {
