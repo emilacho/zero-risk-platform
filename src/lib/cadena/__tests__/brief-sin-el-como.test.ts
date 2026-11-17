@@ -52,12 +52,13 @@ describe('el brief no trae el cómo como orden · las 4 clases (kit sin fila, po
     expect(h.briefs.map((b) => b.brief_id).sort()).toEqual(CASOS.map((c) => c[0]).sort())
   })
   for (const [id, ideaId, como] of CASOS) {
-    it(`${id}: la descripción del banco aparece UNA vez y bajo SUGERENCIAS; QUÉ ES, IDEA DEL BANCO e IDEA DE LA PIEZA no la repiten`, () => {
+    // 17-nov · Sprint 4 · F (firma de Emilio 17:01): la pieza nace de la idea · la descripción del banco llega UNA vez, TAL CUAL, en IDEA DEL BANCO (ya no como sugerencia reemplazable)
+    it(`${id}: la descripción del banco aparece UNA vez, tal cual, en IDEA DEL BANCO; QUÉ ES e IDEA DE LA PIEZA no la repiten`, () => {
       const b = parsearBrief(h.texto_md, id)!
       expect(b.texto.split(como).length - 1).toBe(1)
-      expect(b.texto).toContain(`- SUGERENCIAS:\n  - cómo la imaginó el banco (${ideaId}): ${como} · la mesa puede mejorarla o reemplazarla diciendo por qué`)
+      expect(b.texto.split('\n').find((l) => l.startsWith('- IDEA DEL BANCO: '))).toContain(`- IDEA DEL BANCO: ${ideaId} · serie S1 · ${como} · mensaje: `)
+      expect(b.texto).not.toContain('cómo la imaginó el banco')
       expect(b.que_es).not.toContain(COMO)
-      expect(b.texto).toMatch(new RegExp(`^- IDEA DEL BANCO: ${ideaId} · serie S1 · cómo la imaginó el banco: en SUGERENCIAS$`, 'm'))
       expect(b.idea_de_la_pieza).toBeUndefined()
     })
     it(`${id}: LO DECIDIDO trae FIJO (la idea: id y mensaje, sin el cómo) y LIBRE`, () => {
@@ -71,8 +72,14 @@ describe('el brief no trae el cómo como orden · las 4 clases (kit sin fila, po
     expect(parsearBrief(h.texto_md, idDelKit('2026-W47'))!.que_es).toBe('Kit semanal de historias y estados (1 elemento) · mensaje: ya llegó al norte')
     expect(parsearBrief(h.texto_md, 'post-fila')!.que_es).toBe('post para Ig · mensaje: pídelo hoy')
   })
-  it('una fila con idea PROPIA la conserva como IDEA DE LA PIEZA (manda la fila)', () => {
+  // 17-nov · Sprint 4 · F: con idea del banco, la idea que escribió el calendario (fila vieja v4) NO llega a la hoja: manda la de los creativos
+  it('una fila vieja con idea PROPIA y con idea del banco: la del calendario no llega; manda la del banco', () => {
     const h2 = escribirHoja({ ...INS, filas: [fila({ id: 'post-fila', concepto: { idea: 'la idea propia de la fila' } })] })
+    expect(parsearBrief(h2.texto_md, 'post-fila')!.idea_de_la_pieza).toBeUndefined()
+    expect(h2.texto_md).not.toContain('la idea propia de la fila')
+  })
+  it('una fila SIN idea del banco conserva su idea propia como IDEA DE LA PIEZA (es lo único que hay)', () => {
+    const h2 = escribirHoja({ ...INS, filas: [fila({ id: 'post-fila', idea_ref: null, concepto: { idea: 'la idea propia de la fila' } })] })
     expect(parsearBrief(h2.texto_md, 'post-fila')!.idea_de_la_pieza).toBe('la idea propia de la fila')
   })
 })

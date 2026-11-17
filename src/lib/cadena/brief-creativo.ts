@@ -78,13 +78,15 @@ function textoDe(s: Sec | undefined, titulo: string): string {
 /** líneas `- clave: valor` de una sección (sin exigir mayúsculas) */
 function lineasConClave(texto: string): Array<{ clave: string; valor: string }> {
   const out: Array<{ clave: string; valor: string }> = []
-  for (const l of texto.split('\n')) {
+  // 17-nov (GO Lenovo · auditoría `07-hojas-piezas.md`): las negritas del brief («- **vocabulario:** …») no viajan como «**» a la hoja
+  for (const l of texto.split('\n').map((x) => x.replace(/\*\*/g, ''))) {
     const m = /^\s*-\s*([^:·]{1,60}?)\s*:\s*(.*)$/.exec(l)
     if (m) out.push({ clave: m[1].trim(), valor: m[2].trim() })
   }
   return out
 }
-const lista = (v: string): string[] => v.split(/[;·]|,(?![^(]*\))/).map((x) => x.trim().replace(/^«|»$/g, '')).filter(Boolean)
+// 17-nov: las comillas se quitan solo si envuelven el item entero («premium» → premium); «el mejor X» sin citar reseña queda tal cual
+const lista = (v: string): string[] => v.split(/[;·]|,(?![^(«]*[)»])/).map((x) => x.trim().replace(/^«([^«»]*)»$/, '$1')).filter(Boolean)
 /** el número de frases de un mensaje (un brief = UN mensaje: máximo 2 frases, 260 caracteres) */
 export const frasesDe = (s: string): number => s.split(/[.!?¡¿]+/).map((x) => x.trim()).filter(Boolean).length
 /** ¿el público dice «todos»? (si lo nombra) */

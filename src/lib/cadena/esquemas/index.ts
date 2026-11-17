@@ -106,6 +106,23 @@ export const ESQUEMA_CALENDARIO_TANDA_V4 = objeto({
   ajustes_al_patron: lista(objeto({ semana: entero, slot: texto, accion: { enum: ['omitir', 'mover', 'agregar'] }, motivo: texto })),
 })
 
+/**
+ * 17-nov · Sprint 4 · F (GO Lenovo · firma de Emilio 17:01 Zúrich · CC3) · `calendario_tanda.v5` = v4 SIN la idea, el mensaje, el llamado ni las fotos de la pieza:
+ * la pieza nace de la idea del banco (la crearon los creativos de la gran idea) y el calendario solo pone lo suyo: fecha, red, formato, el objetivo de esa fecha
+ * y a quién le habla. `calendario_tanda.v4` queda en el registro tal cual era (las filas guardadas se siguen leyendo).
+ */
+export const CONCEPTO_DE_LA_FECHA = objeto({ objetivo: texto, publico: texto })
+export const ESQUEMA_CALENDARIO_TANDA_V5 = objeto({
+  piezas: lista(objeto({
+    semana: entero, dia_semana: entero, slot: texto, hora: texto, red: texto, formato: texto, pilar: texto, tema: texto, sede: texto,
+    requiere_abierto: bool, depende_de: listaDeTexto, pieza_fija: texto, idea_de_mesa: texto,
+    concepto: CONCEPTO_DE_LA_FECHA,
+    datos: lista(objeto({ dato: texto, valor: texto, clase: { enum: ['alto', 'medio', 'bajo'] }, ref: texto, nivel: { enum: ['F0', 'F1', 'F2', 'F3'] }, opcional: bool })),
+    pendientes: listaDeTexto,
+  })),
+  ajustes_al_patron: lista(objeto({ semana: entero, slot: texto, accion: { enum: ['omitir', 'mover', 'agregar'] }, motivo: texto })),
+})
+
 /** solo se usa si el cliente declaró tipos de fechas · `tipo`, `ambito` y `alcance` son texto libre: el esquema no fija categorías de ningún rubro */
 export const ESQUEMA_FECHAS_ESPECIALES = objeto({
   tipo: texto, ambito: texto, anio: entero,
@@ -138,6 +155,7 @@ export const ESQUEMAS = {
   'calendario_tanda.v2': ESQUEMA_CALENDARIO_TANDA_V2,
   'calendario_tanda.v3': ESQUEMA_CALENDARIO_TANDA_V3,
   'calendario_tanda.v4': ESQUEMA_CALENDARIO_TANDA_V4,
+  'calendario_tanda.v5': ESQUEMA_CALENDARIO_TANDA_V5,
   'fechas_especiales.v1': ESQUEMA_FECHAS_ESPECIALES,
   'gancho_video.v1': ESQUEMA_GANCHO_DE_VIDEO,
 } as const

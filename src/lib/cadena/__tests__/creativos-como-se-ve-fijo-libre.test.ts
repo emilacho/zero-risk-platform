@@ -109,12 +109,13 @@ describe('punto 2 · «cómo se ve» llega a la hoja de CADA pieza (una por fami
       expect(b!.visual).toBe(`${PREFIJO_VISUAL_DE_CAMPANA}Madera y pan, nada de estudio. · planos cerrados${id === 'F1-S1-ig-foto' ? ' · foto f-01' : ''}`)
     })
   }
-  it('la idea elegida de cada pieza viaja como FIJO con su porqué; su descripción visual NO es lo fijo: va a SUGERENCIAS', () => {
+  // 17-nov · Sprint 4 · F: la descripción del banco llega TAL CUAL en IDEA DEL BANCO (la pieza nace de la idea); el porqué dice que la crearon los creativos
+  it('la idea elegida de cada pieza viaja como FIJO con su porqué; su descripción llega tal cual en IDEA DEL BANCO', () => {
     // 17-nov (RESPUESTA a Lenovo «el brief trae el cómo»): lo fijo de la idea es el qué y el quién (id, mensaje, protagonista); «la puerta que se abre» es el cómo que imaginó el banco
     const fijo = parsearBrief(h.texto_md, 'F1-S1-ig-reel')!.lo_decidido!.find((x) => x.startsWith('FIJO · idea de esta pieza: C1-I04'))!
-    expect(fijo).toMatch(/^FIJO · idea de esta pieza: C1-I04 · mensaje: .+ · PORQUÉ: la eligió el calendario del banco de ideas del capítulo F1$/)
+    expect(fijo).toMatch(/^FIJO · idea de esta pieza: C1-I04 · mensaje: .+ · PORQUÉ: la crearon los creativos de la gran idea en el capítulo F1; el calendario solo le puso fecha, red y formato$/)
     expect(fijo).not.toContain('la puerta que se abre')
-    expect(parsearBrief(h.texto_md, 'F1-S1-ig-reel')!.texto).toContain('  - cómo la imaginó el banco (C1-I04): la puerta que se abre · la mesa puede mejorarla o reemplazarla diciendo por qué')
+    expect(parsearBrief(h.texto_md, 'F1-S1-ig-reel')!.texto).toMatch(/^- IDEA DEL BANCO: C1-I04 · la puerta que se abre · mensaje: /m)
   })
 })
 

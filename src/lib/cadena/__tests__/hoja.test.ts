@@ -51,7 +51,8 @@ describe('hoja.v1 · ida y vuelta con el lector de la oficina', () => {
     expect(b.protagonista).toBe('la silla')
     expect(b.vocabulario_obligatorio).toEqual(['pan de masa madre', 'mesa larga'])
     expect(b.prohibido).toEqual(['delicioso'])
-    expect(b.negativos).toEqual(['precios', 'delicioso'])
+    // 17-nov (GO Lenovo · auditoría 07-hojas-piezas): lo prohibido sale UNA vez, en PROHIBIDO; NEGATIVOS lleva solo «lo que no se dice»
+    expect(b.negativos).toEqual(['precios'])
     expect(b.llamado).toBe('«ven a desayunar»')
     expect(b.sintaxis).toBe('Cercano y directo.')
     expect(b.visual).toContain('Luz cálida'); expect(b.visual).toContain('planos cerrados'); expect(b.visual).toContain('foto f-01')

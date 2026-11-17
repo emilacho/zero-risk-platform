@@ -149,16 +149,17 @@ function seccionDeFechas(p: PedidoDeCalendario): string {
   return ['# FECHAS ESPECIALES (verificadas por el código)', p.fechasEspeciales?.length ? p.fechasEspeciales.map((x) => `- fecha:${x.id} · ${x.hasta && x.hasta !== x.fecha ? `${x.fecha} → ${x.hasta}` : x.fecha} · ${x.nombre} (${x.tipo})${x.origen === 'cliente' ? ' · temporada del negocio (la dio el cliente)' : ''}`).join('\n') : '(ninguna declarada para esta campaña)'].join('\n')
 }
 
-/** 16-nov · lo que se le pide al calendario para cada pieza (campo `concepto` de `calendario_tanda.v4`, GO Lenovo 22:04: solo lo estratégico) */
+/**
+ * 16-nov · lo que se le pide al calendario para cada pieza (campo `concepto`).
+ * 17-nov · Sprint 4 · F (`calendario_tanda.v5`, firma de Emilio 17:01 Zúrich): la pieza nace de la idea del banco; el calendario ya NO escribe la idea, el mensaje,
+ * el llamado ni las fotos (antes v4 los reescribía y la hoja los anteponía a los de los creativos). Solo pone lo suyo, como el plan de medios de una agencia.
+ */
 export const CONCEPTO_DE_CADA_PIEZA = [
-  '# El concepto de cada pieza',
-  'Cada pieza lleva en `concepto` lo ESTRATÉGICO de ESA pieza: QUÉ tiene que lograr y POR QUÉ (sale de su idea del banco y de su capítulo). El CÓMO (la escena, el gancho, la composición, la emoción y qué foto usar) NO lo escribes tú: lo decide la mesa de creativos.',
-  '- `idea`: la idea de la pieza en una frase (qué cuenta, no cómo se ve).',
-  '- `objetivo`: lo que esta pieza tiene que lograr, atado al objetivo de su fase y de su red.',
-  '- `mensaje`: el único mensaje que tiene que quedar.',
+  '# Lo que pones en cada pieza',
+  'Cada pieza realiza una idea del banco tal como la crearon los creativos: NO reescribes su idea, su mensaje, su gancho ni su llamado, y no eliges fotos. Tú decides solo dónde, cuándo y para qué sirve esa pieza en el plan: la fecha, la red, el formato, la oferta que vende (en `sede`), y en `concepto`:',
+  '- `objetivo`: lo que esta pieza tiene que lograr EN SU FECHA, atado al objetivo de su fase y de su red.',
   '- `publico`: a quién le habla esta pieza (del público del plan).',
-  '- `llamado`: el llamado a la acción de esta pieza.',
-  '- `fotos_disponibles`: las fotos propias del cliente que podrían servir como material (`foto:<id>` de las referencias), o la lista vacía; la mesa elige si usa alguna.',
+  'Si la idea del banco no calza con la fecha o con un hecho que conoces, no la cambies: elige otra idea del banco o deja `idea_de_mesa` vacío y explícalo en `pendientes`.',
   'Si no sabes alguna parte, déjala vacía (el código lo avisa); no la inventes.',
 ].join('\n')
 
