@@ -1,0 +1,29 @@
+{
+  "name": "zero-risk-render-html",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Zero Risk · servicio de render HTML (Railway, modo que duerme) · la plantilla de marca a PNG (anuncio fijo) y a MP4 (composición sobre el video) con hyperframes en versión fija y telemetría apagada · S2-5",
+  "type": "module",
+  "packageManager": "pnpm@9.15.4",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  },
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "hyperframes": "0.9.59",
+    "puppeteer-core": "25.17.0",
+    "tsx": "4.21.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.1",
+    "typescript": "5.9.3"
+  }
+}

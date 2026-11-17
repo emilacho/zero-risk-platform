@@ -267,9 +267,12 @@ export function traducirGuion(md: string, o: { preguntasHechas?: number; maxPreg
   return { ok: true, planos, segundos: total, audio, pie_de_foto: pie, hashtags: tags, fotos_ids: fotos, avisos }
 }
 
-/** el texto del pedido al modelo: un renglón por plano con sus segundos, y el audio; lo que el guion no dice no se inventa */
+/**
+ * el texto del pedido al modelo: un renglón por plano con sus segundos, y el audio; lo que el guion no dice no se inventa.
+ * S2-5 · el «Texto en pantalla» del plano NO va al modelo: se compone después, por código, con la marca (`video-html.ts`); el modelo no escribe letras.
+ */
 export function promptDelGuion(t: Pick<TraduccionDeGuion, 'planos' | 'audio' | 'segundos'>, max = 3600): { prompt: string; recortado: boolean } {
-  const lineas = t.planos.map((p) => `Plano ${p.n} (${p.desde}–${p.hasta} s): ${p.se_ve}${p.movimiento ? ` Cámara: ${p.movimiento}.` : ''}${p.texto_en_pantalla ? ` Texto en pantalla, literal: «${p.texto_en_pantalla}».` : ''}`)
+  const lineas = t.planos.map((p) => `Plano ${p.n} (${p.desde}–${p.hasta} s): ${p.se_ve}${p.movimiento ? ` Cámara: ${p.movimiento}.` : ''}`)
   lineas.push(t.audio ? `Audio: ${t.audio}` : 'Audio: música o sonido ambiente acorde a la escena.')
   lineas.push(`Duración total: ${t.segundos} s.`)
   const prompt = lineas.join('\n')

@@ -66,7 +66,8 @@ export const MAX_FOTOS_DE_REFERENCIA = 9 // el mínimo común de 2.0 (9) y 2.5 (
 export const REGLAS_DEL_PEDIDO: readonly string[] = [
   'Sin voces, sin diálogo y sin narración: solo música y sonido ambiente.',
   'Sin rostros de personas reales ni reconocibles; si aparecen personas, de espaldas, de lejos o solo manos.',
-  'Sin texto en pantalla que no esté escrito literalmente en este pedido; sin logotipos ni marcas que no sean las del cliente.',
+  // S2-5 · el texto y la marca se componen después, por código, con la plantilla de marca: el modelo no escribe letras
+  'Sin texto, letras, subtítulos ni letreros en pantalla: el texto y el logo se agregan después en edición; sin logotipos ni marcas que no sean las del cliente.',
 ]
 
 export interface PedidoDeVideo {

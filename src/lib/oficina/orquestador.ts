@@ -626,7 +626,9 @@ async function componerConLaMarca(P: Puertos, enc: Encargo, b: ReturnType<typeof
   const r = await P.componer({ ancho: med.ancho, alto: med.alto, foto: fotoUri, logo, firma: logo ? null : firma, texto, diseno })
   if (!r.ok) return { bytes: null, composicion: { compuesta: false, motivo: 'fallo_del_dibujo', detalle: r.error }, avisos: [...avisos, `no se pudo componer la imagen con la marca (${r.error}): sale la foto sin textos`] }
   if (r.fonts_faltantes.length) avisos.push(`tipografías del manual que no se pudieron cargar (se dibujó con la de reserva): ${r.fonts_faltantes.join(', ')}`)
-  return { bytes: r.png, composicion: { compuesta: true, variante: diseno.variante, colores: { etiqueta: diseno.etiqueta.fondo, boton: diseno.boton.fondo, franja: diseno.franja.fondo }, tipografia: diseno.tipografia, texto, con_logo: !!logo, fonts_faltantes: r.fonts_faltantes }, avisos }
+  // S2-5 · el servicio de render HTML falló: se dibujó igual con el motor de siempre, y se avisa
+  if (r.aviso_motor) avisos.push(`el servicio de render HTML falló (${r.aviso_motor}): la imagen se compuso con el dibujo de siempre`)
+  return { bytes: r.png, composicion: { compuesta: true, ...(r.motor ? { motor: r.motor } : {}), variante: diseno.variante, colores: { etiqueta: diseno.etiqueta.fondo, boton: diseno.boton.fondo, franja: diseno.franja.fondo }, tipografia: diseno.tipografia, texto, con_logo: !!logo, fonts_faltantes: r.fonts_faltantes }, avisos }
 }
 
 // ───────────────────────── re-imagen que pide la opinión

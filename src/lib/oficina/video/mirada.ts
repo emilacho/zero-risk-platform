@@ -142,7 +142,7 @@ export function tareaDeLaMirada(o: {
 }): { task: string; images: string[] } {
   const senalDe = new Map((o.senales?.por_plano ?? []).map((s) => [s.plano, s]))
   // Sprint 2 · S2-1 · el rol del plano en la historia y lo que tenía que decir van primero: el agente juzga si el plano CUMPLE su rol, no solo si se ve lo pedido
-  const planos = o.planos.map((p) => `- Plano ${p.n} (${p.desde}–${p.hasta} s)${p.rol ? ` · rol: ${p.rol}` : ''}${p.dice ? ` · tenía que decir: ${p.dice}` : ''}: ${p.se_ve}${p.producto === undefined ? '' : ` · producto en cuadro: ${p.producto ? 'sí' : 'no'}`}${p.movimiento ? ` · cámara: ${p.movimiento}` : ''}${p.estado_final ? ` · cómo termina: ${p.estado_final}` : ''}${p.texto_en_pantalla ? ` · texto en pantalla: «${p.texto_en_pantalla}»` : ''}${o.senales ? senalesLegibles(senalDe.get(p.n)) : ''}`).join('\n')
+  const planos = o.planos.map((p) => `- Plano ${p.n} (${p.desde}–${p.hasta} s)${p.rol ? ` · rol: ${p.rol}` : ''}${p.dice ? ` · tenía que decir: ${p.dice}` : ''}: ${p.se_ve}${p.producto === undefined ? '' : ` · producto en cuadro: ${p.producto ? 'sí' : 'no'}`}${p.movimiento ? ` · cámara: ${p.movimiento}` : ''}${p.estado_final ? ` · cómo termina: ${p.estado_final}` : ''}${p.texto_en_pantalla ? ` · texto que se agrega en edición (NO debe verse en el clip): «${p.texto_en_pantalla}»` : ''}${o.senales ? senalesLegibles(senalDe.get(p.n)) : ''}`).join('\n')
   // las imágenes van agrupadas por plano: primero su imagen clave (lo que se aprobó antes de filmar), luego sus cuadros en el orden del video
   const claveDe = new Map((o.imagenes_clave ?? []).filter((x) => x.url).map((x) => [x.n, x.url]))
   const { planos: elegidos, recortados } = elegirImagenes(o.cuadros, claveDe, Math.max(1, o.max ?? MAX_IMAGENES))

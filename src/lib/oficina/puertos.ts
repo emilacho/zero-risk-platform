@@ -228,7 +228,7 @@ export interface Puertos {
   renderLaminas(p: PedidoDeRender): Promise<ResultadoRender>
   descargar(url: string): Promise<Buffer | null>
   /** Sprint 1 · Mejora 5 · compone la pieza con foto: logo, textos y colores de la marca encima (PNG). Opcional: sin él, la foto sale como siempre */
-  componer?(p: import('../../../packages/carousel-engine/src/anuncio').PedidoDeAnuncio): Promise<{ ok: true; png: Buffer; fonts_faltantes: string[] } | { ok: false; error: string }>
+  componer?(p: import('../../../packages/carousel-engine/src/anuncio').PedidoDeAnuncio): Promise<{ ok: true; png: Buffer; fonts_faltantes: string[]; /** S2-5 · quién dibujó: la plantilla HTML (servicio de render) o el dibujo de siempre */ motor?: 'html' | 'satori'; /** S2-5 · el servicio de render falló y se dibujó con el de siempre */ aviso_motor?: string } | { ok: false; error: string }>
   /** 11-nov · los cuadros de cada plano de un video (ffmpeg · S2-7: inicio, medio y final + señales medidas); opcional: sin él, el video no se mira y queda una ficha que bloquea */
   sacarCuadros?(bytes: Buffer, planos: Plano[]): Promise<{ duracion_s: number | null; cuadros: Array<{ plano: number; segundo: number; parte?: import('./video/mirada').ParteDelPlano; bytes: Buffer }>; senales?: import('./video/mirada').SenalesDelVideo | null; causa?: string }>
   guardarArchivos(ruta: string, archivos: Array<{ nombre: string; bytes: Buffer; tipo: string }>): Promise<{ ok: true; urls: Record<string, string> } | { ok: false; error: string }>
