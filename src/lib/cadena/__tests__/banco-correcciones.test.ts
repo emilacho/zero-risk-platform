@@ -267,13 +267,21 @@ describe('E2 · la mesa «corrección del banco» desde la cadena', () => {
   function encendido(o: { abre?: 'si' | 'no' } = {}) {
     const al = almacen()
     al.config.set(INTERRUPTOR_DEL_BANCO, true)
-    let n = 0
-    al.mesaDelBanco = async () => (o.abre === 'no' ? { estado: 'no_abre', motivo: 'plantilla_inactiva' } : { estado: 'abierta', encargo_id: `enc-${++n}` })
+    // como la oficina real (de-la-cadena.ts · `bco-<campaña>-v<versión>` · ya_existia): la MISMA campaña y versión devuelven el MISMO encargo, sin abrir otro
+    const porVersion = new Map<string, string>()
+    al.mesaDelBanco = async (s) => {
+      if (o.abre === 'no') return { estado: 'no_abre', motivo: 'plantilla_inactiva' }
+      const k = `${s.campana_id}:${s.version}`
+      if (!porVersion.has(k)) porVersion.set(k, `enc-${porVersion.size + 1}`)
+      return { estado: 'abierta', encargo_id: porVersion.get(k)! }
+    }
+    encargoDe.set(al, porVersion)
     return al
   }
+  const encargoDe = new WeakMap<AlmacenMemoria, Map<string, string>>()
   const entrega = (al: AlmacenMemoria, texto: string | null, costo = 0.6) => {
     const s = al.sobresDelBanco.at(-1)!
-    return recibirCorreccionDelBanco(al, { campana_id: s.campana_id, version: s.version, encargo_id: `enc-${al.sobresDelBanco.length}`, texto, costo_usd: costo, motivo: null }, mas(5))
+    return recibirCorreccionDelBanco(al, { campana_id: s.campana_id, version: s.version, encargo_id: encargoDe.get(al)!.get(`${s.campana_id}:${s.version}`)!, texto, costo_usd: costo, motivo: null }, mas(5))
   }
   const editar = bloque({ respuesta: 'tomada', accion: 'editar', cambios: { mensaje: 'el encebollado de siempre' }, explicacion: 'quito la fecha' })
   const noLaTomo = bloque({ respuesta: 'no_tomada', explicacion: 'la idea no promete la oferta' })
@@ -449,6 +457,26 @@ describe('E2 · la mesa «corrección del banco» desde la cadena', () => {
     expect(await recibirCorreccionDelBanco(al, { campana_id: CAMP, version: V1, encargo_id: 'enc-otro', texto: editar, costo_usd: 0.3, motivo: null }, T0)).toEqual({ ok: true, ya_cerrada: true })
     expect((historialDe(al) ?? []).length).toBe(n)
     expect(await correccionDelBanco(al, 'corr-1')).toMatchObject({ estado: 'abierta', encargo_id: 'enc-1' })
+  })
+  it('🔴 n7 de CC6 · el reintento lleva OTRA versión que el primer intento (la oficina es idempotente por versión: con la misma, no abre mesa nueva)', async () => {
+    expect(versionDeLaMesa('corr-1', 1)).not.toBe(versionDeLaMesa('corr-1', 2))
+    expect(versionDeLaMesa('corr-1', 2) - versionDeLaMesa('corr-1', 1)).toBe(1)
+    expect(versionDeLaMesa('corr-1', 1)).not.toBe(versionDeLaMesa('corr-2', 1))
+    const al = encendido()
+    await abrirCorreccionDelBanco(al, CORR({ regla: 'D2' }), T0)
+    expect(await entrega(al, noLaTomo, 0.6)).toEqual({ ok: true, estado: 'reintento' })
+    await abrirCorreccionDelBanco(al, CORR({ regla: 'D2' }), mas(6))
+    const [s1, s2] = al.sobresDelBanco
+    expect(s2.version).not.toBe(s1.version)
+    expect(await correccionDelBanco(al, 'corr-1')).toMatchObject({ estado: 'abierta', intentos: 2, encargo_id: 'enc-2' })
+    expect(await entrega(al, editar, 0.4)).toEqual({ ok: true, estado: 'respondida' })
+  })
+  it('🔴 n11 de CC6 · la misma entrega ilegible dos veces a la vez: una pide el reintento, la otra «ya_cerrada»', async () => {
+    const al = encendido()
+    await abrirCorreccionDelBanco(al, CORR(), T0)
+    const rs = await Promise.all([entrega(al, 'no sé'), entrega(al, 'no sé')])
+    expect(rs).toContainEqual({ ok: true, estado: 'reintento' })
+    expect(rs).toContainEqual({ ok: true, ya_cerrada: true })
   })
   it('🔴 un almacén SIN escritura condicional no abre la mesa: «no_dicha» y nada escrito', async () => {
     const al = encendido()
