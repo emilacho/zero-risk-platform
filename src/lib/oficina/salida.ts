@@ -363,11 +363,11 @@ export function pedidoDeAcortar(errores: string[]): string {
   return ['Estos textos pasan su tope de caracteres (se cuentan TODOS: letras, espacios y signos):', ...lineas, 'Reescríbelos más cortos con la misma idea (no los cortes a la mitad) y devuelve el JSON COMPLETO del contrato, con todo lo demás igual.'].join('\n')
 }
 /** `intento` = cuántos intentos de formato ya se hicieron (0 en el primero). Un reintento como máximo cuando `reintento_formato` = 1; si SOLO sobran caracteres, hasta `CORRECCIONES_DE_LARGO` más. */
-export function procesarSalida(texto: string, esquemaId: string, intento: number, reintento_formato: number, o: { normalizar?: boolean; /** la oficina de piezas lo pide: ver `limpiarForma` */ limpiarForma?: boolean | { descartarEyebrowLargo?: boolean } } = {}): ResultadoDeSalida {
+export function procesarSalida(texto: string, esquemaId: string, intento: number, reintento_formato: number, o: { normalizar?: boolean; /** la oficina de piezas lo pide: ver `limpiarForma` */ limpiarForma?: boolean | { descartarEyebrowLargo?: boolean }; /** 17-nov · punto 6: si SOLO sobran caracteres, se devuelve a acortar (por omisión sí; la jefatura lo apaga: su tope de vueltas es central) */ corregirLargo?: boolean } = {}): ResultadoDeSalida {
   const esq = ESQUEMAS[esquemaId]
   if (!esq) return { ok: false, accion: 'falla_visible', errores: [`esquema «${esquemaId}» no registrado`], ficha: { origen: 'chequeo', donde: 'formato', gravedad: 'bloquea', que: `esquema «${esquemaId}» no registrado` } }
   const fallo = (errores: string[]): ResultadoDeSalida => {
-    const largo = soloTextosLargos(errores)
+    const largo = o.corregirLargo !== false && soloTextosLargos(errores)
     if (largo && intento < reintento_formato + CORRECCIONES_DE_LARGO) return { ok: false, accion: 'reintentar', mensaje_de_error: pedidoDeAcortar(errores) }
     return intento < reintento_formato
       ? { ok: false, accion: 'reintentar', mensaje_de_error: `Tu respuesta no cumple el formato. Errores: ${errores.slice(0, 8).join(' · ')}. Devuelve solo el JSON del contrato.` }

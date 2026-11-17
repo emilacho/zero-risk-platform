@@ -30,6 +30,9 @@ describe('si SOLO sobran caracteres, se devuelve para acortar (no se mata el enc
     expect(CORRECCIONES_DE_LARGO).toBe(2)
     for (const intento of [0, 1, 2]) expect(procesarSalida(estructura({ rol: ROL_LARGO }), 'estructura.v1', intento, 1), `intento ${intento}`).toMatchObject({ ok: false, accion: 'reintentar' })
     expect(procesarSalida(estructura({ rol: ROL_LARGO }), 'estructura.v1', 3, 1)).toMatchObject({ ok: false, accion: 'falla_visible' })
+    // la jefatura lo apaga (su tope de vueltas es central): un reintento y luego falla visible, como antes
+    expect(procesarSalida(estructura({ rol: ROL_LARGO }), 'estructura.v1', 0, 1, { corregirLargo: false })).toMatchObject({ ok: false, accion: 'reintentar' })
+    expect(procesarSalida(estructura({ rol: ROL_LARGO }), 'estructura.v1', 1, 1, { corregirLargo: false })).toMatchObject({ ok: false, accion: 'falla_visible' })
   })
   it('🔴 el pedido dice en claro qué campo, cuánto mide, su tope y cuánto sobra; pide reescribir, no cortar', () => {
     const r = procesarSalida(estructura({ rol: ROL_LARGO }), 'estructura.v1', 1, 1)

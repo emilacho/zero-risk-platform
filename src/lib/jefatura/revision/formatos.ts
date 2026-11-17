@@ -175,12 +175,12 @@ export function procesarSalidaDeRevision(texto: string, esquemaId: string, inten
         const hechosO: string[] = []
         const recortado = recortarTextosLargos(esqO, JSON.parse(lo.json), hechosO)
         if (hechosO.length) {
-          const r = procesarSalida(JSON.stringify(recortado), esquemaId, intento, reintento_formato, { normalizar: true })
+          const r = procesarSalida(JSON.stringify(recortado), esquemaId, intento, reintento_formato, { normalizar: true, corregirLargo: false })
           return r.ok ? { ...r, envoltorio_limpiado: lo.envoltorio, normalizados: [...(r.normalizados ?? []), ...hechosO] } : r
         }
       } catch { /* JSON roto: lo dice procesarSalida con su mensaje de siempre */ }
     }
-    return procesarSalida(texto, esquemaId, intento, reintento_formato, { normalizar: true })
+    return procesarSalida(texto, esquemaId, intento, reintento_formato, { normalizar: true, corregirLargo: false })
   }
   const l = limpiarSalida(texto)
   if (!l.ok) return fallo([l.error])
