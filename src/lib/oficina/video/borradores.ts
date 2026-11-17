@@ -9,7 +9,7 @@
  *  · La tarjeta (CC5) lee `borrador_video.propuestas[i].url` y su `costo_usd` por la fila de la dirección (`direccion/decisiones-propuestas.ts`).
  * Puro: arma los pedidos; el envío y la espera viven en `orquestador-video.ts`.
  */
-import { RESOLUCIONES_PERMITIDAS } from '../../video/parametros'
+import { RESOLUCIONES_PERMITIDAS, type CatalogoDeModelos } from '../../video/parametros'
 import type { BriefLeido } from '../brief'
 import type { FotoEtiquetada } from '../fotos'
 import type { Estado, Paso } from '../tipos'
@@ -56,7 +56,7 @@ export function resolucionDelBorrador(limites: Record<string, unknown> | null | 
  * los pedidos de los borradores: todos los planos de todas las propuestas, cada uno rotulado con su propuesta, en UN lote (se espera a todos y se une por propuesta).
  * La clave de cada clip es `<encargo>:<brief>:r<ronda>:<propuesta>:borrador:p<n>`; la huella (contenido) decide qué se reutiliza.
  */
-export function pedidosDeLosBorradores(o: { e: Pick<Estado, 'artefactos'>; enc: { id: string; brief_id: string }; brief: BriefLeido; fotos: FotoEtiquetada[]; relacion: string; resolucion: string }): { pedidos: PedidoDePlano[]; errores: Array<{ id: string; error: string }>; ids: string[] } {
+export function pedidosDeLosBorradores(o: { e: Pick<Estado, 'artefactos'>; enc: { id: string; brief_id: string }; brief: BriefLeido; fotos: FotoEtiquetada[]; relacion: string; resolucion: string; /** 17-nov · T1 · el catálogo que leyó el encargo al abrir */ catalogo?: CatalogoDeModelos }): { pedidos: PedidoDePlano[]; errores: Array<{ id: string; error: string }>; ids: string[] } {
   const pv = propuestasDe(o.e)
   const ik = (o.e.artefactos?.imagenes_clave?.datos as unknown as ImagenesClave | undefined)?.propuestas ?? []
   const pedidos: PedidoDePlano[] = []
@@ -66,7 +66,7 @@ export function pedidosDeLosBorradores(o: { e: Pick<Estado, 'artefactos'>; enc: 
     ids.push(p.id)
     if (!p.guion || !Array.isArray(p.guion.planos) || !p.guion.planos.length) { errores.push({ id: p.id, error: 'la propuesta no trae planos' }); continue }
     const imagenesClave = (ik.find((x) => x.id === p.id)?.planos ?? []).map((x) => ({ n: x.n, url: x.url }))
-    const pp = pedidosPorPlano({ guion: p.guion, brief: o.brief, fotos: o.fotos, clave: `${o.enc.id}:${o.enc.brief_id}:r${pv?.ronda ?? 1}:${p.id}:borrador`, relacion: o.relacion, resolucion: o.resolucion, imagenesClave })
+    const pp = pedidosPorPlano({ guion: p.guion, brief: o.brief, fotos: o.fotos, clave: `${o.enc.id}:${o.enc.brief_id}:r${pv?.ronda ?? 1}:${p.id}:borrador`, relacion: o.relacion, resolucion: o.resolucion, imagenesClave, ...(o.catalogo ? { catalogo: o.catalogo } : {}) })
     if (!pp.ok) { errores.push({ id: p.id, error: `los planos no forman un pedido válido: ${pp.errores.join(' · ')}` }); continue }
     pedidos.push(...pp.pedidos.map((x) => ({ ...x, propuesta: p.id })))
   }

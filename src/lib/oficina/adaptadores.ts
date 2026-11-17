@@ -6,6 +6,7 @@ import { palabrasDuras } from '../manual/palabras-con-intencion'
 import { retirarLasSuperadas } from './superadas'
 import { puertoDeLaMesa } from './mesa/adaptador'
 import { almacenDeSupabase as almacenDeLaCadena } from '../cadena/almacen-supabase'
+import { leerConfigDelBrazo } from '../video/parametros'
 import { monedaDelCliente } from '@/lib/moneda/por-pais'
 import zlib from 'node:zlib'
 import { renderManualLimpio } from '../brand-book-render-limpio'
@@ -377,6 +378,10 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
           }
           return out
         } catch { return [] }
+      },
+      /** 17-nov · Sprint 3 · T1 · el catálogo de modelos con el MISMO lector que la ruta del brazo (`cadena_config.brazo_de_video`) · gratis · nunca lanza (sin valor o con error: el del código) */
+      async catalogo() {
+        return (await leerConfigDelBrazo((clave) => almacenDeLaCadena().leerConfig(clave))).catalogo
       },
       async estado(requestId): Promise<EstadoDelBrazo> {
         try {

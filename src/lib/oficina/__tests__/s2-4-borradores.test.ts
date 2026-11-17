@@ -9,6 +9,7 @@ import { propuestasDeLaDecision } from '@/lib/direccion/decisiones-propuestas'
 import { sessionIdDeVideo } from '../../video/libro'
 import { VOZ_DEL_GANCHO } from '../mesa/pedidos'
 import { abrirEncargo, type Respuesta } from '../orquestador'
+import { catalogoDeModelos } from '../../video/parametros'
 import { envioDe, enviarVideo, recibirVideo, sondearVideos } from '../orquestador-video'
 import { validarPlantilla } from '../plantilla'
 import { VIDEO_MESA } from '../plantillas/video-mesa'
@@ -242,5 +243,26 @@ describe('piezas', () => {
     }
     const t = propuestasDeLaDecision({ id: 'e', brief_id: 'b' }, motor as never, null)!
     expect(t.lista.map((p) => p.video_url)).toEqual(['https://x.test/borrador-P1.mp4', null])
+  })
+})
+
+describe('17-nov · Sprint 3 · T1 · los borradores usan el catálogo que el encargo guardó al abrir (nota de CC7)', () => {
+  const g = (s: number) => ({ planos: [{ n: 1, desde: 0, hasta: s, se_ve: 'escena 1' }, { n: 2, desde: s, hasta: s + 4, se_ve: 'escena 2' }], audio: 'olas' })
+  const enc = (catalogo: unknown) => ({ id: 'e1', client_id: 'c1', brief_id: 'F1-S1-ig-r1', familia: 'video_mesa', dry_run: true, estado_del_motor: {
+    artefactos: {
+      encargo: { version: 1, version_consumida: 0, datos: { brief: { id: 'F1-S1-ig-r1', red: 'Instagram', formato: 'reel', prohibido: [], aprueba: '', texto: 'brief' }, proporcion: '9:16', F: { fotos: [] }, ...(catalogo ? { catalogo_de_modelos: catalogo } : {}) } },
+      propuestas_video: { version: 1, version_consumida: 0, datos: { ronda: 1, propuestas: [{ id: 'P1', guion: g(20) }, { id: 'P2', guion: g(10) }] } },
+    },
+    gasto_usd: 0, pasos_ejecutados: 3, fichas: [], vueltas: {}, ultimo: 2,
+  } })
+  it('🔴 con Seedance 2.0 guardado: la propuesta con un plano de 20 s queda con su error (antes de enviar); con el del código salen las dos', async () => {
+    const b = brazo({ estados: () => hecho(1) })
+    const out = await enviarVideo({ video: b.v, ahora: () => new Date('2026-11-17T03:00:00Z') } as never, enc(catalogoDeModelos({ modelo_por_omision: 'bytedance/seedance-2.0' })) as never, conBorradores(2), PASO_BORRADOR)
+    const bv = out.res!.artefacto as unknown as BorradoresDeVideo
+    expect(bv.propuestas.map((p) => [p.id, p.url === null])).toEqual([['P1', true], ['P2', false]])
+    expect(bv.propuestas[0].error).toMatch(/admite hasta 15 s por plano/)
+    const b2 = brazo({ estados: () => hecho(1) })
+    const out2 = await enviarVideo({ video: b2.v, ahora: () => new Date('2026-11-17T03:00:00Z') } as never, enc(undefined) as never, conBorradores(2), PASO_BORRADOR)
+    expect((out2.res!.artefacto as unknown as BorradoresDeVideo).propuestas.every((p) => p.url !== null)).toBe(true)
   })
 })

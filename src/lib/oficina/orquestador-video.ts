@@ -21,7 +21,7 @@ import { FUNCION_DEL_BRIEF, FUNCION_DEL_MANUAL, FUNCION_DEL_PLAN, FUNCION_DEL_PO
 import { FUNCION_DEL_TABLERO } from './pedidos-laminas'
 import type { Cambios, Encargo, EstadoDelBrazo, FuentesCompletas, Puertos } from './puertos'
 import type { Estado, Ficha, Paso, Plantilla } from './tipos'
-import { RELACIONES_PERMITIDAS, RELACION_POR_FORMATO, fichaPorOmision } from '../video/parametros'
+import { CATALOGO_POR_OMISION, RELACIONES_PERMITIDAS, RELACION_POR_FORMATO, fichaPorOmision, type CatalogoDeModelos } from '../video/parametros'
 import { sessionIdDeVideo } from '../video/libro'
 import { guionLegible, type TraduccionDeGuion } from './video/guion'
 import { LISTA_DE_FOTOS } from './mesa/pedidos'
@@ -58,7 +58,7 @@ const txt = (x: unknown): string => (typeof x === 'string' ? x : x == null ? '' 
 const arr = <T = string>(x: unknown): T[] => (Array.isArray(x) ? (x as T[]) : [])
 const turnoDe = (e: Estado) => e.pasos_ejecutados + 1
 
-export interface BaseV { brief: BriefLeido; proporcion: string; /** 11-nov · regla #17 · la proporción del brief no la admitía el generador: se usó la de por omisión (se avisa en la hoja de publicar) */ aviso_proporcion?: string; F: FuentesCompletas; familia: 'video'; plataforma: string; elementos: never[]; formato_video: string }
+export interface BaseV { brief: BriefLeido; proporcion: string; /** 11-nov · regla #17 · la proporción del brief no la admitía el generador: se usó la de por omisión (se avisa en la hoja de publicar) */ aviso_proporcion?: string; F: FuentesCompletas; familia: 'video'; plataforma: string; elementos: never[]; formato_video: string; /** 17-nov · Sprint 3 · T1 · el catálogo de modelos que leyó el encargo al ABRIR (el mismo que valida la ruta); los encargos de antes no lo traen: el del código */ catalogo_de_modelos?: CatalogoDeModelos }
 const baseV = (e: Estado): BaseV => datos(e, 'encargo') as unknown as BaseV
 
 /** lo que la mesa deja en el artefacto `guion` */
@@ -123,9 +123,11 @@ async function abrir(P: Puertos, enc: Encargo, pl: Plantilla): Promise<SalidaCod
   const plataforma = `${brief.red.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim() || 'red'}-${formato_video}`
   // 11-nov · GO Lenovo 02:52Z · COTIZAR PRIMERO (real): antes de llamar a la mesa, el brazo estima GRATIS cada ruta que el guion puede usar. Si no puede cotizar, el encargo
   //   falla AQUÍ, en el primer paso y a US$ 0 (queda recuperable: `reapertura.ts`), en vez de enterarse al final con la mesa ya pagada. En seco no sale a la red (como el envío).
-  const cotizacion = enc.dry_run ? null : await cotizarPrimero(P, enc, pl, brief, fu.fotos, proporcion)
+  // 17-nov · Sprint 3 · T1 · el catálogo de modelos de la configuración del brazo (gratis): la oficina compone con el MISMO que valida la ruta, y queda con el encargo
+  const catalogo_de_modelos = await catalogoDelBrazo(P)
+  const cotizacion = enc.dry_run ? null : await cotizarPrimero(P, enc, pl, brief, fu.fotos, proporcion, catalogo_de_modelos)
   if (cotizacion && !cotizacion.ok) return { res: { costo_usd: 0 }, fallido: cotizacion.motivo }
-  return { res: { costo_usd: 0, artefacto: { brief, proporcion, ...(aviso_proporcion ? { aviso_proporcion } : {}), F: fu, familia: 'video', plataforma, elementos: [], formato_video, ...(cotizacion ? { cotizacion: cotizacion.rutas } : {}) } } }
+  return { res: { costo_usd: 0, artefacto: { brief, proporcion, ...(aviso_proporcion ? { aviso_proporcion } : {}), F: fu, familia: 'video', plataforma, elementos: [], formato_video, catalogo_de_modelos, ...(cotizacion ? { cotizacion: cotizacion.rutas } : {}) } } }
 }
 
 /** cuánto se le deja gastar al video al cotizar: el tope por video de la plantilla, sin pasar el del encargo (el brazo además lo recorta al aprobado) */
@@ -135,11 +137,23 @@ const topeDeLaCotizacion = (pl: Plantilla): number => {
 }
 
 /** la cotización gratis de cada ruta posible · el texto que devolvió el proveedor, si lo hubo, queda en el motivo del fallo (para poder verlo) */
-async function cotizarPrimero(P: Puertos, enc: Encargo, pl: Plantilla, brief: BriefLeido, fotos: FuentesCompletas['fotos'], relacion: string): Promise<{ ok: true; rutas: Array<{ ruta: string; costo_estimado_usd: number; costo_lista_usd: number | null }> } | { ok: false; motivo: string }> {
+/** 17-nov · T1 · el catálogo del brazo por su puerto · sin método, o si falla o devuelve algo raro: el del código (nunca lanza) */
+export async function catalogoDelBrazo(P: Pick<Puertos, 'video'>): Promise<CatalogoDeModelos> {
+  if (!P.video?.catalogo) return CATALOGO_POR_OMISION
+  try {
+    const c = await P.video.catalogo()
+    return catalogoValido(c) ? c : CATALOGO_POR_OMISION
+  } catch { return CATALOGO_POR_OMISION }
+}
+/** el catálogo con que se abrió el encargo (los de antes de T1 no lo traen: el del código) */
+const catalogoValido = (c: unknown): c is CatalogoDeModelos => !!c && typeof c === 'object' && !!(c as CatalogoDeModelos).fichas && typeof (c as CatalogoDeModelos).fichas === 'object' && !!(c as CatalogoDeModelos).fichas[(c as CatalogoDeModelos).por_omision]
+const catalogoDelEncargo = (b: BaseV): CatalogoDeModelos => catalogoValido(b.catalogo_de_modelos) ? b.catalogo_de_modelos : CATALOGO_POR_OMISION
+
+async function cotizarPrimero(P: Puertos, enc: Encargo, pl: Plantilla, brief: BriefLeido, fotos: FuentesCompletas['fotos'], relacion: string, catalogo: CatalogoDeModelos = CATALOGO_POR_OMISION): Promise<{ ok: true; rutas: Array<{ ruta: string; costo_estimado_usd: number; costo_lista_usd: number | null }> } | { ok: false; motivo: string }> {
   const sinGastar = 'no se gastó nada; el encargo queda recuperable'
   if (!P.video?.cotizar) return { ok: false, motivo: `no se puede cotizar el video antes de abrir la mesa: el brazo de video no está conectado (${sinGastar})` }
   const lim = (pl.limites.video ?? {}) as { resolucion?: string }
-  const ps = pedidosParaCotizar({ brief, fotos, clave: `${enc.id}:${enc.brief_id}`, relacion, ...(lim.resolucion ? { resolucion: lim.resolucion } : {}) })
+  const ps = pedidosParaCotizar({ brief, fotos, clave: `${enc.id}:${enc.brief_id}`, relacion, ...(lim.resolucion ? { resolucion: lim.resolucion } : {}), catalogo })
   if (!ps.ok) return { ok: false, motivo: `no se pudo armar el pedido de cotización: ${ps.errores.join(' · ')} (${sinGastar})` }
   const rutas: Array<{ ruta: string; costo_estimado_usd: number; costo_lista_usd: number | null }> = []
   for (const { ruta, pedido: ped } of ps.pedidos) {
@@ -153,7 +167,7 @@ async function cotizarPrimero(P: Puertos, enc: Encargo, pl: Plantilla, brief: Br
   // 11-nov · camino B encendido: también se cotiza UN plano con foto (imagen a video, 4 s) · es la ruta que usarán los planos con foto propia
   const conFoto = ps.pedidos.find((x) => x.ruta === 'foto')?.pedido
   if (planoPorPlanoEncendido(pl) && conFoto) {
-    const ped = { ...conFoto, segundos: fichaPorOmision().segundos_min, clave: `${conFoto.clave.replace(/:foto$/, '')}:plano_foto`, plano: true as const }
+    const ped = { ...conFoto, segundos: fichaPorOmision(catalogo).segundos_min, clave: `${conFoto.clave.replace(/:foto$/, '')}:plano_foto`, plano: true as const }
     const c = await P.video.cotizar({ pedido: ped, client_id: enc.client_id, encargo_id: enc.id, tope_usd: topeDeLaCotizacion(pl), workflow_id: `oficina:${enc.familia}`, workflow_execution_id: `${enc.id}:cotizar` })
     if (!c.ok) return { ok: false, motivo: `el brazo de video no pudo cotizar (un plano con foto propia) antes de abrir la mesa: ${c.error}${c.descripcion ? ` · lo que dijo el proveedor sobre sus precios: «${c.descripcion.replace(/\s+/g, ' ').slice(0, 800)}»` : ''} (${sinGastar})` }
     rutas.push({ ruta: 'plano_foto', costo_estimado_usd: c.costo_estimado_usd, costo_lista_usd: c.costo_lista_usd ?? null })
@@ -170,7 +184,7 @@ function pedido(enc: Encargo, pl: Plantilla, e: Estado): SalidaCodigoV {
   if (!g || !Array.isArray(g.planos) || !g.planos.length) return { res: { costo_usd: 0 }, fallido: 'no hay guion traducido que pedir (la mesa no dejó planos)' }
   const lim = (pl.limites.video ?? {}) as { resolucion?: string }
   const clave = `${enc.id}:${enc.brief_id}:v${e.artefactos['guion']?.version ?? 1}`
-  const a = armarPedidoDeLaOficina({ guion: g, brief: b.brief, fotos: b.F.fotos, clave, relacion: b.proporcion, ...(lim.resolucion ? { resolucion: lim.resolucion } : {}) })
+  const a = armarPedidoDeLaOficina({ catalogo: catalogoDelEncargo(b), guion: g, brief: b.brief, fotos: b.F.fotos, clave, relacion: b.proporcion, ...(lim.resolucion ? { resolucion: lim.resolucion } : {}) })
   if (!a.ok) return { res: { costo_usd: 0 }, fallido: `el pedido al brazo de video no es válido: ${a.errores.join(' · ')}` }
   const fichas: Ficha[] = []
   // 11-nov · GO Lenovo 16:34 · si el guion nombra fotos que no existen (o un nombre corto que coincide con varias), el pedido VUELVE UNA SOLA VEZ a la mesa con el aviso de cuáles;
@@ -187,7 +201,7 @@ function pedido(enc: Encargo, pl: Plantilla, e: Estado): SalidaCodigoV {
   if (planoPorPlanoEncendido(pl) && g.planos.length >= 2) {
     // 17-nov · S2-4 · cada clip arranca de la imagen clave FINAL de su plano (#1072/#1076); el encuadre la lleva a la proporción de la red como a cualquier foto
     const ic = imagenesClaveVigentes(e)
-    const pp = pedidosPorPlano({ guion: g, brief: b.brief, fotos: b.F.fotos, clave, relacion: b.proporcion, ...(lim.resolucion ? { resolucion: lim.resolucion } : {}), ...(ic?.planos?.length ? { imagenesClave: ic.planos.map((x) => ({ n: x.n, url: x.url })) } : {}) })
+    const pp = pedidosPorPlano({ catalogo: catalogoDelEncargo(b), guion: g, brief: b.brief, fotos: b.F.fotos, clave, relacion: b.proporcion, ...(lim.resolucion ? { resolucion: lim.resolucion } : {}), ...(ic?.planos?.length ? { imagenesClave: ic.planos.map((x) => ({ n: x.n, url: x.url })) } : {}) })
     if (!pp.ok) return { res: { costo_usd: 0 }, fallido: `los pedidos por plano no son válidos: ${pp.errores.join(' · ')}` }
     planos = pp.pedidos
   }
@@ -614,7 +628,7 @@ async function enviarBorradores(P: Puertos, enc: Encargo, pl: Plantilla, paso: P
   if (!propuestasDe(e)?.propuestas?.length) return pasa('sin_propuestas')
   if (faseDeProduccion(e) !== 'borrador') return pasa('propuesta_aprobada')
   const b = baseV(e)
-  const arm = pedidosDeLosBorradores({ e, enc, brief: b.brief, fotos: b.F.fotos, relacion: b.proporcion, resolucion })
+  const arm = pedidosDeLosBorradores({ e, enc, brief: b.brief, fotos: b.F.fotos, relacion: b.proporcion, resolucion, catalogo: catalogoDelEncargo(b) })
   if (!arm.pedidos.length) return { res: { costo_usd: 0, artefacto: { fase: 'borrador', resolucion, costo_usd: 0, propuestas: arm.ids.map((id) => ({ id, url: null, costo_usd: 0, planos: 0, error: arm.errores.find((x) => x.id === id)?.error ?? 'sin planos' })) } satisfies BorradoresDeVideo as unknown as Record<string, unknown> } }
   if (!P.video) return { fallido: 'el puerto del brazo de video no está configurado' }
   const tope = Math.max(0, Math.min(paso.tope_usd, +(pl.limites.tope_encargo_usd - e.gasto_usd).toFixed(4)))

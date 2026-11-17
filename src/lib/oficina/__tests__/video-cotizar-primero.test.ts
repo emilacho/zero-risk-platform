@@ -12,7 +12,7 @@ import { leerBriefCreativo } from '@/lib/cadena/brief-creativo'
 import { leerConcepto, type InsumosDelConcepto } from '@/lib/cadena/conceptos'
 import type { FormatosPorRed } from '@/lib/cadena/tipos'
 import { costoEstimadoUsd, leerTarifas } from '@/lib/video/higgsfield'
-import { fichaPorOmision } from '@/lib/video/parametros'
+import { CATALOGO_POR_OMISION, catalogoDeModelos, fichaPorOmision } from '@/lib/video/parametros'
 const DURACION_MIN_S = fichaPorOmision().segundos_min // 17-nov · T1: la mínima sale de la ficha del modelo
 import { crearPuertos } from '../adaptadores'
 import { FRASE_SIN_NOTAS_DE_TRABAJO, armarTarea } from '../mesa/pedidos'
@@ -194,6 +194,44 @@ describe.each(CLIENTES)('%s · la sala de video cotiza ANTES de la mesa', (_n, C
     const { a } = await abrir(async (p) => (p.pedido.fotos.length ? { ok: false, error: 'la ruta con foto no cotiza' } : { ok: true, costo_estimado_usd: 2.1 }))
     if (C.fotos.length) expect(a.cuerpo).toMatchObject({ estado: 'fallido' })
     else expect(a.cuerpo.estado).not.toBe('fallido')
+  })
+})
+
+describe.each(CLIENTES)('%s · 17-nov · Sprint 3 · T1 · la oficina lee el MISMO catálogo de modelos que la ruta (nota de CC7)', (_n, C) => {
+  const KLING = { segundos_min: 6, segundos_max: 10, referencias_max: 2, audio: false, precio_usd_s: null, fuente: 'prueba' }
+  const CONFIG = catalogoDeModelos({ modelos: { 'kling/kling-4.0': KLING }, modelo_por_omision: 'kling/kling-4.0' })
+  async function abrirCon(catalogo: PuertoDeVideo['catalogo']) {
+    const M = crearMemoria({ parte: parteDe(C), plantilla: VIDEO_MESA, fuentes: { fotos: C.fotos } })
+    M.P.mesa = crearMesaEnMemoria()
+    const reg = { cotizados: [] as Array<Record<string, unknown>>, enviados: 0 }
+    M.P.video = { ...brazo(async () => ({ ok: true, costo_estimado_usd: 1 }), reg), ...(catalogo ? { catalogo } : {}) }
+    await abrirEncargo(M.P, { cuerpo: { parte_id: PARTE, brief_id: C.fila, dry_run: false, familia: 'video_mesa' }, client_id: C.client, target_step_id: TARGET_STEP_PRODUCIR })
+    const enc = [...M.encargos.values()][0]
+    return { reg, guardado: (enc.estado_del_motor.artefactos['encargo'].datos as { catalogo_de_modelos?: unknown }).catalogo_de_modelos }
+  }
+  it('🔴 con otro modelo por omisión en la configuración: el encargo lo guarda al abrir y cotiza con SU mínima (6 s, no 4)', async () => {
+    const { reg, guardado } = await abrirCon(async () => CONFIG)
+    expect(guardado).toEqual(CONFIG)
+    expect(reg.cotizados.length).toBeGreaterThan(0)
+    for (const x of reg.cotizados) expect((x.pedido as { segundos: number }).segundos).toBe(6)
+  })
+  it('🔴 camino B: el plano con foto también se cotiza con la mínima de SU modelo (6 s)', async () => {
+    const B = { ...VIDEO_MESA, limites: { ...VIDEO_MESA.limites, video: { ...(VIDEO_MESA.limites.video as object), plano_por_plano: true } } }
+    const M = crearMemoria({ parte: parteDe(C), plantilla: B, fuentes: { fotos: C.fotos } })
+    M.P.mesa = crearMesaEnMemoria()
+    const reg = { cotizados: [] as Array<Record<string, unknown>>, enviados: 0 }
+    M.P.video = { ...brazo(async () => ({ ok: true, costo_estimado_usd: 1 }), reg), catalogo: async () => CONFIG }
+    await abrirEncargo(M.P, { cuerpo: { parte_id: PARTE, brief_id: C.fila, dry_run: false, familia: 'video_mesa' }, client_id: C.client, target_step_id: TARGET_STEP_PRODUCIR })
+    const plano = reg.cotizados.find((x) => (x.pedido as { plano?: boolean }).plano === true)?.pedido as { segundos: number } | undefined
+    if (C.fotos.length) expect(plano?.segundos).toBe(6)
+    else expect(plano).toBeUndefined()
+  })
+  it('🔴 sin el método, si falla o si devuelve algo raro: el catálogo del código (nunca frena el encargo)', async () => {
+    for (const cat of [undefined, async () => { throw new Error('la base no contesta') }, async () => ({ fichas: {}, por_omision: 'x/y' }) as never]) {
+      const { reg, guardado } = await abrirCon(cat)
+      expect(guardado).toEqual(CATALOGO_POR_OMISION)
+      for (const x of reg.cotizados) expect((x.pedido as { segundos: number }).segundos).toBe(4)
+    }
   })
 })
 

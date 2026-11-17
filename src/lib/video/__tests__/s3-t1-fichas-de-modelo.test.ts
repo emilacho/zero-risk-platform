@@ -8,6 +8,7 @@ import { armarPedido, armarPedidoDePlano, catalogoDeModelos, configDelBrazo, fic
 import { VIDEO_POR_OMISION } from '../../oficina/mesa/pedidos'
 import { traducirGuion } from '../../oficina/video/guion'
 import { pedidosPorPlano } from '../../oficina/video/planos'
+import { armarPedidoDeLaOficina, pedidosParaCotizar } from '../../oficina/video/pedido'
 
 const base = { prompt: 'un pedido suficientemente largo para el modelo', formato: 'reel' }
 const KLING = { segundos_min: 3, segundos_max: 10, referencias_max: 4, audio: false, precio_usd_s: 0.126, fuente: 'cotización gratis del 17-nov' }
@@ -107,5 +108,45 @@ describe('🔴 la pieza y el clip no se mezclan (nota de CC7): la pieza la limit
     expect(g.ok && g.segundos).toBe(40)
     const r = pedidosPorPlano({ guion: g, brief, fotos: [], clave: 'k' })
     expect(r).toMatchObject({ ok: false, errores: [expect.stringContaining('el plano 1 dura 40 s y el modelo admite hasta 30 s por plano')] })
+  })
+})
+
+describe('🔴 la oficina compone con el MISMO catálogo que valida la ruta (nota de CC7: no arma un plano que la ruta rechace)', () => {
+  const con20 = catalogoDeModelos({ modelo_por_omision: 'bytedance/seedance-2.0' })
+  const brief = { formato: 'reel', red: 'instagram' }
+  const dosPlanos = (s: number) => traducirGuion([`## Plano 1 · 0–${s} s`, 'Se ve: la puerta', `## Plano 2 · ${s}–${s + 5} s`, 'Se ve: el plato'].join('\n'), { segundosMin: 8, segundosMax: 60 })
+  it('con Seedance 2.0 por omisión: un plano de 20 s se rechaza en la oficina (antes de enviar), con la razón de SU modelo', () => {
+    const g = dosPlanos(20)
+    expect(pedidosPorPlano({ guion: g, brief, fotos: [], clave: 'k', catalogo: con20 })).toMatchObject({ ok: false, errores: [expect.stringContaining('admite hasta 15 s por plano')] })
+    expect(pedidosPorPlano({ guion: g, brief, fotos: [], clave: 'k' })).toMatchObject({ ok: true })
+  })
+  it('lo que la oficina arma con ese catálogo, la ruta lo acepta con ese catálogo (mismo modelo, mismos límites)', () => {
+    const r = pedidosPorPlano({ guion: dosPlanos(15), brief, fotos: [], clave: 'k', catalogo: con20 })
+    expect(r.ok).toBe(true)
+    for (const p of r.ok ? r.pedidos : []) expect(armarPedidoDePlano({ prompt: p.prompt, formato: p.formato, segundos: p.segundos, relacion: p.relacion, fotos: p.fotos }, con20)).toMatchObject({ ok: true, pedido: { modelo: 'bytedance/seedance-2.0' } })
+  })
+  it('el video de una toma y la cotización: fotos y mínima de la ficha del catálogo', () => {
+    const fotos = Array.from({ length: 12 }, (_, i) => ({ id: `f${i}`, url: `https://x/f${i}.jpg`, origen: 'propia' as const, etiquetas: [], descripcion: '' }))
+    const g = { ...traducirGuion(['## Plano 1 · 0–10 s', 'Se ve: la puerta'].join('\n')), fotos_ids: fotos.map((f) => f.id) }
+    const a = armarPedidoDeLaOficina({ guion: g, brief, fotos: fotos as never, clave: 'k', catalogo: con20 })
+    expect(a.ok && a.pedido.fotos).toHaveLength(9)
+    const kling = catalogoDeModelos({ modelos: { 'kling/kling-4.0': KLING }, modelo_por_omision: 'kling/kling-4.0' })
+    const c = pedidosParaCotizar({ brief, fotos: [], clave: 'k', catalogo: kling })
+    expect(c.ok && c.pedidos[0].pedido.segundos).toBe(3)
+  })
+})
+
+describe('🔴 si la configuración admite MÁS que el código, la oficina también lo arma (no se queda con los límites del código)', () => {
+  const ancho = catalogoDeModelos({ modelos: { 'nuevo/largo-1': { segundos_min: 4, segundos_max: 40, referencias_max: 3, audio: true, precio_usd_s: null, fuente: 'prueba' } }, modelo_por_omision: 'nuevo/largo-1' })
+  const brief = { formato: 'reel', red: 'instagram' }
+  it('un plano de 35 s con un modelo de hasta 40 s', () => {
+    const g = traducirGuion(['## Plano 1 · 0–35 s', 'Se ve: la puerta', '## Plano 2 · 35–40 s', 'Se ve: el plato'].join('\n'), { segundosMin: 8, segundosMax: 60 })
+    expect(pedidosPorPlano({ guion: g, brief, fotos: [], clave: 'k', catalogo: ancho })).toMatchObject({ ok: true, pedidos: [{ segundos: 35 }, { segundos: 5 }] })
+  })
+  it('un video de una toma de 35 s y, con 5 fotos, viajan las 3 de su ficha', () => {
+    const fotos = Array.from({ length: 5 }, (_, i) => ({ id: `f${i}`, url: `https://x/f${i}.jpg`, origen: 'propia' as const, etiquetas: [], descripcion: '' }))
+    const g = { ...traducirGuion(['## Plano 1 · 0–35 s', 'Se ve: la puerta'].join('\n'), { segundosMin: 8, segundosMax: 60 }), fotos_ids: fotos.map((f) => f.id) }
+    const a = armarPedidoDeLaOficina({ guion: g, brief, fotos: fotos as never, clave: 'k', catalogo: ancho })
+    expect(a.ok && [a.pedido.segundos, a.pedido.fotos.length]).toEqual([35, 3])
   })
 })

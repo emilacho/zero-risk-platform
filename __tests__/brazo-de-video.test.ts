@@ -472,3 +472,18 @@ describe('17-nov · Sprint 3 · T1 · los modelos y sus límites son DATO (la ru
     expect(fetchMock).not.toHaveBeenCalled()
   })
 })
+
+describe('17-nov · Sprint 3 · T1 · el camino PLANO POR PLANO de la ruta también valida con el catálogo de la configuración (sabotaje de CC7)', () => {
+  const CLIENTES = [['restaurante', { ...PEDIDO, client_id: 'cli-restaurante' }], ['B2B de seguridad', { ...PEDIDO, client_id: 'cli-seguridad', formato: 'short', prompt: 'Así se revisa un extintor en una planta industrial, paso a paso' }]] as const
+  it.each(CLIENTES)('🔴 %s · un plano de 25 s pasa con la ficha del código (hasta 30); si la configuración baja el máximo a 20, es 400 sin llamar al proveedor', async (_n, ped) => {
+    configRows.value = []
+    fetchMock.mockResolvedValueOnce(respuesta(200, { type: 'description', pricing_description: DESC_25 }))
+    expect(await (await post({ ...ped, plano: true, segundos: 25, dry_run: true })).json()).toMatchObject({ plano: true, segundos: 25 })
+    fetchMock.mockClear()
+    configRows.value = [{ valor: { modelos: { 'bytedance/seedance-2.5': { segundos_max: 20 } } } }]
+    const r = await post({ ...ped, plano: true, segundos: 25, dry_run: true })
+    expect(r.status).toBe(400)
+    expect(JSON.stringify(await r.json())).toContain('`segundos` de un plano es un entero de 4 a 20')
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+})

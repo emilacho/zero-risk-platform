@@ -2,7 +2,7 @@
  * DEL GUION AL PEDIDO DEL BRAZO · puro. Lo que el brazo (`POST /api/video/generate`) acepta: `prompt`, `formato` (reel · short · tiktok · video), `segundos`, `resolucion`,
  * `fotos` (direcciones https de fotos PROPIAS del cliente, ≤ 9) y `clave` (idempotencia: `<encargo>:<brief>:v<versión del guion>`). Nada aquí llama a la red.
  */
-import { FORMATOS_DEL_BRAZO, RESOLUCION_APROBADA, armarPedido, fichaPorOmision } from '../../video/parametros'
+import { FORMATOS_DEL_BRAZO, RESOLUCION_APROBADA, armarPedido, fichaPorOmision, type CatalogoDeModelos } from '../../video/parametros'
 import type { BriefLeido } from '../brief'
 import type { FotoEtiquetada } from '../fotos'
 import { promptDelGuion, type TraduccionDeGuion } from './guion'
@@ -57,7 +57,7 @@ export function buscarFotoPropia(id: string, propias: ReadonlyArray<{ id: string
 export const fotosPropiasConDireccion = (fotos: FotoEtiquetada[]): Array<FotoEtiquetada & { url: string }> =>
   fotos.filter((f) => (f.origen ?? 'propia') === 'propia' && !!f.url && /^https:\/\/\S+$/.test(f.url)) as Array<FotoEtiquetada & { url: string }>
 
-export function armarPedidoDeLaOficina(o: { guion: TraduccionDeGuion; brief: Pick<BriefLeido, 'formato' | 'red'>; fotos: FotoEtiquetada[]; clave: string; resolucion?: string; /** 11-nov · regla #17: la proporción que trae el brief (dato de la tabla de formatos); sin ella, la de por omisión */ relacion?: string }): { ok: true; pedido: PedidoDeVideoDeLaOficina; /** los nombres cortos del guion que coinciden con VARIAS fotos propias (también están en `fotos_no_halladas`) */ ambiguas: string[] } | { ok: false; errores: string[] } {
+export function armarPedidoDeLaOficina(o: { /** 17-nov · T1 · el catálogo que leyó el encargo al abrir (el que valida la ruta); sin él, el del código */ catalogo?: CatalogoDeModelos; guion: TraduccionDeGuion; brief: Pick<BriefLeido, 'formato' | 'red'>; fotos: FotoEtiquetada[]; clave: string; resolucion?: string; /** 11-nov · regla #17: la proporción que trae el brief (dato de la tabla de formatos); sin ella, la de por omisión */ relacion?: string }): { ok: true; pedido: PedidoDeVideoDeLaOficina; /** los nombres cortos del guion que coinciden con VARIAS fotos propias (también están en `fotos_no_halladas`) */ ambiguas: string[] } | { ok: false; errores: string[] } {
   const formato = formatoDeVideo(o.brief)
   const propias = fotosPropiasConDireccion(o.fotos)
   const urls: string[] = []
@@ -68,8 +68,8 @@ export function armarPedidoDeLaOficina(o: { guion: TraduccionDeGuion; brief: Pic
     if (h && 'url' in h) { if (!urls.includes(h.url)) urls.push(h.url) } else { noHalladas.push(id); if (h) ambiguas.push(id) }
   }
   const { prompt, recortado } = promptDelGuion(o.guion)
-  const entrada = { prompt, formato, segundos: o.guion.segundos, resolucion: o.resolucion ?? RESOLUCION_APROBADA, ...(o.relacion ? { relacion: o.relacion } : {}), audio: true, fotos: urls.slice(0, fichaPorOmision().referencias_max) }
-  const v = armarPedido(entrada)
+  const entrada = { prompt, formato, segundos: o.guion.segundos, resolucion: o.resolucion ?? RESOLUCION_APROBADA, ...(o.relacion ? { relacion: o.relacion } : {}), audio: true, fotos: urls } // el tope de fotos lo aplica `armarPedido` con la ficha del catálogo
+  const v = armarPedido(entrada, o.catalogo)
   if (!v.ok) return { ok: false, errores: v.errores }
   return { ok: true, pedido: { prompt: v.pedido.prompt, formato: v.pedido.formato, segundos: v.pedido.segundos, resolucion: v.pedido.resolucion, relacion: v.pedido.relacion, audio: true, fotos: v.pedido.fotos, fotos_no_halladas: noHalladas, clave: o.clave, prompt_recortado: recortado }, ambiguas }
 }
@@ -82,13 +82,13 @@ export const PROMPT_DE_COTIZACION = 'Cotización previa de la sala de video: con
  * solo texto siempre; y con foto propia si el cliente tiene alguna (el guion las nombra en «Foto:» y el pedido va por la ruta de referencia).
  * La duración es la MÍNIMA que admite el modelo (su ficha): si ni el video más corto cabe en el tope, ninguno cabrá; uno más largo lo vuelve a medir el brazo al enviar. Puro.
  */
-export function pedidosParaCotizar(o: { brief: Pick<BriefLeido, 'formato' | 'red'>; fotos: FotoEtiquetada[]; clave: string; resolucion?: string; /** regla #17: la misma proporción que llevará el pedido (cambia el costo) */ relacion?: string }): { ok: true; pedidos: Array<{ ruta: 'texto' | 'foto'; pedido: PedidoDeVideoDeLaOficina }> } | { ok: false; errores: string[] } {
+export function pedidosParaCotizar(o: { /** 17-nov · T1 · el mismo catálogo que valida la ruta */ catalogo?: CatalogoDeModelos; brief: Pick<BriefLeido, 'formato' | 'red'>; fotos: FotoEtiquetada[]; clave: string; resolucion?: string; /** regla #17: la misma proporción que llevará el pedido (cambia el costo) */ relacion?: string }): { ok: true; pedidos: Array<{ ruta: 'texto' | 'foto'; pedido: PedidoDeVideoDeLaOficina }> } | { ok: false; errores: string[] } {
   const formato = formatoDeVideo(o.brief)
   const foto = o.fotos.find((f) => (f.origen ?? 'propia') === 'propia' && f.url && /^https:\/\/\S+$/.test(f.url))?.url
   const rutas: Array<{ ruta: 'texto' | 'foto'; fotos: string[] }> = [{ ruta: 'texto', fotos: [] }, ...(foto ? [{ ruta: 'foto' as const, fotos: [foto] }] : [])]
   const pedidos: Array<{ ruta: 'texto' | 'foto'; pedido: PedidoDeVideoDeLaOficina }> = []
   for (const r of rutas) {
-    const v = armarPedido({ prompt: PROMPT_DE_COTIZACION, formato, segundos: fichaPorOmision().segundos_min, resolucion: o.resolucion ?? RESOLUCION_APROBADA, ...(o.relacion ? { relacion: o.relacion } : {}), audio: true, fotos: r.fotos })
+    const v = armarPedido({ prompt: PROMPT_DE_COTIZACION, formato, segundos: fichaPorOmision(o.catalogo).segundos_min, resolucion: o.resolucion ?? RESOLUCION_APROBADA, ...(o.relacion ? { relacion: o.relacion } : {}), audio: true, fotos: r.fotos }, o.catalogo)
     if (!v.ok) return { ok: false, errores: v.errores }
     pedidos.push({ ruta: r.ruta, pedido: { prompt: v.pedido.prompt, formato: v.pedido.formato, segundos: v.pedido.segundos, resolucion: v.pedido.resolucion, relacion: v.pedido.relacion, audio: true, fotos: v.pedido.fotos, fotos_no_halladas: [], clave: `${o.clave}:cotizar:${r.ruta}`, prompt_recortado: false } })
   }
