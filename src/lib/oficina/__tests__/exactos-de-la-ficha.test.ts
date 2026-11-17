@@ -89,6 +89,33 @@ describe('dato VENCIDO / AÚN NO VIGENTE que se usa igual · con la fecha DE LA 
   })
 })
 
+describe('D1 · oferta cerrada o que aún no existe en la fecha de la fila (por el tipo del hecho del cerebro · #1145)', () => {
+  const conCierre = (tipo: 'cierre_retiro' | 'aun_no_existe' | 'sede', d: { vigente_desde?: string; vigente_hasta?: string }) => ({ ...CLIENTES[2].ficha, no_se_puede_afirmar: [{ valor: 'la oferta no se da en este tramo', fuente: 'cerebro:dueno · hechos:4', tipo, ...d }] })
+  it.each(CLIENTES)('$nombre · sin hecho que la cierre: D1 no dispara', ({ ficha, precioBien }) => {
+    expect(chequeosExactos(fichaDeLaHoja(hoja(ficha.clave, ficha, '2026-11-20')), precioBien).hallazgos).toEqual([])
+  })
+  it('cierre desde antes de la fecha de la fila → calendario, regla dura, con la línea citable', () => {
+    const f = fichaDeLaHoja(hoja('asesoria-tributaria', conCierre('cierre_retiro', { vigente_desde: '2026-11-15' }), '2026-11-20'))
+    expect(f.cierre).toMatch(/^la oferta no se da en este tramo \(fuente: cerebro:/)
+    const h = chequeosExactos(f, 'La declaración anual por 120 dólares').hallazgos
+    expect(h).toEqual([expect.objectContaining({ destino: 'calendario', origen: 'codigo' })])
+    expect(h[0].que).toMatch(/^D1 · /)
+    expect(f.lineas).toContain(h[0].linea_de_la_ficha)
+  })
+  it('«aún no existe» hasta E: la fila del día E+1 ya vale (sin D1); la del día E, no', () => {
+    const ficha = conCierre('aun_no_existe', { vigente_hasta: '2026-11-30' })
+    expect(chequeosExactos(fichaDeLaHoja(hoja('asesoria-tributaria', ficha, '2026-11-30')), '').hallazgos.map((x) => x.destino)).toEqual(['calendario'])
+    expect(chequeosExactos(fichaDeLaHoja(hoja('asesoria-tributaria', ficha, '2026-12-01')), '').hallazgos).toEqual([])
+  })
+  it('un hecho que no cierra (sede) no dispara D1', () => {
+    expect(chequeosExactos(fichaDeLaHoja(hoja('asesoria-tributaria', conCierre('sede', {}), '2026-11-20')), '').hallazgos).toEqual([])
+  })
+  it('sin ficha no hay D1 aunque la hoja traiga el campo', () => {
+    const h = `${hoja('x', null, '2026-11-20')}\n- OFERTA CERRADA EN SU FECHA: cerrada (fuente: cerebro:x)`
+    expect(chequeosExactos(fichaDeLaHoja(h), '').hallazgos).toEqual([])
+  })
+})
+
 describe('lo exacto dentro del paso jefatura', () => {
   const H = hoja('olon', CLIENTES[0].ficha, '2026-11-20')
   const estado = (): Estado => ({ pasos_ejecutados: 4, fichas: [], artefactos: {}, gasto_usd: 0, vueltas: {} }) as unknown as Estado
@@ -103,7 +130,7 @@ describe('lo exacto dentro del paso jefatura', () => {
   it('el precio que no está vuelve a la mesa como corrección, sin devolución', () => {
     const { res, j } = aplicar('Pide el combo a $9,90')
     expect((res.artefacto as { vuelve_a_la_mesa?: boolean }).vuelve_a_la_mesa).toBe(true)
-    expect((res.artefacto as { aviso_a_la_mesa: string }).aviso_a_la_mesa).toMatch(/sentido · pieza: el precio «\$9,90»/)
+    expect((res.artefacto as { aviso_a_la_mesa: string }).aviso_a_la_mesa).toMatch(/sentido · pieza: D3 · el precio «\$9,90»/)
     expect(j.sentido!.devoluciones).toEqual([])
   })
   it('el precio vigente no da hallazgo: la pieza sigue limpia', () => {

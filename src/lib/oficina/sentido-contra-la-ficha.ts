@@ -22,6 +22,8 @@ export const DESTINOS_DE_LA_CADENA: readonly Destino[] = ['hoja', 'calendario', 
 /** los nombres de la hoja (los escribe `src/lib/cadena/hoja.ts`: `campo('OFERTA', …)` y `CAMPO_FICHA`) */
 export const CAMPO_OFERTA_DE_LA_HOJA = 'OFERTA'
 export const CAMPO_FICHA_DE_LA_HOJA = 'FICHA DE LA OFERTA'
+/** D1 · la hoja lo escribe SOLO si `ofertaCerradaOInexistenteEn(ficha, fecha_de_la_fila)` (cadena · CC3 #1145) devuelve un dato: «<valor> (fuente: …)». Sin el campo, D1 no dispara */
+export const CAMPO_CIERRE_DE_LA_HOJA = 'OFERTA CERRADA EN SU FECHA'
 
 export const TITULO_DE_LA_FICHA = 'Ficha de la oferta'
 export const FUNCION_DE_LA_FICHA = 'los hechos de lo que esta pieza vende, cada uno con su fuente y su vigencia en la fecha de la pieza: contra esto se comprueba el sentido'
@@ -44,6 +46,8 @@ export interface FichaDeLaHoja {
   motivo?: string
   /** el resto de la hoja (todo menos la lista de la ficha): ahí se busca si la hoja USA un dato */
   resto: string
+  /** D1 · el dato del cerebro que cierra la oferta en la fecha de la fila (lo decidió el código de la cadena); también va como línea de la ficha para poder citarlo */
+  cierre?: string
 }
 
 /** lee `- OFERTA:` y `- FICHA DE LA OFERTA:` (lista) de la sección de la hoja de esta pieza */
@@ -55,12 +59,14 @@ export function fichaDeLaHoja(seccion: string | null | undefined): FichaDeLaHoja
   const resto: string[] = []
   let enLaFicha = false
   let vista = false
+  let cierre: string | null = null
   for (const l of lineas) {
     const item = /^\s{2,}-\s+(.*\S)\s*$/.exec(l)
     if (enLaFicha && item) { items.push(limpio(item[1])); continue }
     enLaFicha = false
     const c = /^-\s+([^:]+):\s*(.*)$/.exec(l)
     if (c && limpio(c[1]) === CAMPO_OFERTA_DE_LA_HOJA) oferta = limpio(c[2]) || null
+    if (c && limpio(c[1]) === CAMPO_CIERRE_DE_LA_HOJA) { cierre = limpio(c[2]) || null; continue }
     if (c && limpio(c[1]) === CAMPO_FICHA_DE_LA_HOJA) {
       vista = true
       if (limpio(c[2])) declarado = limpio(c[2])
@@ -73,7 +79,7 @@ export function fichaDeLaHoja(seccion: string | null | undefined): FichaDeLaHoja
   const base = { oferta: ofertaReal, resto: resto.join('\n') }
   if (!vista) return { ...base, estado: 'sin_ficha', lineas: [], motivo: 'la hoja no trae la ficha de la oferta' }
   if (!items.length) return { ...base, estado: 'sin_ficha', lineas: [], motivo: declarado ?? 'la ficha llegó vacía' }
-  return { ...base, estado: 'con_ficha', lineas: items }
+  return { ...base, estado: 'con_ficha', lineas: cierre ? [...items, `${CAMPO_CIERRE_DE_LA_HOJA.toLowerCase()}: ${cierre}`] : items, ...(cierre ? { cierre } : {}) }
 }
 
 /** el documento para el revisor: SOLO con ficha (sin ficha no se agrega nada · el pedido queda como antes) */

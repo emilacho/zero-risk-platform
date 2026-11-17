@@ -160,11 +160,11 @@ describe('firma de Emilio · tras la vuelta, el creador ya respondió', () => {
     ['sin respuesta', []],
     ['«no tomada» sin motivo', ['RESPUESTA A LA JEFATURA S1: no tomada']],
     ['respuesta que no se entiende', ['RESPUESTA A LA JEFATURA S1: ya veremos']],
-  ])('%s · se declara «no dicha», nunca se da por tomada, y la pieza no sale sola', (_c, lineas) => {
+  ])('%s · se declara «no dicha», nunca se da por tomada; queda marcada y NO bloquea (fuera de la lista de reglas duras)', (_c, lineas) => {
     const { j, e, prefijo } = tras([], lineas)
     expect(j.sentido!.respuestas_del_creador![0]).toMatchObject({ respuesta: 'no_dicha' })
     expect(j.sentido!.respuestas_del_creador![0].declarado).toBeTruthy()
-    expect(e.fichas).toEqual([expect.objectContaining({ gravedad: 'bloquea', donde: 'pieza' })])
+    expect(e.fichas).toEqual([])
     expect(prefijo).toContain('⚠️ CORRECCIÓN SIN RESPUESTA · ')
   })
 

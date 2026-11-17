@@ -170,10 +170,10 @@ export function aplicarSalidaDeJefatura(pl: Pick<Plantilla, 'familia' | 'clase'>
     return { ...fichaNueva(`jefe-${e.pasos_ejecutados}-${i}`, 'jefe', p.donde, 'bloquea', p.que, 'revisión de la jefatura', 'una persona decide'), estado: 'no_tomada' as const, razon: 'la jefatura cerró sin que se tomara' }
   })
   // cambio 4 · firma de Emilio · cada regreso a la cadena vuelve SOLO a su creador (automático): la pieza no se publica mientras esa corrección no tenga respuesta (ficha que bloquea).
-  //   La corrección que el creador de la pieza dejó sin responder también bloquea (no se da por tomada). Lo que no reabre queda registrado en `sentido.no_reabre`, sin ficha.
+  //   La corrección que el creador de la pieza dejó sin responder NO bloquea (DECISION-EMILIO reglas duras: nada fuera de la lista bloquea): queda «no dicha», declarada y marcada en la bandeja;
+  //   nunca se da por tomada. Lo que no reabre queda registrado en `sentido.no_reabre`, sin ficha.
   if (sen) {
     sen.datos.devoluciones.forEach((d, i) => fichas.push({ ...fichaNueva(`sentido-${e.pasos_ejecutados}-${i}`, 'jefe', d.destino, 'bloquea', `sentido · ${d.destino}: ${d.motivo}`, d.linea_de_la_ficha ? `ficha de la oferta: «${d.linea_de_la_ficha}»` : 'ficha de la oferta', d.dura ? `vuelve a ${d.destino}: regla dura, su creador la toma sí o sí` : `vuelve a ${d.destino}: su creador la toma, la toma en parte o no la toma, y dice por qué`), estado: 'no_tomada' as const, razon: `devuelto a ${d.destino}` }))
-    ;(sen.datos.respuestas_del_creador ?? []).filter((r) => r.respuesta === 'no_dicha' && !r.dura).forEach((r, i) => fichas.push({ ...fichaNueva(`sentido-sin-respuesta-${e.pasos_ejecutados}-${i}`, 'jefe', 'pieza', 'bloquea', `el creador no respondió la corrección ${r.id}: ${r.declarado ?? ''}`.trim(), r.texto, 'que el creador diga si la tomó, en parte o no, y por qué'), estado: 'no_tomada' as const, razon: 'corrección sin respuesta' }))
   }
   // la opinión libre de GPT llega como OPINIÓN (una ficha `externa` por dueño, nunca bloquea ni cuenta como desacuerdo), con lo que cada dueño decidió
   const externas = respuestas.filter((r) => r.origen === 'externa').sort((a, b) => (a.donde === 'texto' ? -1 : b.donde === 'texto' ? 1 : 0))

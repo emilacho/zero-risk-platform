@@ -52,15 +52,15 @@ async function correr(desacuerdos: string[][], piezas: string[]) {
   M.P.jefatura = async (sobre) => { revisiones.push(sobre.payload.texto); return { estado: 'cerrada', salida: salida(desacuerdos[Math.min(revisiones.length - 1, desacuerdos.length - 1)]) } }
   let r = await abrirEncargo(M.P, { cuerpo: { parte_id: PARTE, brief_id: 'BRF-0300', dry_run: true, familia: 'kit_historias' }, client_id: CLIENTE, target_step_id: TARGET_STEP_PRODUCIR })
   const id = String(r.cuerpo.encargo_id)
-  let escritas = 0
   for (let i = 0; i < 40 && r.cuerpo.accion === 'esperar'; i++) {
     const t = r.cuerpo.turno as { n: number; paso: string; agente: string }
     const [, tipo] = t.paso.split(':')
     let texto = `(${t.agente}) aporte breve`
     if (t.agente === 'creative-director-mesa' && tipo !== 'dirige') {
       const citas = MS.filas.filter((f) => f.encargo_id === id && f.tipo === 'aporta').map((f) => `A${f.n} usé: el titular`).join('\n')
-      texto = `${piezas[Math.min(escritas, piezas.length - 1)]}\n## Citas\n${citas}`
-      escritas++
+      // antes de la vuelta escribe la 1.ª pieza; después de la devolución de la jefatura, la 2.ª (con su respuesta)
+      const volvio = MS.filas.some((f) => f.encargo_id === id && f.tipo === 'devuelve' && f.de === 'oficina-creativa')
+      texto = `${piezas[volvio ? 1 : 0]}\n## Citas\n${citas}`
     }
     r = await recibirResultado(M.P, id, t.n, { texto, costo_usd: 0, workflow_execution_id: `t-${t.n}` })
   }
@@ -88,10 +88,22 @@ describe('firma de Emilio · la vuelta con respuesta del creador, de punta a pun
     expect(JSON.stringify(m.e)).not.toMatch(/a_humano|decide una persona/)
   })
 
-  it('🔴 sin respuesta del creador: se declara «no dicha», nunca «tomada», y la pieza no sale sola (con desacuerdo)', async () => {
+  it('🔴 sin respuesta del creador: se declara «no dicha», nunca «tomada»; sigue el camino normal declarándolo (no espera a una persona)', async () => {
     const m = await correr([[HALLAZGO], []], [PIEZA, PIEZA])
     const j = datosDeLaJefatura(m.e)!
-    expect(j.sentido!.respuestas_del_creador).toEqual([expect.objectContaining({ id: 'S1', respuesta: 'no_dicha' })])
-    expect(m.r.cuerpo).toMatchObject({ con_desacuerdo: true })
+    expect(j.sentido!.respuestas_del_creador).toEqual([expect.objectContaining({ id: 'S1', respuesta: 'no_dicha', declarado: 'el creador no respondió esta corrección' })])
+    expect(m.r.cuerpo).toMatchObject({ resultado_para_la_sala: 'encargo_en_bandeja', con_desacuerdo: false })
+  })
+
+  it('🔴 regla dura D3 en la pieza: vuelve con «regla dura»; si el creador la corrige, sale limpia; si no, queda como desacuerdo', async () => {
+    const mal = PIEZA.replace('Texto: Pídelo desde casa.', 'Texto: Pídelo desde casa a $9,90.')
+    const bien = PIEZA.replace('Texto: Pídelo desde casa.', 'Texto: Pídelo desde casa a $7.')
+    const ok = await correr([[], []], [mal, `${bien}\nRESPUESTA A LA JEFATURA S1: tomada`])
+    expect(ok.avisos[0]).toMatch(/\[S1\] sentido · pieza: D3 · el precio «\$9,90».*regla dura: se toma sí o sí/)
+    expect(datosDeLaJefatura(ok.e)!.sentido!.respuestas_del_creador).toEqual([expect.objectContaining({ id: 'S1', respuesta: 'tomada', dura: true })])
+    expect(ok.r.cuerpo).toMatchObject({ con_desacuerdo: false })
+    const no = await correr([[], []], [mal, `${mal}\nRESPUESTA A LA JEFATURA S1: no tomada: prefiero ese precio`])
+    expect(no.r.cuerpo).toMatchObject({ con_desacuerdo: true })
+    expect(no.e.fichas.filter((f) => f.gravedad === 'bloquea' && f.estado === 'no_tomada').map((f) => f.que).join(' ')).toMatch(/D3 · el precio/)
   })
 })

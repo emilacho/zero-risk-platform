@@ -1,9 +1,12 @@
 /**
- * CAMBIO 4 · punto 2 · LO EXACTO POR CÓDIGO contra la ficha de la oferta (precio y dato vencido o aún no vigente que se usa igual) · puro.
- * Va APARTE del resto del cambio 4: Emilio decide antes de meter cualquier verificación por código (RESPUESTA-LENOVO-a-CC4-cambio-4-espera-a-emilio). En rama, sin publicar, hasta su firma.
+ * CAMBIO 4 · LAS REGLAS DURAS contra la ficha de la oferta, por código (FIRMADAS por Emilio 17-nov 20:37 · DECISION-EMILIO-reglas-duras-de-la-jefatura) · puro.
+ *  D1 · vende una oferta cerrada o que aún no existe en su fecha (el campo que escribe la hoja con `ofertaCerradaOInexistenteEn`) ⇒ calendario.
+ *  D2 · usa un dato vencido o aún no vigente en su fecha ⇒ hoja si la hoja lo trae, si no pieza.
+ *  D3 · precio que no está en la ficha vigente ⇒ hoja si la hoja lo trae, si no pieza (la regla 3 de texto · se une a la de `chequeos.ts`).
+ * Una regla dura se toma SÍ O SÍ: el creador no puede dejar de tomarla.
  * Regla de Emilio: «juzgar = agente; verificar exacto = código». Ante la duda NO dispara y lo declara (CC7).
  */
-import { leerDato, normal, type DatoLeido, type FichaDeLaHoja, type Hallazgo } from './sentido-contra-la-ficha'
+import { CAMPO_CIERRE_DE_LA_HOJA, leerDato, normal, type DatoLeido, type FichaDeLaHoja, type Hallazgo } from './sentido-contra-la-ficha'
 
 const limpio = (v: unknown): string => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim() : '')
 
@@ -60,6 +63,8 @@ export function chequeosExactos(f: FichaDeLaHoja, textoDeLaPieza: string): Resul
   if (f.estado !== 'con_ficha') return { hallazgos: [], declarado: [`sin ficha para esta oferta (${f.motivo ?? 'sin motivo'}): solo se revisa la forma`] }
   const datos = f.lineas.map(leerDato).filter((d): d is DatoLeido => !!d)
   const hallazgos: Hallazgo[] = []
+  // D1 · la cadena ya decidió EXACTO (por el tipo del hecho del cerebro y la fecha de la fila) que la oferta está cerrada o aún no existe: la fila no va en esa fecha
+  if (f.cierre) hallazgos.push({ destino: 'calendario', origen: 'codigo', que: `D1 · la oferta está cerrada o aún no existe en la fecha de la pieza: «${f.cierre}»`, linea_de_la_ficha: `${CAMPO_CIERRE_DE_LA_HOJA.toLowerCase()}: ${f.cierre}` })
   const declarado: string[] = []
   const deprecio = datos.filter((d) => normal(d.campo) === 'oferta y precio')
   const vigentes = new Set(deprecio.filter((d) => !d.marca).flatMap((d) => preciosDelDato(d.valor)))
@@ -72,14 +77,14 @@ export function chequeosExactos(f: FichaDeLaHoja, textoDeLaPieza: string): Resul
       if (vigentes.has(p.centavos) || vistos.has(p.centavos)) continue
       vistos.add(p.centavos)
       const origen = enLaHoja.has(p.centavos) ? 'hoja' : 'pieza'
-      hallazgos.push({ destino: origen, origen: 'codigo', que: `el precio «${p.visto}» no está entre los precios vigentes de la ficha${origen === 'hoja' ? ' y viene de la hoja' : ''}`, linea_de_la_ficha: deprecio.find((d) => !d.marca)?.linea ?? null })
+      hallazgos.push({ destino: origen, origen: 'codigo', que: `D3 · el precio «${p.visto}» no está entre los precios vigentes de la ficha${origen === 'hoja' ? ' y viene de la hoja' : ''}`, linea_de_la_ficha: deprecio.find((d) => !d.marca)?.linea ?? null })
     }
   }
   for (const d of datos) {
     if (!d.marca) continue
     const como = d.marca === 'vencido' ? 'VENCIDO' : 'AÚN NO VIGENTE'
-    if (contieneNormal(f.resto, d.valor)) hallazgos.push({ destino: 'hoja', origen: 'codigo', que: `la hoja usa un dato ${como} en la fecha de la pieza: «${d.valor}»`, linea_de_la_ficha: d.linea })
-    else if (contieneNormal(textoDeLaPieza, d.valor)) hallazgos.push({ destino: 'pieza', origen: 'codigo', que: `la pieza usa un dato ${como} en su fecha: «${d.valor}»`, linea_de_la_ficha: d.linea })
+    if (contieneNormal(f.resto, d.valor)) hallazgos.push({ destino: 'hoja', origen: 'codigo', que: `D2 · la hoja usa un dato ${como} en la fecha de la pieza: «${d.valor}»`, linea_de_la_ficha: d.linea })
+    else if (contieneNormal(textoDeLaPieza, d.valor)) hallazgos.push({ destino: 'pieza', origen: 'codigo', que: `D2 · la pieza usa un dato ${como} en su fecha: «${d.valor}»`, linea_de_la_ficha: d.linea })
   }
   return { hallazgos, declarado }
 }

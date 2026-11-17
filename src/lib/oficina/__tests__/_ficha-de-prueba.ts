@@ -1,12 +1,19 @@
 /** cambio 4 · ayuda de pruebas: la hoja de una pieza como la escribe `src/lib/cadena/hoja.ts`, con la función REAL de la cadena, y 3 clientes de rubros distintos */
-import { fichaEnLineas, type FichaDeOferta } from '../../cadena/ficha-de-oferta'
+import { fichaEnLineas, ofertaCerradaOInexistenteEn, type FichaDeOferta } from '../../cadena/ficha-de-oferta'
 
-/** una sección de hoja (OFERTA + FICHA DE LA OFERTA como lista + el resto de campos) */
+/**
+ * una sección de hoja (OFERTA + FICHA DE LA OFERTA como lista + el resto de campos).
+ * D1 · el campo «OFERTA CERRADA EN SU FECHA» lo escribe la hoja con la función REAL de la cadena (`ofertaCerradaOInexistenteEn`, #1145) — es lo que se le pide a CC3.
+ */
 export function hoja(oferta: string | null, ficha: FichaDeOferta | null | 'sin_fichas', fecha: string, extra: string[] = []): string {
   const L = ['### F-01 · Instagram · post', `- QUÉ ES: post para Instagram`, `- OFERTA: ${oferta ?? 'sin oferta en la fila · declarado'}`]
   if (ficha === 'sin_fichas') L.push('- FICHA DE LA OFERTA: sin fichas de hechos todavía · declarado')
   else if (!ficha) L.push(`- FICHA DE LA OFERTA: sin ficha para «${oferta}» · declarado`)
-  else { L.push('- FICHA DE LA OFERTA:'); for (const l of fichaEnLineas(ficha, fecha)) L.push(`  - ${l}`) }
+  else {
+    L.push('- FICHA DE LA OFERTA:'); for (const l of fichaEnLineas(ficha, fecha)) L.push(`  - ${l}`)
+    const c = ofertaCerradaOInexistenteEn(ficha, fecha)
+    if (c) L.push(`- OFERTA CERRADA EN SU FECHA: ${c.valor} (fuente: ${c.fuente})`)
+  }
   L.push('- MENSAJE (uno): lo de la pieza', ...extra)
   return L.join('\n')
 }
