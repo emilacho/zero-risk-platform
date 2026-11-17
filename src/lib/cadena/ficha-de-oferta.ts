@@ -81,7 +81,9 @@ export function datoEnTexto(d: DatoDeFicha, fechaDeLaPieza?: string | null): str
   const futuro = aunNoVigente(d, fechaDeLaPieza)
   const marca = futuro ? 'AÚN NO VIGENTE · ' : vencido(d, fechaDeLaPieza) ? 'VENCIDO · ' : ''
   const vence = hasta ? ` · ${marca === 'VENCIDO · ' ? 'venció el' : 'vale hasta'} ${hasta}` : ''
-  return `${marca}${limpio(d.valor)} (fuente: ${limpio(d.fuente)}${red ? ` · solo en ${red}` : ''}${desde ? ` · ${futuro ? 'empieza el' : 'vale desde'} ${desde}` : ''}${vence})`
+  // sin fecha de referencia, «desde» neutro (🟡 3 de CC6 a #1131): «vale desde», leído hoy, suena a presente
+  const conFecha = esFecha(limpio(fechaDeLaPieza))
+  return `${marca}${limpio(d.valor)} (fuente: ${limpio(d.fuente)}${red ? ` · solo en ${red}` : ''}${desde ? ` · ${futuro ? 'empieza el' : conFecha ? 'vale desde' : 'desde'} ${desde}` : ''}${vence})`
 }
 
 const CAMPOS: ReadonlyArray<{ k: Exclude<keyof FichaDeOferta, 'clave' | 'nombre' | 'objetivo_por_fecha'>; etiqueta: string }> = [
@@ -113,7 +115,7 @@ export function datosSinFuente(ficha: FichaDeOferta): number {
  * Un dato sin fuente no entra. Un campo sin datos se declara una vez al final («sin dato: …»), nunca se inventa.
  * Sin `fechaDeLaPieza` (el pedido de una mesa, que no es de una pieza) se listan todos los tramos de objetivo.
  */
-export function fichaEnLineas(ficha: FichaDeOferta, fechaDeLaPieza?: string | null): string[] {
+export function fichaEnLineas(ficha: FichaDeOferta, fechaDeLaPieza?: string | null, opciones: { todosLosTramos?: boolean } = {}): string[] {
   const out: string[] = []
   const sinDato: string[] = []
   for (const { k, etiqueta } of CAMPOS) {
@@ -122,7 +124,7 @@ export function fichaEnLineas(ficha: FichaDeOferta, fechaDeLaPieza?: string | nu
     for (const d of lista) out.push(`${etiqueta}: ${datoEnTexto(d, fechaDeLaPieza)}`)
   }
   const tramo = (o: ObjetivoPorFecha) => (o.desde || o.hasta ? ` · del ${o.desde ?? '…'} al ${o.hasta ?? '…'}` : '')
-  if (limpio(fechaDeLaPieza)) {
+  if (limpio(fechaDeLaPieza) && !opciones.todosLosTramos) {
     const obj = objetivoParaLaFecha(ficha, fechaDeLaPieza)
     if (obj) out.push(`objetivo para esta fecha: ${limpio(obj.objetivo)} (fuente: ${limpio(obj.fuente)}${tramo(obj)})`)
     else sinDato.push('objetivo para esta fecha')
@@ -138,10 +140,13 @@ export function fichaEnLineas(ficha: FichaDeOferta, fechaDeLaPieza?: string | nu
 /**
  * EL BLOQUE para el pedido de una mesa (gran idea · D, crítica · E): todas las fichas, con su clave y nombre. Lo usan todos tal cual.
  * Sin fichas, lo DICE (nunca un bloque vacío en silencio).
+ * `hoy` (🟡 3 de CC6 a #1131): la fecha de referencia · marca «VENCIDO» y «AÚN NO VIGENTE» igual que la hoja; los tramos de objetivo van todos.
  */
-export function fichasEnTexto(fichas: ReadonlyArray<FichaDeOferta> | null | undefined): string {
+export function fichasEnTexto(fichas: ReadonlyArray<FichaDeOferta> | null | undefined, hoy?: string | null): string {
   if (!fichas?.length) return `${TITULO_DEL_BLOQUE}\n(sin fichas de hechos todavía: trabaja con el manual y el brief, y no inventes datos de la oferta)`
-  return [TITULO_DEL_BLOQUE, ...fichas.map((f) => [`## ${limpio(f.clave)}${f.nombre ? ` · ${limpio(f.nombre)}` : ''}`, ...fichaEnLineas(f).map((l) => `- ${l}`)].join('\n'))].join('\n\n')
+  const ref = esFecha(limpio(hoy)) ? limpio(hoy) : null
+  const titulo = ref ? `${TITULO_DEL_BLOQUE}\n(vigencias leídas al ${ref})` : TITULO_DEL_BLOQUE
+  return [titulo, ...fichas.map((f) => [`## ${limpio(f.clave)}${f.nombre ? ` · ${limpio(f.nombre)}` : ''}`, ...fichaEnLineas(f, ref, { todosLosTramos: true }).map((l) => `- ${l}`)].join('\n'))].join('\n\n')
 }
 
 /**

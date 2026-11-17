@@ -200,10 +200,11 @@ export function loDecidido(c: Pick<ConceptoLeido, 'gran_idea' | 'como_se_ve_part
 export const CAMPO_FICHA = 'FICHA DE LA OFERTA'
 /**
  * 17-nov · Sprint 4 · A · la ficha de la oferta de la pieza, como lista de datos con fuente.
- * Sin fichas cargadas no se escribe este campo (la línea OFERTA sí va siempre); con fichas pero sin la de esta oferta, se declara y se avisa.
+ * Sin fichas cargadas se DECLARA (🟡 2 de CC6 a #1131: nunca en silencio); con fichas pero sin la de esta oferta, se declara y se avisa.
  */
+export const SIN_FICHAS = 'sin fichas de hechos todavía · declarado'
 function fichaDeLaPieza(ins: InsumosDeLaHoja, f: FilaDeHoja, id: string, avisos: string[]): string[] {
-  if (!ins.fichas?.length) return []
+  if (!ins.fichas?.length) return [campo(CAMPO_FICHA, SIN_FICHAS)]
   const ficha = fichaDeLaOferta(ins.fichas, f.oferta)
   if (!ficha) {
     avisos.push(`${id}: ${f.oferta ? `la oferta «${limpio(f.oferta)}» no tiene ficha de hechos` : 'la fila no dice su oferta'} · la mesa trabaja sin ficha`)

@@ -12,7 +12,7 @@ import { parsearBrief } from '@/lib/oficina/brief'
 import { leerBriefCreativo } from '../brief-creativo'
 import { leerConcepto, type InsumosDelConcepto } from '../conceptos'
 import { comoSeCompraParaLaRed, datosSinFuente, fichaDeLaOferta, fichaEnLineas, fichasEnTexto, objetivoParaLaFecha, TITULO_DEL_BLOQUE, type FichaDeOferta } from '../ficha-de-oferta'
-import { CAMPO_FICHA, escribirHoja, ideaTalCual, llamadoDeLaPieza, SIN_LLAMADO, type FilaDeHoja, type InsumosDeLaHoja } from '../hoja'
+import { CAMPO_FICHA, escribirHoja, ideaTalCual, llamadoDeLaPieza, SIN_FICHAS, SIN_LLAMADO, type FilaDeHoja, type InsumosDeLaHoja } from '../hoja'
 import { CONCEPTO_DE_CADA_PIEZA } from '../indicaciones'
 import { ESQUEMA_CALENDARIO_TANDA_V5, ESQUEMAS } from '../esquemas'
 import type { FormatosPorRed } from '../tipos'
@@ -198,12 +198,21 @@ describe('el llamado a la acción: orden de respaldo de 5 pasos (borde b con CC5
   })
 })
 
-describe('sin fichas: la hoja dice la oferta y no escribe el bloque (la de hoy, más la línea OFERTA)', () => {
-  it('sin fichas cargadas no aparece FICHA DE LA OFERTA ni avisos de ficha', () => {
-    const h = escribirHoja(INS(CLIENTES[0], [fila({ id: 'p-a', oferta: 'puerto' })], { fichas: null }))
-    expect(h.texto_md).toContain('- OFERTA: puerto')
-    expect(h.texto_md).not.toContain(`- ${CAMPO_FICHA}`)
-    expect(h.avisos.join(' ')).not.toMatch(/ficha/)
+describe('sin fichas: la hoja dice la oferta y DECLARA que no hay fichas (🟡 2 de CC6: nunca en silencio)', () => {
+  it('sin fichas cargadas (el caso de hoy, hasta la entrega 2) la ficha se declara; sin avisos de ficha', () => {
+    for (const fichas of [null, []]) {
+      const h = escribirHoja(INS(CLIENTES[0], [fila({ id: 'p-a', oferta: 'puerto' })], { fichas }))
+      expect(h.texto_md).toContain('- OFERTA: puerto')
+      expect(seccion(h.texto_md, 'p-a')).toContain(`- ${CAMPO_FICHA}: ${SIN_FICHAS}`)
+      expect(h.avisos.join(' ')).not.toMatch(/ficha/)
+    }
+  })
+  // 🟡 1 de CC6: el aviso de los datos sin fuente se prueba (la entrega dice «no entra, y se avisa»)
+  it('un dato sin fuente: no entra en la hoja y el aviso de la hoja lo nombra', () => {
+    const f: FichaDeOferta = { clave: 'puerto', que_es: { valor: 'algo', fuente: 'manual:a' }, oferta_y_precio: [{ valor: 'PRECIO-SIN-FUENTE', fuente: '' }] }
+    const h = escribirHoja(INS(CLIENTES[0], [fila({ id: 'p-a', oferta: 'puerto' })], { fichas: [f] }))
+    expect(h.texto_md).not.toContain('PRECIO-SIN-FUENTE')
+    expect(h.avisos).toContain('p-a: la ficha de «puerto» trae 1 dato sin fuente · no entra en la hoja')
   })
   it('una fila sin oferta lo declara', () => {
     expect(escribirHoja(INS(CLIENTES[0], [fila({ id: 'p-a' })], { fichas: null })).texto_md).toContain('- OFERTA: sin oferta en la fila · declarado')
@@ -219,6 +228,41 @@ describe('F · el calendario v5 solo pone lo suyo', () => {
     const pieza = (ESQUEMA_CALENDARIO_TANDA_V5.properties.piezas as { items: { properties: Record<string, { required?: string[] }> } }).items
     expect(pieza.properties.concepto.required).toEqual(['objetivo', 'publico'])
     expect(ESQUEMAS['calendario_tanda.v5']).toBe(ESQUEMA_CALENDARIO_TANDA_V5)
+  })
+  // 🟡 4 de CC6: la instrucción pide SOLO lo que el esquema v5 acepta
+  it('la instrucción al calendario solo nombra campos que existen en v5, y en `concepto` solo pide objetivo y público', () => {
+    const pieza = (ESQUEMA_CALENDARIO_TANDA_V5.properties.piezas as { items: { properties: Record<string, { properties?: Record<string, unknown> }> } }).items
+    const campos = new Set([...Object.keys(pieza.properties), ...Object.keys(pieza.properties.concepto.properties ?? {}), 'pendientes'])
+    const nombrados = [...CONCEPTO_DE_CADA_PIEZA.matchAll(/`([a-z_]+)`/g)].map((m) => m[1])
+    expect(nombrados.length).toBeGreaterThan(0)
+    for (const n of nombrados) expect(campos.has(n), `«${n}» no es un campo de calendario_tanda.v5`).toBe(true)
+    const pedidos = CONCEPTO_DE_CADA_PIEZA.split('\n').filter((l) => l.startsWith('- ')).map((l) => /^- `?([a-z_]+)`?/.exec(l)?.[1])
+    expect(pedidos).toEqual(['objetivo', 'publico'])
+    for (const k of ['mensaje', 'idea', 'llamado', 'fotos_disponibles']) expect(CONCEPTO_DE_CADA_PIEZA).not.toMatch(new RegExp(`\`${k}\`|^- ${k}\\b`, 'm'))
+  })
+})
+
+// 🟡 3 de CC6: el bloque de las mesas (D, E, C) marca lo futuro y lo vencido con su fecha de referencia
+describe('fichasEnTexto con fecha de referencia', () => {
+  const apertura: FichaDeOferta = {
+    clave: 'nueva',
+    se_puede_afirmar: [{ valor: 'ya abrimos en el norte', fuente: 'cerebro:hecho-7', vigente_desde: '2026-11-21' }],
+    oferta_y_precio: [{ valor: 'promo de lanzamiento', fuente: 'plan:p', vigente_hasta: '2026-11-10' }],
+    objetivo_por_fecha: [{ desde: '2026-11-01', hasta: '2026-11-30', objetivo: 'que prueben', fuente: 'plan:f1' }, { desde: '2026-12-01', objetivo: 'que vuelvan', fuente: 'plan:f2' }],
+  }
+  it('apertura el 21, referencia el 20: llega AÚN NO VIGENTE; lo vencido, VENCIDO; los tramos de objetivo van todos', () => {
+    const t = fichasEnTexto([apertura], '2026-11-20')
+    expect(t).toContain('(vigencias leídas al 2026-11-20)')
+    expect(t).toContain('- se puede afirmar: AÚN NO VIGENTE · ya abrimos en el norte (fuente: cerebro:hecho-7 · empieza el 2026-11-21)')
+    expect(t).toContain('- oferta y precio: VENCIDO · promo de lanzamiento (fuente: plan:p · venció el 2026-11-10)')
+    expect(t).toContain('- objetivo: que prueben')
+    expect(t).toContain('- objetivo: que vuelvan')
+  })
+  it('sin fecha de referencia, «desde» es neutro (nunca «vale desde»)', () => {
+    const t = fichasEnTexto([apertura])
+    expect(t).toContain('ya abrimos en el norte (fuente: cerebro:hecho-7 · desde 2026-11-21)')
+    expect(t).not.toContain('vale desde')
+    expect(t).not.toContain('(vigencias leídas al')
   })
 })
 
