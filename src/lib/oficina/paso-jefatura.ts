@@ -10,6 +10,7 @@
 import type { PayloadDeRevision, Productor, SalidaDeRevision } from '../jefatura/revision/contrato'
 import { datos, fichaNueva } from './ayudas'
 import { claseDe } from './clase'
+import { quedaDesacuerdoDeHechos } from './hechos-del-negocio'
 import type { ContextoDelRevisor } from './ciego'
 import type { Encargo } from './puertos'
 import type { ResultadoDePaso } from './motor'
@@ -167,7 +168,7 @@ export function aplicarSinRevisar(motivo: string): ResultadoDePaso {
 export function prefijoDeLaBandeja(e: Estado): string {
   const j = datosDeLaJefatura(e)
   if (!j) return ''
-  return (j.incompleta ? '⚠️ REVISIÓN INCOMPLETA · ' : '') + (j.sin_revisar ? '⚠️ SIN REVISAR · ' : '')
+  return (j.incompleta ? '⚠️ REVISIÓN INCOMPLETA · ' : '') + (j.sin_revisar ? '⚠️ SIN REVISAR · ' : '') + (quedaDesacuerdoDeHechos(e.fichas) ? '⚠️ DESACUERDO DE HECHOS · ' : '')
 }
 export function metadataDeLaJefatura(e: Estado): Record<string, unknown> {
   const j = datosDeLaJefatura(e)
