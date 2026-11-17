@@ -326,7 +326,9 @@ describe('ENSAYO EN SECO · la hoja real → la mesa de video → el brazo simul
     expect(enviados).toHaveLength(1)
     const ped = enviados[0].pedido as Record<string, unknown>
     expect(ped).toMatchObject({ formato: 'reel', segundos: 12, relacion: '9:16', audio: true, fotos: [`https://fotos.test/${FOTOS[0].id}.jpg`], fotos_no_halladas: [] })
-    expect(String(ped.prompt)).toContain('Texto en pantalla, literal: «Hay mesa desde las siete»')
+    // S2-5 · el texto del plano ya no va al modelo (se compone después con la marca)
+    expect(String(ped.prompt)).not.toContain('Hay mesa desde las siete')
+    expect(String(ped.prompt)).not.toContain('Texto en pantalla')
     expect(enviados[0]).toMatchObject({ dry_run: true, workflow_id: 'oficina:video_mesa', client_id: CLIENTE })
     // cerró: guion, copy, pedido, video (simulado), entrega con mp4 + guion + pie; nada real
     expect(ultima.cuerpo).toMatchObject({ accion: 'cerrado', estado: 'cerrado', simulado: true })

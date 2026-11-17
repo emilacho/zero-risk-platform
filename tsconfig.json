@@ -26,6 +26,7 @@
     "packages",
     "tools",
     "services/agent-runner",
+    "services/render-html",
     "__tests__/agent-sdk-runner-helpers.test.ts",
     "__tests__/run-sdk-middleware.test.ts"
   ]

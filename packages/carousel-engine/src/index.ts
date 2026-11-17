@@ -40,3 +40,4 @@ export type {
 } from './types'
 export { PLATFORM_SPECS } from './types'
 export { htmlDeAnuncio, renderAnuncioHtml, escaparHtml, imagenEmbebida, caraDeFuentes, type PaginaSinPantalla } from './anuncio-html'
+export { htmlDeVideo, capasDeTexto, cierreEfectivo, NOMBRE_DE_VIDEO, SEGUNDOS_DE_CIERRE, SEGUNDOS_MINIMOS_DE_TEXTO, type PedidoDeVideoCompuesto, type TextoDelPlano, type CierreDelVideo } from './video-html'

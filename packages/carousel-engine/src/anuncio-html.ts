@@ -26,7 +26,7 @@ export interface PaginaSinPantalla {
   close(): Promise<void>
 }
 
-const limpio = (s: string | null | undefined): string => sinEmojis(String(s ?? '')).replace(/\s+/g, ' ').trim()
+export const limpio = (s: string | null | undefined): string => sinEmojis(String(s ?? '')).replace(/\s+/g, ' ').trim()
 
 /** el texto del autor nunca se interpreta: se escapa entero */
 export const escaparHtml = (s: string): string => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string)
@@ -36,10 +36,10 @@ export const imagenEmbebida = (src: string | null | undefined): string | null =>
   typeof src === 'string' && /^data:image\/(png|jpeg|webp|svg\+xml);base64,[A-Za-z0-9+/=]+$/.test(src) ? src : null
 
 /** un nombre de familia que no rompe el CSS (letras, números, espacio y guion) */
-const familia = (f: string): string => (f || 'Inter').replace(/[^\p{L}\p{N} \-]/gu, '').trim() || 'Inter'
+export const familia = (f: string): string => (f || 'Inter').replace(/[^\p{L}\p{N} \-]/gu, '').trim() || 'Inter'
 
 /** colores: solo #hex (el diseño ya los valida; esto es la segunda puerta) */
-const color = (c: string, reserva: string): string => (/^#[0-9a-f]{3,8}$/i.test(c) ? c : reserva)
+export const color = (c: string, reserva: string): string => (/^#[0-9a-f]{3,8}$/i.test(c) ? c : reserva)
 
 const aBase64 = (d: ArrayBuffer | Uint8Array | Buffer): string => Buffer.from(d instanceof ArrayBuffer ? new Uint8Array(d) : d).toString('base64')
 
