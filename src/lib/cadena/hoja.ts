@@ -11,7 +11,7 @@ import type { ConceptoDeLaFila, DatoDeterminado, Fila, FormatosPorRed } from './
 import { PROPORCION_POR_FORMATO, proporcionDe, proporcionDeLaTabla } from './proporciones'
 import type { BriefCreativoLeido } from './brief-creativo'
 import { comoSeVeSinPartes, decisionDeLaParte, ideaDelBanco, PARTES_DE_COMO_SE_VE, type CapituloDelConcepto, type ConceptoLeido, type IdeaDelBanco } from './conceptos'
-import { comoSeCompraParaLaRed, datosSinFuente, fichaDeLaOferta, fichaEnLineas, type FichaDeOferta } from './ficha-de-oferta'
+import { comoSeCompraParaLaRed, datosSinFuente, fichaDeLaOferta, fichaEnLineas, ofertaCerradaOInexistenteEn, type FichaDeOferta } from './ficha-de-oferta'
 
 export const FAMILIA_DEL_KIT = 'kit_historias'
 /** el id de un brief del parte (mismo criterio que `autoproducir.ts` RE_BRIEF) */
@@ -203,6 +203,12 @@ export const CAMPO_FICHA = 'FICHA DE LA OFERTA'
  * Sin fichas cargadas se DECLARA (🟡 2 de CC6 a #1131: nunca en silencio); con fichas pero sin la de esta oferta, se declara y se avisa.
  */
 export const SIN_FICHAS = 'sin fichas de hechos todavía · declarado'
+/**
+ * 17-nov · cambio 4 · D1 (regla dura firmada por Emilio) · PEDIDO-CC4-a-CC3: la oficina lee la hoja tal cual y las líneas de la ficha no traen el tipo del hecho.
+ * Solo cuando la ficha dice, POR CÓDIGO, que la oferta está cerrada o aún no existe en la fecha de la fila. Sin dato no se escribe nada (las hojas de hoy no cambian).
+ * El nombre lo lee la oficina como `CAMPO_CIERRE_DE_LA_HOJA` (`src/lib/oficina/sentido-contra-la-ficha.ts`): cambiarlo en los dos lados.
+ */
+export const CAMPO_OFERTA_CERRADA = 'OFERTA CERRADA EN SU FECHA'
 function fichaDeLaPieza(ins: InsumosDeLaHoja, f: FilaDeHoja, id: string, avisos: string[]): string[] {
   if (!ins.fichas?.length) return [campo(CAMPO_FICHA, SIN_FICHAS)]
   const ficha = fichaDeLaOferta(ins.fichas, f.oferta)
@@ -212,7 +218,8 @@ function fichaDeLaPieza(ins: InsumosDeLaHoja, f: FilaDeHoja, id: string, avisos:
   }
   const sinFuente = datosSinFuente(ficha)
   if (sinFuente) avisos.push(`${id}: la ficha de «${limpio(ficha.clave)}» trae ${sinFuente} ${sinFuente === 1 ? 'dato' : 'datos'} sin fuente · no ${sinFuente === 1 ? 'entra' : 'entran'} en la hoja`)
-  return listaDe(CAMPO_FICHA, fichaEnLineas(ficha, f.fecha))
+  const cerrada = ofertaCerradaOInexistenteEn(ficha, f.fecha)
+  return [...listaDe(CAMPO_FICHA, fichaEnLineas(ficha, f.fecha)), ...(cerrada ? [campo(CAMPO_OFERTA_CERRADA, `${limpio(cerrada.valor)} (fuente: ${limpio(cerrada.fuente)})`)] : [])]
 }
 /**
  * 17-nov · Sprint 4 · el llamado a la acción con su orden de respaldo (DISEÑO CC3 · borde b con CC5 · 🟢 CC6): escribirlo es trabajo creativo (la mesa);
