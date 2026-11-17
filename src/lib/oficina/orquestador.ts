@@ -578,6 +578,15 @@ async function ejecutarCodigo(P: Puertos, enc: Encargo, pl: Plantilla, paso: Pas
     }
     // 17-nov · tramo B · la foto con mesa usa el observador de la mesa (otro proveedor), que no se sienta en ella
     case 'mesa_observar': return (await import('./mesa/observar')).observarImagenes(P, enc, pl)
+    // 17-nov · propuestas en imagen · tramo 2b · el borrador de cada propuesta (solo antes de aprobar; aprobada o sin propuestas, US$ 0)
+    case 'borrador_imagen': {
+      const { correrBorradorDeImagen, avisoDeBorradorDeImagenIncompleto } = await import('./mesa/borrador-imagen')
+      const familia = familiaDeLaminas(pl) ?? 'post'
+      const b = await correrBorradorDeImagen(P, enc, pl, familia)
+      const aviso = avisoDeBorradorDeImagenIncompleto(enc.brief_id, b.artefacto, familia)
+      if (aviso) await P.avisar({ canal: 'alertas', encargo_id: enc.id, texto: aviso, dry_run: enc.dry_run })
+      return { res: { costo_usd: b.artefacto.costo_usd, artefacto: b.artefacto as unknown as Record<string, unknown> }, ...(b.gastos.length ? { gastos: b.gastos } : {}), ...(b.imagen_generada ? { imagen_generada: true } : {}) }
+    }
     default: return familiaDeLaminas(pl) ? ejecutarCodigoL(P, enc, pl, paso) : familiaDeVideo(pl) ? ejecutarCodigoV(P, enc, pl, paso) : { res: { costo_usd: 0 }, fallido: `función de código «${paso.funcion}» sin implementar` }
   }
 }

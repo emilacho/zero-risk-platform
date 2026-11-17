@@ -11,6 +11,7 @@
  * más un turno de la mesa si la plantilla la tiene. Si no, el encargo NO abre (409 claro en `abrirEncargo`), nada de abrir para cortarse después.
  */
 import { COTAS, FAMILIAS_MESA } from './mesa/tipos'
+import { propuestasDeLaPlantilla } from './mesa/propuestas-imagen'
 import { evaluar } from './motor'
 import type { Estado, Paso, Plantilla } from './tipos'
 
@@ -136,15 +137,20 @@ export function coberturaDelTope(p: Plantilla, tope: number): { requerido: numbe
   // 17-nov · T7b · condición de CC6 (CERTIFICACIÓN 1118, una sola cuenta): en el video la mesa guarda lo que sigue con `loQueSigueDeLaMesa` (+ la jefatura) antes de su
   //   primer turno; lo requerido nunca es menos que eso, o el encargo abriría y la mesa cerraría sin pieza
   const iMesa = pasos.findIndex((s) => s.funcion === 'mesa')
-  const deLaMesa = iMesa >= 0 && (FAMILIAS_MESA as Record<string, string>)[String(p.familia)] === 'video'
+  // 17-nov · propuestas en imagen · tramo 2b (punto 4 de CC6): la mesa de imagen CON propuestas guarda lo que sigue con la misma cuenta (borradores + rondas + final)
+  const deLaMesa = iMesa >= 0 && guardaLoQueSigue(p)
     ? r4(pasos.slice(0, iMesa).reduce((a, s) => a + Math.max(0, num(s.tope_usd) ?? 0), 0) + COTAS.RESERVA_POR_TURNO_USD + loQueSigueDeLaMesa(p, { vueltas: {} }))
     : 0
   const requerido = Math.max(porPasos, deLaMesa)
   const cubre = num(tope) !== null && tope + 1e-9 >= requerido
   const partes = gastan.map((s) => `${s.clave} ${s.tope_usd}`).concat(mesa ? [`un turno de la mesa ${mesa}`] : [])
   const deVueltas = vueltas.map((x) => `${x.max} × la vuelta de «${x.clave}» (${r4(x.costo)})`)
-  return { requerido, cubre, detalle: `el tope del encargo (US$ ${tope}) ${cubre ? 'cubre' : 'NO cubre'} el peor caso con cada paso a su tope (US$ ${requerido}: una pasada ${partes.join(' + ') || 'sin gasto'}${deVueltas.length ? ` + ${deVueltas.join(' + ')}` : ''} = ${porPasos}${deLaMesa > porPasos ? `; pero la mesa del video guarda ${deLaMesa} antes de su primer turno (su turno + lo que sigue + la jefatura), y manda eso` : ''})` }
+  return { requerido, cubre, detalle: `el tope del encargo (US$ ${tope}) ${cubre ? 'cubre' : 'NO cubre'} el peor caso con cada paso a su tope (US$ ${requerido}: una pasada ${partes.join(' + ') || 'sin gasto'}${deVueltas.length ? ` + ${deVueltas.join(' + ')}` : ''} = ${porPasos}${deLaMesa > porPasos ? `; pero la mesa ${(FAMILIAS_MESA as Record<string, string>)[String(p.familia)] === 'video' ? 'del video' : 'con propuestas'} guarda ${deLaMesa} antes de su primer turno (su turno + lo que sigue + la jefatura), y manda eso` : ''})` }
 }
+
+/** 17-nov · ¿la mesa de esta plantilla guarda lo que sigue con `loQueSigueDeLaMesa`? La del video siempre; la de imagen solo CON propuestas (dato `limites.propuestas` > 1:
+ *  N borradores y rondas del dueño); sin propuestas, la cifra fija de su tipo como hoy · pura */
+export const guardaLoQueSigue = (p: Plantilla): boolean => (FAMILIAS_MESA as Record<string, string>)[String(p.familia)] === 'video' || propuestasDeLaPlantilla(p) > 1
 
 /**
  * 17-nov · T7b · lo que la MESA tiene que dejar para lo que viene DESPUÉS de ella, con la misma cuenta que `coberturaDelTope`: los pasos que gastan después
