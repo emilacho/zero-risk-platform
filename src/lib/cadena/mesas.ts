@@ -21,6 +21,7 @@ import type { ResultadoDeEmision } from './autoproducir'
 import { briefAnteriorParaElMarco, ordenDeAnalisisDeImpacto } from './cambios-pedidos'
 import { hallazgosDelBrief, insumosDelBrief, leerBriefCreativo, REFERENCIA_DEL_BRIEF_CREATIVO, type BriefCreativoLeido } from './brief-creativo'
 import { escribirHoja } from './hoja'
+import { fichasEnTexto as fichasDeOfertaEnTexto, type FichaDeOferta } from './ficha-de-oferta'
 import { filaSinFamilia, notaSinFamilia } from './sin-familia'
 import { hallazgosDelConcepto, idDeBrief, idDeConcepto, insumosDesdeEstrategia, leerConcepto, resumenDelBanco, resumenDeLaVersionAnterior, type ConceptoLeido, type InsumosDelConcepto } from './conceptos'
 import { sumarDias } from './fechas'
@@ -138,7 +139,12 @@ const canalesEnTexto = (e: Estrategia): string => e.canales.map((c) => `- ${c.re
 
 const reglaDeLengua = (ctx: ContextoDelCliente): string => [reglaDeRegistro(ctx.registro), reglaDeIdioma(ctx.idioma)].filter(Boolean).join(' ')
 
-export function marcoDelBrief(a: { ctx: ContextoDelCliente; estrategia: Estrategia; version: number; devolucion: string | null; nota: string | null; informeDeMercado?: string | null; metodo?: string | null; anterior?: string | null; perfil?: PerfilParaLectores | null }): string {
+/**
+ * 17-nov (Sprint 4 · C · ADENDA 2 de Emilio): el brief es el ÚNICO camino del plan a los creativos y cita los hechos de cada oferta desde la ficha (A · CC3).
+ * El bloque `# FICHAS DE LAS OFERTAS` sale de `fichasEnTexto` de CC3, tal cual; sin fichas, el mismo bloque lo DICE (nunca falta en silencio).
+ * Quién trae las fichas aquí lo cablea la entrega 2 de A (el lector y su tabla); hasta entonces los llamadores no las pasan y el bloque declara que no hay.
+ */
+export function marcoDelBrief(a: { ctx: ContextoDelCliente; estrategia: Estrategia; version: number; devolucion: string | null; nota: string | null; informeDeMercado?: string | null; metodo?: string | null; anterior?: string | null; perfil?: PerfilParaLectores | null; fichas?: ReadonlyArray<FichaDeOferta> | null }): string {
   const perfil = a.perfil ? bloqueDelPerfil(a.perfil) : ''
   return [
     '# Qué te pido',
@@ -160,6 +166,8 @@ export function marcoDelBrief(a: { ctx: ContextoDelCliente; estrategia: Estrateg
     canalesEnTexto(a.estrategia),
     '# ESTRATEGIA · fases',
     fasesEnTexto(a.estrategia),
+    '',
+    fichasDeOfertaEnTexto(a.fichas),
     ...(a.informeDeMercado ? ['', '# INFORME DE MERCADO (PROPUESTA · no es dato del cliente · contexto, no mandato)', a.informeDeMercado] : []),
     // 10-nov · perfil del público T2: lo OBSERVADO en voces públicas (contexto, no mandato) · sin perfil no se agrega nada (el marco queda como hoy)
     ...(perfil ? ['', perfil] : []),

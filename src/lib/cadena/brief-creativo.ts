@@ -22,14 +22,21 @@ export interface BriefCreativoLeido {
   contrato: typeof CONTRATO_BRIEF_CREATIVO
   de_que_parte_del_plan: string
   insight: string
+  /** 17-nov (Sprint 4 · C): «Lo único que hay que comunicar» (o «Mensaje», en un brief anterior) · una proposición, no un anuncio */
   mensaje: string
+  /** 17-nov (Sprint 4 · C · vara IPA): secciones nuevas que pide la plantilla y el lector NO exige (fase 1 no agrega rejas) · ausentes en un leído guardado antes */
+  problema_de_negocio?: string
+  razones_para_creer?: string
+  rutas_del_plan?: string
+  /** 17-nov (ADENDA 2 de Emilio): los hechos clave de cada oferta, copiados de la ficha con su fuente · no obligatoria */
+  hechos_de_las_ofertas?: string
   objetivo: string
   /** 10-nov (ADENDA de Emilio · 2): copiados del plan */
   publico: string
   como_sabremos: string
   por_red: ObjetivoPorRed[]
   tono: string
-  obligatorios: { vocabulario: string[]; prohibido: string[]; no_se_dice: string[] }
+  obligatorios: { vocabulario: string[]; prohibido: string[]; no_se_dice: string[]; /** 17-nov (ADENDA 2): «- legales: …» · ausente en un leído guardado antes */ legales?: string[] }
   faltantes: Array<{ campo: string; que_falta: string }>
   contradicciones: string[]
   citas: string
@@ -57,22 +64,34 @@ export interface InsumosDelBrief {
 }
 
 // 10-nov (ADENDA de Emilio · 2): el brief COPIA del plan el público, el objetivo con su número y cómo sabremos que funcionó (la mesa de la gran idea solo lee el brief)
-export const SECCIONES_DEL_BRIEF = ['De qué parte del plan sale', 'Insight', 'Mensaje', 'Público', 'Objetivo', 'Cómo sabremos que funcionó', 'Tono', 'Obligatorios', 'Faltantes', 'Contradicciones plan vs manual', 'Citas'] as const
+// 17-nov (Sprint 4 · C · el brief sin órdenes · vara IPA): «Mensaje» pasa a llamarse «Lo único que hay que comunicar» (el lector acepta los dos nombres) y se suman
+// «Problema de negocio», «Razones para creer», «Rutas vivas del plan» y (ADENDA 2 de Emilio) «Hechos de las ofertas». Las nuevas NO son obligatorias: la fase 1 no agrega rejas y un brief ya validado no se devuelve al re-leerlo
+export const SECCIONES_DEL_BRIEF = ['De qué parte del plan sale', 'Problema de negocio', 'Insight', 'Mensaje', 'Razones para creer', 'Rutas vivas del plan', 'Hechos de las ofertas', 'Público', 'Objetivo', 'Cómo sabremos que funcionó', 'Tono', 'Obligatorios', 'Faltantes', 'Contradicciones plan vs manual', 'Citas'] as const
 const OBLIGATORIAS = ['De qué parte del plan sale', 'Insight', 'Mensaje', 'Público', 'Objetivo', 'Cómo sabremos que funcionó', 'Tono', 'Obligatorios'] as const
+type Seccion = (typeof SECCIONES_DEL_BRIEF)[number]
+/** el nombre con que la plantilla pide cada sección (el que se nombra en una devolución) */
+export const TITULO_DE_LA_SECCION: Partial<Record<Seccion, string>> = { Mensaje: 'Lo único que hay que comunicar' }
+/** los otros nombres que el lector acepta para una sección */
+const OTROS_NOMBRES: Partial<Record<Seccion, string[]>> = { Mensaje: ['Lo único que hay que comunicar'] }
+const tituloVisible = (k: Seccion): string => TITULO_DE_LA_SECCION[k] ?? k
 export const MAX_CARACTERES_DEL_MENSAJE = 260
 export const MIN_CARACTERES_DE_CITA = 12
 const CLICHES_DE_PUBLICO = ['todos', 'todo el mundo', 'toda la poblacion', 'publico general', 'cualquier persona', 'cualquiera', 'toda la gente', 'la gente']
 
 type Sec = ReturnType<typeof seccionesDe>[number]
-function tituloConocido(s: Sec): (typeof SECCIONES_DEL_BRIEF)[number] | null {
+function nombreQueCoincide(s: Sec): { k: Seccion; nombre: string } | null {
   const t = claveDeTexto(s.titulo)
-  for (const k of SECCIONES_DEL_BRIEF) { const c = claveDeTexto(k); if (t === c || t.startsWith(c + ' ')) return k }
+  for (const k of SECCIONES_DEL_BRIEF) for (const nombre of [k, ...(OTROS_NOMBRES[k] ?? [])]) { const c = claveDeTexto(nombre); if (t === c || t.startsWith(c + ' ')) return { k, nombre } }
   return null
+}
+function tituloConocido(s: Sec): Seccion | null {
+  return nombreQueCoincide(s)?.k ?? null
 }
 /** el texto de una sección: lo que sigue al título en la misma línea + el cuerpo */
 function textoDe(s: Sec | undefined, titulo: string): string {
   if (!s) return ''
-  const resto = s.titulo.slice(titulo.length).replace(/^[\s·:—-]+/, '').trim()
+  const nombre = nombreQueCoincide(s)?.nombre ?? titulo
+  const resto = s.titulo.slice(nombre.length).replace(/^[\s·:—-]+/, '').trim()
   return [resto, s.cuerpo].filter(Boolean).join('\n').trim()
 }
 /** líneas `- clave: valor` de una sección (sin exigir mayúsculas) */
@@ -118,7 +137,7 @@ function textosPorSeccion(md: string): (k: (typeof SECCIONES_DEL_BRIEF)[number])
  */
 export function seccionesObligatoriasQueFaltan(md: string): string[] {
   const t = textosPorSeccion(md)
-  return OBLIGATORIAS.filter((k) => !t(k))
+  return OBLIGATORIAS.filter((k) => !t(k)).map(tituloVisible)
 }
 
 /** ¿la cita está literal en el documento? Una elisión («…», «...», «[…]», «(…)») parte la cita: cada tramo tiene que estar */
@@ -170,7 +189,9 @@ export function citasQueNoAparecen(md: string, fuentes: { plan: string; manual?:
     }
     if (cur.length) bloques.push(cur.join(' '))
     for (const b of bloques) {
-      const entera = /^\s*«([\s\S]*)»\s*$/.exec(b)
+      // 17-nov (Sprint 4 · C): varias citas seguidas (`> «A»` + `> «B»`, p. ej. las rutas del plan) forman un bloque; cada «…» se comprueba sola, no el bloque entero
+      const varias = /^\s*(?:«[^«»]*»\s*){2,}$/.test(b)
+      const entera = varias ? null : /^\s*«([\s\S]*)»\s*$/.exec(b)
       const partes = entera ? [entera[1]] : [...b.matchAll(/«([^»]+)»/g)].map((m) => m[1])
       for (const c of partes.length ? partes : [b]) {
         if (normalizar(c).length < MIN_CARACTERES_DE_CITA) continue
@@ -197,7 +218,7 @@ export function leerBriefCreativo(md: string, ins: InsumosDelBrief): BriefCreati
   const bloqueos: string[] = []
 
   // secciones obligatorias presentes y con texto
-  for (const k of OBLIGATORIAS) if (!t(k)) bloqueos.push(`falta la sección «## ${k}»`)
+  for (const k of OBLIGATORIAS) if (!t(k)) bloqueos.push(`falta la sección «## ${tituloVisible(k)}»`)
 
   // UN mensaje
   const mensaje = t('Mensaje').split('\n')[0]?.trim() ?? ''
@@ -230,10 +251,11 @@ export function leerBriefCreativo(md: string, ins: InsumosDelBrief): BriefCreati
     return { red: l.clave.toLowerCase(), objetivo: (objetivo ?? '').trim(), llamado: resto.join(' · ').trim() }
   })
   const objetivo = objetivoTexto.split('\n').filter((l) => !/^\s*-\s*[^:·]{1,60}?\s*:/.test(l)).join('\n').trim()
+  // 17-nov (Sprint 4 · C): el brief ya no fija el llamado de cada red (va en la ficha de la oferta: cómo se compra o contrata) · solo se declara la red sin objetivo.
+  // Un brief anterior con «- ig: objetivo · llamado» se sigue leyendo igual (`por_red[].llamado`)
   for (const r of ins.redes ?? []) {
     const o = por_red.find((x) => claveDeTexto(x.red) === claveDeTexto(r))
-    if (!o) avisos.push(`la red ${r} no tiene objetivo ni llamado en el brief`)
-    else if (!o.llamado) avisos.push(`la red ${r} no tiene llamado («- ${r}: objetivo · llamado»)`)
+    if (!o) avisos.push(`la red ${r} no tiene objetivo en el brief`)
   }
 
   // 10-nov (ADENDA de Emilio · 2): el objetivo de la campaña lleva su número (el del plan); si el plan no lo tiene, se declara en «Faltantes», nunca se inventa
@@ -243,7 +265,7 @@ export function leerBriefCreativo(md: string, ins: InsumosDelBrief): BriefCreati
   // obligatorios: vocabulario · prohibido · lo que no se dice
   const ob = lineasConClave(t('Obligatorios'))
   const de = (re: RegExp) => ob.filter((l) => re.test(claveDeTexto(l.clave))).flatMap((l) => lista(l.valor))
-  const obligatorios = { vocabulario: de(/^vocabulario/), prohibido: de(/^prohibid/), no_se_dice: de(/^lo que no se dice|^no se dice/) }
+  const obligatorios = { vocabulario: de(/^vocabulario/), prohibido: de(/^prohibid/), no_se_dice: de(/^lo que no se dice|^no se dice/), legales: de(/^legal/) }
 
   // faltantes (declarados, nunca rellenados) y contradicciones
   const faltantes = lineasConClave(t('Faltantes')).map((l) => ({ campo: l.clave, que_falta: l.valor }))
@@ -273,7 +295,7 @@ export function leerBriefCreativo(md: string, ins: InsumosDelBrief): BriefCreati
 
   return {
     contrato: CONTRATO_BRIEF_CREATIVO,
-    de_que_parte_del_plan: cita, insight: t('Insight'), mensaje, objetivo, publico: t('Público'), como_sabremos: t('Cómo sabremos que funcionó'), por_red, tono: t('Tono'), obligatorios, faltantes, contradicciones, citas: t('Citas'),
+    de_que_parte_del_plan: cita, insight: t('Insight'), mensaje, problema_de_negocio: t('Problema de negocio'), razones_para_creer: t('Razones para creer'), rutas_del_plan: t('Rutas vivas del plan'), hechos_de_las_ofertas: t('Hechos de las ofertas'), objetivo, publico: t('Público'), como_sabremos: t('Cómo sabremos que funcionó'), por_red, tono: t('Tono'), obligatorios, faltantes, contradicciones, citas: t('Citas'),
     avisos, bloqueos, estado: bloqueos.length ? 'devuelta' : 'validada',
   }
 }
@@ -284,19 +306,29 @@ export function hallazgosDelBrief(b: BriefCreativoLeido): Hallazgo[] {
   return [...b.bloqueos.map((x) => ficha(x, 'bloquea')), ...b.avisos.map((x) => ficha(x, 'aviso'))]
 }
 
-/** la referencia corta del brief creativo (6 campos con su porqué) que recibe la mesa del brief en su marco · texto, sin cliente */
+/**
+ * la referencia del brief creativo que recibe la mesa del brief en su marco · texto, sin cliente.
+ * 17-nov (Sprint 4 · C · el brief sin órdenes · vara IPA «Better Briefs»): el brief dice el problema, el público, LO ÚNICO que hay que comunicar con sus razones para creer,
+ * las rutas vivas del plan, los límites y cómo se medirá. NO escribe el anuncio, no fija llamados ni formatos, no elige fotos; precio, horario y plazos van a la ficha de la oferta.
+ */
 export const REFERENCIA_DEL_BRIEF_CREATIVO = [
   '# El brief creativo de campaña (brief_creativo.v1) · UNO por campaña, corto',
   'Escribe EXACTAMENTE estas secciones (markdown, `## Título`); lo que no sepas se declara en «Faltantes», nunca se rellena.',
+  'Un brief dice QUÉ hay que lograr y POR QUÉ; el cómo (el anuncio, la escena, las fotos, el formato, el llamado) lo deciden los creativos. No prescribas la solución.',
+  'Este brief es lo ÚNICO del plan que reciben los creativos (con el manual): trae todo lo que necesitan del plan, citado; el plan es la fuente, el brief cita y no inventa.',
   '## De qué parte del plan sale · una cita LITERAL del plan (entre «»), porque la pieza debe poder rastrearse al plan.',
+  '## Problema de negocio · qué le pasa al negocio que esta campaña tiene que mover, tal como lo dice el plan, porque sin problema no hay forma de saber si una idea sirve.',
+  '## Público · cópialo del PLAN (quién es, dónde está, qué le impide hoy actuar: sus dudas y barreras), porque la mesa de la gran idea solo lee este brief.',
   '## Insight · una verdad del público en 1–2 frases, porque sin insight no hay idea, solo decoración.',
-  '## Mensaje · UNO, máximo 2 frases, porque dos mensajes = ninguno.',
-  '## Público · cópialo del PLAN (quién es, dónde está, qué duda tiene), porque la mesa de la gran idea solo lee este brief.',
-  '## Objetivo · el de la campaña CON SU NÚMERO tal como lo da el plan, y por red una línea «- ig: objetivo · llamado», porque cada red pide una acción distinta. Si el plan no trae número, decláralo en «Faltantes».',
+  '## Lo único que hay que comunicar · UNA proposición, máximo 2 frases, en lenguaje llano: lo que el público tiene que llevarse. NO es un anuncio ni un eslogan: sin llamado, sin dirección web ni teléfono, sin precio. Dos mensajes = ninguno.',
+  '## Razones para creer · los hechos del plan o del manual que sostienen esa proposición, cada uno con de dónde sale, porque una promesa sin prueba no convence.',
+  '## Rutas vivas del plan · TODAS las rutas o hipótesis que el plan quiere probar, cada una como cita LITERAL del plan en un bloque `> «…»`, y cómo las prueba (por ejemplo, una contra otra por tanda), porque la mesa de la gran idea no ve el plan y tiene que crear para cada una; no elijas una por tu cuenta.',
+  '## Hechos de las ofertas · de cada oferta que toca la campaña, los hechos clave copiados de «# FICHAS DE LAS OFERTAS» (qué es, para quién y dónde, oferta y precio, cómo se compra, qué mostrar y qué nunca, obligatorios legales), uno por línea: «- <oferta> · <hecho> (fuente: <la de la ficha>)». Si una oferta no tiene ficha, escribe «sin ficha de la oferta»; nunca los escribas de memoria.',
+  '## Objetivo · el de la campaña CON SU NÚMERO tal como lo da el plan, y por red una línea «- <red>: objetivo», porque cada red pide una acción distinta. Si el plan no trae número, decláralo en «Faltantes».',
   '## Cómo sabremos que funcionó · cópialo del PLAN (los indicadores y la regla de revisión), porque sin medida no se puede decidir si seguir, ajustar o parar.',
   '## Tono · voz y trato que fija el manual, en 2 líneas (responde en el idioma y con el trato del manual del cliente), porque la voz es del cliente, no tuya.',
-  '## Obligatorios · «- vocabulario: …» · «- prohibido: …» · «- lo que no se dice: …», porque son los límites que la pieza no puede cruzar.',
-  '## Faltantes · «- <campo>: <qué falta>» (declarado, no rellenado) · ## Contradicciones plan vs manual · «- qué · plan dice · manual dice · qué se hizo» · ## Citas · «A1 usé: …».',
-  'Sin cifras con decimales inventadas; sin datos con valor (precios, horarios) que no estén en el material con su referencia.',
+  '## Obligatorios · «- vocabulario: …» · «- prohibido: …» · «- lo que no se dice: …» · «- legales: …» (los de la ficha y el manual), porque son los límites que la pieza no puede cruzar.',
+  '## Faltantes · «- <campo>: <qué falta>» (declarado, no rellenado) · ## Contradicciones plan vs manual · «- qué · plan dice · manual dice · qué se hizo» · ## Citas · «A1 usé: …» (de qué documento sale cada cosa).',
+  'Lo que NO va en el brief: el texto final de un anuncio; el llamado a la acción y los formatos de las piezas; las fotos (ni elegidas ni citadas por número: las mira la mesa de la gran idea); el precio, el horario y los plazos escritos de memoria (solo llegan citados de la ficha de cada oferta, en «Hechos de las ofertas»).',
   'Toda cita (un bloque `> «…»` o «el plan dice: «…»» / «el manual dice: «…»») va LITERAL, copiada de su documento: una cita nunca se corrige; si algo la contradice, se explica fuera de ella.',
 ].join('\n')
