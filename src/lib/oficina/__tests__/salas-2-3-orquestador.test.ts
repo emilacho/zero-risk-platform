@@ -1,3 +1,4 @@
+import { rolesSinImagen } from '../marcas-de-origen'
 import { describe, expect, it } from 'vitest'
 import type { FormatosPorRed } from '@/lib/cadena/tipos'
 import { abrirEncargo, avanzar } from '../orquestador'
@@ -356,12 +357,41 @@ describe('SALA 2 · las imágenes por rol y los 3 controles', () => {
     expect(arte(M, id, 'visual_direction').refs_generadas).toEqual(['hook', 'proof'])
     expect(fichas(M, id).some((f) => /más de 2 imágenes generadas/.test(f.que ?? ''))).toBe(true)
   })
-  it('un rol que no existe, o repetido, se le devuelve al curador una vez y luego se descarta con ficha', async () => {
+  it('🔴 quitar rejas, filas 5 y 11 · sin lista de roles en la plantilla, el curador nombra el rol («portada»): ni vuelta ni ficha, y la imagen se queda', async () => {
     const { M, id } = await abiertoC()
     const raro = j({ resumen: 'x', imagenes: [{ ref: 'portada', modo: 'ninguna', motivo: 'm' }], reglas_de_imagen: { obligatorio: [], prohibido: [] } })
     const { tareas } = await correr(M, id, guionCarrusel({ direccion_visual: () => ({ texto: raro }) }))
-    expect(tareas['direccion_visual']).toHaveLength(2); expect(tareas['direccion_visual'][1]).toMatch(/portada/)
-    expect(arte(M, id, 'visual_direction').imagenes).toEqual([])
+    expect(tareas['direccion_visual']).toHaveLength(1)
+    expect(arte(M, id, 'visual_direction').imagenes.map((i: { ref: string }) => i.ref)).toEqual(['portada'])
+    expect(fichas(M, id).some((f) => /no está en la lista de la plantilla/.test(f.que ?? ''))).toBe(false)
+    expect(tareas['direccion_visual'][0]).toMatch(/no hay una lista fija/)
+    // 🟡 de CC6: con roles libres, el curador y el diseñador saben qué nombre lleva la lámina SIN imagen (el de la plantilla)
+    expect(tareas['direccion_visual'][0]).toContain('Una lámina que va SIN imagen (tipográfica, de marca) lleva el rol «cta» o «cierre»; cualquier otro rol lleva imagen.')
+    expect(tareas['laminas'][0]).toContain('Una lámina que va SIN imagen (tipográfica, de marca) lleva el rol «cta» o «cierre»; cualquier otro rol lleva imagen.')
+    expect(tareas['direccion_visual'][0]).not.toMatch(/hook, problem, reframe/)
+  })
+  it('🔴 con `roles_de_lamina` en la plantilla (dato), un rol fuera de la lista solo AVISA: ni vuelta ni descarte', async () => {
+    const pl = { ...CARRUSEL_IG_V1, limites: { ...CARRUSEL_IG_V1.limites, roles_de_lamina: ['hook', 'cta'] } }
+    const { M, id } = await abierto(pl, BRIEF_CARRUSEL, 'BRF-0100')
+    const raro = j({ resumen: 'x', imagenes: [{ ref: 'portada', modo: 'ninguna', motivo: 'm' }], reglas_de_imagen: { obligatorio: [], prohibido: [] } })
+    const { tareas } = await correr(M, id, guionCarrusel({ direccion_visual: () => ({ texto: raro }) }))
+    expect(tareas['direccion_visual']).toHaveLength(1)
+    expect(tareas['direccion_visual'][0]).toMatch(/Roles de lámina posibles \(el ref de una imagen es un rol\): hook, cta\./)
+    expect(arte(M, id, 'visual_direction').imagenes.map((i: { ref: string }) => i.ref)).toEqual(['portada'])
+    const f = fichas(M, id).filter((x) => /la imagen «portada» usa un rol que no está en la lista de la plantilla \(hook, cta\)/.test(x.que ?? ''))
+    expect(f).toHaveLength(1); expect(f[0]).toMatchObject({ gravedad: 'sugerencia' })
+    // y las láminas cuyo rol no está en la lista: aviso por lámina, sin vuelta del diseñador
+    expect(tareas['laminas']).toHaveLength(1)
+    const deLamina = fichas(M, id).filter((x) => /lámina \d+: el rol «[^»]+» no está en la lista de la plantilla \(hook, cta\)/.test(x.que ?? ''))
+    expect(deLamina.length).toBeGreaterThan(0)
+    expect(deLamina.every((x) => x.gravedad === 'sugerencia')).toBe(true)
+  })
+  it('una imagen repetida sigue devolviéndose al curador una vez (es integridad, no estilo) y luego se descarta la copia', async () => {
+    const { M, id } = await abiertoC()
+    const rep = j({ resumen: 'x', imagenes: [{ ref: 'portada', modo: 'ninguna', motivo: 'm' }, { ref: 'portada', modo: 'ninguna', motivo: 'm' }], reglas_de_imagen: { obligatorio: [], prohibido: [] } })
+    const { tareas } = await correr(M, id, guionCarrusel({ direccion_visual: () => ({ texto: rep }) }))
+    expect(tareas['direccion_visual']).toHaveLength(2); expect(tareas['direccion_visual'][1]).toMatch(/repetida/)
+    expect(arte(M, id, 'visual_direction').imagenes).toHaveLength(1)
   })
   it('🔴 17-nov · la sala de láminas también comprueba contra el MANUAL que recibió el agente: una regla citada del manual pasa sin marca', async () => {
     const { M, id } = await abiertoC()
@@ -799,5 +829,41 @@ describe('reglas rígidas #13 · el dato sin verificar en el carrusel', () => {
       const { M, id } = await correrCon(dato)
       expect(fichas(M, id).some((f) => f.gravedad === 'bloquea' && f.donde === 'imagen')).toBe(true)
     }
+  })
+})
+
+describe('🟡 de CC6 al tramo 4 · los roles SIN imagen salen del dato de la plantilla, en el armado y en los pedidos', () => {
+  it('con `roles_sin_imagen: [«final»]` el pedido nombra «final» (no «cta»/«cierre») y una sola función lo lee para todos', async () => {
+    const pl = { ...CARRUSEL_IG_V1, limites: { ...CARRUSEL_IG_V1.limites, roles_sin_imagen: ['final'] } }
+    const { M, id } = await abierto(pl, BRIEF_CARRUSEL, 'BRF-0100')
+    const { tareas } = await correr(M, id, guionCarrusel())
+    for (const t of [tareas['direccion_visual'][0], tareas['laminas'][0]]) {
+      expect(t).toContain('lleva el rol «final»; cualquier otro rol lleva imagen.')
+      expect(t).not.toMatch(/lleva el rol «cta»/)
+    }
+    expect(rolesSinImagen({ roles_sin_imagen: ['final'] })).toEqual(['final'])
+    expect(rolesSinImagen({})).toEqual(['cta', 'cierre'])
+  })
+  it('🔴 el ARMADO (lo que gasta) también lee el dato: con `roles_sin_imagen: [«final»]` y «generar cuando no hay foto», se genera «portada» y «final» queda sin imagen', async () => {
+    const pl = { ...CARRUSEL_IG_V1, limites: { ...CARRUSEL_IG_V1.limites, generar_cuando_no_hay_foto: true, roles_sin_imagen: ['final'] } } as Plantilla
+    const { M, id } = await abierto(pl, BRIEF_CARRUSEL, 'BRF-0100')
+    await correr(M, id, guionCarrusel({
+      direccion_visual: () => ({ texto: j({ resumen: 'sin fotos aptas', imagenes: [{ ref: 'portada', modo: 'ninguna', motivo: 'sin foto' }, { ref: 'final', modo: 'ninguna', motivo: 'tipográfica' }], reglas_de_imagen: { obligatorio: [], prohibido: [] } }) }),
+    }))
+    const dv = arte(M, id, 'visual_direction') as { imagenes: Array<{ ref: string; modo: string }>; refs_generadas: string[] }
+    expect(dv.refs_generadas).toEqual(['portada'])
+    expect(dv.imagenes.find((i) => i.ref === 'final')?.modo).toBe('ninguna')
+    const ids = fichas(M, id).map((f) => f.id)
+    expect(ids).toContain('vd-generada-por-falta-portada')
+    expect(ids).not.toContain('vd-generada-por-falta-final')
+  })
+  it('🔴 sin el dato (cta/cierre por omisión), la misma «final» SÍ se genera: la diferencia es el dato, no el nombre', async () => {
+    const pl = { ...CARRUSEL_IG_V1, limites: { ...CARRUSEL_IG_V1.limites, generar_cuando_no_hay_foto: true, roles_sin_imagen: undefined } } as Plantilla
+    const { M, id } = await abierto(pl, BRIEF_CARRUSEL, 'BRF-0100')
+    await correr(M, id, guionCarrusel({
+      direccion_visual: () => ({ texto: j({ resumen: 'sin fotos aptas', imagenes: [{ ref: 'final', modo: 'ninguna', motivo: 'sin foto' }, { ref: 'cierre', modo: 'ninguna', motivo: 'tipográfica' }], reglas_de_imagen: { obligatorio: [], prohibido: [] } }) }),
+    }))
+    const dv = arte(M, id, 'visual_direction') as { refs_generadas: string[] }
+    expect(dv.refs_generadas).toEqual(['final'])
   })
 })

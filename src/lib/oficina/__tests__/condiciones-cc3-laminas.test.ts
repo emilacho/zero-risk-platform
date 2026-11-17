@@ -56,7 +56,11 @@ describe('límites exactos del contrato de lámina', () => {
     expect(avisosDeContrato([L({ cta: 'Ya' }), L({ cta: 'Ya' }), L()], { llamados_max: 2 })).toEqual([])
     expect(avisosDeContrato([L({ cta: 'Ya' }), L({ cta: '  ' }), L()], { llamados_max: 1 })).toEqual([])
     expect(problemasDeContrato([L({ cta: 'Ya' }), L({ cta: 'Ya' }), L()], cant)).toEqual([])
-    expect(problemasDeContrato([L({ rol: 'inventado' }), L(), L()], cant).length).toBe(1)
+    // filas 5 y 11: el rol es libre (nunca problema de contrato); con `roles_de_lamina` de la plantilla, uno fuera de la lista solo avisa
+    expect(problemasDeContrato([L({ rol: 'inventado' }), L(), L()], cant)).toEqual([])
+    expect(avisosDeContrato([L({ rol: 'inventado' }), L(), L()], {})).toEqual([])
+    expect(avisosDeContrato([L({ rol: 'inventado' }), L(), L()], { roles: ['hook'] }).join('|')).toMatch(/el rol «inventado» no está en la lista de la plantilla/)
+    expect(avisosDeContrato([L(), L(), L()], { roles: ['hook'] })).toEqual([])
   })
   it('historias: tope exacto de titular y de texto', () => {
     const lim = { headline_historia: 40, body_historia: 100 }

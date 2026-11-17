@@ -167,8 +167,11 @@ describe('los esquemas de salida de las salas 2 y 3 los hace cumplir el código'
       expect(r.descartados.join('|')).toMatch(/platform/); expect(r.descartados.join('|')).toMatch(/open_questions/); expect(r.descartados.join('|')).toMatch(/size/)
     }
   })
-  it('laminas.v1: un rol inventado o un campo extra → reintento 1 vez; y luego falla visible', () => {
-    for (const mal of [lam({ rol: 'gancho' }), lam({ video: 'a.mp4' })]) {
+  it('laminas.v1: un rol nombrado por el diseñador SE ACEPTA (quitar rejas, filas 5 y 11: no hay lista cerrada)', () => {
+    expect(procesarSalida(JSON.stringify({ laminas: [lam({ rol: 'paso-2' })] }), 'laminas.v1', 0, 1).ok).toBe(true)
+  })
+  it('laminas.v1: un campo extra → reintento 1 vez; y luego falla visible', () => {
+    for (const mal of [lam({ video: 'a.mp4' })]) {
       const t = JSON.stringify({ laminas: [mal] })
       expect(procesarSalida(t, 'laminas.v1', 0, 1)).toMatchObject({ ok: false, accion: 'reintentar' })
       expect(procesarSalida(t, 'laminas.v1', 1, 1)).toMatchObject({ ok: false, accion: 'falla_visible' })
@@ -224,9 +227,9 @@ describe('contrato de lámina', () => {
   const ok = Array.from({ length: 5 }, (_, i) => ({ rol: ['hook', 'problem', 'reframe', 'benefit', 'cta'][i], headline: `H${i}` }))
   const cant = { laminas_min: 5, laminas_max: 10 }
   it('5 láminas con roles conocidos y un solo llamado: cumple', () => { expect(problemasDeContrato(ok.map((l, i) => (i === 4 ? { ...l, cta: 'Pide' } : l)), cant)).toEqual([]) })
-  it('cuenta fuera de rango y rol desconocido piden otra vuelta; el largo y los llamados NO (son aviso: quitar rejas, filas 9 y 10)', () => {
+  it('solo la cuenta fuera de rango pide otra vuelta; el rol, el largo y los llamados NO (quitar rejas, filas 5, 9, 10 y 11)', () => {
     expect(problemasDeContrato(ok.slice(0, 3), cant).join('|')).toMatch(/3 láminas/)
-    expect(problemasDeContrato([{ ...ok[0], rol: 'gancho' }, ...ok.slice(1)], cant).join('|')).toMatch(/desconocido/)
+    expect(problemasDeContrato([{ ...ok[0], rol: 'gancho' }, ...ok.slice(1)], cant)).toEqual([])
     expect(problemasDeContrato([{ ...ok[0], headline: 'x'.repeat(91) }, ...ok.slice(1)], cant)).toEqual([])
     expect(problemasDeContrato(ok.map((l) => ({ ...l, cta: 'Pide' })), cant)).toEqual([])
   })

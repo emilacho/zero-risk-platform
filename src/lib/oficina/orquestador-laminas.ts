@@ -6,6 +6,7 @@
  */
 import { candidatasDelEncargo } from './material-fotos'
 import { fotosDeReferencia, fotosPorImagen } from './foto-de-referencia'
+import { rolesSinImagen } from './marcas-de-origen'
 import { datos, fichaNueva, reglasParaPrompts, reglasVisuales } from './ayudas'
 import { elementosDelKit, planDeOrigen, fechaLimiteDelBrief, parsearBrief, prohibePersonas, protagonistasDelBrief, proporcionDelBrief, type BriefLeido, type ElementoDelKit } from './brief'
 import { briefEsDelEncargo, claseDeLaFamilia } from './familia-del-brief'
@@ -21,7 +22,7 @@ import { construirTareaLaminas, contextoDelRevisorLaminas, type ContextoLaminas 
 import type { Cambios, Encargo, FuentesCompletas, Puertos } from './puertos'
 import { chequearPrompts, citasExisten, elegirVersion, veredictoDeImagenes, type ObservacionDeImagen, type ReglasDeImagen } from './reglas-de-imagen'
 import { reglasDeInvencion } from './prompts-sin-invencion'
-import { CORRECCIONES_DE_LARGO, ROLES_DE_LAMINA } from './salida'
+import { CORRECCIONES_DE_LARGO } from './salida'
 import type { Estado, Ficha, Paso, Plantilla } from './tipos'
 
 export type FamiliaDeLaminas = 'carrusel' | 'kit'
@@ -33,7 +34,13 @@ const baseL = (e: Estado): BaseL => datos(e, 'encargo') as unknown as BaseL
 export const baseDeLaminas = baseL
 const arr = <T = Record<string, unknown>>(x: unknown): T[] => (Array.isArray(x) ? (x as T[]) : [])
 const txt = (x: unknown): string => (typeof x === 'string' ? x : x == null ? '' : String(x))
-const refsValidosDe = (b: BaseL): string[] => (b.familia === 'kit' ? b.elementos.map((x) => x.ref) : [...ROLES_DE_LAMINA])
+/** 17-nov · quitar rejas (filas 5 y 11): la lista de roles del carrusel es DATO de la plantilla (`roles_de_lamina`); sin el dato no hay lista (los roles los nombra la estructura del manual y el brief) */
+export const rolesDeLamina = (pl: Pick<Plantilla, 'limites'>): string[] | undefined => {
+  const r = pl.limites.roles_de_lamina
+  return Array.isArray(r) && r.length && r.every((x) => typeof x === 'string' && x.trim()) ? (r as string[]) : undefined
+}
+/** refs válidos de una imagen: kit → sus elementos (estructura del brief); carrusel → la lista de roles de la plantilla, o NINGUNA lista (null: cualquier rol) */
+const refsValidosDe = (b: BaseL, pl: Pick<Plantilla, 'limites'>): string[] | null => (b.familia === 'kit' ? b.elementos.map((x) => x.ref) : rolesDeLamina(pl) ?? null)
 
 interface ImagenDecidida { ref: string; modo: 'real' | 'generada' | 'ninguna'; foto_id?: string; motivo: string }
 const direccion = (e: Estado) => datos(e, 'visual_direction') as ({ imagenes?: ImagenDecidida[]; refs_generadas?: string[] } & Record<string, unknown>) | undefined
@@ -68,7 +75,7 @@ export function contextoL(pl: Plantilla, e: Estado): ContextoLaminas {
   const b = baseL(e)
   return {
     fuentes: b.F, brief: b.brief, proporcion: b.proporcion, estado: e, reglas: reglasVisuales(e, b.brief), imagenesAMirar: imagenesAMirarL(e), art: (n) => datos(e, n),
-    sinFoto: pl.limites.generar_cuando_no_hay_foto === true, familia: b.familia, limites: pl.limites, elementos: b.elementos, plataforma: b.plataforma, refsValidos: refsValidosDe(b), refsGeneradas: refsGeneradas(e), png: arr<string>(datos(e, 'render')?.urls),
+    sinFoto: pl.limites.generar_cuando_no_hay_foto === true, familia: b.familia, limites: pl.limites, elementos: b.elementos, plataforma: b.plataforma, refsValidos: refsValidosDe(b, pl) ?? [], refsGeneradas: refsGeneradas(e), png: arr<string>(datos(e, 'render')?.urls),
   }
 }
 
@@ -331,7 +338,7 @@ function chequeos(pl: Plantilla, e: Estado): SalidaCodigoL {
     fonts_faltantes: arr<string>(render?.fonts_faltantes),
     imagenes_sin_lamina: arr<string>(armado?.sin_lamina), fotos_reusadas: reusadas,
     problemas_de_contrato: problemasContrato,
-    avisos_de_contrato: kit ? [] : avisosDeContrato(laminas, { llamados_max: llamadosMax(pl), largos: largosDeLamina(pl) }),
+    avisos_de_contrato: kit ? [] : avisosDeContrato(laminas, { llamados_max: llamadosMax(pl), largos: largosDeLamina(pl), roles: rolesDeLamina(pl) }),
     texto_fuera_del_autor: kit || !copiaC ? [] : textoFueraDelAutor(laminas, copiaC),
     problemas_de_armado: arr<string>(armado?.problemas),
     problemas_de_kit: kit ? problemasDeKit(b.elementos, refsConLamina) : [],
@@ -527,20 +534,22 @@ export const largosDeLamina = (pl: Pick<Plantilla, 'limites'>): LargosDeLamina |
 export const llamadosMax = (pl: Pick<Plantilla, 'limites'>): number | undefined => (typeof pl.limites.llamados_max === 'number' ? pl.limites.llamados_max : undefined)
 
 function direccionVisual(v: Record<string, unknown>, b: BaseL, e: Estado, pl: Plantilla, retry: (p: string[]) => ProcesoL | null): ProcesoL {
-  const validos = refsValidosDe(b)
+  const validos = refsValidosDe(b, pl)
   let imgs = arr<ImagenDecidida>(v.imagenes)
   const dup = imgs.map((i) => i.ref).filter((r, k, a) => a.indexOf(r) !== k)
-  const malos = refsInvalidos(imgs.map((i) => i.ref), validos)
-  const r = retry([...malos.map((x) => `la imagen «${x}» no existe (usa solo: ${validos.join(', ')})`), ...[...new Set(dup)].map((x) => `la imagen «${x}» está repetida`)])
+  // el kit: el ref es un elemento del brief (estructura, no estilo) y sigue pidiendo otra vuelta; el carrusel: un rol fuera de la lista de la plantilla solo se avisa (filas 5 y 11)
+  const malos = validos ? refsInvalidos(imgs.map((i) => i.ref), validos) : []
+  const r = retry([...(b.familia === 'kit' ? malos : []).map((x) => `la imagen «${x}» no existe (usa solo: ${(validos ?? []).join(', ')})`), ...[...new Set(dup)].map((x) => `la imagen «${x}» está repetida`)])
   if (r) return r
   const fichas: Ficha[] = []
-  imgs = imgs.filter((i, k) => validos.includes(i.ref) && imgs.findIndex((y) => y.ref === i.ref) === k)
+  if (b.familia !== 'kit') for (const x of malos) fichas.push(fichaNueva(`rol-${e.pasos_ejecutados}-${x}`, 'chequeo', 'imagen', 'sugerencia', `la imagen «${x}» usa un rol que no está en la lista de la plantilla (${(validos ?? []).join(', ')})`, 'roles de lámina de la plantilla', 'usar un rol de la lista o ampliar la lista'))
+  imgs = imgs.filter((i, k) => (b.familia !== 'kit' || validos!.includes(i.ref)) && imgs.findIndex((y) => y.ref === i.ref) === k)
   const cand = arr<{ id: string }>(datos(e, 'candidatas_foto')?.candidatas)
   const politica = String(pl.limites.politica_imagen_generada ?? 'permitida')
   const maxGen = Number(pl.limites.imagenes_generadas_max ?? 2)
   let generadas = 0
   const generarSiFalta = pl.limites.generar_cuando_no_hay_foto === true
-  const sinImagen = new Set<string>(Array.isArray(pl.limites.roles_sin_imagen) ? (pl.limites.roles_sin_imagen as unknown[]).map(String) : ['cta', 'cierre'])
+  const sinImagen = new Set<string>(rolesSinImagen(pl.limites))
   const efectivas: ImagenDecidida[] = imgs.map((i) => {
     let modo = i.modo, foto = i.foto_id
     // el CÓDIGO decide lo que no se confía al modelo: una foto real tiene que ser una de las candidatas
