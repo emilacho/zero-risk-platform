@@ -1,7 +1,10 @@
 /**
  * PARÁMETROS APROBADOS DEL BRAZO DE VIDEO (Emilio, 31-oct 11:55Z, «aprobado todo» · adenda 1 del encargo):
- * Seedance 2.5 · 8–15 s para reel/tiktok/short · 1080p (adenda 4: por omisión 720p hasta medir el descuento real) · audio generado (música/ambiente), SIN voz sintética al inicio · fotos propias del cliente como referencia
- * siempre que existan · SIN caras de personas reales por ahora · tope US$ 5 por video · cantidad = la que pida el calendario.
+ * Seedance 2.5 · 8–15 s para reel/tiktok/short · 1080p (adenda 4: por omisión 720p hasta medir el descuento real) · audio generado · fotos propias del cliente como referencia
+ * siempre que existan · tope US$ 5 por video · cantidad = la que pida el calendario.
+ * 17-nov · DECISIÓN de Emilio («un sistema agnóstico tiene que tener la libertad de trabajar como tal»): SIN reglas fijas de voz, diálogo, locución, rostros ni personajes
+ * generados — los decide la mesa de creativos por pieza. Solo queda lo que es ley o términos del proveedor: la cara o la voz de una persona real identificable solo con su
+ * permiso registrado, y nada de marcas de terceros.
  * Son DATOS (se cambian aquí o por el pedido, dentro de lo permitido): el código solo impide salirse de lo aprobado y de lo que la API admite.
  */
 
@@ -62,10 +65,9 @@ export const RELACION_POR_FORMATO: Readonly<Record<string, string>> = Object.fro
 export const RELACIONES_PERMITIDAS: ReadonlySet<string> = new Set(['16:9', '4:3', '1:1', '3:4', '9:16', '21:9'])
 export const MAX_FOTOS_DE_REFERENCIA = 9 // el mínimo común de 2.0 (9) y 2.5 (30): nunca se manda más que lo que admite cualquiera de los dos
 
-/** reglas fijas que viajan en el pedido al modelo (texto del guion + estas líneas): lo aprobado que el modelo tiene que respetar */
+/** lo que viaja SIEMPRE en el pedido al modelo (texto del guion + estas líneas): solo ley/términos del proveedor y lo que el código compone después (texto y marca) · 17-nov: nada de voz ni de rostros, eso lo decide la mesa */
 export const REGLAS_DEL_PEDIDO: readonly string[] = [
-  'Sin voces, sin diálogo y sin narración: solo música y sonido ambiente.',
-  'Sin rostros de personas reales ni reconocibles; si aparecen personas, de espaldas, de lejos o solo manos.',
+  'Ni la cara ni la voz de una persona real identificable, salvo que el cliente tenga registrado su permiso; las personas, voces y locuciones generadas sí, si el guion las pide.',
   // S2-5 · el texto y la marca se componen después, por código, con la plantilla de marca: el modelo no escribe letras
   'Sin texto, letras, subtítulos ni letreros en pantalla: el texto y el logo se agregan después en edición; sin logotipos ni marcas que no sean las del cliente.',
 ]

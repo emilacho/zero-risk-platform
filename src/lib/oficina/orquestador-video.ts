@@ -36,6 +36,9 @@ import { ARTEFACTO_PEDIDO_BORRADOR, borradoresOmitidos, FUNCION_BORRADOR_VIDEO, 
 import { pedidosPorPlano, type PedidoDePlano } from './video/planos'
 import { cotizarYEnviar, encuadrarFotos, leerPlanos, separarPagados, textoDeLoCobrado, unirClips, type ClipCobrado, type PlanoEnviado } from './video/motor-planos'
 
+/** 17-nov · DECISIÓN de Emilio: el rótulo de la entrega dice que el video y su audio son GENERADOS; ya no afirma «sin voces» (la voz la decide la mesa) */
+export const ROTULO_DEL_VIDEO_GENERADO = '⚠️ El video es GENERADO por un modelo (Seedance), no una grabación real; su audio también es generado.'
+
 /** para la jefatura: qué es el contexto «lo que vio el agente» */
 export const FUNCION_DE_LA_MIRADA = 'lo que un agente con visión vio en los cuadros del video terminado (uno por plano), comparado con el guion y la fila; la imagen manda si no coinciden'
 
@@ -276,7 +279,7 @@ async function empaquetar(P: Puertos, enc: Encargo): Promise<SalidaCodigoV> {
     `Red: ${b.brief.red} · formato: ${b.brief.formato} (${b.formato_video}, ${b.proporcion}) · ${g?.segundos ?? pedidoEnviado?.segundos ?? '?'} s`,
     `Hora de publicación: ${cuando ? (cuando.de === 'fila' ? `${cuando.fecha}${cuando.hora ? ' ' + cuando.hora : ''}${b.F.zona ? ' (' + b.F.zona + ')' : ' (zona del cliente sin registrar)'}` : `(aprobar antes de ${cuando.fecha})`) : 'sin fecha: se decide al aprobar'}`,
     b.aviso_proporcion ? `⚠️ ${b.aviso_proporcion}.` : '',
-    '⚠️ El video es GENERADO por un modelo (Seedance), no una grabación real. Sin voces; música o ambiente generados.',
+    ROTULO_DEL_VIDEO_GENERADO,
     v.copia === 'solo_proveedor' ? `⚠️ El video quedó solo en el proveedor${v.expires_at ? ` y vence ${v.expires_at}` : ''}: descargarlo al aprobar.` : '',
     v.simulado ? '(ensayo: el video es simulado)' : '',
     '',

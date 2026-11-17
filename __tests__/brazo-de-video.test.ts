@@ -61,8 +61,9 @@ describe('lo aprobado por Emilio (31-oct) · armarPedido', () => {
     expect(armarPedido({ prompt: 'Así servimos un encebollado en Náufrago', formato: 'reel', resolucion: '1080p' })).toMatchObject({ ok: true, pedido: { resolucion: '1080p' } })
     expect('image_urls' in c).toBe(false)
     for (const regla of REGLAS_DEL_PEDIDO) expect(String(c.prompt)).toContain(regla)
-    expect(String(c.prompt)).toMatch(/Sin voces/)
-    expect(String(c.prompt)).toMatch(/Sin rostros de personas reales/)
+    // DECISIÓN Emilio 17-nov: el pedido ya no prohíbe voces ni rostros; solo lleva la regla de ley (persona real identificable con permiso)
+    expect(String(c.prompt)).not.toMatch(/Sin voces|sin narración|de espaldas|Sin rostros/i)
+    expect(String(c.prompt)).toContain('Ni la cara ni la voz de una persona real identificable, salvo que el cliente tenga registrado su permiso')
   })
   it('con fotos propias → reference-to-video con `image_urls` (máximo 9, sin repetidas); video de youtube → 16:9', () => {
     const fotos = Array.from({ length: 12 }, (_, i) => `https://x/f${i % 10}.jpg`)

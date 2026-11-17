@@ -19,7 +19,7 @@ export const RE_ID_DE_BRIEF = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,39}$/
 export { PROPORCION_POR_FORMATO, proporcionDe }
 /** T8 · los formatos que filma el brazo de video (lo mismo que lee `esVideo` en la oficina: reel · short · video · tiktok); la hoja lo declara en LÍMITES para que la mesa sepa que escribe un guion */
 export const esFormatoDeVideo = (formato: string): boolean => /\b(reel|short|video|tiktok)\b/i.test(formato)
-export const NOTA_DE_VIDEO_EN_LIMITES = 'video corto de 8 a 15 s que filma el brazo de video a partir del guion de la mesa (sin voces ni narración; sin rostros reconocibles de personas reales)'
+export const NOTA_DE_VIDEO_EN_LIMITES = 'video corto de 8 a 15 s que filma el brazo de video a partir del guion de la mesa (sin rostro ni voz de persona real identificable salvo permiso registrado)'
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
 
 export type FilaDeHoja = Pick<Fila, 'id' | 'fecha' | 'hora' | 'red' | 'formato' | 'pilar' | 'tema' | 'datos'> & {
