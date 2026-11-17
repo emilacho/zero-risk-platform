@@ -104,7 +104,17 @@ export class AlmacenMemoria implements Almacen {
     this.fechas = (semilla.fechasEspeciales ?? []).map((f) => ({ ...f, pais: 'x' }))
   }
   async leerConfig(k: string) { return this.config.get(k) }
-  async escribirConfig(k: string, v: unknown) { this.config.set(k, v) }
+  async escribirConfig(k: string, v: unknown) { this.config.set(k, v); this.sellos.set(k, `s${++this.nSello}`) }
+  /** 17-nov · escritura condicional (puerto banco): cada escritura cambia el sello de la clave; la prueba puede escribir «por fuera» con `escribirConfig` */
+  sellos = new Map<string, string>()
+  nSello = 0
+  async leerConfigConSello(k: string) { return this.config.has(k) ? { valor: structuredClone(this.config.get(k)), sello: this.sellos.get(k) ?? 's0' } : null }
+  async escribirConfigSiSello(k: string, v: unknown, sello: string | null) {
+    const actual = this.config.has(k) ? (this.sellos.get(k) ?? 's0') : null
+    if (actual !== sello) return false
+    this.config.set(k, structuredClone(v)); this.sellos.set(k, `s${++this.nSello}`)
+    return true
+  }
   /** J7 · lo que la jefatura decidiría; por omisión NO retiene (= la cadena de siempre). La prueba lo fija. */
   retencion: ((tipo: 'estrategia' | 'calendario' | 'registro', clientId: string) => Promise<{ retener: boolean; motivo: string }>) | null = null
   async retencionDeJefatura(tipo: 'estrategia' | 'calendario' | 'registro', clientId: string) { return this.retencion ? this.retencion(tipo, clientId) : { retener: false, motivo: 'jefatura_apagada' } }
@@ -138,6 +148,13 @@ export class AlmacenMemoria implements Almacen {
   get arreglosPublicados(): ((desde: string) => Promise<LecturaDeArreglos>) | undefined {
     const f = this.fuenteDeArreglos
     return f ? async (desde) => { this.lecturasDeArreglos.push(desde); return f(desde) } : undefined
+  }
+  /** 17-nov · la corrección del banco · la apertura de su mesa; null = el almacén no la tiene. La prueba la fija y ve los sobres */
+  mesaDelBanco: ((sobre: import('../banco-correcciones').SobreDelBanco) => Promise<import('../banco-correcciones').ResultadoDeAbrirMesaDelBanco>) | null = null
+  sobresDelBanco: import('../banco-correcciones').SobreDelBanco[] = []
+  get abrirMesaDelBanco(): ((sobre: import('../banco-correcciones').SobreDelBanco) => Promise<import('../banco-correcciones').ResultadoDeAbrirMesaDelBanco>) | undefined {
+    const f = this.mesaDelBanco
+    return f ? async (sobre) => { this.sobresDelBanco.push(structuredClone(sobre)); return f(sobre) } : undefined
   }
   get abrirMesaDeFallidos(): ((sobre: SobreDeFallidos) => Promise<ResultadoDeAbrirMesaDeFallidos>) | undefined {
     const f = this.mesaDeFallidos

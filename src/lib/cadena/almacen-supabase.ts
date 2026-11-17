@@ -144,7 +144,7 @@ export async function abrirRevisionConVuelta(db: unknown, entrada: { artifact_ty
  * 10-nov · filas que quedaron atrás · abre la mesa de reubicación de la oficina EN PROCESO (la misma función que `api/oficina/encargos` con `origen: cadena`) y despierta su primer turno.
  * La oficina se importa en el acto (la oficina ya importa este archivo: así no hay ciclo al cargar). Nunca lanza.
  */
-export async function abrirMesaDeReubicacionReal(sobre: SobreDeReubicacion | SobreDeFallidos, f: typeof fetch = fetch): Promise<ResultadoDeAbrirMesa> {
+export async function abrirMesaDeReubicacionReal(sobre: SobreDeReubicacion | SobreDeFallidos | import('./banco-correcciones').SobreDelBanco, f: typeof fetch = fetch): Promise<ResultadoDeAbrirMesa> {
   try {
     const [{ entornoConBase }, { crearPuertos }, { abrirMesaDeLaCadena, validarSobreDeLaCadena }, { avanzar }, { despertarAlFlujoDeLaOficina }] = await Promise.all([
       import('@/lib/oficina/ruta'), import('@/lib/oficina/adaptadores'), import('@/lib/oficina/mesa/de-la-cadena'), import('@/lib/oficina/orquestador'), import('@/lib/oficina/despertar'),
@@ -271,12 +271,32 @@ export function almacenDeSupabase(): Almacen {
     },
     arreglosPublicados: (desde) => arreglosPublicadosReal(desde),
     abrirMesaDeFallidos: (sobre) => abrirMesaDeReubicacionReal(sobre),
+    // 17-nov · la corrección del banco (nace apagada): la misma apertura en proceso
+    abrirMesaDelBanco: (sobre) => abrirMesaDeReubicacionReal(sobre),
     reabrirFallido: (p) => reabrirFallidoReal(p),
     // 11-nov (#1014 · relectura): el texto que la mesa dejó en su encargo (`pieza_texto`), sin llamar al agente; nunca lanza
     async textoGuardadoDeLaMesa(encargoId) {
       try { return await (await import('@/lib/oficina/mesa/de-la-cadena')).textoGuardadoDeLaMesa(db as never, encargoId) } catch (e) { return { ok: false as const, motivo: e instanceof Error ? e.message : String(e) } }
     },
     async leerConfig(k) { return (await uno<{ valor: unknown }>(db.from('cadena_config').select('valor').eq('clave', k).maybeSingle()))?.valor },
+    // 17-nov · escritura condicional por `actualizado_en` (puerto banco): insertar solo si no existe; actualizar solo si el sello sigue igual
+    async leerConfigConSello(k) {
+      const f = await uno<{ valor: unknown; actualizado_en: string }>(db.from('cadena_config').select('valor, actualizado_en').eq('clave', k).maybeSingle())
+      return f ? { valor: f.valor, sello: String(f.actualizado_en) } : null
+    },
+    async escribirConfigSiSello(k, v, sello) {
+      const ahora = new Date().toISOString()
+      if (sello === null) {
+        const { error } = await db.from('cadena_config').insert({ clave: k, valor: v, actualizado_en: ahora })
+        if (error && (error as { code?: string }).code === '23505') return false
+        if (error) fallo(error)
+        return true
+      }
+      const nuevo = Date.parse(ahora) <= Date.parse(sello) ? new Date(Date.parse(sello) + 1).toISOString() : ahora
+      const { data, error } = await db.from('cadena_config').update({ valor: v, actualizado_en: nuevo }).eq('clave', k).eq('actualizado_en', sello).select('clave')
+      if (error) fallo(error)
+      return Array.isArray(data) && data.length === 1
+    },
     async escribirConfig(k, v) { const { error } = await db.from('cadena_config').upsert({ clave: k, valor: v, actualizado_en: new Date().toISOString() }); if (error) fallo(error) },
     async plazos() { return lista<PlazoCfg>(db.from('cadena_plazos').select('*').limit(100)) },
     async formatos() {

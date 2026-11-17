@@ -8,16 +8,17 @@
 /** 31-oct · nuevo orden de la cadena: `brief_mesa` (el brief creativo de la campaña) y `concepto_mesa` (la gran idea, capítulos y banco) son mesas de la CADENA: sin imágenes, sin traductor, sin jefatura propia; la entrega va a la cadena, no a la bandeja */
 /** 10-nov · `reubicacion_mesa` (GO de Lenovo 18:14Z · camino A): las filas del calendario que quedaron atrás sin producir; la dirige jefe-marketing, sin miembros ni portero; entrega a la cadena */
 /** 11-nov · `fallidos_mesa` (GO de Lenovo 16:46 Zúrich): revisa los encargos fallidos que ya gastaron contra los arreglos publicados después; la dirige jefe-marketing, sin miembros ni portero; entrega a la cadena */
+/** 17-nov · `banco_mesa` (GO de Lenovo · cambio 4): la mesa de la gran idea responde, como creadora, a UNA corrección de la jefatura sobre una idea del banco; la dirige creative-director-mesa, sin miembros ni portero; entrega a la cadena */
 /** T8 · 31-oct · `video_mesa` (parte 2 del brazo de video, sobre la hoja): la mesa escribe el GUION y el brazo lo filma */
 /** 17-nov · `post_mesa` («creativos en cada paso», tramo B): la foto con su mesa corta; la cola mecánica es la de la sala 1 (`post_img`) */
-export const FAMILIAS_MESA = { carrusel_mesa: 'carrusel', kit_mesa: 'kit', post_mesa: 'post', brief_mesa: 'brief', concepto_mesa: 'concepto', video_mesa: 'video', reubicacion_mesa: 'reubicacion', fallidos_mesa: 'fallidos' } as const
+export const FAMILIAS_MESA = { carrusel_mesa: 'carrusel', kit_mesa: 'kit', post_mesa: 'post', brief_mesa: 'brief', concepto_mesa: 'concepto', video_mesa: 'video', reubicacion_mesa: 'reubicacion', fallidos_mesa: 'fallidos', banco_mesa: 'banco' } as const
 export type FamiliaMesa = keyof typeof FAMILIAS_MESA
 export type TipoDePieza = (typeof FAMILIAS_MESA)[FamiliaMesa]
 export const esFamiliaMesa = (f: string): f is FamiliaMesa => Object.prototype.hasOwnProperty.call(FAMILIAS_MESA, f)
 /** la plantilla v1 cuyas funciones de código (abrir, armar, dibujar, empaquetar) reutiliza la mesa (el video no tiene v1: sus funciones son propias, `orquestador-video.ts`) */
-export const FAMILIA_V1_DE: Record<Exclude<TipoDePieza, 'brief' | 'concepto' | 'reubicacion' | 'fallidos'>, string> = { carrusel: 'carrusel_ig_v1', kit: 'kit_historias', video: 'video_mesa', post: 'post_img' }
+export const FAMILIA_V1_DE: Record<Exclude<TipoDePieza, 'brief' | 'concepto' | 'reubicacion' | 'fallidos' | 'banco'>, string> = { carrusel: 'carrusel_ig_v1', kit: 'kit_historias', video: 'video_mesa', post: 'post_img' }
 /** las mesas que entrega la CADENA (no hay pieza: ni imágenes, ni traductor, ni jefatura propia, ni bandeja) */
-export const TIPOS_DE_LA_CADENA = ['brief', 'concepto', 'reubicacion', 'fallidos'] as const
+export const TIPOS_DE_LA_CADENA = ['brief', 'concepto', 'reubicacion', 'fallidos', 'banco'] as const
 export const esDeLaCadena = (tipo: string): tipo is (typeof TIPOS_DE_LA_CADENA)[number] => (TIPOS_DE_LA_CADENA as readonly string[]).includes(tipo)
 
 /** las cotas del bucle (guardarraíles de bucle coherente): nada de la mesa es indefinido */

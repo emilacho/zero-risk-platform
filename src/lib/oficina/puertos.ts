@@ -155,6 +155,8 @@ export interface PuertoDeLaCadena {
   entregarReubicacion?(p: { campana_id: string; version: number; encargo_id: string; texto: string | null; costo_usd: number; motivo: string | null }): Promise<EntregaALaCadena>
   /** 11-nov · la mesa de revisión de fallidos entrega sus veredictos; la cadena los VERIFICA por código antes de reabrir. Opcional: sin él, la entrega no llega y lo dice */
   entregarFallidos?(p: { campana_id: string; version: number; encargo_id: string; texto: string | null; costo_usd: number; motivo: string | null }): Promise<EntregaALaCadena>
+  /** 17-nov · la mesa de la gran idea responde, como creadora, a una corrección de la jefatura sobre una idea del banco; la cadena la VERIFICA por código antes de escribir. Opcional */
+  entregarBanco?(p: { campana_id: string; version: number; encargo_id: string; texto: string | null; costo_usd: number; motivo: string | null }): Promise<EntregaALaCadena>
 }
 
 /** lo que el brazo de video contesta al enviar: en dry_run el puerto NO sale a la red y devuelve `simulado` */
