@@ -33,6 +33,8 @@ CREATE TABLE IF NOT EXISTS public.cadena_correcciones (
   alarma_en         timestamptz,
   -- se guarda al cerrar: ¿la pieza quedó frenada? la fila de alarmas por reintentar lee solo éstas (🟡 CC6 · las tomadas no la tapan)
   frena             boolean     NOT NULL DEFAULT false,
+  -- 🟡 CC7 · otros encargos de la misma fila que llegaron con ésta abierta: la respuesta del creador vale también para ellos
+  encargos_cubiertos text[]     NOT NULL DEFAULT '{}',
   CONSTRAINT cadena_correcciones_frena_cerrada CHECK (NOT frena OR estado = 'respondida'),
   CONSTRAINT cadena_correcciones_llave UNIQUE (llave),
   -- la hoja se reparte al recibir (al insumo de donde salió la línea · Lenovo 17-nov): lo guardado va a calendario o banco; la llave conserva el destino pedido

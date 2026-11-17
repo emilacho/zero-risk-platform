@@ -20,6 +20,7 @@ function consulta() {
   q.limit = (n: number) => { tope = n; return q }
   q.eq = (col: string, v: unknown) => { filtros.push((r) => r[col] === v); return q }
   q.neq = (col: string, v: unknown) => { filtros.push((r) => r[col] !== v); return q }
+  q.contains = (col: string, v: unknown[]) => { filtros.push((r) => v.every((x) => ((r[col] as unknown[]) ?? []).includes(x))); return q }
   q.is = (col: string, v: unknown) => { filtros.push((r) => (r[col] ?? null) === v); return q }
   q.update = (p: Record<string, unknown>) => { cambio = p; return q }
   q.insert = (p: Record<string, unknown>) => { alta = p; return q }
@@ -87,6 +88,13 @@ describe('adaptador · cadena_correcciones', () => {
     expect(r).toHaveLength(50)
     expect(r[0]).toBe('f00:calendario')
     expect(r).not.toContain('f59:calendario')
+  })
+  it('🔴 CC7 · las del encargo incluyen las que lo CUBREN (otro encargo de la misma fila), sin repetir', async () => {
+    filas.push({ ...base, llave: 'h:calendario', encargo_id: 'enc-1', encargos_cubiertos: ['enc-2'], estado: 'en_manos_del_creador', respuesta: null })
+    filas.push({ ...base, llave: 'h:banco', encargo_id: 'enc-2', encargos_cubiertos: ['enc-2'], estado: 'recibida', respuesta: null })
+    const al = almacenDeSupabase()
+    expect((await al.correccionesDeEncargo!('enc-2')).map((c) => c.llave).sort()).toEqual(['h:banco', 'h:calendario'])
+    expect((await al.correccionesDeEncargo!('enc-1')).map((c) => c.llave)).toEqual(['h:calendario'])
   })
   it('🔴 a3 · las pendientes de repartir no incluyen las respondidas', async () => {
     const al = almacenDeSupabase()

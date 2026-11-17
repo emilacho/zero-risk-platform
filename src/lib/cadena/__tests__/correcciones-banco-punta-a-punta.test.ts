@@ -172,4 +172,24 @@ describe('el banco de punta a punta por el reloj', () => {
     expect(al.correcciones[0]).toMatchObject({ frena: false })
     expect(await al.alarmasPendientes()).toEqual([])
   })
+  it('🔴 CC7 · la misma fila vuelve con el encargo 2 y otra regla dura al banco: corrección NUEVA, su propia mesa del banco, su propia marca en la fila', async () => {
+    const { al, entrega } = almacen()
+    await devolver(al)
+    await relojDeLaCadena(al, VIGIA, T0)
+    await entrega(tomarla, mas(5))
+    await relojDeLaCadena(al, VIGIA, mas(6))
+    expect(await paraLaPiezaDe(al)).toEqual(['reemplazada'])
+    // el brief se rehízo: la pieza 2 vuelve a la oficina y la jefatura encuentra otra dura en la misma hoja
+    filaDe(al, FILA).estado = 'briefeada'
+    expect(await devolver(al, { encargo_id: 'enc-pieza-2', motivo: 'el precio del encebollado no es el de la ficha' })).toMatchObject({ status: 201, cuerpo: { correccion: { llave: `${FILA}:hoja`, llave_guardada: `${FILA}:hoja#2` } } })
+    await relojDeLaCadena(al, VIGIA, mas(7))
+    expect(al.sobresDelBanco).toHaveLength(2)
+    expect(al.sobresDelBanco[1].version).not.toBe(al.sobresDelBanco[0].version)
+    expect(al.sobresDelBanco[1].marco_texto).toContain('el precio del encebollado')
+    await entrega(bloque({ respuesta: 'tomada', accion: 'editar', cambios: { mensaje: 'el encebollado al precio de la ficha, en la sede abierta' }, explicacion: 'pongo el precio de la ficha' }), mas(8))
+    await relojDeLaCadena(al, VIGIA, mas(9))
+    const dos = ((await ACCIONES.correcciones.del_encargo(al, { encargo_id: 'enc-pieza-2' }, T0)).cuerpo as { correcciones: Array<{ para_la_pieza: string }> }).correcciones
+    expect(dos.map((c) => c.para_la_pieza)).toEqual(['reemplazada'])
+    expect(filaDe(al, FILA).avisos.filter((a) => a.includes('corrección'))).toHaveLength(2)
+  })
 })
