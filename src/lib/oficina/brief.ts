@@ -19,6 +19,8 @@ export interface BriefLeido {
   visual: string
   visual_obligatorio: string[]
   visual_prohibido: string[]
+  /** 17-nov · lo que la gran idea decidió, como decisiones «FIJO · … · PORQUÉ: …» y «LIBRE · …» (la hoja lo escribe solo si la gran idea trae «cómo se ve» en partes) */
+  lo_decidido?: string[]
   llamado: string
   variantes: string
   negativos: string[]
@@ -37,7 +39,7 @@ export interface BriefLeido {
 /** FIRMA 01-nov «hoja sin reja»: lo que se le dice a todo el que recibe un brief (pedidos, pedidos-laminas y la mesa). Lo único fijo es el manual, lo prohibido y la gran idea. */
 export const BRIEF_GUIA_NO_REGLA = 'guía, no regla al pie de la letra: lo único fijo es el manual, lo prohibido y la gran idea; todo lo demás puedes mejorarlo'
 // la hoja escribe «VOCABULARIO DE LA MARCA» desde la FIRMA 01-nov; los partes anteriores traen «VOCABULARIO OBLIGATORIO» y siguen siendo legibles
-const CAMPOS_LISTA = new Set(['VOCABULARIO DE LA MARCA', 'VOCABULARIO OBLIGATORIO', 'PROHIBIDO', 'NEGATIVOS', 'VISUAL OBLIGATORIO', 'VISUAL PROHIBIDO', 'ELEMENTOS', 'FOTOS DISPONIBLES', 'SUGERENCIAS'])
+const CAMPOS_LISTA = new Set(['VOCABULARIO DE LA MARCA', 'VOCABULARIO OBLIGATORIO', 'PROHIBIDO', 'NEGATIVOS', 'VISUAL OBLIGATORIO', 'VISUAL PROHIBIDO', 'ELEMENTOS', 'FOTOS DISPONIBLES', 'SUGERENCIAS', 'LO DECIDIDO'])
 
 /** corta la sección de un brief (desde su «### ID ·» hasta el siguiente «### » o «## ») */
 export function seccionDelBrief(parte: string, id: string): string | null {
@@ -81,6 +83,8 @@ export function parsearBrief(parte: string, id: string): BriefLeido | null {
     ...(g('OBJETIVO') ? { objetivo: g('OBJETIVO') } : {}),
     ...(g('IDEA DE LA PIEZA') ? { idea_de_la_pieza: g('IDEA DE LA PIEZA') } : {}),
     ...(g('QUÉ SE VE') ? { que_se_ve: g('QUÉ SE VE') } : {}),
+    // 17-nov · lo que la gran idea decidió (FIJO / LIBRE / PORQUÉ), tal cual lo escribe la hoja; ausente en un parte viejo
+    ...(listas['LO DECIDIDO']?.length ? { lo_decidido: listas['LO DECIDIDO'] } : {}),
   }
 }
 

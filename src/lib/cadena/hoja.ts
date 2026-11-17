@@ -10,7 +10,7 @@
 import type { ConceptoDeLaFila, DatoDeterminado, Fila, FormatosPorRed } from './tipos'
 import { PROPORCION_POR_FORMATO, proporcionDe, proporcionDeLaTabla } from './proporciones'
 import type { BriefCreativoLeido } from './brief-creativo'
-import { ideaDelBanco, type ConceptoLeido, type IdeaDelBanco } from './conceptos'
+import { comoSeVeSinPartes, decisionDeLaParte, ideaDelBanco, PARTES_DE_COMO_SE_VE, type CapituloDelConcepto, type ConceptoLeido, type IdeaDelBanco } from './conceptos'
 
 export const FAMILIA_DEL_KIT = 'kit_historias'
 /** el id de un brief del parte (mismo criterio que `autoproducir.ts` RE_BRIEF) */
@@ -134,6 +134,29 @@ function conceptoDeLaPieza(f: FilaDeHoja, idea: IdeaDelBanco | null): { idea: st
 }
 /** GO Lenovo 16-nov 22:04 · quién decide el cómo (lo lee la mesa y quien revise: el brief dice QUÉ y POR QUÉ) */
 export const QUIEN_DECIDE_EL_COMO = 'la mesa de creativos decide la escena, el gancho, la composición, la emoción y qué foto usar; lo de SUGERENCIAS puede mejorarlo o reemplazarlo diciendo por qué'
+/** 17-nov · el campo de la hoja con lo decidido (lista); lo lee `parsearBrief` como `lo_decidido` */
+export const CAMPO_LO_DECIDIDO = 'LO DECIDIDO'
+/** lo LIBRE de cada pieza: lo que decide su mesa, dentro de lo FIJO */
+export const LIBRE_DE_LA_PIEZA = 'LIBRE · la escena, el gancho, la composición, la emoción y qué foto usar, dentro de lo FIJO · PORQUÉ: la mesa de esta pieza es su única instancia creativa'
+/**
+ * lo que la gran idea decidió para toda la campaña, como decisiones: «FIJO · <parte>: <qué> · PORQUÉ: <por qué>», la idea elegida del banco y lo LIBRE.
+ * Vacío si la gran idea no trae las partes de «cómo se ve» (gran idea vieja: la hoja no cambia). Puro.
+ */
+export function loDecidido(c: Pick<ConceptoLeido, 'gran_idea' | 'como_se_ve_partes'>, idea: Pick<IdeaDelBanco, 'id' | 'idea'> | null, cap: Pick<CapituloDelConcepto, 'clave'> | null): string[] {
+  const partes = c.como_se_ve_partes
+  if (!partes) return []
+  const porDefecto = c.gran_idea ? `lo decidió la gran idea «${c.gran_idea.nombre}» para toda la campaña` : 'lo decidió la gran idea para toda la campaña'
+  const out: string[] = []
+  for (const { clave, etiqueta } of PARTES_DE_COMO_SE_VE) {
+    const v = partes[clave]
+    if (!v) continue
+    const d = decisionDeLaParte(v)
+    out.push(`FIJO · ${etiqueta}: ${limpio(d.que)} · PORQUÉ: ${limpio(d.porque ?? porDefecto)}`)
+  }
+  if (idea) out.push(`FIJO · idea de esta pieza: ${idea.id} · ${limpio(idea.idea)} · PORQUÉ: la eligió el calendario del banco de ideas${cap ? ` del capítulo ${cap.clave}` : ''}`)
+  out.push(LIBRE_DE_LA_PIEZA)
+  return out
+}
 function lineasDelBrief(ins: InsumosDeLaHoja, cab: { id: string; red: string; formato: string }, f: FilaDeHoja, idea: IdeaDelBanco | null, extra: { fila_ids?: string[]; elementos?: string[] }, avisos: string[]): string[] {
   const b = ins.brief
   const c = ins.concepto
@@ -169,12 +192,16 @@ function lineasDelBrief(ins: InsumosDeLaHoja, cab: { id: string; red: string; fo
     ...listaDe('PROHIBIDO', b.obligatorios.prohibido),
     campo('SINTAXIS', b.tono),
     // la línea VISUAL es del concepto de la CAMPAÑA: referencia de estilo, no las tomas de esta pieza (esas las decide la mesa)
-    campo('VISUAL', (() => { const v = [c.como_se_ve, cap?.como_se_ve, idea?.foto && idea.foto !== 'ninguna' ? `foto ${idea.foto}` : ''].filter(Boolean).join(' · '); return v ? `${PREFIJO_VISUAL_DE_CAMPANA}${v}` : '(el concepto no dice cómo se ve)' })()),
+    campo('VISUAL', (() => { const v = [c.como_se_ve_partes ? comoSeVeSinPartes(c.como_se_ve) : c.como_se_ve, cap?.como_se_ve, idea?.foto && idea.foto !== 'ninguna' ? `foto ${idea.foto}` : ''].filter(Boolean).join(' · '); return v ? `${PREFIJO_VISUAL_DE_CAMPANA}${v}` : '(el concepto no dice cómo se ve)' })()),
     campo('LLAMADO A LA ACCIÓN', pz.llamado || porRed?.llamado || ''),
     campo('VARIANTES', '1'),
     ...listaDe('NEGATIVOS', [...b.obligatorios.no_se_dice, ...b.obligatorios.prohibido]),
     campo('APRUEBA Y PARA CUÁNDO', cuando),
   ]
+  // 17-nov · puntos 2 y 3 de «creativos en cada paso» · lo que la gran idea DECIDIÓ llega como decisión (FIJO / LIBRE / PORQUÉ), no como texto para copiar.
+  // Solo si la gran idea trae las partes de «cómo se ve»: una gran idea vieja escribe la hoja EXACTA de antes
+  const decidido = loDecidido(c, idea, cap)
+  if (decidido.length) L.splice(L.findIndex((x) => x.startsWith('- VISUAL:')) + 1, 0, ...listaDe(CAMPO_LO_DECIDIDO, decidido))
   if (f.datos?.length && !esKit) L.push(campo('DATOS DEL CALENDARIO', datosEnTexto(f.datos)))
   if (extra.fila_ids) L.push(campo('FILAS', extra.fila_ids.join(', ')))
   if (extra.elementos) L.push(...listaDe('ELEMENTOS', extra.elementos))
