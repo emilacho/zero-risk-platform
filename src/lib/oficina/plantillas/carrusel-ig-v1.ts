@@ -163,7 +163,7 @@ export const CARRUSEL_IG_V1: Plantilla = {
   indicaciones: {
     marketing_instagram_curator: [
       ...POST_IMG.indicaciones.marketing_instagram_curator,
-      regla('Asignas las imágenes por ROL de lámina (hook, problem, reframe, proof, social-proof, benefit, objection, cta, cierre), no por número de lámina.', 'codigo:refs_validos'),
+      regla('Asignas las imágenes por ROL de lámina, no por número de lámina. Los roles los nombra la estructura que pidan el manual y el brief (una palabra corta por lámina: portada, paso, producto, antes, después, cierre…); si la plantilla trae una lista de roles, solo esos.', 'codigo:refs_validos'),
     ],
     'content-creator': [
       ...POST_IMG.indicaciones['content-creator'].filter((r) => !r.regla.startsWith('Entregas el pie de foto')),

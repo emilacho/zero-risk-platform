@@ -356,12 +356,38 @@ describe('SALA 2 · las imágenes por rol y los 3 controles', () => {
     expect(arte(M, id, 'visual_direction').refs_generadas).toEqual(['hook', 'proof'])
     expect(fichas(M, id).some((f) => /más de 2 imágenes generadas/.test(f.que ?? ''))).toBe(true)
   })
-  it('un rol que no existe, o repetido, se le devuelve al curador una vez y luego se descarta con ficha', async () => {
+  it('🔴 quitar rejas, filas 5 y 11 · sin lista de roles en la plantilla, el curador nombra el rol («portada»): ni vuelta ni ficha, y la imagen se queda', async () => {
     const { M, id } = await abiertoC()
     const raro = j({ resumen: 'x', imagenes: [{ ref: 'portada', modo: 'ninguna', motivo: 'm' }], reglas_de_imagen: { obligatorio: [], prohibido: [] } })
     const { tareas } = await correr(M, id, guionCarrusel({ direccion_visual: () => ({ texto: raro }) }))
-    expect(tareas['direccion_visual']).toHaveLength(2); expect(tareas['direccion_visual'][1]).toMatch(/portada/)
-    expect(arte(M, id, 'visual_direction').imagenes).toEqual([])
+    expect(tareas['direccion_visual']).toHaveLength(1)
+    expect(arte(M, id, 'visual_direction').imagenes.map((i: { ref: string }) => i.ref)).toEqual(['portada'])
+    expect(fichas(M, id).some((f) => /no está en la lista de la plantilla/.test(f.que ?? ''))).toBe(false)
+    expect(tareas['direccion_visual'][0]).toMatch(/no hay una lista fija/)
+    expect(tareas['direccion_visual'][0]).not.toMatch(/hook, problem, reframe/)
+  })
+  it('🔴 con `roles_de_lamina` en la plantilla (dato), un rol fuera de la lista solo AVISA: ni vuelta ni descarte', async () => {
+    const pl = { ...CARRUSEL_IG_V1, limites: { ...CARRUSEL_IG_V1.limites, roles_de_lamina: ['hook', 'cta'] } }
+    const { M, id } = await abierto(pl, BRIEF_CARRUSEL, 'BRF-0100')
+    const raro = j({ resumen: 'x', imagenes: [{ ref: 'portada', modo: 'ninguna', motivo: 'm' }], reglas_de_imagen: { obligatorio: [], prohibido: [] } })
+    const { tareas } = await correr(M, id, guionCarrusel({ direccion_visual: () => ({ texto: raro }) }))
+    expect(tareas['direccion_visual']).toHaveLength(1)
+    expect(tareas['direccion_visual'][0]).toMatch(/Roles de lámina posibles \(el ref de una imagen es un rol\): hook, cta\./)
+    expect(arte(M, id, 'visual_direction').imagenes.map((i: { ref: string }) => i.ref)).toEqual(['portada'])
+    const f = fichas(M, id).filter((x) => /la imagen «portada» usa un rol que no está en la lista de la plantilla \(hook, cta\)/.test(x.que ?? ''))
+    expect(f).toHaveLength(1); expect(f[0]).toMatchObject({ gravedad: 'sugerencia' })
+    // y las láminas cuyo rol no está en la lista: aviso por lámina, sin vuelta del diseñador
+    expect(tareas['laminas']).toHaveLength(1)
+    const deLamina = fichas(M, id).filter((x) => /lámina \d+: el rol «[^»]+» no está en la lista de la plantilla \(hook, cta\)/.test(x.que ?? ''))
+    expect(deLamina.length).toBeGreaterThan(0)
+    expect(deLamina.every((x) => x.gravedad === 'sugerencia')).toBe(true)
+  })
+  it('una imagen repetida sigue devolviéndose al curador una vez (es integridad, no estilo) y luego se descarta la copia', async () => {
+    const { M, id } = await abiertoC()
+    const rep = j({ resumen: 'x', imagenes: [{ ref: 'portada', modo: 'ninguna', motivo: 'm' }, { ref: 'portada', modo: 'ninguna', motivo: 'm' }], reglas_de_imagen: { obligatorio: [], prohibido: [] } })
+    const { tareas } = await correr(M, id, guionCarrusel({ direccion_visual: () => ({ texto: rep }) }))
+    expect(tareas['direccion_visual']).toHaveLength(2); expect(tareas['direccion_visual'][1]).toMatch(/repetida/)
+    expect(arte(M, id, 'visual_direction').imagenes).toHaveLength(1)
   })
   it('🔴 17-nov · la sala de láminas también comprueba contra el MANUAL que recibió el agente: una regla citada del manual pasa sin marca', async () => {
     const { M, id } = await abiertoC()

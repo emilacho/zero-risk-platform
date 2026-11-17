@@ -5,7 +5,7 @@
 import { BRIEF_GUIA_NO_REGLA, type ElementoDelKit } from './brief'
 import { AVISO_DEL_CEREBRO, describirReglas, FUNCION_DEL_BRIEF, FUNCION_DEL_MANUAL, FUNCION_DEL_PLAN, FUNCION_DEL_PORTERO, resumenDelEncargo, seccionDelPerfil, type ContextoDePedido } from './pedidos'
 import type { ContextoDelRevisor, ResumenDelEncargo } from './ciego'
-import { ROLES_DE_LAMINA, LIMITES_DE_LAMINA, LIMITES_DE_ESTRUCTURA } from './salida'
+import { LIMITES_DE_LAMINA, LIMITES_DE_ESTRUCTURA } from './salida'
 import { seccionDeImagenSinFoto } from './prompts-sin-invencion'
 import type { Ficha, Limites } from './tipos'
 
@@ -33,6 +33,13 @@ const largos = (lim: Record<string, unknown>): string => {
   return xs.length ? `Largos de esta plantilla (caracteres, contando espacios y signos): ${xs.join(', ')}. Si te pasas, se te devuelve para acortar.` : 'Sin tope de caracteres: si algo es muy largo, el dibujo baja la letra y queda anotado.'
 }
 const llamados = (lim: Record<string, unknown>): string => (typeof lim.llamados_max === 'number' ? `Hasta ${lim.llamados_max} ${lim.llamados_max === 1 ? 'lámina' : 'láminas'} con llamado a la acción.` : 'Cuántos llamados a la acción lleva y en qué láminas lo deciden el manual y el brief.')
+/** 17-nov · quitar rejas (filas 5 y 11): la lista de roles del carrusel es DATO de la plantilla (`roles_de_lamina`); sin ella, los roles los nombra la estructura del manual y el brief */
+const roles = (lim: Record<string, unknown>): string => {
+  const r = lim.roles_de_lamina
+  return Array.isArray(r) && r.length && r.every((x) => typeof x === 'string' && x.trim())
+    ? `Roles de lámina posibles (el ref de una imagen es un rol): ${r.join(', ')}.`
+    : 'Los roles de las láminas los nombra la estructura que pidan el manual y el brief (una palabra corta por lámina: portada, paso, producto, antes, después, cierre…); no hay una lista fija. El ref de una imagen es el rol de la lámina que la lleva.'
+}
 const recorta = (t: string, n: number) => (t.length > n ? `${t.slice(0, n)}\n[… recortado: ${t.length - n} caracteres más en el manual]` : t)
 const lista = (xs: string[]) => (xs.length ? xs.map((x) => `- ${x}`).join('\n') : '- (ninguno)')
 const arr = (a: unknown): unknown[] => (Array.isArray(a) ? a : [])
@@ -44,7 +51,7 @@ export const CONTRATOS_LAMINAS: Record<string, string> = {
   'prompts_por_ref.v1': '{"imagenes": [{"ref": "<ref a generar>", "prompts": [{"prompt": "…", "idea_en_una_linea": "…"}, {"prompt": "…", "idea_en_una_linea": "…"}]}]}  (2 o 3 prompts por imagen; no escribas tamaño ni parámetros: los fija la sala)',
   'observacion_imagenes.v1': '{"imagenes": [{"indice": 0, "reglas": [{"id": "o1", "presente": true, "evidencia": "…"}], "texto_en_imagen": ["…"], "marcas": ["…"], "personas": 0, "producto": "…", "elementos_visibles": ["…"], "dato_sin_verificar": false}], "preferencia": [0]}  (presente = true | false | "no_se_ve"; dato_sin_verificar = true si la imagen muestra un precio, una cifra, un sello, una certificación, una etiqueta, una norma o la lectura de un instrumento que nadie verificó; describes, no apruebas)',
   'copy_base.v1': '{"texto_base": "TODO el texto que irá en las láminas, una idea por línea", "pie_de_foto": "…", "hashtags": ["…"], "llamado": "…", "nota_para_quien_publica": "…", "necesito": []}',
-  'laminas.v1': `{"laminas": [{"rol": "${ROLES_DE_LAMINA.join('|')}", "eyebrow": "(antetítulo corto; puede ir vacío)", "headline": "…", "body": "…", "cta": "(puede ir vacío)"}], "necesito": []}`,
+  'laminas.v1': `{"laminas": [{"rol": "(una palabra corta con la función de la lámina; si hay lista de roles, uno de esos)", "eyebrow": "(antetítulo corto; puede ir vacío)", "headline": "…", "body": "…", "cta": "(puede ir vacío)"}], "necesito": []}`,
   // 17-nov · GO creativos punto 6: el agente recibe los topes CLAROS (contados con espacios y signos), los mismos que comprueba el esquema
   'estructura.v1': `{"elementos": [{"ref": "e01", "rol": "(≤ ${LIMITES_DE_ESTRUCTURA.rol} caracteres CONTADOS con espacios y signos)", "beat": "(≤ ${LIMITES_DE_ESTRUCTURA.beat})", "foto_slot": "<ref de la imagen>", "mood": "(≤ ${LIMITES_DE_ESTRUCTURA.mood})", "sugerencia_interactiva": "(opcional; ≤ ${LIMITES_DE_ESTRUCTURA.sugerencia_interactiva})"}]}  (SIN ningún campo de texto de imagen)`,
   'copy_kit.v1': `{"elementos": [{"ref": "e01", "eyebrow": "(≤ ${LIMITES_DE_LAMINA.eyebrow} caracteres CONTADOS con espacios y signos; si no cabe, acórtalo o déjalo vacío)", "headline": "…", "body": "…", "cta": "…", "acompanamiento": "texto de acompañamiento (pie o texto del estado)", "hashtags": ["…"]}], "necesito": []}`,
@@ -90,7 +97,7 @@ export function construirTareaLaminas(clave: string, c: ContextoLaminas, extra?:
   const kit = c.familia === 'kit'
   const base = `${AVISO_DEL_CEREBRO}\n\n## Manual de marca del cliente\n${recorta(F.manual_texto, 12000)}\n\n## El brief de este entregable (${BRIEF_GUIA_NO_REGLA})\n${c.brief.texto}\n${c.fuentes.plan_texto ? `\n## Plan de trabajo del cliente (contexto)\n${recorta(c.fuentes.plan_texto, 8000)}\n` : ''}${seccionDelPerfil(F)}`
   const datosVerificados = `## Datos verificados del cliente (solo estos; no inventes otros)\nTeléfonos: ${F.propios.telefonos.join(', ') || '(no se pudieron leer)'}\nUsuarios: ${F.propios.handles.join(', ') || '(no se pudieron leer)'}\nPrecios de la carta: ${F.fuentes.precios.join(', ') || '(no hay carta guardada)'}`
-  const refs = kit ? `Elementos del kit (cada uno es una lámina fija 9:16):\n${describirElementos(c.elementos)}` : `Roles de lámina posibles (el ref de una imagen es un rol): ${ROLES_DE_LAMINA.join(', ')}`
+  const refs = kit ? `Elementos del kit (cada uno es una lámina fija 9:16):\n${describirElementos(c.elementos)}` : roles(c.limites)
   const pieza = describirPieza(c)
   let esquema = '', images: string[] = []
   const fin = (task: string) => ({ task: extra?.errorDeFormato ? `${task}\n\n## Corrección de formato\n${extra.errorDeFormato}` : task, images, esquema })
@@ -132,7 +139,7 @@ export function construirTareaLaminas(clave: string, c: ContextoLaminas, extra?:
     }
     case 'laminas': {
       esquema = 'laminas.v1'
-      return fin(`${base}\n## Texto del autor (de aquí sale el texto de las láminas)\n${pieza}\n\n## Imágenes ya decididas por rol\n${JSON.stringify(Object.keys((c.art('imagenes_elegidas')?.por_ref ?? {}) as object))}\n\n## Tu trabajo\nArmas UNA plataforma (${c.plataforma}; el tamaño lo pone la sala) con entre ${c.limites.laminas_min ?? 5} y ${c.limites.laminas_max ?? 10} láminas. Cada titular, texto o llamado sale del texto del autor: lo recortas y, si hace falta para que entre o se lea mejor, ajustas palabras sin cambiar lo que dice ni agregar datos, cifras o promesas. ${llamados(c.limites)} ${largos(c.limites)} Los roles posibles: ${ROLES_DE_LAMINA.join(', ')}. Lo que no puedas resolver va en \`necesito\`; no preguntas al cliente.\n\n## Formato de tu respuesta\nSolo este JSON:\n${CONTRATOS_LAMINAS[esquema]}`)
+      return fin(`${base}\n## Texto del autor (de aquí sale el texto de las láminas)\n${pieza}\n\n## Imágenes ya decididas por rol\n${JSON.stringify(Object.keys((c.art('imagenes_elegidas')?.por_ref ?? {}) as object))}\n\n## Tu trabajo\nArmas UNA plataforma (${c.plataforma}; el tamaño lo pone la sala) con entre ${c.limites.laminas_min ?? 5} y ${c.limites.laminas_max ?? 10} láminas. Cada titular, texto o llamado sale del texto del autor: lo recortas y, si hace falta para que entre o se lea mejor, ajustas palabras sin cambiar lo que dice ni agregar datos, cifras o promesas. ${llamados(c.limites)} ${largos(c.limites)} ${roles(c.limites)} Cada imagen ya decidida va en la lámina cuyo rol es su ref. Lo que no puedas resolver va en \`necesito\`; no preguntas al cliente.\n\n## Formato de tu respuesta\nSolo este JSON:\n${CONTRATOS_LAMINAS[esquema]}`)
     }
     case 'revision_jefe': {
       esquema = 'fichas.v1'

@@ -25,14 +25,14 @@ const IGNORAR_TAMANO = ['tamaño', 'tamano', 'size', 'aspect_ratio', 'relacion_d
 /** salas 2-3: la plataforma y el tamaño los pone la sala (una sola plataforma por encargo); y nadie le pregunta nada al cliente: `open_questions` se descarta y se anota */
 const IGNORAR_LAMINAS = [...IGNORAR_TAMANO, 'platform', 'plataforma', 'platforms_requested', 'dimensiones', 'open_questions', 'preguntas']
 
-/** roles de lámina (contrato del diseñador de carruseles) */
+/** roles de REFERENCIA (17-nov · quitar rejas, filas 5 y 11): el traductor de la mesa los usa para rotular por posición; el carrusel de la sala ya no los exige (su lista, si la hay, es `roles_de_lamina` de la plantilla) */
 export const ROLES_DE_LAMINA = ['hook', 'problem', 'reframe', 'proof', 'social-proof', 'benefit', 'objection', 'cta', 'cierre'] as const
 /** largos SUGERIDOS de una lámina (17-nov · quitar rejas, fila 9): pasarse es un aviso, no un rechazo; en el carrusel el dibujo se ajusta. El kit de historias tiene sus topes como dato de la plantilla */
 export const LIMITES_DE_LAMINA = { eyebrow: 24, headline: 90, body: 220, cta: 32 } as const
 
 const lamina: Esq = {
   t: 'obj', req: ['rol', 'headline'], ignorar: IGNORAR_LAMINAS,
-  props: { orden: { t: 'num', min: 1, max: 30 }, rol: { t: 'enum', v: [...ROLES_DE_LAMINA] }, eyebrow: str(0), headline: str(1), body: str(0), cta: str(0) },
+  props: { orden: { t: 'num', min: 1, max: 30 }, rol: str(1, 60), eyebrow: str(0), headline: str(1), body: str(0), cta: str(0) },
 }
 const copiaCarrusel: Esq = { t: 'obj', req: ['texto_base', 'pie_de_foto', 'hashtags'], ignorar: IGNORAR_LAMINAS, props: { texto_base: str(1, 5000), pie_de_foto: str(1, 3000), hashtags: { t: 'arr', de: str(1, 80), max: 40 }, llamado: str(0, 300), nota_para_quien_publica: str(0, 600), necesito } }
 /** un elemento de texto del kit: SOLO texto (lo escribe `content-creator`, único autor) */

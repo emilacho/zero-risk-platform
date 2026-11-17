@@ -3,7 +3,7 @@
  * armar las láminas que dibuja el brazo, y los chequeos duros (sin modelo). Diseño: docs/DISENO-2026-10-09-oficina-salas-2-3-4.md §2.5, §3.2, §3.5.
  * Agnóstico: ningún texto nombra a un cliente. Las cifras y los límites finos llegan como DATO (plantilla / fuentes del cliente).
  */
-import { LIMITES_DE_LAMINA, ROLES_DE_LAMINA } from './salida'
+import { LIMITES_DE_LAMINA } from './salida'
 import { chequeosDePost, type FuentesDelCliente } from './chequeos'
 import { normalizar } from './texto'
 import type { Ficha } from './tipos'
@@ -39,13 +39,10 @@ export function textoFueraDelAutor(laminas: Lamina[], copia: Pick<CopiaCarrusel,
 
 // ── contrato de lámina ───────────────────────────────────────────────────────────────
 export interface LimitesDeCantidad { laminas_min: number; laminas_max: number }
-/** problemas del contrato que piden otra vuelta (vacío = cumple): la cantidad de láminas (dato de la plantilla) y los roles conocidos */
+/** problemas del contrato que piden otra vuelta (vacío = cumple): solo la cantidad de láminas, dato de la plantilla (los roles son libres o dato: aviso, filas 5 y 11) */
 export function problemasDeContrato(laminas: Lamina[], cant: LimitesDeCantidad): string[] {
   const p: string[] = []
   if (laminas.length < cant.laminas_min || laminas.length > cant.laminas_max) p.push(`${laminas.length} láminas; el formato pide de ${cant.laminas_min} a ${cant.laminas_max}`)
-  laminas.forEach((l, i) => {
-    if (!(ROLES_DE_LAMINA as readonly string[]).includes(l.rol)) p.push(`lámina ${i + 1}: rol «${l.rol}» desconocido`)
-  })
   return p
 }
 
@@ -70,8 +67,10 @@ export const pedidoDeAcortarLaminas = (xs: ReturnType<typeof largosPasados>): st
  *  · largo de cada campo por encima del de la plantilla (`largos_de_lamina`; sin el dato, la referencia `LIMITES_DE_LAMINA`): con el dato, antes se devolvió hasta 2 veces; el dibujo baja la letra;
  *  · llamados a la acción por encima de `llamados_max`, SOLO si la plantilla lo trae como dato (sin el dato no hay tope: un carrusel de catálogo puede llevar uno por producto).
  */
-export function avisosDeContrato(laminas: Lamina[], dato: { llamados_max?: number; largos?: LargosDeLamina }): string[] {
+export function avisosDeContrato(laminas: Lamina[], dato: { llamados_max?: number; largos?: LargosDeLamina; roles?: string[] }): string[] {
   const p: string[] = []
+  // filas 5 y 11: un rol fuera de la lista SOLO si la plantilla trae `roles_de_lamina`; sin la lista, el rol es libre
+  if (dato.roles?.length) laminas.forEach((l, i) => { if (!dato.roles!.includes(l.rol)) p.push(`lámina ${i + 1}: el rol «${l.rol}» no está en la lista de la plantilla (${dato.roles!.join(', ')})`) })
   for (const x of largosPasados(laminas, dato.largos)) p.push(`texto muy largo para la lámina (el dibujo baja la letra hasta el piso legible): lámina ${x.lamina}: «${x.campo}» tiene ${x.largo} caracteres (${dato.largos ? 'tope de la plantilla' : 'referencia'}: ${x.tope})`)
   const conCta = laminas.filter((l) => typeof l.cta === 'string' && l.cta.trim()).length
   if (typeof dato.llamados_max === 'number' && Number.isFinite(dato.llamados_max) && conCta > dato.llamados_max) p.push(`${conCta} láminas con llamado a la acción; la plantilla sugiere hasta ${dato.llamados_max}`)

@@ -2,7 +2,8 @@
  * Para las pruebas de migraciones VIEJAS que comparan sus indicaciones con las del código.
  *  · hasta 202611170800 la regla del director visual pedía «la cita literal del brief» (esa migración la cambió: por referencia);
  *  · hasta 202611171130 el curador decía «No inventes marcas, rostros…» y el ingeniero de prompts «No nombres marcas, fotógrafos…» (quitar rejas, tramo 2 de CC1);
- *  · hasta 202611171200 el carrusel pedía el recorte LITERAL del texto del autor (quitar rejas, tramo 3 de CC1).
+ *  · hasta 202611171200 el carrusel pedía el recorte LITERAL del texto del autor (quitar rejas, tramo 3 de CC1);
+ *  · hasta 202611171230 el curador del carrusel cerraba los roles en 9 (quitar rejas, tramo 4 de CC1).
  * Las migraciones de antes escribieron lo viejo: se comparan contra el código con esas reglas como eran; lo demás, idéntico.
  */
 import { POST_IMG } from '../plantillas/post-img'
@@ -25,6 +26,12 @@ export const REGLAS_ANTES_DE_1200: Readonly<Record<string, string>> = {
     'No escribes texto nuevo: recortas LITERALMENTE el texto del autor; cada titular, texto o llamado de una lámina debe ser un trozo exacto de lo que escribió content-creator.',
 }
 
+/** 202611171230 · la regla del curador del carrusel como estaba antes (texto exacto de la migración) */
+export const REGLAS_ANTES_DE_1230: Readonly<Record<string, string>> = {
+  'Asignas las imágenes por ROL de lámina, no por número de lámina. Los roles los nombra la estructura que pidan el manual y el brief (una palabra corta por lámina: portada, paso, producto, antes, después, cierre…); si la plantilla trae una lista de roles, solo esos.':
+    'Asignas las imágenes por ROL de lámina (hook, problem, reframe, proof, social-proof, benefit, objection, cta, cierre), no por número de lámina.',
+}
+
 const deshacer = (mapa: Readonly<Record<string, string>>) => (ind: unknown): unknown =>
   JSON.parse(JSON.stringify(ind), (k, v) => (k === 'regla' && typeof v === 'string' && mapa[v] ? mapa[v] : v))
 
@@ -32,10 +39,12 @@ const deshacer = (mapa: Readonly<Record<string, string>>) => (ind: unknown): unk
 export const indicacionesAntesDe1130 = deshacer(REGLAS_ANTES_DE_1130)
 /** las indicaciones del código (copia JSON) como estaban antes de 202611171200; lo demás, idéntico */
 export const indicacionesAntesDe1200 = deshacer(REGLAS_ANTES_DE_1200)
+/** las indicaciones del código (copia JSON) como estaban antes de 202611171230; lo demás, idéntico */
+export const indicacionesAntesDe1230 = deshacer(REGLAS_ANTES_DE_1230)
 
-/** las indicaciones del código (copia JSON) con la regla del director visual como estaba antes de 202611170800 (y lo de 1130 y 1200 deshecho); lo demás, idéntico */
+/** las indicaciones del código (copia JSON) con la regla del director visual como estaba antes de 202611170800 (y lo de 1130, 1200 y 1230 deshecho); lo demás, idéntico */
 export function indicacionesAntesDe0800(ind: unknown): unknown {
-  return JSON.parse(JSON.stringify(indicacionesAntesDe1130(indicacionesAntesDe1200(ind))), (k, v) => (k === 'regla' && v === NUEVA ? REGLA_DEL_DIRECTOR_ANTES_DE_0800 : v))
+  return JSON.parse(JSON.stringify(indicacionesAntesDe1130(indicacionesAntesDe1200(indicacionesAntesDe1230(ind)))), (k, v) => (k === 'regla' && v === NUEVA ? REGLA_DEL_DIRECTOR_ANTES_DE_0800 : v))
 }
 
 /** 202611171215 · los `limites` del código (copia JSON) como estaban antes: sin `largos_de_lamina`; lo demás, idéntico */
