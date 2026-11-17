@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest'
 import { AlmacenMemoria } from '../__fixtures__/almacen-memoria'
 import { ACCIONES } from '../acciones'
-import { guardarRespuesta, INTENTOS_POR_CORRECCION, leerRespuestaDelCreador, marcoDeLaCorreccion, PLAZO_DEL_CREADOR_MIN, repartirCorrecciones, type CreadorDeCorreccion } from '../correcciones'
+import { bloqueaLaPieza, guardarRespuesta, INTENTOS_POR_CORRECCION, leerRespuestaDelCreador, marcoDeLaCorreccion, PLAZO_DEL_CREADOR_MIN, repartirCorrecciones, type CreadorDeCorreccion } from '../correcciones'
 import type { Campana } from '../almacen'
 
 const AHORA = '2026-11-17T21:00:00.000Z'
@@ -102,7 +102,8 @@ describe('2 · el reparto de la vigía', () => {
   it('🔴 sin creador para el destino (hoja hoy · banco sin el puerto): queda recibida y visible, SIN gastar intentos', async () => {
     const al = await conUna({ destino: 'hoja' })
     const r = await repartirCorrecciones(al, AHORA, { calendario: abre })
-    expect(r.lineas.join()).toMatch(/sin creador para «hoja»/)
+    expect(r.lineas).toEqual([])
+    expect(r.aplicado).toEqual([])
     expect(al.correcciones[0]).toMatchObject({ estado: 'recibida', intentos: 0 })
   })
   it('🔴 entrega: en manos del creador, intento 1, una sola vez aunque la vigía corra dos veces', async () => {
@@ -173,3 +174,24 @@ describe('3b · guardar la respuesta', () => {
   })
 })
 
+describe('4 · ¿la pieza sigue frenada? (🟡 CC6 punto 5 · la decisión final es de Lenovo)', () => {
+  it('🔴 sin responder frena; tomada, en parte y no tomada liberan; una DURA cerrada no_dicha SIGUE frenando; una de criterio no_dicha libera', () => {
+    for (const estado of ['recibida', 'en_manos_del_creador'] as const) expect(bloqueaLaPieza({ estado, respuesta: null, dura: false })).toBe(true)
+    for (const respuesta of ['tomada', 'tomada_en_parte', 'no_tomada'] as const) {
+      expect(bloqueaLaPieza({ estado: 'respondida', respuesta, dura: false })).toBe(false)
+      if (respuesta !== 'no_tomada') expect(bloqueaLaPieza({ estado: 'respondida', respuesta, dura: true })).toBe(false)
+    }
+    expect(bloqueaLaPieza({ estado: 'respondida', respuesta: 'no_dicha', dura: true })).toBe(true)
+    expect(bloqueaLaPieza({ estado: 'respondida', respuesta: 'no_dicha', dura: false })).toBe(false)
+  })
+  it('🔴 de punta a punta: una DURA que el creador no toma dos veces queda cerrada no_dicha y la bandeja la ve frenando', async () => {
+    const al = await conUna({ dura: true })
+    const R = 'RESPUESTA A LA JEFATURA C1: no tomada: no me parece'
+    await repartirCorrecciones(al, AHORA, { calendario: abre })
+    await guardarRespuesta(al, 'f-7:calendario', leerRespuestaDelCreador(R, true), mas(5))
+    await repartirCorrecciones(al, mas(6), { calendario: abre })
+    await guardarRespuesta(al, 'f-7:calendario', leerRespuestaDelCreador(R, true), mas(7))
+    const v = (await ACCIONES.correcciones.del_encargo(al, { encargo_id: 'enc-1' }, AHORA)).cuerpo.correcciones as Array<Record<string, unknown>>
+    expect(v[0]).toMatchObject({ estado: 'respondida', respuesta: 'no_dicha', bloquea_la_pieza: true })
+  })
+})

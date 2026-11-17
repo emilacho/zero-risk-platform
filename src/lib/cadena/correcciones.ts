@@ -78,7 +78,17 @@ export async function correccionesDelEncargo(al: Almacen, cuerpo: Record<string,
   return { status: 200, cuerpo: { ok: true, correcciones: lista.map(vista) } }
 }
 
-const vista = (c: Correccion) => ({ llave: c.llave, fila_id: c.fila_id, destino: c.destino, estado: c.estado, respuesta: c.respuesta, explicacion: c.explicacion, dura: c.dura, intentos: c.intentos, respondida_en: c.respondida_en })
+/**
+ * ¿la pieza de esa fila sigue frenada? Mientras la corrección no esté respondida, sí (la oficina ya la deja bloqueada).
+ * Respondida: tomada / en parte → la fila sigue con su versión nueva (la vieja no se publica: la reemplaza el creador) · no_tomada (solo criterio) → se libera.
+ * 🟡 CC6 punto 5 (RESPUESTA-CC6-a-CC1-excepcion-puerto-banco): una DURA que se cierra no_dicha (el creador no la tomó tras el reintento) SIGUE frenando: «se toman sí o sí».
+ *    Choca con el punto 8 de la DECISIÓN («sigue el camino normal declarando el problema»): LO DECIDE LENOVO. Hasta su decisión, la regla segura es frenar.
+ */
+export function bloqueaLaPieza(c: Pick<Correccion, 'estado' | 'respuesta' | 'dura'>): boolean {
+  if (c.estado !== 'respondida') return true
+  return c.dura && c.respuesta === 'no_dicha'
+}
+const vista = (c: Correccion) => ({ llave: c.llave, fila_id: c.fila_id, destino: c.destino, estado: c.estado, respuesta: c.respuesta, explicacion: c.explicacion, dura: c.dura, intentos: c.intentos, respondida_en: c.respondida_en, bloquea_la_pieza: bloqueaLaPieza(c) })
 
 // ───────────────────────────────────────────── 3 · la respuesta del creador (una línea fija · el mismo formato de la oficina)
 export const ROTULO_DE_RESPUESTA = 'RESPUESTA A LA JEFATURA'
@@ -162,7 +172,8 @@ export async function repartirCorrecciones(al: Almacen, ahora: string, creadores
         continue
       }
       const creador = creadores[c.destino]
-      if (!creador) { lineas.push(`${c.llave}: sin creador para «${c.destino}» todavía · queda recibida y visible`); continue }
+      // sin creador: queda recibida y visible en la corrección (la bandeja la lee); no se avisa en cada vuelta (menos ruido)
+      if (!creador) continue
       if (c.intentos >= INTENTOS_POR_CORRECCION) {
         await al.correccionActualizar(c.llave, { estado: 'respondida', respuesta: 'no_dicha', explicacion: c.explicacion ?? 'intentos agotados', respondida_en: ahora }, c.estado)
         aplicado.push(`${c.llave}: intentos agotados → no_dicha`)
