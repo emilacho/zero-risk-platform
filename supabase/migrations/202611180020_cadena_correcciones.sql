@@ -31,6 +31,9 @@ CREATE TABLE IF NOT EXISTS public.cadena_correcciones (
   entregada_en      timestamptz,
   respondida_en     timestamptz,
   alarma_en         timestamptz,
+  -- se guarda al cerrar: ¿la pieza quedó frenada? la fila de alarmas por reintentar lee solo éstas (🟡 CC6 · las tomadas no la tapan)
+  frena             boolean     NOT NULL DEFAULT false,
+  CONSTRAINT cadena_correcciones_frena_cerrada CHECK (NOT frena OR estado = 'respondida'),
   CONSTRAINT cadena_correcciones_llave UNIQUE (llave),
   -- la hoja se reparte al recibir (al insumo de donde salió la línea · Lenovo 17-nov): lo guardado va a calendario o banco; la llave conserva el destino pedido
   CONSTRAINT cadena_correcciones_destino_valido CHECK (destino IN ('calendario', 'banco')),
@@ -46,6 +49,7 @@ CREATE TABLE IF NOT EXISTS public.cadena_correcciones (
 );
 CREATE INDEX IF NOT EXISTS cadena_correcciones_pendientes ON public.cadena_correcciones (estado) WHERE estado <> 'respondida';
 CREATE INDEX IF NOT EXISTS cadena_correcciones_encargo ON public.cadena_correcciones (encargo_id);
+CREATE INDEX IF NOT EXISTS cadena_correcciones_alarmas ON public.cadena_correcciones (respondida_en) WHERE frena AND alarma_en IS NULL;
 
 -- permisos y seguridad por fila (CREATE TABLE no alcanza) · igual que las demás tablas de la cadena
 ALTER TABLE public.cadena_correcciones ENABLE ROW LEVEL SECURITY;

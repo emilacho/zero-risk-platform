@@ -53,6 +53,8 @@ export interface Correccion {
   respondida_en: string | null
   /** la alarma de una dura no tomada salió (una por incidente · Lenovo 17-nov) */
   alarma_en: string | null
+  /** 🟡 CC6 22:00 · se guarda al CERRAR: ¿quedó frenada? La fila de alarmas por reintentar trae solo éstas (las tomadas no la tapan) */
+  frena: boolean
 }
 
 export const llaveDeCorreccion = (filaId: string, destino: DestinoDeCorreccion): string => `${filaId}:${destino}`
@@ -121,7 +123,7 @@ export async function correccionRecibir(al: Almacen, cuerpo: Record<string, unkn
   const nueva: Correccion = {
     llave, campana_id: campana.id, fila_id: filaId, destino: r.destino, destino_pedido: destino, campo_de_la_hoja: campoDeLaHoja, idea_id: r.destino === 'banco' ? fila?.idea_ref ?? null : null, idea_sello: sello, regla,
     motivo: recortar(motivo)!, linea_de_la_ficha: recortar(cadena(cuerpo.linea_de_la_ficha)), dura: cuerpo.dura === true || !!regla,
-    origen: cadena(cuerpo.origen), encargo_id: encargoId, estado: 'recibida', respuesta: null, explicacion: null, version_nueva: null, intentos: 0, recibida_en: ahora, entregada_en: null, respondida_en: null, alarma_en: null,
+    origen: cadena(cuerpo.origen), encargo_id: encargoId, estado: 'recibida', respuesta: null, explicacion: null, version_nueva: null, frena: false, intentos: 0, recibida_en: ahora, entregada_en: null, respondida_en: null, alarma_en: null,
   }
   const { correccion, nueva: esNueva } = await al.correccionInsertar(nueva)
   return { status: esNueva ? 201 : 200, cuerpo: { ok: true, ya_estaba: !esNueva, correccion: vista(correccion) } }
@@ -215,8 +217,10 @@ export async function guardarRespuesta(al: Almacen, llave: string, leida: Respue
     return { estado: 'recibida', respuesta: null }
   }
   const explicacion = leida.respuesta === 'no_dicha' ? (leida.motivo_no_dicha ?? 'sin respuesta del creador') : leida.explicacion
-  const cerro = await al.correccionActualizar(llave, { estado: 'respondida', respuesta: leida.respuesta, explicacion: recortar(explicacion), version_nueva: versionNueva, respondida_en: ahora }, c.estado)
-  if (cerro) await alarmaSiFrena(al, { ...c, estado: 'respondida', respuesta: leida.respuesta, explicacion: recortar(explicacion), version_nueva: versionNueva }, ahora)
+  const cerrada: Correccion = { ...c, estado: 'respondida', respuesta: leida.respuesta, explicacion: recortar(explicacion), version_nueva: versionNueva, respondida_en: ahora }
+  const frena = paraLaPieza(cerrada) === 'frenada'
+  const cerro = await al.correccionActualizar(llave, { estado: 'respondida', respuesta: leida.respuesta, explicacion: cerrada.explicacion, version_nueva: versionNueva, respondida_en: ahora, frena }, c.estado)
+  if (cerro) await alarmaSiFrena(al, { ...cerrada, frena }, ahora)
   return { estado: 'respondida', respuesta: leida.respuesta }
 }
 

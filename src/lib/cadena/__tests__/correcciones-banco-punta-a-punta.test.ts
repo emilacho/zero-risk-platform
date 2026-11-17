@@ -150,4 +150,26 @@ describe('el banco de punta a punta por el reloj', () => {
     await relojDeLaCadena(al, VIGIA, mas(6))
     expect(al.correcciones[0].version_nueva).toMatchObject({ filas_al_brief: [FILA] })
   })
+  it('🔴 🟡 CC6 n6 · la consulta de publicación dice NO publicada pero la fila no se pudo mover (perdió la carrera): FRENADA, no «sigue»', async () => {
+    const { al, entrega } = almacen()
+    filaDe(al, FILA).estado = 'aprobada'
+    al.piezaPublicada = async () => false
+    al.reubicarFila = async () => false
+    await devolver(al)
+    await relojDeLaCadena(al, VIGIA, T0)
+    await entrega(tomarla, mas(5))
+    await relojDeLaCadena(al, VIGIA, mas(6))
+    expect(al.correcciones[0]).toMatchObject({ estado: 'respondida', respuesta: 'tomada', frena: true, version_nueva: { filas_al_brief: [], fila_publicada: false } })
+    expect(await paraLaPiezaDe(al)).toEqual(['frenada'])
+    expect(al.alarmasEnviadas).toHaveLength(1)
+  })
+  it('🔴 🟡 CC6 · la marca «frena» se guarda al cerrar: tomada y reemplazada → false; la frenada → true', async () => {
+    const { al, entrega } = almacen()
+    await devolver(al)
+    await relojDeLaCadena(al, VIGIA, T0)
+    await entrega(tomarla, mas(5))
+    await relojDeLaCadena(al, VIGIA, mas(6))
+    expect(al.correcciones[0]).toMatchObject({ frena: false })
+    expect(await al.alarmasPendientes()).toEqual([])
+  })
 })

@@ -15,7 +15,8 @@ function consulta() {
   let tope = Infinity
   const q: any = {}
   q.select = () => q
-  q.order = () => q
+  let orden: { col: string; asc: boolean } | null = null
+  q.order = (col: string, o?: { ascending?: boolean }) => { orden = { col, asc: o?.ascending !== false }; return q }
   q.limit = (n: number) => { tope = n; return q }
   q.eq = (col: string, v: unknown) => { filtros.push((r) => r[col] === v); return q }
   q.neq = (col: string, v: unknown) => { filtros.push((r) => r[col] !== v); return q }
@@ -28,7 +29,9 @@ function consulta() {
       filas.push(structuredClone(alta))
       return ok({ data: [structuredClone(alta)], error: null })
     }
-    const sel = filas.filter((r) => filtros.every((f) => f(r))).slice(0, tope)
+    const todas = filas.filter((r) => filtros.every((f) => f(r)))
+    if (orden) { const { col, asc } = orden; todas.sort((a, b) => String(a[col]).localeCompare(String(b[col])) * (asc ? 1 : -1)) }
+    const sel = todas.slice(0, tope)
     if (cambio) for (const r of sel) Object.assign(r, structuredClone(cambio))
     return ok({ data: sel.map((r) => structuredClone(r)), error: null })
   }
@@ -43,13 +46,13 @@ vi.mock('@/lib/sala-router-consumer/inmediato-supabase', () => ({ programarDespa
 
 import { almacenDeSupabase } from '../almacen-supabase'
 
-const base = { campana_id: 'c', fila_id: 'f', destino: 'calendario', dura: true, intentos: 1, explicacion: null, alarma_en: null }
+const base = { campana_id: 'c', fila_id: 'f', destino: 'calendario', dura: true, intentos: 1, explicacion: null, alarma_en: null, frena: false, respondida_en: '2026-11-17T19:00:00Z' }
 beforeEach(() => {
   filas = [
     { ...base, llave: 'a:calendario', estado: 'en_manos_del_creador', respuesta: null },
     { ...base, llave: 'b:calendario', estado: 'recibida', respuesta: null },
-    { ...base, llave: 'c:calendario', estado: 'respondida', respuesta: 'no_dicha', alarma_en: null },
-    { ...base, llave: 'd:calendario', estado: 'respondida', respuesta: 'no_dicha', alarma_en: '2026-11-17T20:00:00Z' },
+    { ...base, llave: 'c:calendario', estado: 'respondida', respuesta: 'no_dicha', alarma_en: null, frena: true },
+    { ...base, llave: 'd:calendario', estado: 'respondida', respuesta: 'no_dicha', alarma_en: '2026-11-17T20:00:00Z', frena: true },
     { ...base, llave: 'e:calendario', estado: 'respondida', respuesta: 'tomada', alarma_en: null },
     { ...base, llave: 'g:calendario', estado: 'respondida', respuesta: 'no_dicha', alarma_en: null, dura: false },
   ]
@@ -66,9 +69,24 @@ describe('adaptador · cadena_correcciones', () => {
     expect(await al.correccionActualizar!('a:calendario', { estado: 'respondida', respuesta: 'no_dicha' }, 'en_manos_del_creador')).toBe(false)
     expect(filas[0].respuesta).toBe('tomada')
   })
-  it('🔴 a2 · las alarmas pendientes son SOLO las duras cerradas que todavía no se avisaron (el receptor manda solo las frenadas)', async () => {
+  it('🔴 a2 · las alarmas pendientes son SOLO las FRENADAS cerradas que todavía no se avisaron', async () => {
     const al = almacenDeSupabase()
-    expect((await al.alarmasPendientes!()).map((c) => c.llave)).toEqual(['c:calendario', 'e:calendario'])
+    expect((await al.alarmasPendientes!()).map((c) => c.llave)).toEqual(['c:calendario'])
+  })
+  it('🔴 🟡 CC6 22:00 · 60 duras tomadas que no frenan NO tapan el reintento de la frenada (filtra por «frena», las más viejas primero)', async () => {
+    for (let i = 0; i < 60; i++) filas.push({ ...base, llave: `t${i}:calendario`, estado: 'respondida', respuesta: 'tomada', alarma_en: null, frena: false, respondida_en: '2026-11-17T18:00:00Z' })
+    filas.push({ ...base, llave: 'z:calendario', estado: 'respondida', respuesta: 'no_dicha', alarma_en: null, frena: true, respondida_en: '2026-11-17T21:00:00Z' })
+    const al = almacenDeSupabase()
+    expect((await al.alarmasPendientes!()).map((c) => c.llave)).toEqual(['c:calendario', 'z:calendario'])
+  })
+  it('🔴 con más de 50 frenadas esperando, salen primero las MÁS VIEJAS (no las que la base devuelva primero)', async () => {
+    filas = []
+    for (let i = 59; i >= 0; i--) filas.push({ ...base, llave: `f${String(i).padStart(2, '0')}:calendario`, estado: 'respondida', respuesta: 'no_dicha', frena: true, respondida_en: `2026-11-17T${String(10 + Math.floor(i / 6)).padStart(2, '0')}:${String((i % 6) * 10).padStart(2, '0')}:00Z` })
+    const al = almacenDeSupabase()
+    const r = (await al.alarmasPendientes!()).map((c) => c.llave)
+    expect(r).toHaveLength(50)
+    expect(r[0]).toBe('f00:calendario')
+    expect(r).not.toContain('f59:calendario')
   })
   it('🔴 a3 · las pendientes de repartir no incluyen las respondidas', async () => {
     const al = almacenDeSupabase()
