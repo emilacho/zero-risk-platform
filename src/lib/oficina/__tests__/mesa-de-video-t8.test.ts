@@ -371,7 +371,8 @@ describe('ENSAYO EN SECO · la hoja real → la mesa de video → el brazo simul
     expect(ultima.cuerpo).toMatchObject({ accion: 'cerrado', estado: 'cerrado', simulado: true })
     expect(enviados).toHaveLength(1)
     expect(turnos.length).toBeGreaterThan(6)
-    expect(pedidos.length).toBe(turnos.length)
+    // 17-nov (CC1) · un pedido por turno + UNO del cierre (los avisos de ritmo de la guía en el guion); caída = la pieza cierra igual, sin avisos
+    expect(pedidos.length).toBe(turnos.length + 1)
     expect(new Set(pedidos)).toEqual(new Set([CLIENTE]))
     for (const t of turnos) {
       expect(t.task.includes('## Biblioteca de planos y ritmos de la oficina'), `${t.tipo}:${t.agente}`).toBe(modo === 'ok')

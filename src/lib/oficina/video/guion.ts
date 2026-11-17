@@ -15,7 +15,9 @@ import { limpiarPie, limpiarTexto } from '../mesa/traductor'
  * lista cerrada: un rol que no está aquí se conserva tal cual lo escribió la dirección (sin aviso). Sirve para que la mirada y la jefatura juzguen cada plano contra
  * lo que tenía que hacer, no contra las tomas de la fila.
  */
-export const ROLES_DEL_PLANO = ['captar', 'situar', 'informar', 'prueba', 'giro', 'conclusion', 'llamado', 'ambiente'] as const
+// 17-nov · la lista es UNA: la de la biblioteca de planos de CC4 (S2-2); aquí solo se re-exporta para quien la importaba del guion
+import { ROLES_DEL_PLANO } from './biblioteca'
+export { ROLES_DEL_PLANO }
 
 /** lo que escribió la dirección → la clave del rol (la misma de la biblioteca de planos de CC4, S2-2) si coincide; si no, el texto tal cual (guía, no lista cerrada) */
 export function rolDelPlano(texto: string): string {

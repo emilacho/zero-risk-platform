@@ -24,7 +24,7 @@ import { traducirPieza, hayImagenesAGenerar, pedidoDeImagen, type ConceptoDeImag
 import { traducirGuion, type TraduccionDeGuion } from '../video/guion'
 import { parametrosDelVideo, traducirPropuestas, type PropuestasDelVideo } from '../video/propuestas'
 import { avisoDeLaParadaUnica, PREFIJO_AVISO_DE_CONCEPTO, propuestaAprobada, textosDeConcepto } from '../video/aprobacion'
-import { bibliotecaDelCliente, seccionDeLaBiblioteca } from '../video/biblioteca'
+import { avisosDeRitmo, bibliotecaDelCliente, seccionDeLaBiblioteca, type RitmoDeVideo } from '../video/biblioteca'
 import { aporteDePrompts, promptsParaElBrazo, type ConceptoDeLaImagen, type ImagenARedactar } from './prompts'
 import { COTAS, FAMILIAS_MESA, esDeLaCadena, type Aporte, type EstadoMesa, type LecturaDeNotas, type Tarjeta, type TipoDeAporte } from './tipos'
 
@@ -102,6 +102,20 @@ async function metodoDelAsiento(P: Puertos, agente: string): Promise<string | un
   const metodos = await intenta('metodos')
   const fichas = cual === 'fichas_por_red' ? await intenta('fichas_por_red') : undefined
   return seccionDeMetodo(agente, metodos, fichas, new Date().toISOString()) || undefined
+}
+
+/**
+ * 17-nov · S2-1 (CC1) con la biblioteca de CC4 · las guías de ritmo del cliente para el cierre del video. Sin puerto, con error o sin ritmos: ninguna
+ * (los ritmos AVISAN, nunca rechazan ni frenan el cierre).
+ */
+export async function ritmosDelVideo(P: Puertos, enc: Encargo): Promise<RitmoDeVideo[]> {
+  if (!P.mesa?.bibliotecaDeVideo) return []
+  try { return bibliotecaDelCliente(await P.mesa.bibliotecaDeVideo(enc.client_id)).ritmos } catch { return [] }
+}
+/** los avisos de ritmo de UN guion (cuántos planos, cuándo entra el producto) con la red del brief; un plano sin «producto: sí/no» no cuenta como producto; un tramo al revés lo anula avisosDeRitmo (cuenta 0) */
+export function avisosDeRitmoDelGuion(g: Pick<TraduccionDeGuion, 'segundos' | 'planos'>, red: string | null, ritmos: RitmoDeVideo[]): string[] {
+  if (!ritmos.length || !g.planos.length) return []
+  return avisosDeRitmo({ segundos: g.segundos, red, planos: g.planos.map((p) => ({ segundos: p.hasta - p.desde, ...(p.producto === true ? { producto: true } : {}) })) }, ritmos)
 }
 
 /** Sprint 2 · S2-2 · la biblioteca de planos y ritmos para un turno de la mesa de VIDEO (contexto, no lista cerrada); sin puerto, con error o vacía = nada (nunca frena el turno) */
@@ -320,6 +334,10 @@ async function cerrarLaMesa(P: Puertos, enc: Encargo, pl: Plantilla, indice: num
     const rondaAnterior = Number((enc.estado_del_motor.artefactos.propuestas_video?.datos as { ronda?: number } | undefined)?.ronda ?? 0)
     const tp = traducirPropuestas(textoPieza, { objetivo: est.video!.propuestas, segundosMin: est.video!.segundos_min, segundosMax: est.video!.segundos_max, ronda: rondaAnterior + 1 })
     if (!tp.ok) return aTextoParaLaJefatura(P, enc, est, textoPieza, tp.motivo)
+    // 17-nov · los avisos de ritmo de la biblioteca, en el guion de CADA propuesta (la tarjeta y la jefatura los leen con el id de la propuesta)
+    const ritmos = await ritmosDelVideo(P, enc)
+    const red = baseDeLaminas(enc.estado_del_motor).brief.red ?? null
+    for (const p of tp.resultado.propuestas) p.guion.avisos.push(...avisosDeRitmoDelGuion(p.guion, red, ritmos))
     return cerrarConPropuestas(P, enc, pl, indice, est, libro, textoPieza, tp.resultado, forzado, vuelta)
   }
   // el VIDEO (parte 2 · 31-oct): la pieza es un GUION; el traductor de láminas no aplica (sin imágenes que generar: el brazo filma)
@@ -344,6 +362,8 @@ async function cerrarLaMesa(P: Puertos, enc: Encargo, pl: Plantilla, indice: num
   const avisosDePrompts: string[] = []
   let hayGeneradas = false
   if ('planos' in tr) {
+    // 17-nov · los avisos de ritmo de la biblioteca (CC4) en el guion: avisan, no rechazan
+    tr.avisos.push(...avisosDeRitmoDelGuion(tr, b.brief.red ?? null, await ritmosDelVideo(P, enc)))
     // 17-nov · la excepción de la parada única: si la dirección declaró que la corrección pedía cambiar el concepto aprobado, el aviso va al guion (la ficha) y sigue
     const deConcepto = est.marcas.parada_unica ? textosDeConcepto(textoPieza) : []
     if (deConcepto.length) tr.avisos.push(...deConcepto.map((t) => PREFIJO_AVISO_DE_CONCEPTO + t))
