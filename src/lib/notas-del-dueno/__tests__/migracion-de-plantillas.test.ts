@@ -5,6 +5,7 @@ import { validarPlantilla } from '../../oficina/plantilla'
 import { POST_IMG_CON_JEFATURA, CARRUSEL_IG_CON_JEFATURA, KIT_HISTORIAS_CON_JEFATURA } from '../../oficina/plantillas/con-jefatura'
 import { conSegundoCerebro } from '../../oficina/plantillas/con-segundo-cerebro'
 import type { Plantilla } from '../../oficina/tipos'
+import { limitesAntesDe1215 } from '../../oficina/__tests__/indicacion-antes-de-0800'
 
 const raiz = path.resolve(__dirname, '../../../..')
 const leer = (rel: string) => fs.readFileSync(path.join(raiz, rel), 'utf8')
@@ -26,7 +27,7 @@ describe('la migración de las plantillas vivas', () => {
       const esperado = conSegundoCerebro(base)
       const fila = f.find((x) => x.tipo === tipo)!
       expect(fila.pasos).toEqual(JSON.parse(JSON.stringify(esperado.pasos)))
-      expect(fila.limites).toEqual(JSON.parse(JSON.stringify(esperado.limites)))
+      expect(fila.limites).toEqual(limitesAntesDe1215(esperado.limites)) // 202611171215 agrega después `largos_de_lamina` al carrusel
     })
     it(`${tipo}: lo que se escribe es una plantilla válida para el motor`, () => {
       const fila = f.find((x) => x.tipo === tipo)!

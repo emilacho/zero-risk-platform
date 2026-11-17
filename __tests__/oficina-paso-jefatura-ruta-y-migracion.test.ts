@@ -10,7 +10,7 @@ import { CARRUSEL_IG_CON_JEFATURA, KIT_HISTORIAS_CON_JEFATURA, POST_IMG_CON_JEFA
 import { KIT_HISTORIAS } from '../src/lib/oficina/plantillas/kit-historias'
 import { POST_IMG } from '../src/lib/oficina/plantillas/post-img'
 import { validarPlantilla } from '../src/lib/oficina/plantilla'
-import { indicacionesAntesDe0800 } from '../src/lib/oficina/__tests__/indicacion-antes-de-0800'
+import { indicacionesAntesDe0800, limitesAntesDe1215 } from '../src/lib/oficina/__tests__/indicacion-antes-de-0800'
 import { TARGET_STEP_PRODUCIR } from '../src/lib/oficina/sobre'
 import type { Plantilla } from '../src/lib/oficina/tipos'
 import { BUENOS_PROMPTS, CLIENTE, PARTE, PIEZA_OK, REGLAS_CEVICHE, correr, crearMemoria, direccionGenerada, observacion, type Memoria } from '../src/lib/oficina/__tests__/memoria'
@@ -183,7 +183,7 @@ describe('la migración del paso `jefatura` (sin aplicar)', () => {
       const u = updateDe(s, tipo)
       expect(bloque(u, 'pasos')).toEqual(JSON.parse(JSON.stringify(p.pasos)))
       expect(bloque(u, 'ind')).toEqual(indicacionesAntesDe0800(p.indicaciones))
-      expect(bloque(u, 'lim')).toEqual(JSON.parse(JSON.stringify(p.limites)))
+      expect(bloque(u, 'lim')).toEqual(limitesAntesDe1215(p.limites))
       expect(validarPlantilla({ ...p, pasos: bloque(u, 'pasos') as never })).toEqual([])
     }
   })
@@ -217,7 +217,7 @@ describe('la reversa', () => {
       const u = updateDe(r, tipo)
       expect(bloque(u, 'pasos')).toEqual(JSON.parse(JSON.stringify(p.pasos)))
       expect(bloque(u, 'ind')).toEqual(indicacionesAntesDe0800(p.indicaciones))
-      expect(bloque(u, 'lim')).toEqual(JSON.parse(JSON.stringify(p.limites)))
+      expect(bloque(u, 'lim')).toEqual(limitesAntesDe1215(p.limites))
       expect(u).toMatch(/AND activo = false;/)
       expect((bloque(u, 'pasos') as Array<{ clave: string }>).some((x) => x.clave === 'revision_jefe')).toBe(true)
     }

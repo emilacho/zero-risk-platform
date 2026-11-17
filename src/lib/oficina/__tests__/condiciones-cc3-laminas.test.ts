@@ -1,6 +1,6 @@
 /** Condiciones de CC#3 · #469 H3/H4: lo que sus mutaciones dejaron vivo (foto_slot, cifras, límites exactos, clasificadores de formato). */
 import { describe, it, expect } from 'vitest'
-import { armarLaminasDeKit, cifrasFueraDeFuentes, problemasDeContrato, problemasDeHistoria, problemasDeKit } from '../laminas'
+import { armarLaminasDeKit, avisosDeContrato, cifrasFueraDeFuentes, problemasDeContrato, problemasDeHistoria, problemasDeKit } from '../laminas'
 import { LIMITES_DE_LAMINA } from '../salida'
 import { esCarrusel, esKitDeHistorias, type BriefLeido } from '../brief'
 
@@ -41,17 +41,21 @@ describe('límites exactos del contrato de lámina', () => {
     expect(problemasDeContrato(n(5), cant)).toEqual([])
     expect(problemasDeContrato(n(6), cant).length).toBe(1)
   })
-  it('caracteres: el tope exacto pasa, uno más falla', () => {
+  it('caracteres (17-nov · quitar rejas, fila 9): el sugerido exacto no avisa, uno más AVISA y nunca es problema de contrato', () => {
     for (const c of ['eyebrow', 'headline', 'body', 'cta'] as const) {
       const tope = LIMITES_DE_LAMINA[c]
       const resto = n(3).slice(1)
-      expect(problemasDeContrato([L({ [c]: 'a'.repeat(tope) }), ...resto], cant), c).toEqual([])
-      expect(problemasDeContrato([L({ [c]: 'a'.repeat(tope + 1) }), ...resto], cant).length, c).toBe(1)
+      expect(avisosDeContrato([L({ [c]: 'a'.repeat(tope) }), ...resto], {}), c).toEqual([])
+      expect(avisosDeContrato([L({ [c]: 'a'.repeat(tope + 1) }), ...resto], {}).length, c).toBe(1)
+      expect(problemasDeContrato([L({ [c]: 'a'.repeat(tope + 1) }), ...resto], cant), c).toEqual([])
     }
   })
-  it('un solo llamado a la acción; rol conocido', () => {
-    expect(problemasDeContrato([L({ cta: 'Ya' }), L({ cta: 'Ya' }), L()], cant).length).toBe(1)
-    expect(problemasDeContrato([L({ cta: 'Ya' }), L({ cta: '  ' }), L()], cant)).toEqual([])
+  it('llamados (fila 10): sin el dato de la plantilla no hay tope; con `llamados_max` avisa al pasarse; nunca es problema de contrato; rol conocido', () => {
+    expect(avisosDeContrato([L({ cta: 'Ya' }), L({ cta: 'Ya' }), L({ cta: 'Ya' })], {})).toEqual([])
+    expect(avisosDeContrato([L({ cta: 'Ya' }), L({ cta: 'Ya' }), L()], { llamados_max: 1 }).length).toBe(1)
+    expect(avisosDeContrato([L({ cta: 'Ya' }), L({ cta: 'Ya' }), L()], { llamados_max: 2 })).toEqual([])
+    expect(avisosDeContrato([L({ cta: 'Ya' }), L({ cta: '  ' }), L()], { llamados_max: 1 })).toEqual([])
+    expect(problemasDeContrato([L({ cta: 'Ya' }), L({ cta: 'Ya' }), L()], cant)).toEqual([])
     expect(problemasDeContrato([L({ rol: 'inventado' }), L(), L()], cant).length).toBe(1)
   })
   it('historias: tope exacto de titular y de texto', () => {

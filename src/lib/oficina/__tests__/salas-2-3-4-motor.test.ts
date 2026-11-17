@@ -174,10 +174,9 @@ describe('los esquemas de salida de las salas 2 y 3 los hace cumplir el código'
       expect(procesarSalida(t, 'laminas.v1', 1, 1)).toMatchObject({ ok: false, accion: 'falla_visible' })
     }
   })
-  it('laminas.v1: un titular de 91 caracteres (SOLO largo · 17-nov punto 6) → se devuelve para acortar hasta 2 veces más que el reintento; luego falla visible', () => {
-    const t = JSON.stringify({ laminas: [lam({ headline: 'x'.repeat(91) })] })
-    for (const i of [0, 1, 2]) expect(procesarSalida(t, 'laminas.v1', i, 1)).toMatchObject({ ok: false, accion: 'reintentar' })
-    expect(procesarSalida(t, 'laminas.v1', 3, 1)).toMatchObject({ ok: false, accion: 'falla_visible' })
+  it('laminas.v1: un titular de 91 caracteres SE ACEPTA (17-nov · quitar rejas, fila 9: el largo es sugerido y solo avisa; antes, punto 6, se devolvía para acortar)', () => {
+    const t = JSON.stringify({ laminas: [lam({ headline: 'x'.repeat(91), eyebrow: 'e'.repeat(60), body: 'b'.repeat(600), cta: 'c'.repeat(80) })] })
+    expect(procesarSalida(t, 'laminas.v1', 0, 1).ok).toBe(true)
   })
   it('estructura.v1 NO admite ningún texto de imagen (el narrador solo pone estructura)', () => {
     const buena = { elementos: [{ ref: 'e01', rol: 'apertura', beat: 'presentar', mood: 'cálido', foto_slot: 'e01' }] }
@@ -225,11 +224,11 @@ describe('contrato de lámina', () => {
   const ok = Array.from({ length: 5 }, (_, i) => ({ rol: ['hook', 'problem', 'reframe', 'benefit', 'cta'][i], headline: `H${i}` }))
   const cant = { laminas_min: 5, laminas_max: 10 }
   it('5 láminas con roles conocidos y un solo llamado: cumple', () => { expect(problemasDeContrato(ok.map((l, i) => (i === 4 ? { ...l, cta: 'Pide' } : l)), cant)).toEqual([]) })
-  it('cuenta fuera de rango, tope de caracteres, rol desconocido y dos llamados', () => {
+  it('cuenta fuera de rango y rol desconocido piden otra vuelta; el largo y los llamados NO (son aviso: quitar rejas, filas 9 y 10)', () => {
     expect(problemasDeContrato(ok.slice(0, 3), cant).join('|')).toMatch(/3 láminas/)
-    expect(problemasDeContrato([{ ...ok[0], headline: 'x'.repeat(91) }, ...ok.slice(1)], cant).join('|')).toMatch(/91 caracteres/)
     expect(problemasDeContrato([{ ...ok[0], rol: 'gancho' }, ...ok.slice(1)], cant).join('|')).toMatch(/desconocido/)
-    expect(problemasDeContrato(ok.map((l) => ({ ...l, cta: 'Pide' })), cant).join('|')).toMatch(/solo una/)
+    expect(problemasDeContrato([{ ...ok[0], headline: 'x'.repeat(91) }, ...ok.slice(1)], cant)).toEqual([])
+    expect(problemasDeContrato(ok.map((l) => ({ ...l, cta: 'Pide' })), cant)).toEqual([])
   })
   it('historia: titular y texto dentro de los topes del dato', () => {
     expect(problemasDeHistoria([{ ref: 'e01', headline: 'x'.repeat(61), body: 'y'.repeat(141) }], { headline_historia: 60, body_historia: 140 })).toHaveLength(2)
@@ -296,11 +295,15 @@ describe('chequeos duros de las láminas', () => {
     expect(q).not.toMatch(/premium/); expect(q).toMatch(/voseo/); expect(q).toMatch(/teléfono/)
     expect(chequeosDeLaminas(c).filter((x) => x.gravedad === 'sugerencia').map((x) => x.que).join('|')).toMatch(/premium/)
   })
-  it('el contrato roto, el texto fuera del autor y la imagen sin lámina bloquean; la tipografía caída y la foto repetida avisan', () => {
+  it('el contrato roto y la imagen sin lámina bloquean; el texto fuera del autor, los largos, la tipografía caída y la foto repetida avisan (quitar rejas, filas 4 y 9)', () => {
     const c = base()
     c.problemas_de_contrato = ['3 láminas']; c.texto_fuera_del_autor = [{ lamina: 2, campo: 'headline', texto: 'inventado' }]; c.imagenes_sin_lamina = ['proof']; c.fonts_faltantes = ['Caveat']; c.fotos_reusadas = ['f1']
+    c.avisos_de_contrato = ['lámina 1: «headline» tiene 91 caracteres']
     const fs = chequeosDeLaminas(c)
-    expect(fs.filter((x) => x.gravedad === 'bloquea').map((x) => x.donde).sort()).toEqual(['laminas', 'laminas', 'laminas'])
+    expect(fs.filter((x) => x.gravedad === 'bloquea').map((x) => x.que).join('|')).toMatch(/3 láminas.*proof|proof.*3 láminas/)
+    expect(fs.filter((x) => x.gravedad === 'bloquea')).toHaveLength(2)
+    expect(fs.filter((x) => x.gravedad === 'sugerencia').map((x) => x.que).join('|')).toMatch(/inventado/)
+    expect(fs.filter((x) => x.gravedad === 'sugerencia').map((x) => x.que).join('|')).toMatch(/91 caracteres/)
     expect(fs.filter((x) => x.gravedad === 'sugerencia').map((x) => x.que).join('|')).toMatch(/Caveat/)
     expect(fs.filter((x) => x.gravedad === 'sugerencia').map((x) => x.que).join('|')).toMatch(/f1/)
   })
@@ -308,6 +311,22 @@ describe('chequeos duros de las láminas', () => {
     const c = base(); c.textos_de_laminas = ['Sube 80% tus ventas']; c.texto_del_autor = { texto: 'Sube 80% tus ventas', hashtags: [] }
     const fs = chequeosDeLaminas(c).filter((x) => /80%/.test(x.que ?? ''))
     expect(fs).toHaveLength(1); expect(fs[0].gravedad).toBe('sugerencia')
+  })
+  it('🔴 quitar rejas, fila 4 (🟡 de CC6) · lo que va SOLO en una lámina pasa por los mismos chequeos de datos que el texto del autor, con la misma gravedad', () => {
+    const fuentes = { palabras_prohibidas: ['barato'], palabras_duras: [], telefonos: ['0991111111'], telefonos_verificables: true, handles: ['@naufrago'], precios: ['7.00'], competidores: ['Sushi Pop'], registro: 'tuteo' } as ContextoDeChequeoLaminas['fuentes']
+    const casos = ['Llama al 0998887777', 'Escribe a @otro', 'Desde $9.99', 'Lo más barato del puerto', 'Mejor que Sushi Pop']
+    for (const malo of casos) {
+      const enAutor = base(); enAutor.fuentes = fuentes; enAutor.texto_del_autor = { texto: malo, hashtags: [] }; enAutor.textos_de_laminas = [malo]
+      const soloLamina = base(); soloLamina.fuentes = fuentes; soloLamina.textos_de_laminas = ['Pruébalo hoy', malo]
+      const datos = (fs: ReturnType<typeof chequeosDeLaminas>) => fs.filter((x) => x.donde === 'texto' || x.donde === 'hashtags').map((x) => `${x.gravedad}|${x.que}`).sort()
+      const delAutor = datos(chequeosDeLaminas(enAutor))
+      expect(delAutor.length, malo).toBeGreaterThan(0)
+      expect(datos(chequeosDeLaminas(soloLamina)), malo).toEqual(delAutor)
+    }
+    // y lo que ya salió del texto del autor no se repite por estar también en la lámina
+    const ambos = base(); ambos.fuentes = fuentes; ambos.texto_del_autor = { texto: 'Llama al 0998887777', hashtags: [] }; ambos.textos_de_laminas = ['Llama al 0998887777']
+    const solo = base(); solo.fuentes = fuentes; solo.texto_del_autor = { texto: 'Llama al 0998887777', hashtags: [] }; solo.textos_de_laminas = []
+    expect(chequeosDeLaminas(ambos).filter((x) => x.donde === 'texto')).toHaveLength(chequeosDeLaminas(solo).filter((x) => x.donde === 'texto').length)
   })
   it('todas las fichas son del origen «chequeo» y tienen id único', () => {
     const c = base(); c.problemas_de_contrato = ['a', 'b']; c.imagenes_sin_lamina = ['x', 'y']

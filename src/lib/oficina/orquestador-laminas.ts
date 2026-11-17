@@ -13,7 +13,7 @@ import { claseDe, dibujaLaminas } from './clase'
 import { aUtc, chequeosDeEntrega, cuandoSePublica, leerMedidas, manifiesto, nombreDeArchivo, textoParaCopiar, type ArchivoDeEntrega, type FilaDeFormato } from './entrega'
 import { candidatasFoto, confianzaDeLaFoto } from './fotos'
 import {
-  armarLaminasDeCarrusel, armarLaminasDeKit, chequeosDeLaminas, problemasDeContrato, problemasDeHistoria, problemasDeKit, refsInvalidos, textoFueraDelAutor,
+  armarLaminasDeCarrusel, armarLaminasDeKit, avisosDeContrato, largosPasados, pedidoDeAcortarLaminas, type LargosDeLamina, chequeosDeLaminas, problemasDeContrato, problemasDeHistoria, problemasDeKit, refsInvalidos, textoFueraDelAutor,
   type ElementoDeCopyKit, type ElementoDeEstructura, type ImagenDeRef, type Lamina,
 } from './laminas'
 import type { ResultadoDePaso } from './motor'
@@ -21,7 +21,7 @@ import { construirTareaLaminas, contextoDelRevisorLaminas, type ContextoLaminas 
 import type { Cambios, Encargo, FuentesCompletas, Puertos } from './puertos'
 import { chequearPrompts, citasExisten, elegirVersion, veredictoDeImagenes, type ObservacionDeImagen, type ReglasDeImagen } from './reglas-de-imagen'
 import { reglasDeInvencion } from './prompts-sin-invencion'
-import { ROLES_DE_LAMINA } from './salida'
+import { CORRECCIONES_DE_LARGO, ROLES_DE_LAMINA } from './salida'
 import type { Estado, Ficha, Paso, Plantilla } from './tipos'
 
 export type FamiliaDeLaminas = 'carrusel' | 'kit'
@@ -331,6 +331,7 @@ function chequeos(pl: Plantilla, e: Estado): SalidaCodigoL {
     fonts_faltantes: arr<string>(render?.fonts_faltantes),
     imagenes_sin_lamina: arr<string>(armado?.sin_lamina), fotos_reusadas: reusadas,
     problemas_de_contrato: problemasContrato,
+    avisos_de_contrato: kit ? [] : avisosDeContrato(laminas, { llamados_max: llamadosMax(pl), largos: largosDeLamina(pl) }),
     texto_fuera_del_autor: kit || !copiaC ? [] : textoFueraDelAutor(laminas, copiaC),
     problemas_de_armado: arr<string>(armado?.problemas),
     problemas_de_kit: kit ? problemasDeKit(b.elementos, refsConLamina) : [],
@@ -453,12 +454,18 @@ async function finalizarEntrega(P: Puertos, enc: Encargo, png: ArchivoDeEntrega[
 }
 
 // ───────────────────────── lo que cada paso de agente hace con su salida (validadores de código)
-export type ProcesoL = { res?: ResultadoDePaso; fallido?: string; /** mensaje literal para el reintento de formato (lo manda el orquestador mientras queden reintentos) */ reintentar?: string }
+export type ProcesoL = { res?: ResultadoDePaso; fallido?: string; /** mensaje literal para el reintento de formato (lo manda el orquestador mientras queden reintentos) */ reintentar?: string; /** el reintento es SOLO por largo (dato de la plantilla): su tope es `CORRECCIONES_DE_LARGO`, no el de formato */ largo?: true }
 const sin = <T extends { ref: string }>(xs: T[], validos: string[]): T[] => xs.filter((x) => validos.includes(x.ref))
 
 export function procesarValorL(paso: Paso, v: Record<string, unknown>, enc: Encargo, e: Estado, pl: Plantilla, intentos: number): ProcesoL {
   const b = baseL(e)
   const quedan = intentos < (paso.salida?.reintento_formato ?? 0)
+  // RESPUESTA Lenovo · punto 6 + fila 9: con `largos_de_lamina` (dato), una lámina que se pasa se devuelve para acortar hasta CORRECCIONES_DE_LARGO (2) veces; después sigue (queda el aviso)
+  const acortar = (lam: Lamina[]): ProcesoL | null => {
+    const largos = largosDeLamina(pl)
+    const xs = largos ? largosPasados(lam, largos) : []
+    return xs.length && intentos < CORRECCIONES_DE_LARGO ? { reintentar: pedidoDeAcortarLaminas(xs), largo: true } : null
+  }
   const retry = (problemas: string[]): ProcesoL | null => (problemas.length && quedan ? { reintentar: `Tu respuesta no cumple lo que la sala comprueba por código: ${problemas.slice(0, 6).join(' · ')}. Corrígelo y devuelve solo el JSON del contrato.` } : null)
   switch (paso.clave) {
     case 'direccion_visual': return direccionVisual(v, b, e, pl, retry)
@@ -488,7 +495,7 @@ export function procesarValorL(paso: Paso, v: Record<string, unknown>, enc: Enca
     }
     case 'laminas': {
       const lam = arr<Lamina>(v.laminas).map((l, i) => ({ ...l, orden: i + 1 }))
-      const r = retry(problemasDeLaminas(lam, e, pl))
+      const r = retry(problemasDeLaminas(lam, e, pl)) ?? acortar(lam)
       if (r) return r
       return { res: { costo_usd: 0, artefacto: { laminas: lam } } }
     }
@@ -497,16 +504,27 @@ export function procesarValorL(paso: Paso, v: Record<string, unknown>, enc: Enca
       return { res: { costo_usd: 0, artefacto: { fichas: fs.length }, fichas: fs } }
     }
     case 'corrige_texto': case 'decide_texto': case 'ajusta_laminas': case 'ajusta_laminas_2': case 'corrige_laminas': case 'decide_laminas': case 'corrige_estructura': case 'decide_estructura': case 'decide_imagen':
-      return resolver(paso, v, b, e, pl, retry)
+      return resolver(paso, v, b, e, pl, retry, acortar)
     default: return { res: { costo_usd: 0, artefacto: v } }
   }
 }
 
-function problemasDeLaminas(lam: Lamina[], e: Estado, pl: Plantilla): string[] {
-  const copia = datos(e, 'copy_carrusel') as unknown as { texto_base: string; pie_de_foto: string; llamado?: string } | undefined
-  const fuera = copia ? textoFueraDelAutor(lam, copia).map((x) => `lámina ${x.lamina}: «${x.texto.slice(0, 50)}» (${x.campo}) no es un recorte literal del texto del autor`) : []
-  return [...fuera, ...problemasDeContrato(lam, { laminas_min: Number(pl.limites.laminas_min ?? 1), laminas_max: Number(pl.limites.laminas_max ?? 10) })]
+/** lo que pide otra vuelta al diseñador: solo la cantidad (dato) y los roles. El texto fuera del autor, los largos y los llamados son avisos en las fichas (quitar rejas, filas 4, 9 y 10) */
+function problemasDeLaminas(lam: Lamina[], _e: Estado, pl: Plantilla): string[] {
+  return problemasDeContrato(lam, { laminas_min: Number(pl.limites.laminas_min ?? 1), laminas_max: Number(pl.limites.laminas_max ?? 10) })
 }
+
+/** `largos_de_lamina` de la plantilla (dato): solo los campos con número; sin el dato, undefined (no se devuelve nada por largo) */
+export const largosDeLamina = (pl: Pick<Plantilla, 'limites'>): LargosDeLamina | undefined => {
+  const l = pl.limites.largos_de_lamina
+  if (!l || typeof l !== 'object') return undefined
+  const out: LargosDeLamina = {}
+  for (const c of ['eyebrow', 'headline', 'body', 'cta'] as const) { const n = (l as Record<string, unknown>)[c]; if (typeof n === 'number' && Number.isFinite(n) && n > 0) out[c] = n }
+  return Object.keys(out).length ? out : undefined
+}
+
+/** `llamados_max` de la plantilla, solo si es un número: sin el dato no hay tope de llamados */
+export const llamadosMax = (pl: Pick<Plantilla, 'limites'>): number | undefined => (typeof pl.limites.llamados_max === 'number' ? pl.limites.llamados_max : undefined)
 
 function direccionVisual(v: Record<string, unknown>, b: BaseL, e: Estado, pl: Plantilla, retry: (p: string[]) => ProcesoL | null): ProcesoL {
   const validos = refsValidosDe(b)
@@ -586,7 +604,7 @@ export function decisionDeReImagenL(e: Estado, pl: Plantilla, tomada: { razon: s
   return { re_imagen: si, refs: si ? refs : [], por_rehacer_humano: !!tomada && !si, motivo, razon: tomada?.razon ?? null }
 }
 
-function resolver(paso: Paso, v: Record<string, unknown>, b: BaseL, e: Estado, pl: Plantilla, retry: (p: string[]) => ProcesoL | null): ProcesoL {
+function resolver(paso: Paso, v: Record<string, unknown>, b: BaseL, e: Estado, pl: Plantilla, retry: (p: string[]) => ProcesoL | null, acortar: (lam: Lamina[]) => ProcesoL | null = () => null): ProcesoL {
   const mias = fichasQueTocanL(e, paso)
   const respuestas = arr<{ id: string; estado: 'tomada' | 'no_tomada'; razon: string }>(v.respuestas)
   const validas = respuestas.filter((x) => mias.some((f) => f.id === x.id))
@@ -609,7 +627,7 @@ function resolver(paso: Paso, v: Record<string, unknown>, b: BaseL, e: Estado, p
     }
     case 'ajusta_laminas': case 'ajusta_laminas_2': case 'corrige_laminas': case 'decide_laminas': {
       const lam = v.laminas ? arr<Lamina>(v.laminas).map((l, i) => ({ ...l, orden: i + 1 })) : arr<Lamina>(datos(e, 'laminas')?.laminas)
-      const r = retry(problemasDeLaminas(lam, e, pl))
+      const r = retry(problemasDeLaminas(lam, e, pl)) ?? (v.laminas ? acortar(lam) : null)
       if (r) return r
       // «ajusta» (el autor cambió el texto) SIEMPRE deja una versión nueva de las láminas, aunque no cambien: así el kit se vuelve a armar, dibujar y chequear contra el texto vigente
       // en la ronda 2 el diseñador también atiende la OPINIÓN: si el texto no cambió y no devolvió láminas nuevas, no hay versión nueva (no se vuelve a dibujar por gusto)

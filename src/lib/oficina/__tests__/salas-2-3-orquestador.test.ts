@@ -134,35 +134,68 @@ describe('SALA 2 · carrusel · punta a punta con modelo simulado', () => {
     expect(JSON.stringify(hoja)).not.toMatch(/api\/social|meta-social|publicar_en/i)
     expect(hoja.nombres.some((n: string) => n.endsWith('_publicar.md'))).toBe(true)
   })
-  it('el texto de una lámina que NO es del autor: un reintento con el error literal; si lo corrige, sigue limpio', async () => {
+  it('🔴 quitar rejas, fila 4 · el texto de una lámina que NO es un trozo exacto del autor NO pide otra vuelta ni bloquea: queda una ficha de sugerencia para la revisión', async () => {
     const { M, id } = await abiertoC()
     const mala = LAMINAS.map((l, i) => (i === 1 ? { ...l, headline: 'Hoy todo cambia para siempre' } : l))
-    const { tareas, ultima } = await correr(M, id, guionCarrusel({ laminas: (n) => ({ texto: j({ laminas: n === 1 ? mala : LAMINAS }) }) }))
-    expect(tareas['laminas']).toHaveLength(2); expect(tareas['laminas'][1]).toMatch(/recorte literal/)
+    const { tareas, ultima } = await correr(M, id, guionCarrusel({ laminas: () => ({ texto: j({ laminas: mala }) }) }))
+    expect(tareas['laminas']).toHaveLength(1)
     expect(ultima.cuerpo).toMatchObject({ estado: 'cerrado', con_desacuerdo: false })
+    const f = fichas(M, id).filter((x) => /no es un trozo exacto del texto del autor/.test(x.que ?? ''))
+    expect(f).toHaveLength(1); expect(f[0]).toMatchObject({ gravedad: 'sugerencia', estado: 'abierta', donde: 'laminas' })
+    expect(fichas(M, id).some((x) => x.gravedad === 'bloquea' && x.donde === 'laminas')).toBe(false)
   })
-  it('🔴 17-nov · punto 6 · un titular que pasa su tope DOS veces seguidas no mata el encargo: se le devuelve para acortar (con la medida) y, al tercer intento corto, sigue limpio', async () => {
+  it('🔴 RESPUESTA Lenovo (punto 6 + fila 9) · los largos son DATO de la plantilla (`largos_de_lamina`) y el pedido los dice', () => {
+    expect(CARRUSEL_IG_V1.limites.largos_de_lamina).toEqual({ eyebrow: 24, headline: 90, body: 220, cta: 32 })
+  })
+  it('🔴 un titular que pasa el largo de la plantilla se devuelve para acortar (con la medida) y, corto, sigue limpio', async () => {
     const { M, id } = await abiertoC()
     const larga = LAMINAS.map((l, i) => (i === 0 ? { ...l, headline: 'x'.repeat(95) } : l))
     const { tareas, ultima } = await correr(M, id, guionCarrusel({ laminas: (n) => ({ texto: j({ laminas: n <= 2 ? larga : LAMINAS }) }) }))
+    expect(tareas['laminas'][0]).toContain('Largos de esta plantilla (caracteres, contando espacios y signos): antetítulo hasta 24, titular hasta 90, texto hasta 220, llamado hasta 32. Si te pasas, se te devuelve para acortar.')
     expect(tareas['laminas']).toHaveLength(3)
-    expect(tareas['laminas'][1]).toContain('$.laminas[0].headline: tiene 95 caracteres y el tope es 90 (sobran 5)')
-    expect(tareas['laminas'][2]).toContain('sobran 5')
+    expect(tareas['laminas'][1]).toContain('- lámina 1, «headline»: tiene 95 caracteres y el tope es 90 (sobran 5)')
     expect(ultima.cuerpo).toMatchObject({ estado: 'cerrado', con_desacuerdo: false })
+    expect(fichas(M, id).some((x) => /texto muy largo para la lámina/.test(x.que ?? ''))).toBe(false)
   })
-  it('🔴 17-nov · punto 6 · el tope de vueltas es explícito: si sigue largo tras 1 + 2 correcciones, falla visible (nunca un ciclo sin fin)', async () => {
+  it('🔴 si tras 2 devoluciones sigue largo: NO falla ni bloquea; cierra con una ficha de sugerencia visible (el dibujo baja la letra)', async () => {
     const { M, id } = await abiertoC()
     const larga = LAMINAS.map((l, i) => (i === 0 ? { ...l, headline: 'x'.repeat(95) } : l))
     const { tareas, ultima } = await correr(M, id, guionCarrusel({ laminas: () => ({ texto: j({ laminas: larga }) }) }))
-    expect(tareas['laminas']).toHaveLength(4)
-    expect(ultima.cuerpo).toMatchObject({ estado: 'fallido' })
+    expect(tareas['laminas']).toHaveLength(3)
+    expect(ultima.cuerpo).toMatchObject({ estado: 'cerrado', con_desacuerdo: false })
+    const f = fichas(M, id).filter((x) => /texto muy largo para la lámina.*95 caracteres \(tope de la plantilla: 90\)/.test(x.que ?? ''))
+    expect(f).toHaveLength(1); expect(f[0]).toMatchObject({ gravedad: 'sugerencia', estado: 'abierta' })
   })
-  it('si el diseñador sigue escribiendo texto nuevo tras el reintento, la pieza sale con desacuerdo (ficha que bloquea), nunca se corrige a mano', async () => {
+  it('🔴 sin `largos_de_lamina` en la plantilla no hay tope: ni devolución ni frase de largos en el pedido; el largo solo se avisa contra la referencia', async () => {
+    const { largos_de_lamina: _l, ...sin } = CARRUSEL_IG_V1.limites
+    void _l
+    const { M, id } = await abierto({ ...CARRUSEL_IG_V1, limites: sin as typeof CARRUSEL_IG_V1.limites }, BRIEF_CARRUSEL, 'BRF-0100')
+    const larga = LAMINAS.map((l, i) => (i === 0 ? { ...l, headline: 'x'.repeat(95) } : l))
+    const { tareas, ultima } = await correr(M, id, guionCarrusel({ laminas: () => ({ texto: j({ laminas: larga }) }) }))
+    expect(tareas['laminas']).toHaveLength(1)
+    expect(tareas['laminas'][0]).toContain('Sin tope de caracteres: si algo es muy largo, el dibujo baja la letra y queda anotado.')
+    expect(ultima.cuerpo).toMatchObject({ estado: 'cerrado', con_desacuerdo: false })
+    expect(fichas(M, id).some((x) => /95 caracteres \(referencia: 90\)/.test(x.que ?? '') && x.gravedad === 'sugerencia')).toBe(true)
+  })
+  it('🔴 quitar rejas, fila 10 · varios llamados a la acción sin el dato de la plantilla: ni vuelta ni ficha', async () => {
+    const { M, id } = await abiertoC()
+    const conCta = LAMINAS.map((l) => ({ ...l, cta: 'Pide hoy' }))
+    const { tareas, ultima } = await correr(M, id, guionCarrusel({ laminas: () => ({ texto: j({ laminas: conCta }) }) }))
+    expect(tareas['laminas']).toHaveLength(1)
+    expect(ultima.cuerpo).toMatchObject({ estado: 'cerrado', con_desacuerdo: false })
+    expect(fichas(M, id).some((x) => /llamado a la acción/.test(x.que ?? ''))).toBe(false)
+    expect(tareas['laminas'][0]).toMatch(/Cuántos llamados a la acción lleva y en qué láminas lo deciden el manual y el brief/)
+    expect(tareas['laminas'][0]).not.toMatch(/Un solo llamado/)
+    // fila 4 · el pedido tampoco exige el trozo exacto
+    expect(tareas['laminas'][0]).toMatch(/lo recortas y, si hace falta para que entre o se lea mejor, ajustas palabras sin cambiar lo que dice ni agregar datos, cifras o promesas/)
+    expect(tareas['laminas'][0]).not.toMatch(/trozo EXACTO|no escribes texto nuevo/)
+  })
+  it('el texto ajustado por el diseñador nunca se corrige a mano: la lámina sale con su texto y la ficha lo cita', async () => {
     const { M, id } = await abiertoC()
     const mala = LAMINAS.map((l, i) => (i === 1 ? { ...l, headline: 'Hoy todo cambia para siempre' } : l))
-    const { ultima } = await correr(M, id, guionCarrusel({ laminas: () => ({ texto: j({ laminas: mala }) }) }))
-    expect(ultima.cuerpo).toMatchObject({ estado: 'cerrado', con_desacuerdo: true })
-    expect(fichas(M, id).some((f) => f.gravedad === 'bloquea' && f.donde === 'laminas' && /recorte literal/.test(f.que ?? ''))).toBe(true)
+    await correr(M, id, guionCarrusel({ laminas: () => ({ texto: j({ laminas: mala }) }) }))
+    expect(JSON.stringify(arte(M, id, 'laminas'))).toContain('Hoy todo cambia para siempre')
+    expect(fichas(M, id).some((f) => /«Hoy todo cambia para siempre»/.test(f.que ?? ''))).toBe(true)
   })
   it('la plataforma, el tamaño y las preguntas abiertas que escriba el diseñador se ignoran y se anotan', async () => {
     const { M, id } = await abiertoC()
@@ -203,7 +236,7 @@ describe('SALA 2 · carrusel · punta a punta con modelo simulado', () => {
     expect(JSON.stringify(M.llamadas.renderPedidos[1].slides)).toMatch(/Hoy cambia tu mañana/)
     expect(ultima.cuerpo).toMatchObject({ estado: 'cerrado', con_desacuerdo: false })
   })
-  it('si el autor cambia el texto y el diseñador NO vuelve a recortar (laminas obsoletas), se le pide una vez y luego queda ficha que bloquea', async () => {
+  it('si el autor cambia el texto y el diseñador NO vuelve a armar las láminas (quitar rejas, fila 4): no hay otra vuelta; queda ficha de sugerencia con el texto que ya no está en el del autor', async () => {
     const { M, id } = await abiertoC()
     const nuevaCopia = { ...COPIA, texto_base: TEXTO_BASE.replace('Hoy cambia el plato del día', 'Hoy cambia tu mañana') }
     const { ultima, tareas } = await correr(M, id, guionCarrusel({
@@ -211,8 +244,9 @@ describe('SALA 2 · carrusel · punta a punta con modelo simulado', () => {
       corrige_texto: (_n, t) => ({ texto: j({ respuestas: [{ id: /\[(jefe-[^\]]+)\]/.exec(t)![1], estado: 'tomada', razon: 'ok' }], copia: nuevaCopia }) }),
       ajusta_laminas: () => ({ texto: j({ respuestas: [] }) }), // no recorta de nuevo
     }))
-    expect(tareas['ajusta_laminas']).toHaveLength(2)
-    expect(ultima.cuerpo).toMatchObject({ con_desacuerdo: true })
+    expect(tareas['ajusta_laminas']).toHaveLength(1)
+    expect(ultima.cuerpo).toMatchObject({ estado: 'cerrado' })
+    expect(fichas(M, id).some((f) => f.gravedad === 'sugerencia' && f.estado === 'abierta' && /no es un trozo exacto del texto del autor/.test(f.que ?? ''))).toBe(true)
   })
   it('un hallazgo de láminas lo atiende el diseñador, sin tocar el texto del autor', async () => {
     const { M, id } = await abiertoC()
@@ -222,6 +256,16 @@ describe('SALA 2 · carrusel · punta a punta con modelo simulado', () => {
     }))
     expect(pasos).toContain('corrige_laminas'); expect(pasos).not.toContain('corrige_texto')
     expect(M.llamadas.render).toBe(2)
+  })
+  it('🔴 RESPUESTA Lenovo · si al corregir las láminas el diseñador se pasa del largo de la plantilla, también se le devuelve para acortar', async () => {
+    const { M, id } = await abiertoC()
+    const larga = [{ ...LAMINAS[1], headline: 'x'.repeat(95) }, LAMINAS[0], ...LAMINAS.slice(2)]
+    const { tareas } = await correr(M, id, guionCarrusel({
+      revision_jefe: () => ({ texto: j({ fichas: [{ que: 'el orden confunde', donde: 'laminas', contra_que: 'brief', gravedad: 'bloquea', propuesta: 'reordenar' }] }) }),
+      corrige_laminas: (n, t) => ({ texto: j({ respuestas: [{ id: /\[(jefe-[^\]]+)\]/.exec(t)![1], estado: 'tomada', razon: 'ok' }], laminas: n === 1 ? larga : [LAMINAS[1], LAMINAS[0], ...LAMINAS.slice(2)] }) }),
+    }))
+    expect(tareas['corrige_laminas']).toHaveLength(2)
+    expect(tareas['corrige_laminas'][1]).toContain('- lámina 1, «headline»: tiene 95 caracteres y el tope es 90 (sobran 5)')
   })
   it('🔴 el revisor externo recibe la pieza (texto + TODAS las láminas dibujadas) y el cerebro del cliente, con UNA pregunta abierta; sin reglas y sin nada del jefe ni del diseñador', async () => {
     const { M, id } = await abiertoC()
@@ -422,7 +466,8 @@ describe('SALA 2 · más reglas del orquestador de láminas', () => {
     const { pedidos } = await correr(M, id, guionCarrusel())
     const d = pedidos['laminas'][0] as { agent_name: string; extra: { indicacion_oficina: string }; max_budget_usd: number; dry_run: boolean; task: string }
     expect(d).toMatchObject({ agent_name: 'carousel-designer', max_budget_usd: 0.5, dry_run: true })
-    expect(d.extra.indicacion_oficina).toMatch(/recortas LITERALMENTE/)
+    expect(d.extra.indicacion_oficina).toMatch(/ajustas palabras sin cambiar lo que dice ni agregar datos, cifras o promesas/)
+    expect(d.extra.indicacion_oficina).not.toMatch(/LITERALMENTE/)
     expect(d.task).toMatch(/Texto base:/); expect(d.task).toMatch(/instagram-feed/)
   })
 })

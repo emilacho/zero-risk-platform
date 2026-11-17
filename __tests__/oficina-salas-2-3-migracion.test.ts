@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest'
 import { CARRUSEL_IG_V1 } from '../src/lib/oficina/plantillas/carrusel-ig-v1'
 import { KIT_HISTORIAS } from '../src/lib/oficina/plantillas/kit-historias'
 import { validarPlantilla } from '../src/lib/oficina/plantilla'
+import { limitesAntesDe1215 } from '../src/lib/oficina/__tests__/indicacion-antes-de-0800'
 
 const RAIZ = process.cwd()
 const MIGRACION = 'supabase/migrations/202610100200_oficina_salas_2_3.sql'
@@ -45,7 +46,7 @@ describe('la migración: SOLO datos, repetible y sin encender nada', () => {
     for (const [tipo, p] of [['carrusel_ig_v1', CARRUSEL_IG_V1], ['kit_historias', KIT_HISTORIAS]] as const) {
       const f = filaDe(s, tipo)
       expect(validarPlantilla({ ...p, pasos: bloque(f, 'pasos') as never, indicaciones: bloque(f, 'ind') as never, limites: bloque(f, 'lim') as never })).toEqual([])
-      expect(bloque(f, 'lim')).toEqual(JSON.parse(JSON.stringify(p.limites))) // los límites no cambiaron
+      expect(bloque(f, 'lim')).toEqual(limitesAntesDe1215(p.limites)) // los límites no cambiaron
     }
   })
   it('las tres especificaciones de entrega nacen SIN VERIFICAR (los límites avisan, no bloquean) y no inventan formatos que el motor no produce', () => {

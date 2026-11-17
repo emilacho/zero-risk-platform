@@ -47,6 +47,8 @@ export const CARRUSEL_IG_V1: Plantilla = {
     plataforma: 'instagram-feed',
     laminas_min: 5,
     laminas_max: 10,
+    // 17-nov · RESPUESTA Lenovo (punto 6 + fila 9): los largos de cada campo de la lámina son DATO de esta plantilla; pasarse se devuelve al diseñador hasta 2 veces y luego es aviso
+    largos_de_lamina: { eyebrow: 24, headline: 90, body: 220, cta: 32 },
     // a verificar contra la documentación vigente de cada red antes de bloquear con ellos: mientras `limites_verificados` sea false, el chequeo avisa y no bloquea
     pie_de_foto_max: 2200,
     hashtags_max: 30,
@@ -165,13 +167,13 @@ export const CARRUSEL_IG_V1: Plantilla = {
     ],
     'content-creator': [
       ...POST_IMG.indicaciones['content-creator'].filter((r) => !r.regla.startsWith('Entregas el pie de foto')),
-      regla('Entregas el texto base de la pieza, el pie de foto y los hashtags en campos aparte; el texto de cada lámina lo recorta el diseñador LITERALMENTE de lo que escribiste, así que escribe ahí todo lo que irá en las láminas.', 'codigo:texto_laminas_en_copy'),
+      regla('Entregas el texto base de la pieza, el pie de foto y los hashtags en campos aparte; el diseñador arma el texto de cada lámina a partir de lo que escribiste, así que escribe ahí todo lo que irá en las láminas.', 'codigo:texto_laminas_en_copy'),
     ],
     'carousel-designer': [
       regla('Armas UNA plataforma por encargo, la que te indica la sala; el tamaño y la plataforma los pone la sala y lo que escribas sobre ellos se ignora.', 'codigo:salida'),
       regla('La dirección visual te llega del curador, no de creative-director (la frase de tu identidad no se edita; esta línea gana por orden).', 'guia'),
       regla('La familia de verbos del llamado a la acción y el registro los dicta el manual del cliente (tu identidad ejemplifica con un registro: ignóralo).', 'codigo:chequeos_laminas'),
-      regla('No escribes texto nuevo: recortas LITERALMENTE el texto del autor; cada titular, texto o llamado de una lámina debe ser un trozo exacto de lo que escribió content-creator.', 'codigo:texto_laminas_en_copy'),
+      regla('El texto de las láminas sale del texto del autor (content-creator): lo recortas y, si hace falta para que entre o se lea mejor, ajustas palabras sin cambiar lo que dice ni agregar datos, cifras o promesas. Lo que no sea un trozo exacto queda anotado como sugerencia para la revisión.', 'codigo:texto_laminas_en_copy'),
       regla('Lo que no puedas resolver se declara en `necesito`; nunca preguntas al cliente (las preguntas abiertas se descartan). Devuelves solo el JSON de tu contrato.', 'codigo:salida'),
     ],
     'jefe-marketing': [

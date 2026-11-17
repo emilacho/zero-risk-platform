@@ -37,7 +37,7 @@ import { construirTarea, contextoDelRevisor, CONTRATOS_EN_TEXTO, type ContextoDe
 import { seccionDeAutorevision, validarAutorevision, type NotaVista } from '../notas-del-dueno/autorevision'
 import type { Cambios, Encargo, FuentesCompletas, Puertos, TurnoRegistrado } from './puertos'
 import { chequearPrompts, citasExisten, derivarDecision, elegirVersion, veredictoDeImagenes, type ObservacionDeImagen, type ReglasDeImagen } from './reglas-de-imagen'
-import { DESCARTAR_EYEBROW_LARGO, procesarSalida, proyectarAlEsquema } from './salida'
+import { DESCARTAR_EYEBROW_LARGO, procesarSalida, proyectarAlEsquema, CORRECCIONES_DE_LARGO } from './salida'
 import { agotaLasVersiones, alcanzaElTechoDeCortadas, MAX_VERSIONES_CORTADAS, MAX_VERSIONES_POR_BRIEF, rastroDe, type RastroDeEncargo } from './reapertura'
 import { conCausaDelFallo, type OrigenDeCorteNuestro } from './causa-del-fallo'
 import { decidirPuerta, TARGET_STEP_PRODUCIR, validarSobre, type Sobre } from './sobre'
@@ -847,8 +847,9 @@ async function recibirAutorevision(P: Puertos, enc: Encargo, pl: Plantilla, sig:
     await aplicarResultado(P, encLimpio, pl, sig.indice, { ...resultado, costo_usd: c.costo }, { vuelta: sig.vuelta, turno: { ...c.turnoBase, estado: 'hecho', ...(error ? { error } : {}) }, gastos: c.gastoModelo, n: c.n })
     return avanzar(P, enc.id)
   }
-  const reintentarOSeguir = async (mensaje: string): Promise<Respuesta> => {
-    if (!quedaReintento) { await registrar(false, [{ sin_cambios: mensaje.slice(0, 300) }]); return seguir({ costo_usd: c.costo }, `auto-revisión sin efecto: ${mensaje.slice(0, 300)}`) }
+  // RESPUESTA Lenovo (punto 6 + fila 9): una lámina corregida que solo pasa el largo de la plantilla se devuelve hasta CORRECCIONES_DE_LARGO veces; después la corrección SE QUEDA con la sugerencia del largo
+  const reintentarOSeguir = async (mensaje: string, largo = false): Promise<Respuesta> => {
+    if (!(largo ? intentos < CORRECCIONES_DE_LARGO : quedaReintento)) { await registrar(false, [{ sin_cambios: mensaje.slice(0, 300) }]); return seguir({ costo_usd: c.costo }, `auto-revisión sin efecto: ${mensaje.slice(0, 300)}`) }
     const nuevo: Estado = { ...e, vueltas: { ...e.vueltas, [`fmt:${paso.clave}`]: intentos + 1 }, pasos_ejecutados: e.pasos_ejecutados + 1, gasto_usd: +(e.gasto_usd + c.costo).toFixed(6) }
     await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: nuevo, gasto_usd: nuevo.gasto_usd, turno: { ...c.turnoBase, n: c.n, estado: 'hecho', error: `auto-revisión: reintento (${mensaje.slice(0, 200)})` }, ...(c.gastoModelo.length ? { gastos: c.gastoModelo } : {}) })
     const { agente: ag, pedido } = armarPedido(enc, pl, paso, nuevo, `Tu respuesta no sirvió: ${mensaje}. Devuelve solo el JSON del contrato.`)
@@ -868,8 +869,8 @@ async function recibirAutorevision(P: Puertos, enc: Encargo, pl: Plantilla, sig:
   // algo chocó: la entrega corregida pasa el MISMO esquema y los MISMOS validadores del paso que revisa, como si él la hubiera entregado
   const f = procesarSalida(JSON.stringify(v.corregida), revisado.salida.esquema, 0, 0)
   if (!f.ok) return reintentarOSeguir(`la pieza corregida no cumple el formato de «${revisado.salida_artefacto}»: ${f.accion === 'falla_visible' ? f.errores.slice(0, 4).join(' · ') : f.mensaje_de_error}`)
-  const proc: { res?: ResultadoDePaso; fallido?: string; reintentar?: string } = familiaDeLaminas(pl) ? procesarValorL(revisado, f.valor, enc, e, pl, 0) : procesarValor(revisado, f.valor, enc, e, pl)
-  if (proc.reintentar !== undefined) return reintentarOSeguir(proc.reintentar)
+  const proc: { res?: ResultadoDePaso; fallido?: string; reintentar?: string } = familiaDeLaminas(pl) ? procesarValorL(revisado, f.valor, enc, e, pl, intentos) : procesarValor(revisado, f.valor, enc, e, pl)
+  if (proc.reintentar !== undefined) return reintentarOSeguir(proc.reintentar, 'largo' in proc && proc.largo === true)
   if (proc.fallido || !proc.res) return reintentarOSeguir(proc.fallido ?? 'la pieza corregida no pasó los validadores del paso')
   // las fichas que el validador vuelve a levantar (mismo id que las de la primera vez) no se duplican
   const conocidas = new Set(e.fichas.map((x) => x.id))
