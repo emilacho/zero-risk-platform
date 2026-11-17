@@ -6,7 +6,7 @@
  */
 import type { Consulta, Fila } from '../consulta'
 import { origenDeLaFoto, type OrigenDeFoto, ORIGENES_DE_FOTO } from './fotos-pendientes'
-import { gustoDe, nivelDeOrigen, ordenarPorEmbudo } from '../../portero-alimenta/embudo'
+import { gustoDe, nivelDeOrigen, ordenarPorEmbudo, rolEfectivo } from '../../portero-alimenta/embudo'
 
 export const TIPOS_DE_VIDEO = ['reel', 'video_feed', 'historia', 'anuncio', 'video_web'] as const
 export type TipoDeVideoVisto = (typeof TIPOS_DE_VIDEO)[number]
@@ -44,7 +44,7 @@ export type RespuestaDeVideos =
   | { ok: true; cliente: string | null; alcance: 'cliente' | 'bodega'; total: number; devueltos: number; por_tipo: Record<string, number>; por_origen: Record<OrigenDeFoto, number>; sin_descargar: number; videos: VideoVisto[]; archivo_firmado: boolean; modelos_llamados: 0; costo_usd: 0 }
   | { ok: false; error: string; detalle: string }
 
-const COLUMNAS_DE_VIDEO = ['id', 'owner_role', 'handle', 'post_id', 'tipo', 'estado', 'path', 'bytes', 'duracion_s', 'caption', 'posted_at', 'post_url', 'transcripcion', 'metricas', 'created_at', 'archivo_borrado_en']
+const COLUMNAS_DE_VIDEO = ['id', 'owner_role', 'papel', 'handle', 'post_id', 'tipo', 'estado', 'path', 'bytes', 'duracion_s', 'caption', 'posted_at', 'post_url', 'transcripcion', 'metricas', 'created_at', 'archivo_borrado_en']
 const COLUMNAS_DE_CAPTURA = ['id', 'video_id', 'posicion', 'url', 'etiquetada_en', 'que_muestra', 'producto_visto', 'texto_visible', 'estado', 'created_at']
 
 /** lo que trata el video: las etiquetas de sus capturas, sin repetir; sin etiquetas, el pie */
@@ -82,10 +82,10 @@ export async function listarVideos(consulta: Consulta, p: PedidoDeVideos, firmar
   const sin_descargar = v.filas.length - todos.length
   const por_tipo: Record<string, number> = {}
   const por_origen = Object.fromEntries(ORIGENES_DE_FOTO.map((o) => [o, 0])) as Record<OrigenDeFoto, number>
-  for (const f of todos) { por_tipo[String(f.tipo)] = (por_tipo[String(f.tipo)] ?? 0) + 1; por_origen[origenDeLaFoto(f.owner_role)]++ }
-  const nivelDe = (f: Fila) => (bodega ? 'mundo' : nivelDeOrigen(origenDeLaFoto(f.owner_role), txt(deTendencia.get(String(f.id))?.nivel)))
+  for (const f of todos) { por_tipo[String(f.tipo)] = (por_tipo[String(f.tipo)] ?? 0) + 1; por_origen[origenDeLaFoto(rolEfectivo(f))]++ }
+  const nivelDe = (f: Fila) => (bodega ? 'mundo' : nivelDeOrigen(origenDeLaFoto(rolEfectivo(f)), txt(deTendencia.get(String(f.id))?.nivel)))
   const gustoDelVideo = (f: Fila) => { const m = f.metricas && typeof f.metricas === 'object' ? (f.metricas as Record<string, unknown>) : {}; return gustoDe(m) ?? gustoDe(deTendencia.get(String(f.id)) ?? null) }
-  const elegidos = ordenarPorEmbudo(todos.filter((f) => (!p.origen || origenDeLaFoto(f.owner_role) === p.origen) && (!p.tipo || f.tipo === p.tipo)), (f) => ({ nivel: nivelDe(f), gusto: gustoDelVideo(f) })).slice(0, limite)
+  const elegidos = ordenarPorEmbudo(todos.filter((f) => (!p.origen || origenDeLaFoto(rolEfectivo(f)) === p.origen) && (!p.tipo || f.tipo === p.tipo)), (f) => ({ nivel: nivelDe(f), gusto: gustoDelVideo(f) })).slice(0, limite)
   const videos: VideoVisto[] = []
   for (const f of elegidos) {
     const caps = capturasDe.get(String(f.id)) ?? []
@@ -96,7 +96,7 @@ export async function listarVideos(consulta: Consulta, p: PedidoDeVideos, firmar
     const m = f.metricas && typeof f.metricas === 'object' ? (f.metricas as Record<string, unknown>) : {}
     const metricas: Record<string, number> = {}
     for (const [k, x] of Object.entries(m)) { const n = numero(x); if (n !== null) metricas[k] = n }
-    videos.push({ video_id: String(f.id), tipo: String(f.tipo), origen: origenDeLaFoto(f.owner_role), nivel: nivelDe(f), gusto: gustoDelVideo(f), cuenta: txt(f.handle), publicado_en: txt(f.posted_at), copiado_en: txt(f.created_at), duracion_s: numero(f.duracion_s), bytes: numero(f.bytes), pie, metricas, post_url: txt(f.post_url), de_que_trata: deQueTrataElVideo(caps, pie), transcripcion: txt(f.transcripcion), archivo_url, archivo_borrado_en: txt(f.archivo_borrado_en), capturas: caps })
+    videos.push({ video_id: String(f.id), tipo: String(f.tipo), origen: origenDeLaFoto(rolEfectivo(f)), nivel: nivelDe(f), gusto: gustoDelVideo(f), cuenta: txt(f.handle), publicado_en: txt(f.posted_at), copiado_en: txt(f.created_at), duracion_s: numero(f.duracion_s), bytes: numero(f.bytes), pie, metricas, post_url: txt(f.post_url), de_que_trata: deQueTrataElVideo(caps, pie), transcripcion: txt(f.transcripcion), archivo_url, archivo_borrado_en: txt(f.archivo_borrado_en), capturas: caps })
   }
   return { ok: true, cliente, alcance: bodega ? 'bodega' : 'cliente', total: todos.length, devueltos: videos.length, por_tipo, por_origen, sin_descargar, videos, archivo_firmado: !!firmar, modelos_llamados: 0, costo_usd: 0 }
 }

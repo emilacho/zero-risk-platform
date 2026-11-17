@@ -18,6 +18,17 @@ export function nivelDeOrigen(origen: string, nivelDeTendencia?: string | null):
   return origen === 'competencia' || origen === 'competidor' ? 'directa' : 'competencia'
 }
 
+/**
+ * EL ROL QUE VALE de una foto o video (17-nov · ENCARGO 3 de Cerebro, fase B): el `papel` que escribió el cerebro manda sobre el `owner_role` con que se guardó.
+ *   propio → propio · competidor → competidor · mercado y referencia → referencia (una cuenta hallada por un hashtag NO es competencia). Sin papel → el owner_role.
+ */
+export function rolEfectivo(f: { owner_role?: unknown; papel?: unknown } | null | undefined): string {
+  const p = f?.papel
+  if (p === 'propio' || p === 'competidor') return p
+  if (p === 'mercado' || p === 'referencia') return 'referencia'
+  return String(f?.owner_role ?? '')
+}
+
 /** una ficha por su alcance: del cliente → propio · de un competidor → directa · del mercado (rubro y zona) → competencia · del país o sus ciudades (búsquedas, eventos) → país · sin alcance → propio */
 export function nivelDeFicha(alcance: unknown): NivelDeAfuera {
   if (alcance === 'competidor') return 'directa'

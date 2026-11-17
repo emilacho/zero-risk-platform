@@ -17,6 +17,7 @@ import { avisoDeProvisionales } from '../manual/lectura'
 import { validacionDelManual, versionVigente } from '../manual/campos-del-manual'
 import { AVISO_DE_HORARIO_CERRADA, AVISO_DE_HORARIO_POR_ABRIR, estadoDeLasSedes, esLineaDeHorarioOAtencion } from '../sedes/por-abrir'
 import { esCapturaDeLaWeb, frasePLF } from './portero/procedencia'
+import { rolEfectivo } from '../portero-alimenta/embudo'
 
 export interface Contexto {
   consulta: Consulta
@@ -283,11 +284,11 @@ export function fuenteDeLaCopia(f: Fila): { fuente: string | null; esPublicacion
   return { fuente: null, esPublicacion }
 }
 export async function leerFotos(ctx: Contexto): Promise<Salida> {
-  const r = await leer(ctx, { tabla: 'client_social_images', columnas: ['id', 'owner_role', 'post_id', 'tipo', 'medio', 'estado', 'url', 'caption', 'posted_at', 'post_url', 'producto', 'producto_fuente', 'que_muestra', 'producto_visto', 'created_at', 'handle', 'clase', 'clase_motivo', 'procedencia', 'oferta', 'sede_id', 'lugar_fuente', 'fecha_origen', 'fecha_fuente'], donde: { client_id: ctx.cliente } })
+  const r = await leer(ctx, { tabla: 'client_social_images', columnas: ['id', 'owner_role', 'papel', 'post_id', 'tipo', 'medio', 'estado', 'url', 'caption', 'posted_at', 'post_url', 'producto', 'producto_fuente', 'que_muestra', 'producto_visto', 'created_at', 'handle', 'clase', 'clase_motivo', 'procedencia', 'oferta', 'sede_id', 'lugar_fuente', 'fecha_origen', 'fecha_fuente'], donde: { client_id: ctx.cliente } })
   if (r.error) return fallo(['fotos'], r.error)
   const claves: string[] = []
   const lineas = r.filas.map((f) => {
-    const rol = porRol(f.owner_role)
+    const rol = porRol(rolEfectivo(f))
     const medio = texto(f.medio)
     const esLogo = medio === 'logo' || /logo/.test(String(f.tipo ?? '').toLowerCase())
     const esVideo = !esLogo && (medio === 'reel' || medio === 'video')
