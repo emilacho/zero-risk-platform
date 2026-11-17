@@ -33,6 +33,8 @@ const M2300 = leer('migrations', '202611162300_oficina_video_imagen_clave.sql')
 const M0520 = leer('migrations', '202611170520_oficina_video_reserva_30.sql')
 const tomar = (sql: string, d: string) => JSON.parse(new RegExp(`\\$${d}\\$([\\s\\S]*?)\\$${d}\\$`).exec(sql)![1])
 const json = (x: unknown) => JSON.parse(JSON.stringify(x))
+/** 202611170720 escribió el borrador en 20 (DECISIÓN 04:47); 202611170830 lo bajó a 10 · lo que 0720 escribió = la encendida de hoy con el borrador en 20 */
+const PASOS_0720 = json(VIDEO_MESA_ENCENDIDA.pasos.map((p) => (p.clave === 'borrador_video' ? { ...p, tope_usd: 20 } : p)))
 const sentencias = (sql: string) => sql.split('\n').filter((l) => !l.trimStart().startsWith('--')).join('\n')
 /** las guardas que tienen que ESTAR y estar ANTES del único UPDATE */
 const GUARDAS = [
@@ -49,7 +51,7 @@ describe('la plantilla encendida', () => {
       'pedido', 'video', 'cuadros_video', 'mirar_video', 'chequeos', 'jefatura', 'chequeos_2', 'entrega', 'cierre',
     ])
     const paso = (c: string) => VIDEO_MESA_ENCENDIDA.pasos.find((p) => p.clave === c)!
-    expect(paso('borrador_video').tope_usd).toBe(20)
+    expect(paso('borrador_video').tope_usd).toBe(10)
     expect(paso('video').tope_usd).toBe(TOPE_DEL_PASO_VIDEO_USD)
     expect(paso('aprobar_propuestas')).toEqual(PASO_APROBAR_PROPUESTAS)
     expect(paso('aprobar_propuestas').vuelve_a).toMatchObject({ paso: 'mesa', max: 2 })
@@ -62,7 +64,7 @@ describe('la plantilla encendida', () => {
     expect(planoPorPlanoEncendido(VIDEO_MESA)).toBe(false)
     expect(VIDEO_MESA_ENCENDIDA.limites.video).toMatchObject({ plano_por_plano: true, propuestas: 3, borrador: { resolucion: '480p' }, resolucion: '720p', tope_por_video_usd: 15 })
     expect(resolucionDelBorrador(VIDEO_MESA_ENCENDIDA.limites)).toBe('480p')
-    expect([PROPUESTAS_DE_VIDEO, TOPE_DEL_BORRADOR_DE_VIDEO_USD, TOPE_DE_VIDEO_MESA_USD, RESERVA_POR_VIDEO_USD]).toEqual([3, 20, 45, 30])
+    expect([PROPUESTAS_DE_VIDEO, TOPE_DEL_BORRADOR_DE_VIDEO_USD, TOPE_DE_VIDEO_MESA_USD, RESERVA_POR_VIDEO_USD]).toEqual([3, 10, 45, 30])
     expect(VIDEO_MESA_ENCENDIDA.limites).toMatchObject({ tope_encargo_usd: 45, reserva_por_pieza_usd: 30 })
     // el resto de los límites, idéntico
     const { video: _a, ...restoE } = VIDEO_MESA_ENCENDIDA.limites
@@ -81,7 +83,7 @@ describe('la plantilla encendida', () => {
 
 describe('202611170720 · la migración', () => {
   it('escribe EXACTAMENTE la plantilla encendida del código y exige lo de antes entero', () => {
-    expect(tomar(MIG, 'pasos')).toEqual(json(VIDEO_MESA_ENCENDIDA.pasos))
+    expect(tomar(MIG, 'pasos')).toEqual(PASOS_0720)
     expect(tomar(MIG, 'lim')).toEqual(json(VIDEO_MESA_ENCENDIDA.limites))
     expect(tomar(MIG, 'pasos_antes')).toEqual(tomar(M2300, 'pasos'))
     expect(tomar(MIG, 'lim_antes')).toEqual(tomar(M0520, 'lim'))
@@ -110,7 +112,7 @@ describe('202611170720 · la migración', () => {
     expect(fin).toContain("p->>'clave' = 'aprobar_propuestas'")
   })
   it('la reversa es el espejo: exige lo encendido y devuelve los pasos de 2300 y los límites de 0520', () => {
-    expect(tomar(REV, 'pasos_antes')).toEqual(json(VIDEO_MESA_ENCENDIDA.pasos))
+    expect(tomar(REV, 'pasos_antes')).toEqual(PASOS_0720)
     expect(tomar(REV, 'lim_antes')).toEqual(json(VIDEO_MESA_ENCENDIDA.limites))
     expect(tomar(REV, 'pasos')).toEqual(tomar(M2300, 'pasos'))
     expect(tomar(REV, 'lim')).toEqual(tomar(M0520, 'lim'))
