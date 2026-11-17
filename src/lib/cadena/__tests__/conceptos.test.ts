@@ -230,6 +230,31 @@ describe('piezas sueltas del contrato', () => {
     expect(c2.ideas_descartadas.map((d) => d.motivo)).toEqual(['id duplicado (ya hay otra idea con ese id)'])
     expect(c2.banco.map((i) => [i.id, i.gancho])).toEqual([['C1-I01', 'g']])
   })
+  it('17-nov · C4 (CC7 q15): la corregida cuyo gancho REPITE el de otra idea NO reemplaza: queda la sin gancho con su aviso y la corregida se declara', () => {
+    const md = `## Gran idea  X · y
+## Banco de ideas
+- C1-I01 · ig · reel · a · mensaje: m · gancho: el mismo gancho
+- C1-I02 · ig · reel · b · mensaje: n
+## Integración
+- C1-I02 · ig · reel · b · mensaje: n · gancho: el mismo gancho
+`
+    const c = leerConcepto(md, INS)
+    expect(c.banco.map((i) => [i.id, i.gancho])).toEqual([['C1-I01', 'el mismo gancho'], ['C1-I02', '']])
+    expect(c.avisos).toContain('la idea C1-I02 no trae gancho: entra al banco y la mesa de la pieza lo propone')
+    expect(c.ideas_descartadas.map((d) => d.id)).toEqual(['C1-I02'])
+  })
+  it('17-nov · C4 (CC7 q16): corregida con gancho propio, y DESPUÉS otra idea con ese mismo gancho: la posterior se descarta por «gancho repetido»', () => {
+    const md = `## Gran idea  X · y
+## Banco de ideas
+- C1-I01 · ig · reel · a · mensaje: m
+## Integración
+- C1-I01 · ig · reel · a · mensaje: m · gancho: g nuevo
+- C1-I03 · fb · imagen · c · mensaje: z · gancho: g nuevo
+`
+    const c = leerConcepto(md, INS)
+    expect(c.banco.map((i) => [i.id, i.gancho])).toEqual([['C1-I01', 'g nuevo']])
+    expect(c.ideas_descartadas.map((d) => [d.id, d.motivo])).toEqual([['C1-I03', 'gancho repetido (igual al de C1-I01)']])
+  })
   it('reserva 2 de CC3: viñetas «*», «1.» e id en negrita se leen; una línea con forma de idea que no se reconoce se DECLARA, no desaparece', () => {
     expect(leerIdea('* C1-I05 · ig · reel · a · mensaje: m · gancho: g')?.id).toBe('C1-I05')
     expect(leerIdea('1. C1-I05 · ig · reel · a · mensaje: m · gancho: g')?.id).toBe('C1-I05')
