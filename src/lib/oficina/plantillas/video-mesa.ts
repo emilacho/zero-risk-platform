@@ -10,8 +10,10 @@
  * 11-nov · GO Lenovo 18:56 + 19:44 Zúrich (regla premium: la SEGUNDA filmación tiene que caber): video US$ 15 · encargo US$ 35 (mesa + video + mirada + segundo video, con margen)
  * · lo esperado por pieza para el freno de la campaña US$ 12 (`reserva_por_pieza_usd`, mientras no haya historia). Migración 202611111930 (dato; se baja después).
  */
-import type { Condicion, Plantilla } from '../tipos'
-import { CALIDAD_DE_IMAGEN_CLAVE, ESQUEMA_REVISION_IMAGENES_CLAVE, PASO_IMAGENES_CLAVE, PASO_REVISAR_IMAGENES_CLAVE } from '../video/imagen-clave'
+import type { Condicion, Paso, Plantilla } from '../tipos'
+import { CALIDAD_DE_IMAGEN_CLAVE, ESQUEMA_REVISION_IMAGENES_CLAVE, PASO_IMAGENES_CLAVE, PASO_IMAGENES_CLAVE_FINAL, PASO_REVISAR_IMAGENES_CLAVE } from '../video/imagen-clave'
+import { pasoDelBorradorDeVideo } from '../video/borradores'
+import { FUNCION_APROBAR_PROPUESTAS, ARTEFACTO_APROBACION } from '../video/aprobacion'
 
 // 16-nov · S2-3 (CC2) · 35 → 45: las imágenes clave (≤ 3) y su revisión (0,5) van ANTES del video y también se repiten en la vuelta de la mirada; con 35 la segunda filmación
 //   (regla premium del 11-nov) ya no cabría. 45 ≥ lo gastado al mirar (≈ 22) + volver (≈ 19,6). Necesita GO de Lenovo al aplicar (es dinero); el máximo de la base es 50.
@@ -92,3 +94,39 @@ export const VIDEO_MESA: Plantilla = {
     ],
   },
 }
+
+// ───────────────────────────────────────────────────────── 17-nov · EL ENCENDIDO DEL SPRINT 2 (video)
+// DECISIÓN Lenovo 07:18 · Emilio FIRMÓ el encendido (encender no gasta): plano por plano (camino B) + las propuestas con su borrador en video, en la plantilla VIVA.
+// El orden acordado (S2-4): mesa → imágenes clave de borrador → borrador en video de las propuestas → aprobación del dueño → imágenes clave finales (con la propuesta
+// aprobada) → su revisión → pedido → video… Topes: el encargo sigue en US$ 45, el video en 15; el borrador de las 3 propuestas juntas, US$ 20 (DECISIÓN 04:47).
+// `video_mesa` en `familias_activas` NO entra aquí: se activa con el «dale» de Emilio a la prueba de la semana (gasto). Migración 202611170720 + su reversa.
+/** cuántas propuestas presenta la mesa (DATO · `limites.video.propuestas`) */
+export const PROPUESTAS_DE_VIDEO = 3
+/** lo que se acepta gastar en los borradores en video de TODAS las propuestas juntas, por ronda (DECISIÓN 04:47: US$ 20) */
+export const TOPE_DEL_BORRADOR_DE_VIDEO_USD = 20
+/** la calidad del borrador en video (DATO; la cotización real del 17-nov: US$ 0,1177/s a 480p) */
+export const RESOLUCION_DEL_BORRADOR = '480p'
+/** rondas de cambios del dueño sobre las propuestas antes de que solo quede aprobar */
+export const VUELTAS_DE_LAS_PROPUESTAS = 2
+
+export const PASO_APROBAR_PROPUESTAS: Paso = {
+  clave: FUNCION_APROBAR_PROPUESTAS, tipo: 'codigo', quien: 'sala', funcion: FUNCION_APROBAR_PROPUESTAS, condicion: siempre, entrada: ['mesa'], salida_artefacto: ARTEFACTO_APROBACION, tope_usd: 0,
+  vuelve_a: { paso: 'mesa', max: VUELTAS_DE_LAS_PROPUESTAS, si: { tipo: 'si_artefacto', artefacto: ARTEFACTO_APROBACION, campo: 'vuelve_a_la_mesa', igual: true } },
+}
+
+function encender(base: Plantilla): Plantilla {
+  const ic = base.pasos.find((p) => p.clave === PASO_IMAGENES_CLAVE)!
+  const rev = base.pasos.find((p) => p.clave === PASO_REVISAR_IMAGENES_CLAVE)!
+  const sin = base.pasos.filter((p) => p.clave !== PASO_IMAGENES_CLAVE && p.clave !== PASO_REVISAR_IMAGENES_CLAVE)
+  const i = sin.findIndex((p) => p.clave === 'mesa')
+  const icFinal: Paso = { ...ic, clave: PASO_IMAGENES_CLAVE_FINAL, salida_artefacto: PASO_IMAGENES_CLAVE_FINAL }
+  // la revisión con visión mira las imágenes FINALES (las de la propuesta aprobada), antes de filmar
+  const revFinal: Paso = { ...rev, condicion: { tipo: 'si_artefacto', artefacto: PASO_IMAGENES_CLAVE_FINAL, campo: 'hay_imagenes', igual: true }, entrada: [PASO_IMAGENES_CLAVE_FINAL, 'guion'] }
+  return {
+    ...base,
+    pasos: [...sin.slice(0, i + 1), ic, pasoDelBorradorDeVideo(TOPE_DEL_BORRADOR_DE_VIDEO_USD), PASO_APROBAR_PROPUESTAS, icFinal, revFinal, ...sin.slice(i + 1)],
+    limites: { ...base.limites, video: { ...(base.limites.video as Record<string, unknown>), plano_por_plano: true, propuestas: PROPUESTAS_DE_VIDEO, borrador: { resolucion: RESOLUCION_DEL_BORRADOR } } },
+  }
+}
+/** la plantilla VIVA de `video_mesa` desde el encendido (202611170720): lo que la migración escribe, EXACTO */
+export const VIDEO_MESA_ENCENDIDA: Plantilla = encender(VIDEO_MESA)
