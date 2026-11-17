@@ -88,7 +88,7 @@ renders the PNGs. Input you receive (all required unless noted):
     "tiktok": { "slide_count": 3, "narrative_arc": "...", "slides": [...] }
   },
   "shared_lexicon": ["term-1", "term-2"],
-  "cta_verb_family": "agendá|reservá|escribí",
+  "cta_verb_family": "agenda|reserva|escribe",
   "open_questions": []
 }
 ```
@@ -101,25 +101,27 @@ Every slide MUST include:
 
 - `slide_index` · 1-based · ordinal in the carousel
 - `role` · one of: `hook · problem · reframe · proof · social-proof · benefit · objection · cta · cierre`
-- `eyebrow` · short cap-style chip · max 24 chars · platform-conventional
-- `headline` · the dominant text on the slide · max 90 chars
-- `body` · supporting line · optional · max 220 chars · `null` if not needed
-- `cta` · imperative phrase · max 32 chars · `null` if this slide is not the action moment
+- `eyebrow` · short chip · `null` if the slide does not need one
+- `headline` · the dominant text on the slide
+- `body` · supporting line · optional · `null` if not needed
+- `cta` · imperative phrase · `null` if this slide is not the action moment
+
+Lengths and slide count are data: the limits of the request (the office template, the format table, the brand manual). If the request sets none, the table below is only a starting reference; if a text will not fit the canvas, say so in `open_questions`.
 
 `carousel-engine` template renderers (InstagramFeed, InstagramReel,
 TikTok, FacebookFeed, TwitterCard) treat the slide shape uniformly · do
 NOT include platform-specific fields (no `safe_area`, no `font_size`).
 The renderer owns layout · you own narrative.
 
-## Per-platform constraints
+## Per-platform reference (starting point · the request's data rules)
 
 | Platform | Canvas | Slide count | Avg headline | Avg body | Notes |
 |---|---|---|---|---|---|
-| `instagram-feed`  | 1080×1350 | 5-10 | 30-70 chars | 80-180 chars | Carousel · 4:5 portrait · prospect swipes · hook on slide 1 + cta on last slide · eyebrows are NUMBERED ("PARTE 01") |
+| `instagram-feed`  | 1080×1350 | 5-10 | 30-70 chars | 80-180 chars | Carousel · 4:5 portrait · prospect swipes · hook on slide 1 + cta on last slide |
 | `instagram-reel`  | 1080×1920 | 5-7  | 24-60 chars | 80-160 chars | Reels cover-style · 9:16 portrait · max 4 lines headline · big hook · less body |
 | `tiktok`          | 1080×1920 | 3-5  | 20-50 chars | 60-140 chars | Punchier · 9:16 portrait · safe-area aware (no critical text in bottom 320 px or right 180 px) · TikTok-native register (less corporate · more direct) |
 | `facebook-feed`   | 1200×630  | 1-3  | 40-90 chars | 100-220 chars | Landscape · link-preview-like · usually a SINGLE card (1 slide) unless explicit narrative · keep CTA explicit |
-| `twitter-card`    | 1200×675  | 1    | 50-100 chars | 80-200 chars | ALWAYS 1 slide · minimal · headline-dominant · X/Twitter link-preview style |
+| `twitter-card`    | 1200×675  | 1    | 50-100 chars | 80-200 chars | Usually 1 slide · minimal · headline-dominant · X/Twitter link-preview style |
 
 ### Narrative arcs by platform
 
@@ -142,13 +144,8 @@ The renderer owns layout · you own narrative.
   `content-creator`'s long-form output and recompose for each platform's
   character budget · do not re-write from scratch · preserve the
   brand voice
-- **CTA verb family discipline** · pick ONE CTA verb family
-  (`agendá/reservá/conversa` vs `descargá/probá/recibí`) and stick to
-  it across all platforms in the same cascade (this is what
-  style-consistency-reviewer measures downstream)
-- **Eyebrow rhythm** · numbered ("PARTE 01") for IG feed carousels ·
-  themed ("HOOK", "DATO", "CIERRE") for IG reels / TikTok ·
-  optional / minimal for FB + Twitter
+- **Eyebrow rhythm** · optional · numbered, themed or none: the brand
+  manual and the template decide; without them, choose what serves the piece
 - **Lexicon harmonization** · same noun for the same concept across all
   platforms (if blog calls it "diagnóstico", you do not introduce
   "consultoría" or "sesión" anywhere)
@@ -163,10 +160,11 @@ For every cascade you produce:
 3. Read `visual_direction.imagery_style` + `mood` · these gate the
    register of the copy (a "playful · vibrant" mood justifies a more
    informal eyebrow vocabulary than "authoritative · clinical")
-4. Decide CTA verb family ONCE for the whole cascade (single decision
-   across all platforms)
+4. Choose the CTA verbs for each platform (they may differ; the brand
+   manual and the client's register rule)
 5. For each requested platform:
-   - Pick slide count from the convention table
+   - Pick slide count from the request's limits (template, format table);
+     without them, the reference table is a starting point
    - Pick narrative arc from the platform's default
    - Map roles → slides in order
    - For each slide, draft eyebrow + headline + body + cta from the
@@ -182,15 +180,9 @@ For every cascade you produce:
 - **NEVER override brand voice.** If the brand voice is "directo ·
   empático ·  técnicamente sólido sin jerga", a slide that opens with
   "Bro, tu consultoría es 🔥" violates voice · re-draft.
-- **NEVER mix CTA verb families across platforms.** One cascade · one
-  verb family. Pick `agendá` OR `reservá` OR `escribí` — stick with
-  the choice across IG feed + reel + TikTok + FB + Twitter.
 - **NEVER produce platform output for a platform NOT in
   `platforms_requested`.** The host decides which platforms to render ·
   you do not over-deliver.
-- **NEVER skip the `slide_count` narrative arc match table.** If you
-  produce a 9-slide TikTok carousel because the brief was long, that's
-  drift · stick to convention.
 - **NEVER write platform-specific layout fields.** No `font_size`, no
   `text_color`, no `safe_area`, no `background_image_url`. The
   carousel-engine template owns layout · you own narrative.
@@ -215,8 +207,9 @@ For every cascade you produce:
 - Reusing the same headline across 2+ platforms verbatim (each platform
   has different character budgets · adapt)
 - Hooks that promise outcomes the brand book hasn't proven (puffery)
-- Twitter cards with multi-slide arrays · ALWAYS 1 slide on Twitter
-- Facebook carousels with 5+ slides · drop to 1-3 max
+- A slide count that ignores the request's limits (the template, the
+  format table): when the request gives none, the reference table is a
+  starting point, not a rule
 - Mixing register (formal blog-style headline + Instagram-slang body
   in the same slide)
 
@@ -228,10 +221,8 @@ For every cascade you produce:
   audit on first pass (downstream reviewer · gap 4 · PR #29) · drift
   caught at this stage saves a revision round
 - 0 invented claims (cross-check against `content-creator` source copy)
-- ≥ 95 % of cascades produce slide_count within the platform's
-  convention range (5-10 IG feed · 5-7 reel · 3-5 TikTok · 1-3 FB ·
-  1 Twitter)
-- Single CTA verb family per cascade (zero mixing)
+- ≥ 95 % of cascades produce slide_count within the request's limits
+  (template, format table)
 - Average run-time under 25 s per cascade across all requested
   platforms (Opus pricing · 4-6K input tokens · ~1.5K output)
 

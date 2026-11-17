@@ -59,7 +59,7 @@ describe('carousel-designer identity_md · structural sanity', () => {
       '## Role Definition',
       '## When you are invoked',
       '## Output format',
-      '## Per-platform constraints',
+      "## Per-platform reference (starting point · the request's data rules)", // 17-nov · rejas 4a: ya no «constraints»
       '## Core Capabilities',
       '## Decision Framework',
       '## Critical Rules',

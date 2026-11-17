@@ -67,7 +67,7 @@ writing. Specifically:
   components · pluralizing things the brief didn't say · fabricating
   social proof)
 
-**Copy rules per component type**:
+**Copy reference per component type** (starting point · the landing template and the brand manual rule; if they set lengths or counts, those win):
 
 | Component | Copy contract |
 |---|---|
