@@ -57,7 +57,8 @@ export const FIN_DE_LO_AJENO = '<<<FIN DEL MATERIAL DE TERCEROS>>>'
 export function limpio(v: unknown, max: number): string | null {
   const t = txt(v)
   if (!t) return null
-  const una = t.replace(/[\r\n\t]+/g, ' ').replace(/[#`*_<>|«»"“”]/g, '').replace(/\s{2,}/g, ' ').trim()
+  // CC7 · 1b · NFKC primero: los parecidos de ancho completo («＜», «＞», «＃», dígitos «０９９…») pasan a su forma simple y caen con las reglas de siempre; ‹ › 〈 〉 se quitan también
+  const una = t.normalize('NFKC').replace(/[\r\n\t\u2028\u2029]+/g, ' ').replace(/[#`*_<>|«»"“”‹›〈〉⟨⟩]/g, '').replace(/\s{2,}/g, ' ').trim()
   if (!una) return null
   return una.length > max ? `${una.slice(0, max - 1).trimEnd()}…` : una
 }
@@ -66,7 +67,7 @@ export function limpio(v: unknown, max: number): string | null {
  * teléfonos (7 o más dígitos, con espacios, puntos, guiones o paréntesis), `@cuentas`, direcciones web y la propia cuenta de la referencia se tapan ANTES de limpiar */
 const DOMINIOS = 'com|net|org|ec|pe|co|mx|es|ar|cl|io|app|shop|store|site|online|info|biz|me|tv|us|uk|sa'
 export function taparContactos(v: unknown, cuenta?: unknown): string | null {
-  let t = txt(v)
+  let t = txt(v)?.normalize('NFKC') ?? null
   if (!t) return null
   const c = txt(cuenta)?.replace(/^@/, '')
   if (c && c.length >= 3) t = t.replace(new RegExp(c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), '[cuenta]')
