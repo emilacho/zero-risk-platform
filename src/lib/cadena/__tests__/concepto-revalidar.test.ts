@@ -76,7 +76,7 @@ const LIBRO: Linea[] = [
   { n: 6, de: 'video-editor', tipo: 'aporta', texto: APORTE_QUE_CHOCA },
   { n: 7, de: 'creative-director-mesa', tipo: 'integra', texto: INTEGRACION },
 ]
-const SIN_GRAN_IDEA_PERO_CON_MOTIVO = 'sin_concepto: sin banco de ideas válido (ninguna idea con mensaje y gancho propios)'
+const SIN_GRAN_IDEA_PERO_CON_MOTIVO = 'sin_concepto: sin banco de ideas válido (ninguna idea con mensaje propio)'
 
 const entrega = (version: number, texto: string | null, extra: Record<string, unknown> = {}) => ({ campana_id: CAMP, version, encargo_id: `enc-${version}`, texto, costo_usd: 4.58, motivo: null, ...extra })
 
@@ -109,7 +109,7 @@ describe('la entrega de la mesa de concepto lleva las ideas de los aportes', () 
   it('🔴 caso real 577c6038: con la entrega de ANTES (solo la integración) el lector da el mismo falso rojo que se vio en producción', () => {
     const l = leerConcepto(textoParaLaCadena(libroReal, null), insReal)
     expect(l.estado).toBe('sin_concepto')
-    expect(l.bloqueos).toEqual(['sin banco de ideas válido (ninguna idea con mensaje y gancho propios)'])
+    expect(l.bloqueos).toEqual(['sin banco de ideas válido (ninguna idea con mensaje propio)'])
   })
   it('🔴 caso real 577c6038: con la entrega de HOY el lector encuentra el banco; manda el aporte que cita la dirección (A23) y los choques de id se declaran', () => {
     const texto = textoParaLaCadena(libroReal, null, true)

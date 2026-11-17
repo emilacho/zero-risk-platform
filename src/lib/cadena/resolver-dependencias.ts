@@ -65,7 +65,6 @@ export function resolverDependencias(filas: Fila[], previas: Fila[] = []): Resul
         const a = dep === f.id ? undefined : porId.get(dep)
         if (dep === f.id) { anota(f, `se soltó la dependencia de «${dep}»: una fila no puede depender de sí misma`); cambio = true; continue }
         if (!a) { anota(f, `se soltó la dependencia de «${dep}»: esa fila no existe`); cambio = true; continue }
-        if (a.estado === 'espera_video') { anota(f, `se soltó la dependencia de «${dep}»: es una pieza de video que espera al brazo`); cambio = true; continue }
         if (saleAntes(a, f)) { quedan.push(dep); continue }
         if (a.fecha > f.fecha) { anota(f, `se soltó la dependencia de «${dep}»: sale después (${a.fecha}) que esta fila (${f.fecha})`); cambio = true; continue }
         // mismo día y no sale antes: se intenta ordenar con la hora

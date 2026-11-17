@@ -17,7 +17,6 @@ const REGLAS_BASE = [
   '@REGISTRO@',
   'No inventes datos. Todo dato concreto (precio, medida, horario, dirección, cantidad, reseña) necesita una referencia (`ref`) a un id de la lista de REFERENCIAS; si no hay referencia, no lo escribas: déjalo como pendiente.',
   'No afirmes origen, frescura, porción, trazabilidad ni garantías («recién», «del día», «alcanza para N», «garantizado», «100 %»…) sin una referencia que lo diga.',
-  'No cites reseñas ni testimonios de personas.',
   'No escribas fechas absolutas, ni totales, ni porcentajes de reparto: el sistema los calcula. Tú das semana + día de la semana (1 = lunes … 7 = domingo) + hora (HH:MM).',
   'Un solo formato por pieza, elegido de los formatos permitidos de esa red. Si el formato es de video, igual se planea (el sistema lo marca como en espera).',
 ]
@@ -76,7 +75,7 @@ export function tareaDeEstrategia(p: PedidoDeEstrategia): string {
       ...[lineaDelDiaUno(p.fechaInicio, p.fechaFin, p.diasDeCampana ?? 90, p.diaUnoDelPlan)].filter(Boolean),
       'Cada dependencia lleva `cantidad`: cuántas piezas de `antes` pide la regla antes de la primera de `despues`, como NÚMERO (si el plan dice «tres posts», pon 3; si no dice cuántas, 1).',
       '`tolerancia_frecuencia` dice cuántas piezas por semana y red puede desviarse el calendario de la frecuencia antes de que el sistema lo frene (`feed`, `historias`, `anuncios`; 0 = exacta). Si el plan no dice nada, usa feed 0, historias 1, anuncios 1; si el plan pide más rigor o da más holgura, sigue al plan.',
-      '`fechas_que_importan` es una lista de TIPOS de fechas que le importan a ESTE negocio (feriados locales, temporadas, eventos del sector, fechas comerciales… o ninguna). Lo normal es la lista VACÍA: no inventes tipos «por si acaso». Si declaras uno, di su origen (plan | estrategia | alta) y un motivo concreto.',
+      '`fechas_que_importan` es una lista de TIPOS de fechas que le importan a ESTE negocio (feriados locales, temporadas, eventos del sector, fechas comerciales… o ninguna). No inventes tipos «por si acaso». Si declaras uno, di su origen (plan | estrategia | alta) y un motivo concreto.',
       'Cada fecha que declares lleva su `clase`, y la decides tú razonando sobre lo que ES la fecha (no por las palabras de su nombre): `feriado_publico` si es una fecha del país o de un lugar, igual para todos los negocios de ahí (Navidad, Año Nuevo, un feriado nacional o local); `temporada_del_negocio` si es un tramo propio de ESTE negocio (su temporada alta, su cosecha, el tramo del año en que más vende).',
       '`llave`: la llave estable de esa fecha, en minúsculas y con guiones bajos. Mira la lista LLAVES DE FECHAS QUE YA EXISTEN: si tu fecha es la MISMA que una de la lista (aunque tú la escribirías distinto), usa esa llave y ese ámbito tal cual y pon `llave_nueva` en false. Si en la lista hay dos o más que son la misma fecha escrita de formas distintas, usa la PRIMERA que aparece (la lista va de la usada más recientemente a la menos). Solo si ninguna es la misma, crea una nueva y pon `llave_nueva` en true.',
       'En una `temporada_del_negocio`, `desde` y `hasta` (`YYYY-MM-DD`) son el tramo que dice el PLAN, y `cita_plan` es la frase literal del plan que lo dice. Si el plan no dice cuándo es, deja `desde`, `hasta` y `cita_plan` vacíos: queda pendiente y el sistema consigue la fecha por su vía. Nunca pongas una fecha que el plan no dice. En un `feriado_publico`, `desde` y `hasta` van vacíos: su fecha la verifica el sistema con las fuentes oficiales.',
@@ -180,7 +179,7 @@ export function tareaDeCalendario(p: PedidoDeCalendario): string {
     lineas(reglasComunes(p.ctx.registro, p.ctx.idioma)),
     lineas([
       'Respeta el patrón semanal, los pilares, la frecuencia por red y las alertas de la ESTRATEGIA. Una pieza fija de la estrategia usa su `pieza_fija` y su tema.',
-      'Si una pieza depende de otra (el plan lo pide), pon el id de la antecesora en `depende_de` (formato `s<semana>-d<día>-<slot>`); nunca dependas de una pieza de video.',
+      'Si una pieza depende de otra (el plan lo pide), pon el id de la antecesora en `depende_de` (formato `s<semana>-d<día>-<slot>`).',
       'La antecesora debe salir ANTES: otra fecha anterior, o el mismo día a una hora anterior. Una réplica en otra red el mismo día sale una hora después de la original (pon esa hora); el código ordena las que queden iguales y lo anota.',
       'Cada dato concreto del tema va en `datos` con `dato`, `valor` tal como aparece en la referencia, `clase` (alto = precio, horario, dirección, medida, reseña, cifras; medio = ingredientes/descripciones; bajo = ambiente), `ref`, `nivel` y `opcional`.',
       'Si el tema cita una fecha especial (un feriado, una temporada, una celebración), agrega en `datos` un dato `fecha_especial` cuya `ref` es el `fecha:<id>` de esa fecha en la lista FECHAS ESPECIALES. Si la fecha no está en la lista, no la cites.',

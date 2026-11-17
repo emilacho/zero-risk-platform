@@ -94,9 +94,9 @@ export interface ConceptoLeido {
   como_se_ve_partes?: ComoSeVe
   como_suena: string
   capitulos: CapituloDelConcepto[]
-  /** las ideas VÁLIDAS (con mensaje y gancho propios, id único, no listadas en «Ideas que salen») */
+  /** las ideas VÁLIDAS (con mensaje propio, id único, no listadas en «Ideas que salen»; sin gancho entran con aviso) */
   banco: IdeaDelBanco[]
-  /** las ideas que NO entran al banco y por qué (sin mensaje, sin gancho, repetida, id duplicado): se declaran, no se arreglan */
+  /** las ideas que NO entran al banco y por qué (sin mensaje, repetida, id duplicado): se declaran, no se arreglan */
   ideas_descartadas: Array<{ id: string; motivo: string; linea: string }>
   ideas_que_salen: Array<{ id: string; motivo: string }>
   caminos_descartados: string
@@ -387,6 +387,17 @@ export function leerConcepto(md: string, ins: InsumosDelConcepto): ConceptoLeido
     // reserva 1 de CC3 (31-oct): el duplicado solo cuenta contra una idea que SÍ entró; si la previa fue descartada (p. ej. sin gancho), la corregida se evalúa normal
     const previa = banco.find((b) => b.id === i.id)
     if (previa) {
+      // 17-nov · C4 · la idea entró SIN gancho (con aviso) y llega CORREGIDA con su gancho y el mismo id: la corregida la reemplaza (no es «duplicado»)
+      if (!previa.gancho.trim() && i.gancho.trim() && claveDeTexto(previa.mensaje) === claveDeTexto(i.mensaje)) {
+        const kg2 = claveDeTexto(i.gancho)
+        if (!ganchos.has(kg2)) {
+          banco[banco.indexOf(previa)] = { ...i, capitulo: previa.capitulo }
+          ganchos.set(kg2, i.id)
+          const k = avisos.indexOf(`la idea ${i.id} no trae gancho: entra al banco y la mesa de la pieza lo propone`)
+          if (k >= 0) avisos.splice(k, 1)
+          continue
+        }
+      }
       if (!mismaLinea(previa.linea, i.linea)) ideas_descartadas.push({ id: i.id, motivo: 'id duplicado (ya hay otra idea con ese id)', linea: i.linea })
       continue
     }
@@ -394,7 +405,6 @@ export function leerConcepto(md: string, ins: InsumosDelConcepto): ConceptoLeido
     if (salen.has(i.id)) continue
     const faltas: string[] = []
     if (!i.mensaje.trim()) faltas.push('sin `mensaje:`')
-    if (!i.gancho.trim()) faltas.push('sin `gancho:`')
     if (!i.red) faltas.push('sin red')
     const km = claveDeTexto(i.mensaje)
     const kg = claveDeTexto(i.gancho)
@@ -405,10 +415,12 @@ export function leerConcepto(md: string, ins: InsumosDelConcepto): ConceptoLeido
     ganchos.set(kg, i.id)
     const cap = faseDeCapitulo(capituloDeId(i.id))
     if (cap === null) avisos.push(`la idea ${i.id} apunta a un capítulo que no existe`)
+    // 17-nov · GO «quitar rejas» C4: sin gancho la idea ENTRA al banco con aviso (la mesa de la pieza lo propone); antes se descartaba
+    if (!i.gancho.trim()) avisos.push(`la idea ${i.id} no trae gancho: entra al banco y la mesa de la pieza lo propone`)
     banco.push({ ...i, capitulo: cap })
   }
   for (const l of lineasDeIdeaNoReconocidas(md)) if (!salen.has(l.id)) ideas_descartadas.push({ id: l.id, motivo: 'formato de línea no reconocido (se espera «- C<fase>-I<nn> · red · formato · idea · mensaje: … · gancho: …»)', linea: l.linea })
-  if (!banco.length) bloqueos.push(ideasDelTexto(md).length ? 'sin banco de ideas válido (ninguna idea con mensaje y gancho propios)' : 'sin banco de ideas (ninguna línea `- C<fase>-I<nn> · …`)')
+  if (!banco.length) bloqueos.push(ideasDelTexto(md).length ? 'sin banco de ideas válido (ninguna idea con mensaje propio)' : 'sin banco de ideas (ninguna línea `- C<fase>-I<nn> · …`)')
 
   // ≥ 1 idea por red y capítulo, y el mínimo huecos × semanas
   const banco_parcial: BancoParcial[] = []

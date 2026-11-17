@@ -91,11 +91,11 @@ describe('qué hace con cada caso (sintético)', () => {
     const r = resolverDependencias([fila('a', '2026-10-28', '09:00'), fila('b', '2026-10-26', '09:00', ['a'])])
     expect(r.filas[1].depende_de).toEqual([]); expect(r.filas.map((f) => f.fecha)).toEqual(['2026-10-28', '2026-10-26']); expect(r.filas[1].avisos[0]).toContain('sale después')
   })
-  it('no existe, es ella misma o es un video que espera: se suelta cada una con su motivo', () => {
+  it('no existe o es ella misma: se suelta cada una con su motivo; (17-nov · GO «quitar rejas» C10) un video que espera y sale antes SE QUEDA', () => {
     const r = resolverDependencias([fila('v', '2026-10-25', '09:00', [], { estado: 'espera_video' }), fila('b', '2026-10-26', '09:00', ['v', 'fantasma', 'b'])])
-    expect(r.filas[1].depende_de).toEqual([])
+    expect(r.filas[1].depende_de).toEqual(['v'])
     const t = r.filas[1].avisos.join(' | ')
-    expect(t).toContain('pieza de video'); expect(t).toContain('esa fila no existe'); expect(t).toContain('no puede depender de sí misma')
+    expect(t).not.toContain('pieza de video'); expect(t).toContain('esa fila no existe'); expect(t).toContain('no puede depender de sí misma')
   })
   it('una dependencia buena y una mala en la misma fila: queda la buena', () => {
     const r = resolverDependencias([fila('a', '2026-10-25', '09:00'), fila('b', '2026-10-26', '09:00', ['a', 'fantasma'])])

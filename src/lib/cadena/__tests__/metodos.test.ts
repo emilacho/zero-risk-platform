@@ -280,7 +280,8 @@ describe('firma 2 · lo que dice cada método (lo que la firma pide)', () => {
   })
   it('pieza: nativa por red (nunca copia), gancho de taxonomía cumplido por el cuerpo, enlace según la ficha, carrusel con roles/≈70 %/alt, lista negativa, promesas con referencia', () => {
     const m = METODO_PIEZA_POR_OMISION
-    expect(m).toMatch(/nunca pegues el mismo texto en dos redes/)
+    expect(m).toMatch(/supuesto de partida: no pegues el mismo texto en dos redes/)
+    expect(m).not.toMatch(/nunca pegues/)
     expect(m).toMatch(/pregunta · a contracorriente · cifra · historia · brecha de curiosidad · prueba · punto de vista/)
     expect(m).toMatch(/una brecha de curiosidad que el cuerpo no cierra es un defecto/)
     expect(m).toMatch(/El enlace va donde la ficha de la red diga/)
