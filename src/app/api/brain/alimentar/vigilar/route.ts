@@ -13,6 +13,8 @@ import { avisarAAlertas, apagarFlujoDelPortero } from '@/lib/portero-alimenta/av
 import { rutaVigilar } from '@/lib/portero-alimenta/vigilante'
 import { modoDelEntorno } from '@/lib/portero-alimenta/modo'
 import { umbralesDeAnomaliaDelEntorno } from '@/lib/portero-alimenta/anomalia'
+import { hechosDeLaCorridaDelVigilante, preguntarPorHttp } from '@/lib/portero-alimenta/hechos-preguntas'
+import { baseDeRunSdk } from '@/lib/finanzas/conversa/modelo-run-sdk'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -26,7 +28,10 @@ export async function POST(request: Request) {
   try {
     const db = getSupabaseAdmin() as unknown as Db
     const r = await rutaVigilar({ db, interruptores: interruptoresDelEntorno(), apagar: apagarFlujoDelPortero(), avisar: avisarAAlertas({ db }), umbrales: umbralesDeGastoDelEntorno(), modo: modoDelEntorno().modo, anomalia: umbralesDeAnomaliaDelEntorno() }, cuerpo)
-    return NextResponse.json(r.body, { status: r.status })
+    // 17-nov (ENCARGO 2 de Cerebro): en cada corrida, los HECHOS DEL NEGOCIO de cada cliente revisado y las preguntas de sus huecos. Va DESPUÉS del vigilante y aparte:
+    // nunca cambia lo que el vigilante decidió ni su código de respuesta; si falla, lo dice en su propio campo
+    const hechos = await hechosDeLaCorridaDelVigilante({ db, preguntar: preguntarPorHttp({ base: baseDeRunSdk(process.env), llave: process.env.INTERNAL_API_KEY ?? '' }) }, cuerpo, r.body).catch((e) => ({ error: e instanceof Error ? e.message : String(e) }))
+    return NextResponse.json(hechos ? { ...r.body, hechos_del_negocio: hechos } : r.body, { status: r.status })
   } catch (e) {
     return NextResponse.json({ error: 'vigilante_error', detalle: e instanceof Error ? e.message : String(e) }, { status: 500 })
   }

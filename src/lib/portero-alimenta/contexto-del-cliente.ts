@@ -10,6 +10,7 @@ import { CLASE_DEL_DUENO } from './dueno'
 import { CLASE_DEL_SUPUESTO_ACEPTADO, supuestoDeLaFicha, type SupuestoAceptado } from './supuestos-del-dueno'
 import { esloganDelCliente, REGLA_DEL_ESLOGAN } from '../manual/campos-del-manual'
 import type { Db } from './alimentar'
+import { leerHechosDelNegocio, type LecturaDeHechosDelNegocio } from './hechos-del-negocio'
 
 type Fila = Record<string, unknown>
 const lista = (x: unknown): Fila[] => (Array.isArray(x) ? (x as Fila[]) : [])
@@ -52,6 +53,9 @@ export interface ContextoDelCliente {
   hechos_del_dueno?: HechoDelDueno[]
   /** 06-nov · lo que el dueño ASUMIÓ (supuestos que propuso una oficina): aparte de sus hechos, nunca como dato del dueño */
   supuestos_aceptados_por_el_dueno?: SupuestoAceptado[]
+  /** 17-nov (ENCARGO 2 de Cerebro) · BLOQUE ESENCIAL «Hechos del negocio» por oferta: cada hecho con fuente y fecha; lo que no consta, dicho; si no se pudo leer, lo dice.
+   *  `oficina.hechos` es la forma de la oficina (CC4: {que, valor, donde, desde, fuente}); `hechos` es la forma completa (CC3: oferta, tipo, vigente_desde/hasta, fuente…) */
+  hechos_del_negocio?: LecturaDeHechosDelNegocio
   /** 01-nov · el eslogan que el cliente ya usa, con su fuente y la regla de uso; ausente si no se conoce */
   eslogan?: { texto: string; fuente: string; regla: string }
   resumen_vivo: ResumenVivoAdjunto
@@ -66,9 +70,8 @@ const masNueva = (a: Fila, b: Fila) => ms(b.observado_en) - ms(a.observado_en)
 
 /** lee el resumen vivo entero y los informes vigentes de UN cliente */
 export async function adjuntoDelCliente(db: Db, clientId: string, ahora: Date = new Date()): Promise<ContextoDelCliente> {
-  const eslogan = await esloganVigente(db, clientId)
-  const c = await contextoSinEslogan(db, clientId, ahora)
-  return eslogan ? { eslogan, ...c } : c
+  const [eslogan, c, hechos_del_negocio] = await Promise.all([esloganVigente(db, clientId), contextoSinEslogan(db, clientId, ahora), leerHechosDelNegocio(db, clientId, ahora)])
+  return { ...(eslogan ? { eslogan } : {}), ...c, hechos_del_negocio }
 }
 
 /** del manual vigente; nunca lanza: sin este dato la carpeta viaja igual */
