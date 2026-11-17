@@ -13,7 +13,7 @@ import { claseDe, dibujaLaminas } from './clase'
 import { aUtc, chequeosDeEntrega, cuandoSePublica, leerMedidas, manifiesto, nombreDeArchivo, textoParaCopiar, type ArchivoDeEntrega, type FilaDeFormato } from './entrega'
 import { candidatasFoto, confianzaDeLaFoto } from './fotos'
 import {
-  armarLaminasDeCarrusel, armarLaminasDeKit, chequeosDeLaminas, problemasDeContrato, problemasDeHistoria, problemasDeKit, refsInvalidos, textoFueraDelAutor,
+  armarLaminasDeCarrusel, armarLaminasDeKit, avisosDeContrato, chequeosDeLaminas, problemasDeContrato, problemasDeHistoria, problemasDeKit, refsInvalidos, textoFueraDelAutor,
   type ElementoDeCopyKit, type ElementoDeEstructura, type ImagenDeRef, type Lamina,
 } from './laminas'
 import type { ResultadoDePaso } from './motor'
@@ -331,6 +331,7 @@ function chequeos(pl: Plantilla, e: Estado): SalidaCodigoL {
     fonts_faltantes: arr<string>(render?.fonts_faltantes),
     imagenes_sin_lamina: arr<string>(armado?.sin_lamina), fotos_reusadas: reusadas,
     problemas_de_contrato: problemasContrato,
+    avisos_de_contrato: kit ? [] : avisosDeContrato(laminas, { llamados_max: llamadosMax(pl) }),
     texto_fuera_del_autor: kit || !copiaC ? [] : textoFueraDelAutor(laminas, copiaC),
     problemas_de_armado: arr<string>(armado?.problemas),
     problemas_de_kit: kit ? problemasDeKit(b.elementos, refsConLamina) : [],
@@ -502,11 +503,13 @@ export function procesarValorL(paso: Paso, v: Record<string, unknown>, enc: Enca
   }
 }
 
-function problemasDeLaminas(lam: Lamina[], e: Estado, pl: Plantilla): string[] {
-  const copia = datos(e, 'copy_carrusel') as unknown as { texto_base: string; pie_de_foto: string; llamado?: string } | undefined
-  const fuera = copia ? textoFueraDelAutor(lam, copia).map((x) => `lámina ${x.lamina}: «${x.texto.slice(0, 50)}» (${x.campo}) no es un recorte literal del texto del autor`) : []
-  return [...fuera, ...problemasDeContrato(lam, { laminas_min: Number(pl.limites.laminas_min ?? 1), laminas_max: Number(pl.limites.laminas_max ?? 10) })]
+/** lo que pide otra vuelta al diseñador: solo la cantidad (dato) y los roles. El texto fuera del autor, los largos y los llamados son avisos en las fichas (quitar rejas, filas 4, 9 y 10) */
+function problemasDeLaminas(lam: Lamina[], _e: Estado, pl: Plantilla): string[] {
+  return problemasDeContrato(lam, { laminas_min: Number(pl.limites.laminas_min ?? 1), laminas_max: Number(pl.limites.laminas_max ?? 10) })
 }
+
+/** `llamados_max` de la plantilla, solo si es un número: sin el dato no hay tope de llamados */
+export const llamadosMax = (pl: Pick<Plantilla, 'limites'>): number | undefined => (typeof pl.limites.llamados_max === 'number' ? pl.limites.llamados_max : undefined)
 
 function direccionVisual(v: Record<string, unknown>, b: BaseL, e: Estado, pl: Plantilla, retry: (p: string[]) => ProcesoL | null): ProcesoL {
   const validos = refsValidosDe(b)

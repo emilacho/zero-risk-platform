@@ -118,7 +118,7 @@ describe('la limpieza de forma no inventa ni adivina', () => {
     for (const c of [CONTRATOS_LAMINAS['direccion_imagenes.v1'], CONTRATOS_EN_TEXTO['visual_direction.v1']]) {
       expect(c).toContain('OMITE la clave'); expect(c).toContain('"paleta": ["#RRGGBB"]')
     }
-    expect(CONTRATOS_LAMINAS['copy_kit.v1']).toContain('caracteres CONTADOS'); expect(CONTRATOS_LAMINAS['laminas.v1']).toContain('caracteres CONTADOS')
+    expect(CONTRATOS_LAMINAS['copy_kit.v1']).toContain('caracteres CONTADOS'); expect(CONTRATOS_LAMINAS['laminas.v1']).toContain('(sugerido: hasta 24 caracteres; puede ir vacío)') // carrusel: largos sugeridos (quitar rejas, fila 9)
   })
   it('sin la opción, procesarSalida se comporta exactamente como antes (la jefatura y los demás no cambian)', () => {
     expect(procesarSalida(BRF_0002, 'direccion_imagenes.v1', 1, 1).ok).toBe(false)

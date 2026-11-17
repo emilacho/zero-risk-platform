@@ -1,5 +1,5 @@
 /**
- * LÁMINAS · salas 2 (carrusel) y 3 (historia/estado de WhatsApp) · lo PURO: el contrato de una lámina, «el texto de las láminas es un recorte literal del texto del autor»,
+ * LÁMINAS · salas 2 (carrusel) y 3 (historia/estado de WhatsApp) · lo PURO: el contrato de una lámina, «el texto de las láminas sale del texto del autor» (lo que no es un trozo exacto solo se AVISA desde el 17-nov),
  * armar las láminas que dibuja el brazo, y los chequeos duros (sin modelo). Diseño: docs/DISENO-2026-10-09-oficina-salas-2-3-4.md §2.5, §3.2, §3.5.
  * Agnóstico: ningún texto nombra a un cliente. Las cifras y los límites finos llegan como DATO (plantilla / fuentes del cliente).
  */
@@ -39,19 +39,31 @@ export function textoFueraDelAutor(laminas: Lamina[], copia: Pick<CopiaCarrusel,
 
 // ── contrato de lámina ───────────────────────────────────────────────────────────────
 export interface LimitesDeCantidad { laminas_min: number; laminas_max: number }
-/** problemas del contrato (vacío = cumple): cantidad, topes de caracteres, un solo llamado, roles conocidos. Los topes de caracteres también los impone el esquema; aquí es la segunda llave. */
+/** problemas del contrato que piden otra vuelta (vacío = cumple): la cantidad de láminas (dato de la plantilla) y los roles conocidos */
 export function problemasDeContrato(laminas: Lamina[], cant: LimitesDeCantidad): string[] {
   const p: string[] = []
   if (laminas.length < cant.laminas_min || laminas.length > cant.laminas_max) p.push(`${laminas.length} láminas; el formato pide de ${cant.laminas_min} a ${cant.laminas_max}`)
   laminas.forEach((l, i) => {
-    for (const c of CAMPOS) {
-      const t = l[c]
-      if (typeof t === 'string' && t.length > LIMITES_DE_LAMINA[c]) p.push(`lámina ${i + 1}: «${c}» tiene ${t.length} caracteres y el tope es ${LIMITES_DE_LAMINA[c]}`)
-    }
     if (!(ROLES_DE_LAMINA as readonly string[]).includes(l.rol)) p.push(`lámina ${i + 1}: rol «${l.rol}» desconocido`)
   })
+  return p
+}
+
+/**
+ * 17-nov · quitar rejas (filas 9 y 10 de CC1): lo que solo se AVISA, nunca pide otra vuelta ni bloquea.
+ *  · largo de cada campo por encima del sugerido (`LIMITES_DE_LAMINA`): en el carrusel el dibujo se ajusta;
+ *  · llamados a la acción por encima de `llamados_max`, SOLO si la plantilla lo trae como dato (sin el dato no hay tope: un carrusel de catálogo puede llevar uno por producto).
+ */
+export function avisosDeContrato(laminas: Lamina[], dato: { llamados_max?: number }): string[] {
+  const p: string[] = []
+  laminas.forEach((l, i) => {
+    for (const c of CAMPOS) {
+      const t = l[c]
+      if (typeof t === 'string' && t.length > LIMITES_DE_LAMINA[c]) p.push(`texto muy largo para la lámina (el dibujo baja la letra hasta el piso legible): lámina ${i + 1}: «${c}» tiene ${t.length} caracteres (sugerido: hasta ${LIMITES_DE_LAMINA[c]})`)
+    }
+  })
   const conCta = laminas.filter((l) => typeof l.cta === 'string' && l.cta.trim()).length
-  if (conCta > 1) p.push(`${conCta} láminas con llamado a la acción; solo una`)
+  if (typeof dato.llamados_max === 'number' && Number.isFinite(dato.llamados_max) && conCta > dato.llamados_max) p.push(`${conCta} láminas con llamado a la acción; la plantilla sugiere hasta ${dato.llamados_max}`)
   return p
 }
 
@@ -152,6 +164,8 @@ export interface ContextoDeChequeoLaminas {
   /** fotos reales que la sala ya usó dentro de la ventana de reuso */
   fotos_reusadas: string[]
   problemas_de_contrato: string[]
+  /** largos y llamados por encima de lo sugerido: solo aviso (filas 9 y 10 de quitar rejas) */
+  avisos_de_contrato?: string[]
   texto_fuera_del_autor: Array<{ lamina: number; campo: string; texto: string }>
   problemas_de_armado: string[]
   /** kit: elementos del brief sin lámina o láminas sin fecha */
@@ -178,7 +192,9 @@ export function chequeosDeLaminas(c: ContextoDeChequeoLaminas): Ficha[] {
   }
   // 2 · contrato de lámina y recortes literales
   for (const p of c.problemas_de_contrato) nueva('laminas', 'bloquea', p, 'contrato de lámina', 'ajustar las láminas al contrato')
-  for (const x of c.texto_fuera_del_autor) nueva('laminas', 'bloquea', `lámina ${x.lamina}: el campo «${x.campo}» («${x.texto.slice(0, 50)}») no es un recorte literal del texto del autor`, 'un solo autor del texto', 'usar solo texto del autor')
+  for (const p of c.avisos_de_contrato ?? []) nueva('laminas', 'sugerencia', p, 'largos sugeridos de la lámina', 'acortar si no se lee bien')
+  // 17-nov · quitar rejas (fila 4): el diseñador puede ajustar palabras del autor; lo que no es un trozo exacto se anota para la revisión, no detiene la pieza
+  for (const x of c.texto_fuera_del_autor) nueva('laminas', 'sugerencia', `lámina ${x.lamina}: el campo «${x.campo}» («${x.texto.slice(0, 50)}») no es un trozo exacto del texto del autor: revisar que no cambie lo que dice ni agregue datos`, 'el texto sale del autor', 'volver al texto del autor si cambió el sentido')
   for (const p of c.problemas_de_armado) nueva(c.familia === 'kit' ? 'estructura' : 'laminas', 'bloquea', p, 'estructura y texto del mismo kit', 'alinear estructura y texto')
   for (const p of c.problemas_de_kit) nueva('estructura', 'bloquea', p, 'kit de la semana', 'completar el kit')
   // 3 · cifras que nadie le dio al autor

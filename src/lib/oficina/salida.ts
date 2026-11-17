@@ -27,12 +27,12 @@ const IGNORAR_LAMINAS = [...IGNORAR_TAMANO, 'platform', 'plataforma', 'platforms
 
 /** roles de lámina (contrato del diseñador de carruseles) */
 export const ROLES_DE_LAMINA = ['hook', 'problem', 'reframe', 'proof', 'social-proof', 'benefit', 'objection', 'cta', 'cierre'] as const
-/** topes DUROS del formato de una lámina (contrato del diseñador); los límites finos por red viven en `limites` de la plantilla */
+/** largos SUGERIDOS de una lámina (17-nov · quitar rejas, fila 9): pasarse es un aviso, no un rechazo; en el carrusel el dibujo se ajusta. El kit de historias tiene sus topes como dato de la plantilla */
 export const LIMITES_DE_LAMINA = { eyebrow: 24, headline: 90, body: 220, cta: 32 } as const
 
 const lamina: Esq = {
   t: 'obj', req: ['rol', 'headline'], ignorar: IGNORAR_LAMINAS,
-  props: { orden: { t: 'num', min: 1, max: 30 }, rol: { t: 'enum', v: [...ROLES_DE_LAMINA] }, eyebrow: str(0, LIMITES_DE_LAMINA.eyebrow), headline: str(1, LIMITES_DE_LAMINA.headline), body: str(0, LIMITES_DE_LAMINA.body), cta: str(0, LIMITES_DE_LAMINA.cta) },
+  props: { orden: { t: 'num', min: 1, max: 30 }, rol: { t: 'enum', v: [...ROLES_DE_LAMINA] }, eyebrow: str(0), headline: str(1), body: str(0), cta: str(0) },
 }
 const copiaCarrusel: Esq = { t: 'obj', req: ['texto_base', 'pie_de_foto', 'hashtags'], ignorar: IGNORAR_LAMINAS, props: { texto_base: str(1, 5000), pie_de_foto: str(1, 3000), hashtags: { t: 'arr', de: str(1, 80), max: 40 }, llamado: str(0, 300), nota_para_quien_publica: str(0, 600), necesito } }
 /** un elemento de texto del kit: SOLO texto (lo escribe `content-creator`, único autor) */
