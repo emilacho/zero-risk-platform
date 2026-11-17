@@ -34,17 +34,17 @@ function porElMotor(pl: Plantilla, rondas: number) {
   }
   throw new Error('no terminó')
 }
-/** el estado que dejó 0830: el encargo en 45 (202611170930 lo subió a 55; esa cuenta vive en `techo-60-y-video-55.test.ts`) */
+/** el estado que dejó 0830: el encargo en 45 (202611170930 lo subió a 58; esa cuenta vive en `techo-60-y-video-58.test.ts`) */
 const EN_45: Plantilla = { ...VIDEO_MESA_ENCENDIDA, limites: { ...VIDEO_MESA_ENCENDIDA.limites, tope_encargo_usd: 45 } }
 const conBorrador = (t: number): Plantilla => ({ ...EN_45, pasos: VIDEO_MESA_ENCENDIDA.pasos.map((p) => (p.clave === 'borrador_video' ? { ...p, tope_usd: t } : p)) })
 const veces = (h: string[], c: string) => h.filter((x) => x === c).length
 
 describe('el borrador reserva 10, por el motor real (peor caso de CC6)', () => {
-  it('🔴 el código: el paso borrador_video reserva 10; el video en 15 (el encargo, 55 desde 0930)', () => {
+  it('🔴 el código: el paso borrador_video reserva 10; el video en 15 (el encargo, 58 desde 0930)', () => {
     expect(TOPE_DEL_BORRADOR_DE_VIDEO_USD).toBe(10)
     expect(VIDEO_MESA_ENCENDIDA.pasos.find((p) => p.clave === 'borrador_video')!.tope_usd).toBe(10)
     expect(VIDEO_MESA_ENCENDIDA.pasos.find((p) => p.clave === 'video')!.tope_usd).toBe(15)
-    expect(VIDEO_MESA_ENCENDIDA.limites.tope_encargo_usd).toBe(55)
+    expect(VIDEO_MESA_ENCENDIDA.limites.tope_encargo_usd).toBe(58)
   })
   it('🔴 0 y 1 ronda de cambios del dueño: entrega con el video (25,71 y 37,37)', () => {
     for (const [r, g] of [[0, 25.71], [1, 37.37]] as const) {

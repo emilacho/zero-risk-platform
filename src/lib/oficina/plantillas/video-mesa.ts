@@ -104,9 +104,9 @@ export const VIDEO_MESA: Plantilla = {
 export const PROPUESTAS_DE_VIDEO = 3
 /** lo que se acepta gastar en los borradores en video de TODAS las propuestas juntas, por ronda (US$ 10 · DECISIÓN Lenovo 17-nov «tope-borrador-video-10»; migración 202611170830) */
 export const TOPE_DEL_BORRADOR_DE_VIDEO_USD = 10
-/** 17-nov · el tope del encargo de video ENCENDIDO: 45 → 55 (202611170930). La cuenta del motor hasta el cierre, en el peor caso con 2 rondas y el video cobrando su tope (15),
- *  gasta 52,08; con 52 se cortaba antes de la entrega (CC6), 53 es el mínimo; 55 deja margen. RESPUESTA Lenovo + regla de Emilio 08:06 (los topes no cortan trabajo a medias) */
-export const TOPE_DEL_ENCARGO_DE_VIDEO_ENCENDIDO_USD = 55
+/** 17-nov · el tope del encargo de video ENCENDIDO: 45 → 58 (202611170930). La cuenta del motor hasta el cierre, en el peor caso con 2 rondas y el video cobrando su tope (15),
+ *  gasta 52,08; con 52 se cortaba antes de la entrega (CC6), 53 es el mínimo; DECISIÓN Lenovo «tope-encargo-video-58»: margen sobre 53 (incluye las correcciones de largo). RESPUESTA Lenovo + regla de Emilio 08:06 (los topes no cortan trabajo a medias) */
+export const TOPE_DEL_ENCARGO_DE_VIDEO_ENCENDIDO_USD = 58
 /** la calidad del borrador en video (DATO; la cotización real del 17-nov: US$ 0,1177/s a 480p) */
 export const RESOLUCION_DEL_BORRADOR = '480p'
 /** rondas de cambios del dueño sobre las propuestas antes de que solo quede aprobar */

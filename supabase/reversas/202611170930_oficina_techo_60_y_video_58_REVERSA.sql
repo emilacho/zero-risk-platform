@@ -8,10 +8,10 @@ BEGIN
   IF EXISTS (SELECT 1 FROM public.oficina_encargos WHERE estado IN ('abierto', 'en_paso')) THEN
     RAISE EXCEPTION '202611170930 REVERSA: hay encargos de la oficina vivos; esperar a que cierren';
   END IF;
-  IF (SELECT limites FROM public.oficina_tipos_de_grupo WHERE familia = 'video_mesa') IS DISTINCT FROM $lim_antes${"margen":50,"tope_encargo_usd":55,"max_rondas":2,"imagenes_generadas_max":0,"reuso_dias":14,"plataforma":"instagram-reel","pie_de_foto_max":2200,"hashtags_max":30,"limites_verificados":false,"formato_por_omision":"9:16","mesa":true,"video":{"resolucion":"720p","segundos_min":8,"segundos_max":15,"tope_por_video_usd":15,"plano_por_plano":true,"propuestas":3,"borrador":{"resolucion":"480p"}},"reserva_por_pieza_usd":30,"imagen_clave":{"borrador":{"quality":"low","size":"1024x1536"},"final":{"quality":"max","size":"1024x1536"}}}$lim_antes$::jsonb THEN
+  IF (SELECT limites FROM public.oficina_tipos_de_grupo WHERE familia = 'video_mesa') IS DISTINCT FROM $lim_antes${"margen":50,"tope_encargo_usd":58,"max_rondas":2,"imagenes_generadas_max":0,"reuso_dias":14,"plataforma":"instagram-reel","pie_de_foto_max":2200,"hashtags_max":30,"limites_verificados":false,"formato_por_omision":"9:16","mesa":true,"video":{"resolucion":"720p","segundos_min":8,"segundos_max":15,"tope_por_video_usd":15,"plano_por_plano":true,"propuestas":3,"borrador":{"resolucion":"480p"}},"reserva_por_pieza_usd":30,"imagen_clave":{"borrador":{"quality":"low","size":"1024x1536"},"final":{"quality":"max","size":"1024x1536"}}}$lim_antes$::jsonb THEN
     RAISE EXCEPTION '202611170930 REVERSA: los límites de video_mesa no son los esperados; no se pisan';
   END IF;
-  IF (SELECT tope_encargo_usd FROM public.oficina_tipos_de_grupo WHERE familia = 'video_mesa') IS DISTINCT FROM 55::numeric THEN
+  IF (SELECT tope_encargo_usd FROM public.oficina_tipos_de_grupo WHERE familia = 'video_mesa') IS DISTINCT FROM 58::numeric THEN
     RAISE EXCEPTION '202611170930 REVERSA: el tope del encargo de video_mesa no es el esperado; no se pisa';
   END IF;
   IF EXISTS (SELECT 1 FROM public.oficina_tipos_de_grupo WHERE familia <> 'video_mesa' AND tope_encargo_usd > 50) THEN

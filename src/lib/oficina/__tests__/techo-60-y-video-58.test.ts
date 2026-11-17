@@ -1,7 +1,7 @@
 /**
- * 202611170930 · techo técnico de la base 50 → 60 + el encargo de video encendido 45 → 55 (CC1 · RESPUESTA Lenovo «check-base-60» · certifica CC6).
+ * 202611170930 · techo técnico de la base 50 → 60 + el encargo de video encendido 45 → 58 (CC1 · RESPUESTA Lenovo «check-base-60» · certifica CC6).
  * La cuenta por el MOTOR REAL HASTA EL CIERRE (lección de CC6: no hasta el paso que uno mira), peor caso de CC6 con el video cobrando su tope (15):
- * mesa 3,6 · imágenes 1 · borrador 7,06 · finales 1 · revisar 0,1 · video 15 · mirar 0,2 · jefatura 1. Con 52 se corta antes de la entrega; 53 es el mínimo; 55 entrega.
+ * mesa 3,6 · imágenes 1 · borrador 7,06 · finales 1 · revisar 0,1 · video 15 · mirar 0,2 · jefatura 1. Con 52 se corta antes de la entrega; 53 es el mínimo; 58 (DECISIÓN Lenovo) entrega.
  */
 import fs from 'node:fs'
 import path from 'node:path'
@@ -13,8 +13,8 @@ import type { Estado, Plantilla } from '../tipos'
 
 const RAIZ = path.resolve(__dirname, '../../../../supabase')
 const leer = (...p: string[]) => fs.readFileSync(path.join(RAIZ, ...p), 'utf8').replace(/\r/g, '')
-const MIG = leer('migrations', '202611170930_oficina_techo_60_y_video_55.sql')
-const REV = leer('reversas', '202611170930_oficina_techo_60_y_video_55_REVERSA.sql')
+const MIG = leer('migrations', '202611170930_oficina_techo_60_y_video_58.sql')
+const REV = leer('reversas', '202611170930_oficina_techo_60_y_video_58_REVERSA.sql')
 const M0720 = leer('migrations', '202611170720_oficina_video_encendido_sprint2.sql')
 const tomar = (sql: string, d: string) => { const a = `$${d}$`; const i = sql.indexOf(a); return JSON.parse(sql.slice(i + a.length, sql.indexOf(a, i + a.length))) }
 const json = (x: unknown) => JSON.parse(JSON.stringify(x))
@@ -37,9 +37,9 @@ function hastaElCierre(tope: number, rondas: number) {
 }
 
 describe('por el motor real, hasta el cierre', () => {
-  it('🔴 con 55, 0 · 1 · 2 rondas llegan a la ENTREGA y al cierre (28,76 · 40,42 · 52,08)', () => {
-    expect(TOPE_DEL_ENCARGO_DE_VIDEO_ENCENDIDO_USD).toBe(55)
-    expect(VIDEO_MESA_ENCENDIDA.limites.tope_encargo_usd).toBe(55)
+  it('🔴 con 58, 0 · 1 · 2 rondas llegan a la ENTREGA y al cierre (28,76 · 40,42 · 52,08)', () => {
+    expect(TOPE_DEL_ENCARGO_DE_VIDEO_ENCENDIDO_USD).toBe(58)
+    expect(VIDEO_MESA_ENCENDIDA.limites.tope_encargo_usd).toBe(58)
     for (const [r, g] of [[0, 28.76], [1, 40.42], [2, 52.08]] as const) {
       const x = hastaElCierre(VIDEO_MESA_ENCENDIDA.limites.tope_encargo_usd, r)
       expect(x.fin.accion, `rondas ${r}`).toBe('fin')
@@ -54,24 +54,24 @@ describe('por el motor real, hasta el cierre', () => {
     expect(c52.hechos).not.toContain('entrega')
     expect(hastaElCierre(53, 2).fin.accion).toBe('fin')
   })
-  it('🔴 el techo de la base sube a 60: un sobre pide hasta 60 y el video (55) cabe', () => {
+  it('🔴 el techo de la base sube a 60: un sobre pide hasta 60 y el video (58) cabe', () => {
     expect(TOPE_MAXIMO_DEL_SOBRE_USD).toBe(60)
     const base = { parte_id: '11111111-1111-4111-8111-111111111111', brief_id: 'b1', dry_run: true }
-    expect(validarSobre({ ...base, tope_usd: 55 }).ok).toBe(true)
+    expect(validarSobre({ ...base, tope_usd: 58 }).ok).toBe(true)
     expect(validarSobre({ ...base, tope_usd: 60.01 }).ok).toBe(false)
     expect(TOPE_DEL_ENCARGO_DE_VIDEO_ENCENDIDO_USD).toBeLessThanOrEqual(TOPE_MAXIMO_DEL_SOBRE_USD)
   })
 })
 
 describe('202611170930 · la migración', () => {
-  it('🔴 límites EXACTOS: antes = 0720; después = el código; solo cambia el tope (45 → 55)', () => {
+  it('🔴 límites EXACTOS: antes = 0720; después = el código; solo cambia el tope (45 → 58)', () => {
     expect(tomar(MIG, 'lim_antes')).toEqual(tomar(M0720, 'lim'))
     expect(tomar(MIG, 'lim')).toEqual(json(VIDEO_MESA_ENCENDIDA.limites))
     const { tope_encargo_usd: a, ...ra } = tomar(MIG, 'lim_antes')
     const { tope_encargo_usd: d, ...rd } = tomar(MIG, 'lim')
-    expect([a, d]).toEqual([45, 55])
+    expect([a, d]).toEqual([45, 58])
     expect(rd).toEqual(ra)
-    expect(sentencias(MIG)).toContain("UPDATE public.oficina_tipos_de_grupo SET tope_encargo_usd = 55, limites = $lim$")
+    expect(sentencias(MIG)).toContain("UPDATE public.oficina_tipos_de_grupo SET tope_encargo_usd = 58, limites = $lim$")
   })
   it('🔴 las dos reglas de la base pasan a (0, 60] = el techo del sobre; guardas ANTES; comprobación después; un solo UPDATE; nada se enciende', () => {
     const s = sentencias(MIG)
@@ -85,7 +85,7 @@ describe('202611170930 · la migración', () => {
     }
     const fin = s.slice(s.indexOf('UPDATE'))
     expect(fin).toContain("LIKE '%<= (60)%'")
-    expect(fin).toContain('IS DISTINCT FROM 55::numeric')
+    expect(fin).toContain('IS DISTINCT FROM 58::numeric')
     expect(s).not.toMatch(/\b(DELETE|TRUNCATE|INSERT)\b|familias_activas|pasos\s*=|activo\s*=/)
   })
   it('la reversa: el video vuelve a 45 (límites de 0720) ANTES de bajar las reglas a 50; la de encargos vuelve NOT VALID (la historia no se toca); se niega si otra plantilla pasa de 50', () => {
