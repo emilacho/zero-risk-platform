@@ -287,3 +287,16 @@ describe('el puerto en proceso de la oficina (CC4 · devolverCorreccion · corre
     expect(await puerto.correccionesDelEncargo('x')).toMatchObject({ status: 500, cuerpo: { ok: false, error: 'sin base' } })
   })
 })
+
+describe('fusionar (🟡 CC6 c6 · una prueba por transición)', () => {
+  it('🔴 tomada con «fusionar»: la fila corregida queda «cancelada» (no «perdio_su_fecha») y la de destino recibe su aviso', async () => {
+    const k = CASOS[0]
+    const al = almacen(k)
+    await corregir(al, k)
+    await reloj(al, k.ahora)
+    expect(await entregar(al, k, V1, `- pieza · fusionar · otra · la misma oferta ya sale ese día\n${R}: tomada`)).toMatchObject({ ok: true, estado: 'aplicada' })
+    expect(filaDe(al, 'pieza').estado).toBe('cancelada')
+    expect(filaDe(al, 'otra').avisos.length).toBeGreaterThan(0)
+    expect(al.correcciones[0]).toMatchObject({ respuesta: 'tomada', version_nueva: { accion: 'fusionar', destino: 'otra' } })
+  })
+})

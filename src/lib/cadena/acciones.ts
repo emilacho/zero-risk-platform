@@ -38,7 +38,8 @@ export const ACCIONES: Record<'campanas' | 'estrategia' | 'calendario' | 'valida
   // 17-nov · Sprint 4 · A entrega 2: el lector de las fichas de hechos por oferta (una vez por campaña, antes del calendario · no es reja)
   fichas: { preparar: fichasPreparar, guardar: (al, c) => fichasGuardar(al, c) },
   // 17-nov · cambio 4 · entrega 2: la jefatura devuelve una corrección a un paso de la cadena (hoja · calendario · banco) · la bandeja lee su estado por encargo
-  correcciones: { recibir: correccionRecibir, del_encargo: (al, c) => correccionesDelEncargo(al, c) },
+  // la ruta llama con 3 argumentos: el 4.º (`enProceso`) solo lo pasa el puerto de la oficina (sugerencia CC6)
+  correcciones: { recibir: (al, c, ahora) => correccionRecibir(al, c, ahora), del_encargo: (al, c) => correccionesDelEncargo(al, c) },
   estrategia: { preparar: estrategiaPreparar, guardar: estrategiaGuardar, pasar: (al, c) => estrategiaPasar(al, c) },
   calendario: { preparar: calendarioPreparar, guardar: calendarioGuardar, siguiente: calendarioSiguiente, pasar: (al, c) => calendarioPasar(al, c) },
   validar: { validar: validarSinEscribir },

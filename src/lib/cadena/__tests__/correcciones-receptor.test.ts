@@ -274,7 +274,8 @@ describe('6 · regla dura sin tomar: FRENA y deja UNA alarma (RESPUESTA-LENOVO 3
     const b = almacen()
     await recibir(b, pedido({ dura: true }))
     await repartirCorrecciones(b, AHORA, { calendario: abre })
-    await guardarRespuesta(b, 'f-7:calendario', leerRespuestaDelCreador('RESPUESTA A LA JEFATURA C1: tomada', true), mas(5))
+    // tomada con la fila movida (el calendario siempre deja su acción): reemplazada, no frenada → sin alarma
+    await guardarRespuesta(b, 'f-7:calendario', leerRespuestaDelCreador('RESPUESTA A LA JEFATURA C1: tomada', true), mas(5), { accion: 'reubicar' })
     expect([...a.alarmasEnviadas, ...b.alarmasEnviadas]).toEqual([])
   })
   it('el texto de la alarma', () => {
