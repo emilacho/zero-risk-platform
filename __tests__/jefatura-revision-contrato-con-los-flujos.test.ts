@@ -8,6 +8,7 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { procesarSalidaDeRevision } from '../src/lib/jefatura/revision/formatos'
 import { correr, puertosDePrueba, sobre } from './_helpers/jefatura-revision'
+import { entregaDe } from '../src/lib/jefatura/revision/orquestador'
 
 process.env.N8N_WEBHOOK_BASE = 'https://n8n.invalid/webhook' // el n8n «propio» de estas pruebas (la ruta y los flujos de J4 usan la misma lista de destinos)
 const DIR = resolve(__dirname, '..', 'scripts', 'worker-staging', 'jefatura')
@@ -164,11 +165,13 @@ describe('lo que entrega el orquestador al CERRAR lo lee el nodo ③ de J4 (entr
   it('el resultado se dice también en el idioma de la sala (`resultado_para_la_sala`)', async () => {
     const { P } = puertosDePrueba()
     const mapa: Record<string, string> = {}
-    for (const [sim, esperado] of [[{ fichas: 'bloquea', toma: 'nada' }, 'con_desacuerdo'], [{ gpt: 'falla_red' }, 'sin_segunda_mirada'], [{ tope: 'exceso', fichas: 'bloquea' }, 'cerrado_por_tope'], [{ fichas: 'bloquea', productor: 'muerto' }, 'fallido']] as const) {
+    // revisión 2 = A · el criterio no tomado ya no es «con desacuerdo»: cierra limpia (con observaciones); «con_desacuerdo» queda para regla dura o sin dueño (abajo)
+    for (const [sim, esperado] of [[{ fichas: 'bloquea', toma: 'nada' }, 'revision_limpia'], [{ gpt: 'falla_red' }, 'sin_segunda_mirada'], [{ tope: 'exceso', fichas: 'bloquea' }, 'cerrado_por_tope'], [{ fichas: 'bloquea', productor: 'muerto' }, 'fallido']] as const) {
       const c = await correr(P, sobre('pieza', { id: `p-${esperado}`, simulacion: sim as never }))
       mapa[esperado] = String(c.final.cuerpo.resultado_para_la_sala)
     }
-    expect(mapa).toEqual({ con_desacuerdo: 'con_desacuerdo', sin_segunda_mirada: 'sin_segunda_mirada', cerrado_por_tope: 'cerrado_por_tope', fallido: 'fallido' })
+    expect(mapa).toEqual({ revision_limpia: 'revision_limpia', sin_segunda_mirada: 'sin_segunda_mirada', cerrado_por_tope: 'cerrado_por_tope', fallido: 'fallido' })
+    expect(entregaDe({ devolver_a: null, journey_id: null } as never, { resultado: 'con_desacuerdo', marcas: { con_desacuerdo: true, sin_segunda_mirada: false } } as never).resultado_para_la_sala).toBe('con_desacuerdo')
   })
 })
 

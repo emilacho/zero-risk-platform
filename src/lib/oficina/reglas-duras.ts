@@ -23,12 +23,21 @@ export interface CierreDeFichas {
 
 const abierta = (f: Ficha): boolean => f.estado === 'abierta' || f.estado === 'no_tomada'
 
+/**
+ * LA REGLA ÚNICA (RESPUESTA-LENOVO revisión 2 = A · todos los tipos): de lo que bloquea y quedó abierto o no tomado, solo lo DURO cuenta;
+ * lo de criterio es observación declarada. La usan la oficina (aquí abajo) y la jefatura (`jefatura/revision/cierre.ts`, por `revision-comun`).
+ */
+export function duroYCriterio(fichas: ReadonlyArray<Ficha>): { duras: Ficha[]; observaciones: Ficha[] } {
+  const quedan = (fichas ?? []).filter((f) => f.gravedad === 'bloquea' && abierta(f))
+  return { duras: quedan.filter((f) => f.dura === true), observaciones: quedan.filter((f) => f.dura !== true) }
+}
+
 export function fichasAlCierre(e: Pick<Estado, 'fichas'>): CierreDeFichas {
-  const quedan = (e.fichas ?? []).filter((f) => f.gravedad === 'bloquea' && abierta(f))
+  const { duras, observaciones } = duroYCriterio(e.fichas ?? [])
   return {
-    frenan: quedan.filter((f) => f.dura === true && !esDeLaCadena(f)),
-    en_la_cadena: quedan.filter((f) => f.dura === true && esDeLaCadena(f)),
-    observaciones: quedan.filter((f) => f.dura !== true),
+    frenan: duras.filter((f) => !esDeLaCadena(f)),
+    en_la_cadena: duras.filter((f) => esDeLaCadena(f)),
+    observaciones,
   }
 }
 

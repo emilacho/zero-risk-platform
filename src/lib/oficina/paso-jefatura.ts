@@ -160,7 +160,9 @@ export function aplicarSalidaDeJefatura(pl: Pick<Plantilla, 'familia' | 'clase'>
   const incompleta = salida.resultado === 'fallida' || salida.resultado === 'incompleta_por_tope'
   const respuestas = Array.isArray(salida.respuestas) ? salida.respuestas : []
   // 17-nov · GO Lenovo (d) · un desacuerdo que la jefatura no pudo resolver (p. ej. falta en la pieza un dato que el brief pide) vuelve UNA vez a la mesa como corrección; solo si sigue, va a la bandeja marcado
-  const crudas = (Array.isArray(salida.desacuerdos) ? salida.desacuerdos : []).map((d) => String(d).trim()).filter(Boolean)
+  // revisión 2 = A · la jefatura ya separa lo de criterio en `observaciones`: la oficina recibe las dos listas y las pasa por SU misma regla (`fichasAlCierre`)
+  const deLaJefatura = [...(Array.isArray(salida.desacuerdos) ? salida.desacuerdos : []), ...(Array.isArray(salida.observaciones) ? salida.observaciones : [])]
+  const crudas = deLaJefatura.map((d) => String(d).trim()).filter(Boolean)
   // cambio 4 · con ficha: lo exacto (código) + el sentido del jefe (cita y destino verificados) se reparten por destino. Sin ficha, `sen` es null y todo sigue como antes
   const sen = o.sentido && o.sentido.ficha.estado === 'con_ficha' && !incompleta ? sentidoDeLaRevision(crudas, o.sentido) : null
   const lineas = sen ? sen.lineas : crudas
@@ -169,7 +171,7 @@ export function aplicarSalidaDeJefatura(pl: Pick<Plantilla, 'familia' | 'clase'>
   const vuelve = lineas.length > 0 && !haciaAtras && o.puedeVolverALaMesa?.(costoDeLaJefatura(salida.costo_usd)) === true
   // fichas de FONDO que siguen sin tomarse: el mismo desacuerdo de siempre (jefe · bloquea · sin tomar); `cerrar` ya sabe contarlas
   //   (si la pieza vuelve a la mesa, el desacuerdo viaja como corrección y NO queda como ficha: la revisión de la vuelta decide)
-  const fichas: Ficha[] = (vuelve ? [] : sen ? lineas : Array.isArray(salida.desacuerdos) ? salida.desacuerdos : []).map((d, i) => {
+  const fichas: Ficha[] = (vuelve ? [] : sen ? lineas : deLaJefatura).map((d, i) => {
     const p = partirDesacuerdo(String(d))
     return { ...fichaNueva(`jefe-${e.pasos_ejecutados}-${i}`, 'jefe', p.donde, 'bloquea', p.que, 'revisión de la jefatura', 'observación de criterio: su creador ya la tuvo en su vuelta; queda declarada y la pieza sigue'), estado: 'no_tomada' as const, razon: 'la jefatura cerró sin que se tomara' }
   })
