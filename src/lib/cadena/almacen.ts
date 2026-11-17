@@ -266,10 +266,16 @@ export interface Almacen {
   encargosDeLaCampana?(campanaId: string): Promise<import('./rehacer-fallidos').EncargoDeLaCampana[]>
   arreglosPublicados?(desde: string): Promise<import('./rehacer-fallidos').LecturaDeArreglos>
   abrirMesaDeFallidos?(sobre: import('./rehacer-fallidos').SobreDeFallidos): Promise<import('./rehacer-fallidos').ResultadoDeAbrirMesaDeFallidos>
+  /** 17-nov · la corrección del banco: abre la mesa de la oficina (el mismo adaptador en proceso que la reubicación; nunca lanza) */
+  abrirMesaDelBanco?(sobre: import('./banco-correcciones').SobreDelBanco): Promise<import('./banco-correcciones').ResultadoDeAbrirMesaDelBanco>
   reabrirFallido?(p: { encargo_id: string; causa: string }): Promise<{ ok: true; encargo_id: string } | { ok: false; motivo: string }>
   // configuración y datos de ajuste
   leerConfig(clave: string): Promise<unknown>
   escribirConfig(clave: string, valor: unknown): Promise<void>
+  /** 17-nov · escritura CONDICIONAL de una clave (puerto banco · observación de CC6): el valor con su sello (la marca de su última escritura); null si la clave no existe */
+  leerConfigConSello?(clave: string): Promise<{ valor: unknown; sello: string } | null>
+  /** escribe SOLO si la clave sigue con ese sello (`null` = solo si no existe). false = otro la cambió: no se escribió nada */
+  escribirConfigSiSello?(clave: string, valor: unknown, sello: string | null): Promise<boolean>
   plazos(): Promise<PlazoCfg[]>
   formatos(): Promise<FormatosPorRed>
   // contexto del cliente (lecturas)

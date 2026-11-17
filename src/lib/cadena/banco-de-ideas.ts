@@ -78,7 +78,9 @@ export function ideaDeReemplazo(banco: IdeaDelBanco[], retirada: IdeaDelBanco, u
 const NOMBRE_DE_CAMPO: Record<string, string> = { idea: 'la idea', mensaje: 'el mensaje', gancho: 'el gancho', protagonista: 'el protagonista' }
 const limpiarCampo = (x: unknown): string | null => (typeof x === 'string' ? x.replace(/\s*[\r\n]+\s*/g, ' ').trim() : null)
 
-interface Contexto { campana_id: string; version: number; autor: string }
+/** a qué versión de la gran idea y en nombre de quién se escribe el banco (la puerta del tablero o el puerto de correcciones lo arman) */
+export interface ContextoDelBanco { campana_id: string; version: number; autor: string }
+type Contexto = ContextoDelBanco
 async function prepararLlamada(al: Almacen, cuerpo: Record<string, unknown>): Promise<{ ok: true; ctx: Contexto } | { ok: false; r: Respuesta }> {
   const id = cadena(cuerpo.campana_id)
   if (!id) return { ok: false, r: fallo(400, 'E-CAMPOS', 'falta campana_id') }
@@ -108,8 +110,8 @@ async function leerVigente(al: Almacen, ctx: Contexto): Promise<{ ok: true; c: C
 }
 
 // ───────────────────────────────────────────────────────── editar (en tanda · todo o nada)
-interface CambioPedido { idea_id: string; campos: Partial<Record<CampoEditable, string>> }
-function leerCambios(x: unknown): { ok: true; cambios: CambioPedido[] } | { ok: false; r: Respuesta } {
+export interface CambioPedido { idea_id: string; campos: Partial<Record<CampoEditable, string>> }
+export function leerCambios(x: unknown): { ok: true; cambios: CambioPedido[] } | { ok: false; r: Respuesta } {
   if (!Array.isArray(x) || x.length === 0) return { ok: false, r: fallo(400, 'E-CAMBIOS', 'faltan los cambios: una lista de { idea_id, campos }') }
   if (x.length > MAXIMO_DE_CAMBIOS_POR_TANDA) return { ok: false, r: fallo(400, 'E-CAMBIOS', `demasiados cambios en una tanda (máximo ${MAXIMO_DE_CAMBIOS_POR_TANDA})`) }
   const vistos = new Set<string>()
@@ -140,6 +142,14 @@ export async function bancoEditar(al: Almacen, cuerpo: Record<string, unknown>, 
   if (!p.ok) return p.r
   const lc = leerCambios(cuerpo.cambios)
   if (!lc.ok) return lc.r
+  return editarEnElBanco(al, p.ctx, lc.cambios, ahora)
+}
+
+/** 17-nov · el NÚCLEO de editar (sin la puerta): lo usan el tablero y, con su propia puerta, el puerto de correcciones de la jefatura (`banco-correcciones.ts`) */
+/** `esperadas` (solo el puerto de correcciones): la `linea` que cada idea debe tener AL ESCRIBIR; si otra edición la cambió en medio → 409 E-IDEA-CAMBIADA, sin pisar. El tablero no la pasa */
+export async function editarEnElBanco(al: Almacen, ctx: ContextoDelBanco, cambios: readonly CambioPedido[], ahora: string, esperadas?: Readonly<Record<string, string>>): Promise<Respuesta> {
+  const p = { ctx }
+  const lc = { cambios }
   for (let intento = 1; intento <= INTENTOS_DE_ESCRITURA; intento++) {
     const v = await leerVigente(al, p.ctx)
     if (!v.ok) return v.r
@@ -153,6 +163,7 @@ export async function bancoEditar(al: Almacen, cuerpo: Record<string, unknown>, 
         return fallo(404, 'E-IDEA-NO-EXISTE', 'esa idea ya no está en el banco de la gran idea: vuelve a abrirla', { idea_id: cambio.idea_id })
       }
       const actual = v.banco[k]
+      if (esperadas && esperadas[cambio.idea_id] !== undefined && esperadas[cambio.idea_id] !== actual.linea) return fallo(409, 'E-IDEA-CAMBIADA', 'la idea cambió desde que se armó la corrección: no se pisa', { idea_id: cambio.idea_id })
       const distintos = CAMPOS_EDITABLES.filter((c) => cambio.campos[c] !== undefined && cambio.campos[c] !== actual[c])
       if (!distintos.length) continue
       const sinLinea: IdeaDelBanco = { ...actual, ...cambio.campos }
@@ -182,12 +193,20 @@ export async function bancoRetirar(al: Almacen, cuerpo: Record<string, unknown>,
   if (!p.ok) return p.r
   const ideaId = cadena(cuerpo.idea_id)
   if (!ideaId) return fallo(400, 'E-CAMPOS', 'falta idea_id')
+  return retirarDelBanco(al, p.ctx, ideaId, ahora)
+}
+
+/** 17-nov · el NÚCLEO de retirar (sin la puerta): reasigna las filas sin brief y saca la idea; lo usan el tablero y el puerto de correcciones */
+/** `esperada` (solo el puerto de correcciones): la `linea` que la idea debe tener antes de tocar filas Y en cada intento de escritura; si cambió → 409 E-IDEA-CAMBIADA */
+export async function retirarDelBanco(al: Almacen, ctx: ContextoDelBanco, ideaId: string, ahora: string, esperada?: string): Promise<Respuesta> {
+  const p = { ctx }
   const v0 = await leerVigente(al, p.ctx)
   if (!v0.ok) return v0.r
   const enBanco = v0.banco.find((i) => i.id === ideaId) ?? null
   const yaRetirada = v0.retiradas.find((i) => i.id === ideaId) ?? null
   const retirada: IdeaDelBanco | null = enBanco ?? yaRetirada
   if (!retirada) return fallo(404, 'E-IDEA-NO-EXISTE', 'esa idea ya no está en el banco de la gran idea: vuelve a abrirla', { idea_id: ideaId })
+  if (esperada !== undefined && enBanco?.linea !== esperada) return fallo(409, 'E-IDEA-CAMBIADA', 'la idea cambió desde que se armó la corrección: no se pisa', { idea_id: ideaId })
 
   // 1) las filas primero: si algo se corta después, las filas ya apuntan a ideas vivas y repetir el retiro termina de sacar la idea
   const calVersion = await al.ultimaVersionDeCalendario(p.ctx.campana_id)
@@ -215,6 +234,7 @@ export async function bancoRetirar(al: Almacen, cuerpo: Record<string, unknown>,
     if (!v.ok) return v.r
     const k = v.banco.findIndex((i) => i.id === ideaId)
     if (k < 0 && !reasignadas.length) return fallo(409, 'E-IDEA-RETIRADA', 'esa idea ya se retiró del banco', { idea_id: ideaId })
+    if (esperada !== undefined && (k < 0 || v.banco[k].linea !== esperada)) return fallo(409, 'E-IDEA-CAMBIADA', 'la idea cambió desde que se armó la corrección: no se pisa', { idea_id: ideaId, reasignadas })
     const entrada: EntradaDelHistorial = { accion: 'retirar', idea_id: ideaId, version: p.ctx.version, antes: { ...retirada }, despues: null, quien: p.ctx.autor, cuando: ahora, reasignadas, con_brief_sin_tocar }
     const leido: Record<string, unknown> = { ...v.leido, historial_del_banco: [...v.historial, entrada] }
     let md = v.c.texto_md
