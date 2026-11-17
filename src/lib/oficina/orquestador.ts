@@ -17,7 +17,10 @@ import { encajarAProporcion } from './encaje'
 import { aUtc, chequeosDeEntrega, cuandoSePublica, manifiesto, nombreDeArchivo, textoParaCopiar, leerMedidas, type ArchivoDeEntrega } from './entrega'
 import { armarPedidoAlRevisor } from './ciego'
 import type { SalidaDeRevision } from '../jefatura/revision/contrato'
-import { aplicarSalidaDeJefatura, aplicarSinRevisar, costoDeLaJefatura, datosDeLaJefatura, metadataDeLaJefatura, prefijoDeLaBandeja, revisionIncompleta, sobreDeLaRevision } from './paso-jefatura'
+import { aplicarSalidaDeJefatura, aplicarSinRevisar, costoDeLaJefatura, datosDeLaJefatura, llavesYaDevueltas, metadataDeLaJefatura, prefijoDeLaBandeja, reglasDurasNoTomadas, revisionIncompleta, sobreDeLaRevision, type OpcionesDeAplicacion } from './paso-jefatura'
+import { contextoDeLaFicha, fichaDeLaHoja } from './sentido-contra-la-ficha'
+import { chequeosExactos, fichaConCierreVivo } from './exactos-de-la-ficha'
+import { fechaDeLaFila } from './piezas-por-publicar'
 import { previueloDeLaminas } from './identidad-visual'
 import { armarPedidoL, contextoDeRevisorL, decisionDeReImagenL, ejecutarCodigoL, familiaDeLaminas, procesarValorL, resumenDeCierreL, saltoL, sinLecturaDeMirarL } from './orquestador-laminas'
 import { armarPedidoV, cabeLaVuelta, contextoDeRevisorV, costoDeVolver, ejecutarCodigoV, quedaVueltaDelPaso, enviarVideo, familiaDeVideo, procesarValorV, resumenDeCierreV, sinLecturaDeMirarV, sinLecturaDeRevisarImagenesClaveV } from './orquestador-video'
@@ -236,12 +239,14 @@ export async function avanzar(P: Puertos, encargoId: string): Promise<Respuesta>
       }
       if (paso.tipo === 'jefatura') {
         // J8a · la pieza ya pasó los chequeos duros: se abre UNA revisión en la jefatura y se espera su cierre
-        const material = familiaDeLaminas(pl) ? contextoDeRevisorL(pl, e) : familiaDeVideo(pl) ? contextoDeRevisorV(pl, e) : contextoDelRevisor(contexto(e))
+        const material = materialDeLaRevision(pl, e)
         // 01-nov · un revisor nunca tiene menos contexto que quien escribe; si el puerto falla, se dice y la revisión sigue
         const carpeta = P.carpetaParaRevisar ? await P.carpetaParaRevisar(String(enc.client_id)).catch((x: unknown) => [{ titulo: 'La carpeta del cliente', funcion: 'lo que el negocio sabe', texto: `(no se pudo leer: ${x instanceof Error ? x.message : String(x)}. No lo tomes como que no existe.)` }]) : []
         // 17-nov · coherencia con los hechos: el bloque de Cerebro (o el aviso de que no lo hay) va SIEMPRE como un documento más del revisor
         const hechos = contextoDeHechos(P.hechosDelNegocio ? await P.hechosDelNegocio(String(enc.client_id)).catch((x: unknown) => ({ no_se_pudo_leer: x instanceof Error ? x.message : String(x) })) : null)
-        const sobre = sobreDeLaRevision(enc, pl, e, { pieza: material.pieza, imagenes: material.imagenes, contexto: [...material.contexto, ...carpeta, hechos] })
+        // cambio 4 · la ficha de la oferta, tal cual la trae la hoja: SOLO si la hay (sin ficha el pedido queda como antes)
+        const ficha = contextoDeLaFicha(fichaDeLaHoja(briefDe(e)?.texto))
+        const sobre = sobreDeLaRevision(enc, pl, e, { pieza: material.pieza, imagenes: material.imagenes, contexto: [...material.contexto, ...carpeta, hechos, ...(ficha ? [ficha] : [])] })
         const ap = P.jefatura ? await P.jefatura(sobre) : ({ estado: 'error', motivo: 'el puerto de la jefatura no está configurado' } as const)
         if (ap.estado === 'esperando') {
           const n = turnoDe(e)
@@ -250,7 +255,7 @@ export async function avanzar(P: Puertos, encargoId: string): Promise<Respuesta>
           return r(200, { accion: 'esperar_jefatura', turno: { n, paso: paso.clave, tipo: 'jefatura', dispatch_key }, revision_id: ap.revision_id })
         }
         if (ap.estado !== 'cerrada') await P.avisar({ canal: 'alertas', encargo_id: enc.id, texto: `⚠️ La jefatura no revisó la pieza · ${enc.brief_id}: ${ap.motivo}; sigue a la bandeja marcada «sin revisar»`, dry_run: enc.dry_run })
-        const res = ap.estado === 'cerrada' ? aplicarSalidaDeJefatura(pl, e, ap.salida, { reImagen: reImagenDe(pl, e), puedeVolverALaMesa: puedeVolverALaMesa(pl, paso, e) }) : aplicarSinRevisar(ap.motivo)
+        const res = ap.estado === 'cerrada' ? aplicarSalidaDeJefatura(pl, e, ap.salida, { reImagen: reImagenDe(pl, e), puedeVolverALaMesa: puedeVolverALaMesa(pl, paso, e), sentido: await sentidoDe(P, enc, e, material.pieza) }) : aplicarSinRevisar(ap.motivo)
         enc = await aplicar(P, enc, pl, sig.indice, res, { vuelta: sig.vuelta, turno: { paso: paso.clave, tipo: 'jefatura', agente: null, dispatch_key: null, cost_usd: res.costo_usd } })
         continue
       }
@@ -286,6 +291,27 @@ const reImagenDe = (pl: Plantilla, e: Estado) => (tomada: { razon: string } | nu
  * 17-nov · GO Lenovo (d) · ¿la pieza puede volver a la mesa desde el paso `jefatura`? Solo si la plantilla lo declara (`vuelve_a` a la mesa), le queda la vuelta y cabe en el tope
  * contando lo que costó ESTA revisión (la vuelta repite la mesa y lo que sigue, incluida otra revisión). Sin `vuelve_a`, nunca (la pieza va a la bandeja como siempre).
  */
+/** lo que ve el revisor de la jefatura (la misma función para abrir la revisión y para aplicar lo que vuelve) */
+function materialDeLaRevision(pl: Plantilla, e: Estado) {
+  return familiaDeLaminas(pl) ? contextoDeRevisorL(pl, e) : familiaDeVideo(pl) ? contextoDeRevisorV(pl, e) : contextoDelRevisor(contexto(e))
+}
+/** la hoja de la pieza (el brief leído); un encargo sin ella no tiene ficha */
+const briefDe = (e: Estado): BriefLeido | null => (datos(e, 'encargo') as unknown as Partial<Base> | undefined)?.brief ?? null
+/** cambio 4 · lo que la aplicación necesita para el sentido: la ficha de la hoja, la pieza, la fila (la del calendario o, si no viaja, el brief, que es su id) y lo ya devuelto */
+async function sentidoDe(P: Pick<Puertos, 'hechosPorOferta'>, enc: Pick<Encargo, 'id' | 'brief_id' | 'sala_ref' | 'client_id'>, e: Estado, textoDeLaPieza: string): Promise<OpcionesDeAplicacion['sentido']> {
+  const fila = (enc.sala_ref?.fila as { id?: unknown } | undefined)?.id
+  // firma de Emilio · si la revisión anterior mandó correcciones a la mesa, esta revisión lee lo que respondió el creador (la mesa guardó sus líneas al cerrar)
+  const enviadas = datosDeLaJefatura(e)?.sentido?.enviadas ?? []
+  const lineas = datos(e, 'mesa')?.respuestas_a_la_jefatura
+  const previas = enviadas.length ? { enviadas, lineasDeRespuesta: Array.isArray(lineas) ? lineas.filter((l): l is string => typeof l === 'string') : [] } : null
+  // D1 · un cierre que el cerebro registró DESPUÉS de armar la hoja también frena (solo lectura de los hechos vivos; si no se puede, vale el de la hoja y se declara)
+  const deLaHoja = fichaDeLaHoja(briefDe(e)?.texto)
+  const conHechos = deLaHoja.estado === 'con_ficha' && deLaHoja.oferta && !deLaHoja.cierre
+  const hechos = conHechos && P.hechosPorOferta ? await P.hechosPorOferta(String(enc.client_id)).catch(() => null) : null
+  const vivo = fichaConCierreVivo(deLaHoja, hechos, fechaDeLaFila(enc.sala_ref))
+  return { ficha: vivo.ficha, declarado: vivo.declarado, textoDeLaPieza, filaId: typeof fila === 'string' && fila ? fila : enc.brief_id || null, encargoId: enc.id, yaDevueltas: llavesYaDevueltas(e), exactos: chequeosExactos, previas }
+}
+
 export function puedeVolverALaMesa(pl: Plantilla, paso: Paso, e: Estado): ((costo: number) => boolean) | undefined {
   if (paso.vuelve_a?.paso !== 'mesa' || !quedaVueltaDelPaso(paso, e)) return undefined
   return (costo) => cabeLaVuelta(pl, { ...e, gasto_usd: e.gasto_usd + costo }, costoDeVolver(pl, paso))
@@ -304,7 +330,7 @@ export async function recibirJefatura(P: Puertos, encargoId: string, salida: Sal
   const sig = siguientePaso(enc.estado_del_motor, pl)
   if (sig.accion !== 'ejecutar' || sig.paso.tipo !== 'jefatura') return r(409, { error: 'sin_paso_pendiente' })
   const e = enc.estado_del_motor
-  await aplicar(P, enc, pl, sig.indice, aplicarSalidaDeJefatura(pl, e, salida, { reImagen: reImagenDe(pl, e), puedeVolverALaMesa: puedeVolverALaMesa(pl, sig.paso, e) }), { vuelta: sig.vuelta, turno: { paso: sig.paso.clave, tipo: 'jefatura', agente: null, dispatch_key: abierto.dispatch_key, cost_usd: costoDeLaJefatura(salida.costo_usd) } })
+  await aplicar(P, enc, pl, sig.indice, aplicarSalidaDeJefatura(pl, e, salida, { reImagen: reImagenDe(pl, e), puedeVolverALaMesa: puedeVolverALaMesa(pl, sig.paso, e), sentido: await sentidoDe(P, enc, e, materialDeLaRevision(pl, e).pieza) }), { vuelta: sig.vuelta, turno: { paso: sig.paso.clave, tipo: 'jefatura', agente: null, dispatch_key: abierto.dispatch_key, cost_usd: costoDeLaJefatura(salida.costo_usd) } })
   return avanzar(P, enc.id)
 }
 
@@ -1053,8 +1079,10 @@ export async function cerrar(P: Puertos, enc: Encargo, pl: Plantilla, parcial: b
   const b = datos(e, 'encargo') ? base(e) : null
   const generada = lam ? lam.generada : fin?.origen === 'generada'
   let output_id: string | null = null, hitl_id: string | null = null
+  // RESPUESTA-LENOVO 17-nov punto 3 · una regla dura que sigue rota tras la vuelta FRENA: la pieza no va a la salida ni a la bandeja (nadie la aprueba encima) y sale UNA alarma con el motivo
+  const frenoDuro = reglasDurasNoTomadas(e)
   const desacuerdos = [...abiertasQueBloquean.map((f) => `${f.donde}: ${f.que ?? ''}`), ...(revisionIncompleta(e) ? [datosDeLaJefatura(e)?.sin_revisar ? 'revisión: sin revisar (la jefatura no abrió o no contestó)' : `revisión: incompleta (${datosDeLaJefatura(e)?.resultado})`] : [])]
-  if (!enc.dry_run && (pz || lam) && b) {
+  if (!enc.dry_run && (pz || lam) && b && !frenoDuro.length) {
     // la opinión libre del revisor externo viaja con la pieza, rotulada como OPINIÓN (y lo que el autor decidió con ella)
     const opinion = opinionExterna(e)
     const sinSegunda = datos(e, 'fichas_externas')?.sin_revision === true
@@ -1070,6 +1098,10 @@ export async function cerrar(P: Puertos, enc: Encargo, pl: Plantilla, parcial: b
     }
   }
   await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: e, gasto_usd: enc.gasto_usd, estado: estadoFinal, con_desacuerdo: conDesacuerdo, imagen_generada: generada, salida_output_id: output_id, hitl_queue_id: hitl_id })
+  if (frenoDuro.length) {
+    await P.avisar({ canal: 'alertas', encargo_id: enc.id, texto: `🛑 Pieza frenada · ${enc.brief_id}: regla dura no tomada tras la vuelta — ${frenoDuro.slice(0, 3).map((h) => `${h.destino}: ${h.que}`).join(' | ')}. No se publica (firma de Emilio: se toma sí o sí).`, dry_run: enc.dry_run })
+    return r(200, { accion: 'cerrado', estado: estadoFinal, con_desacuerdo: true, frenada: true, simulado: enc.dry_run, gasto_usd: e.gasto_usd, output_id: null, hitl_queue_id: null, resultado_para_la_sala: 'con_desacuerdo', sala_ref: enc.sala_ref, desacuerdos })
+  }
   await P.avisar({ canal: 'hilo', encargo_id: enc.id, texto: conDesacuerdo ? `⚠️ Con desacuerdo · ${enc.brief_id}${nota ? ` · ${nota}` : ''}` : `✅ En la bandeja · ${enc.brief_id} · US$ ${e.gasto_usd.toFixed(3)}`, dry_run: enc.dry_run })
   if (conDesacuerdo && !parcial) await P.avisar({ canal: 'alertas', encargo_id: enc.id, texto: `⚠️ Encargo con desacuerdo · ${enc.brief_id}: ${desacuerdos.slice(0, 3).join(' | ')}`, dry_run: enc.dry_run })
   return r(200, {

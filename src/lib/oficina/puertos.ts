@@ -17,6 +17,7 @@ import type { NotaVista } from '../notas-del-dueno/autorevision'
 import type { NotaLeida, PuertoMesa } from './mesa/tipos'
 import type { PerfilParaLectores } from '../perfil-del-publico/lectores'
 import type { FormatosPorRed } from '../cadena/tipos'
+import type { HechoDelNegocioPorOferta } from '../cadena/ficha-de-oferta'
 
 /** lo que el cliente tiene (manual, fotos, datos propios), leído UNA vez al abrir y guardado en el encargo */
 export interface FuentesCompletas {
@@ -198,6 +199,8 @@ export interface Puertos {
   carpetaParaRevisar?(clientId: string): Promise<Array<{ titulo: string; funcion?: string; texto: string }>>
   /** (17-nov · coherencia con los hechos) el bloque de hechos del negocio que define Cerebro. Opcional: sin él (o si falla) la revisión recibe el aviso «no hay bloque» y compara contra el manual y el plan */
   hechosDelNegocio?(clientId: string): Promise<LecturaDeHechos>
+  /** (17-nov · cambio 4 · D1) los hechos del cerebro POR OFERTA con su `tipo` (la misma lectura de la cadena · solo lectura). Sin él (o si falla), D1 usa solo el cierre que trae la hoja y lo declara */
+  hechosPorOferta?(clientId: string): Promise<HechoDelNegocioPorOferta[] | null>
   almacen: Almacen
   /** LA CADENA (opcional): solo la mesa de creativos del calendario la usa. Sin él esa familia falla visible (y la cadena ordena el calendario sin ideas al vencer el plazo) */
   cadena?: PuertoDeLaCadena
