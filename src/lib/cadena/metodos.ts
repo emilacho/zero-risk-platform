@@ -49,7 +49,7 @@ export const METODO_CALENDARIO_POR_OMISION: string = [
     'Hueco por hueco: cada slot del patrón semanal de cada semana es un hueco de una RED en una FASE. Elige para él una idea del BANCO DEL CAPÍTULO de esa fase cuya red coincida y cuyo formato quepa en los formatos permitidos; cita su id en `idea_de_mesa`.',
     'Reparto por pilares: la suma de piezas de la tanda respeta los porcentajes de los pilares de la ESTRATEGIA (±1 pieza). No inventes un pilar.',
     'Mezcla héroe / centro / ayuda (supuesto de partida, no regla): en cada tanda, pocas piezas HÉROE (la gran idea en grande: abrir o cerrar un capítulo), la mayoría CENTRO (las series y lo que el capítulo cuenta), y varias de AYUDA (lo útil para quien ya sigue: cómo, cuándo, dónde). Las de ayuda son las que mejor admiten datos con referencia.',
-    'Dar antes que pedir (supuesto de partida ≈ 3 a 1): por cada pieza que PIDE algo (compra, reserva, visita, mensaje) hay al menos tres que DAN (muestran, cuentan, enseñan). Una pieza que pide va al final de una secuencia, nunca abre un capítulo.',
+    'Dar antes que pedir (supuesto de partida ≈ 3 a 1): por cada pieza que PIDE algo (compra, reserva, visita, mensaje) hay al menos tres que DAN (muestran, cuentan, enseñan). Una pieza que pide suele ir al final de una secuencia y no abrir un capítulo (supuesto de partida).',
     'Orden dentro del capítulo: abre → desarrolla → cierra. Una idea con `serie:` sale en el orden de su serie y en las redes que la serie declara; una serie no se corta a la mitad de la tanda si cabe entera.',
     'Profundidad de cola = lo que el equipo sostiene: no planifiques más piezas que las del patrón. Si un hueco no tiene idea que le sirva, OMÍTELO en `ajustes_al_patron` con su motivo; un hueco vacío declarado vale más que un relleno.',
     'Nada se repite: una idea del banco se usa UNA vez por campaña. Un tema de una tanda anterior puede volver solo como pieza de ayuda y con sus datos re-verificados (misma `ref` vigente o nueva); nunca el mismo tema literal.',
@@ -119,7 +119,7 @@ export const METODO_GANCHO_POR_OMISION: string = [
     'Aviso de contenido sintético: si el video usa medios sintéticos realistas (avatar, voz clonada, generación fotorrealista), incluye la línea de aviso por omisión; si lo omites, di el motivo (estilizado, no realista). Si no hay medios sintéticos, di que no aplica.',
     'Ninguna promesa ni dato sin referencia: precio, horario, «el más…», «gratis», salud, origen. Lo que no tenga `ref` va a `pendientes`, no al guion.',
     'Las frases hechas de la red («esto cambió mi vida», «nadie te lo dice») son folclore: evítalas; el gancho sale del protagonista y de la idea, no de una plantilla.',
-    'Formato: vertical 9:16; la duración objetivo la da el pedido. No afirmes «duración ideal» ni «mejor hora»: no son reglas.',
+    'Formato y duración objetivo: los da el pedido (supuesto de partida: vertical 9:16). No afirmes «duración ideal» ni «mejor hora»: no son reglas.',
   ]),
 ].join('\n')
 
@@ -144,7 +144,7 @@ export function tareaDeGanchoDeVideo(p: PedidoDeGanchoDeVideo): string {
       reglaDeRegistro(p.ctx.registro),
       ...(idioma ? [idioma] : []),
       'No inventes datos. Todo dato concreto (precio, medida, horario, dirección, cantidad, reseña) necesita una referencia (`ref`) a un id de la lista de REFERENCIAS; si no hay referencia, no lo escribas: déjalo como pendiente.',
-      'No cites reseñas ni testimonios de personas. No nombres personas.',
+      'Una reseña o un testimonio solo con la `ref` de su ficha, citado tal cual y atribuido. Una persona real se nombra solo si el manual, el plan o el material la presentan; nunca inventes una.',
       'Una sola voz: el gancho es tuyo. Si recibes estrategia de la red, úsala como contexto; no copies ganchos de ahí.',
     ]),
     ...(p.metodo ? ['', p.metodo] : []),
@@ -241,11 +241,11 @@ export const METODO_PIEZA_POR_OMISION: string = [
   cabecera('social-creative-builder', METODOS_ORIGEN),
   GUIA_NO_FORMATO,
   lineas([
-    'Una idea, N piezas NATIVAS: cada red recibe su forma (hilo o texto corto, tono profesional o conversacional, pie con o sin enlace) según la FICHA DE LA RED si la hay; nunca pegues el mismo texto en dos redes.',
+    'Una idea, N piezas NATIVAS: cada red recibe su forma (hilo o texto corto, tono profesional o conversacional, pie con o sin enlace) según la FICHA DE LA RED si la hay; supuesto de partida: no pegues el mismo texto en dos redes.',
     'Elige el gancho por red de una taxonomía con nombre (pregunta · a contracorriente · cifra · historia · brecha de curiosidad · prueba · punto de vista) y cumple lo que el gancho promete: una brecha de curiosidad que el cuerpo no cierra es un defecto, no un estilo.',
     'El enlace va donde la ficha de la red diga (en el texto o en el primer comentario); si no hay ficha o está vencida, dilo y no inventes la norma.',
     'Carrusel: roles de lámina (gancho · contenido · cierre con la llamada), presupuesto de texto por lámina ≈ 70 % del máximo de la red (supuesto de partida: deja margen al dibujo), zona segura del texto y UNA línea de texto alternativo por lámina.',
-    'Lista negativa: nada de mecánicas de cebo («dale like», «etiqueta a», «comparte para ganar»; una pregunta genuina sí vale), nada de desajuste gancho/cuerpo, nada de etiquetas de relleno (cada hashtag se gana su lugar según la ficha).',
+    'Lista negativa (supuesto de partida; las normas de cada red y la ficha mandan): nada de mecánicas de cebo («dale like», «etiqueta a», «comparte para ganar»; una pregunta genuina sí vale), nada de desajuste gancho/cuerpo, nada de etiquetas de relleno (cada hashtag se gana su lugar según la ficha).',
     'Promesas y datos solo con referencia; lo que no la tenga va a pendientes, no a la pieza. El aviso de contenido pagado o sintético va donde la red lo exige.',
   ]),
 ].join('\n')

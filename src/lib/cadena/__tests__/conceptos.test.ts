@@ -106,7 +106,7 @@ describe('concepto.v1 · lo que bloquea (sin_concepto) y lo que solo se declara'
     expect(sinBanco.bloqueos[0]).toMatch(/sin banco de ideas \(ninguna línea/)
     const sinMensajes = leerConcepto(CONCEPTO.replace(/mensaje: [^·]+·/g, 'mensaje: ·'), INS)
     expect(sinMensajes.estado).toBe('sin_concepto')
-    expect(sinMensajes.bloqueos[0]).toMatch(/ninguna idea con mensaje y gancho propios/)
+    expect(sinMensajes.bloqueos[0]).toMatch(/ninguna idea con mensaje propio/)
     expect(sinMensajes.ideas_descartadas).toHaveLength(6)
     expect(sinMensajes.ideas_descartadas[0].motivo).toBe('sin `mensaje:`')
   })
@@ -118,9 +118,11 @@ describe('concepto.v1 · lo que bloquea (sin_concepto) y lo que solo se declara'
     expect(c.estado).toBe('ok')
     expect(c.avisos.join('\n')).toMatch(/banco parcial: faltan 1 ideas \(ig × F1: 1\)/)
   })
-  it('un gancho repetido también descarta; una idea sin gancho también', () => {
+  it('un gancho repetido descarta; (17-nov · GO «quitar rejas» C4) una idea SIN gancho ENTRA al banco con aviso, no se descarta', () => {
     const c = leerConcepto(CONCEPTO.replace('gancho: hay un día en que no pagas', 'gancho: la segunda vez nunca vienes solo').replace('gancho: mira lo que pasa en dos horas', 'gancho:'), INS)
-    expect(c.ideas_descartadas.map((d) => [d.id, d.motivo])).toEqual([['C1-I02', 'sin `gancho:`'], ['C2-I03', 'gancho repetido (igual al de C2-I01)']])
+    expect(c.ideas_descartadas.map((d) => [d.id, d.motivo])).toEqual([['C2-I03', 'gancho repetido (igual al de C2-I01)']])
+    expect(c.banco.map((i) => i.id)).toContain('C1-I02')
+    expect(c.avisos).toContain('la idea C1-I02 no trae gancho: entra al banco y la mesa de la pieza lo propone')
   })
   it('id duplicado con otra línea ⇒ la segunda se descarta; la MISMA línea repetida (integración + aporte) cuenta una sola vez', () => {
     const repetida = CONCEPTO + '\n## Aporte de content-creator\n- C1-I01 · ig · carrusel · la primera silla: la de la abuela · mensaje: aquí siempre hay una silla para ti · gancho: ¿quién se sentaba aquí antes que tú? · protagonista: la silla · serie: S1 · foto:f-01\n'
@@ -216,15 +218,17 @@ describe('piezas sueltas del contrato', () => {
     expect(leerIdea('- C1-I07 · ig · reel · una idea · mensaje: m · gancho: g')).toMatchObject({ id: 'C1-I07', red: 'ig', formato: 'reel', idea: 'una idea', mensaje: 'm', gancho: 'g', protagonista: '', serie: null, foto: null })
     expect(ideasDelTexto('- C1-I01 · ig · reel · a · mensaje: m · gancho: g\n- C1-I02 · fb · imagen · b · mensaje: n · gancho: h').map((i) => i.id)).toEqual(['C1-I01', 'C1-I02'])
   })
-  it('reserva 1 de CC3: una idea descartada (sin gancho) y luego CORREGIDA con el mismo id entra al banco; la corregida no es «duplicado»', () => {
+  it('reserva 1 de CC3 (con C4 del 17-nov): una idea sin gancho y luego CORREGIDA con el mismo id: la corregida queda en el banco; no es «duplicado»', () => {
     const md = `## Gran idea  X · y\n## Banco de ideas\n- C1-I01 · ig · reel · a · mensaje: m\n## Integración\n- C1-I01 · ig · reel · a · mensaje: m · gancho: g\n`
     const c = leerConcepto(md, INS)
     expect(c.banco.map((i) => [i.id, i.gancho])).toEqual([['C1-I01', 'g']])
-    expect(c.ideas_descartadas).toEqual([expect.objectContaining({ id: 'C1-I01', motivo: 'sin `gancho:`' })])
+    // 17-nov · C4: la versión sin gancho ya no se descarta; la corregida la reemplaza y el aviso se va
+    expect(c.ideas_descartadas).toEqual([])
+    expect(c.avisos.join(' ')).not.toMatch(/C1-I01 no trae gancho/)
     // la misma línea descartada repetida no se declara dos veces; una línea DISTINTA con el id ya en el banco sí es duplicado
     const c2 = leerConcepto(md.replace('- C1-I01 · ig · reel · a · mensaje: m\n', '- C1-I01 · ig · reel · a · mensaje: m\n- C1-I01 · ig · reel · a · mensaje: m\n') + '- C1-I01 · fb · imagen · otra · mensaje: z · gancho: w\n', INS)
-    expect(c2.ideas_descartadas.map((d) => d.motivo)).toEqual(['sin `gancho:`', 'id duplicado (ya hay otra idea con ese id)'])
-    expect(c2.banco).toHaveLength(1)
+    expect(c2.ideas_descartadas.map((d) => d.motivo)).toEqual(['id duplicado (ya hay otra idea con ese id)'])
+    expect(c2.banco.map((i) => [i.id, i.gancho])).toEqual([['C1-I01', 'g']])
   })
   it('reserva 2 de CC3: viñetas «*», «1.» e id en negrita se leen; una línea con forma de idea que no se reconoce se DECLARA, no desaparece', () => {
     expect(leerIdea('* C1-I05 · ig · reel · a · mensaje: m · gancho: g')?.id).toBe('C1-I05')

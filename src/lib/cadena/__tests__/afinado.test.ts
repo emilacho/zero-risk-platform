@@ -45,7 +45,7 @@ describe('afinando lo que las mutaciones dejaron vivo', () => {
     expect(val(t).some((h) => h.chequeo === 'V09' && h.severidad === 'aviso')).toBe(true)
     expect(val(t).some((h) => h.chequeo === 'V09' && h.severidad === 'bloquea')).toBe(false)
   })
-  it('V11: una dependencia a una fila posterior, a una inexistente o a un video que espera, bloquea', () => {
+  it('V11: una dependencia a una fila posterior o a una inexistente bloquea; (17-nov · GO «quitar rejas» C10) a un video que espera, NO', () => {
     const base = insumos(c, bueno)
     const [primera, ...resto] = base.filas
     const ultima = resto[resto.length - 1]
@@ -53,7 +53,7 @@ describe('afinando lo que las mutaciones dejaron vivo', () => {
     expect(dicen(validarTodo({ ...base, filas: [{ ...primera, depende_de: ['no-existe'] }, ...resto] }), 'V11', /no existe/)).toBe(true)
     const video = { ...resto[0], estado: 'espera_video' as const, formato: 'reel' }
     const filas = [primera, video, ...resto.slice(1)].map((f, i) => (i === 3 ? { ...f, depende_de: [video.id] } : f))
-    expect(dicen(validarTodo({ ...base, filas }), 'V11', /video que espera/)).toBe(true)
+    expect(dicen(validarTodo({ ...base, filas }), 'V11', /video/)).toBe(false)
   })
   it('C02: dos valores del mismo nivel para un dato de riesgo alto bloquean la fila', () => {
     const a: Referencia = { id: 's1', client_id: c.clientId, origen: 'sede_datos', fuente: 'sitio', sede: 'centro', texto: 'abre a las 07:00' }
