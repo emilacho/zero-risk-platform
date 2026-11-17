@@ -18,7 +18,7 @@ const ID_PUERTA = 'pBAp5Cx7R39U585i'
 const copia = <T,>(x: T): T => JSON.parse(JSON.stringify(x))
 
 /** un n8n de juguete con lo que hace el de verdad: PUT guarda el BORRADOR; si la puerta está activa, publica… salvo que llame a un sub-flujo sin publicar (400) */
-function n8n(o: { previos?: Flujo[]; borrador?: Flujo; publicado?: Flujo; romper?: (m: string, p: string, veces: number) => boolean; publicaMal?: boolean; putNoPublica?: boolean; activarNoActiva?: boolean } = {}) {
+function n8n(o: { previos?: Flujo[]; borrador?: Flujo; publicado?: Flujo; romper?: (m: string, p: string, veces: number) => boolean; publicaMal?: boolean; putNoPublica?: boolean; activarNoActiva?: boolean; porPagina?: number } = {}) {
   const flujos = new Map<string, Flujo>()
   let v = 0
   const conVersion = (id: string, borrador: Flujo, publicado: Flujo): Flujo => ({ ...copia(borrador), id, active: true, versionId: `v${++v}`, activeVersionId: 'p0', activeVersion: copia({ nodes: publicado.nodes, connections: publicado.connections }) })
@@ -44,7 +44,12 @@ function n8n(o: { previos?: Flujo[]; borrador?: Flujo; publicado?: Flujo; romper
     veces.set(k, (veces.get(k) ?? 0) + 1)
     llamadas.push(k)
     if (o.romper?.(m, p, veces.get(k)!)) throw new Error(`${k} → 500 roto a propósito`)
-    if (m === 'GET' && p.startsWith('/workflows?')) return { data: [...flujos.values()].map((w) => ({ id: w.id, name: w.name, active: w.active, isArchived: !!w.isArchived })), nextCursor: null }
+    if (m === 'GET' && p.startsWith('/workflows?')) {
+      // paginado como el real (hoy 132 flujos en 2 páginas de 100): cursor = índice de inicio
+      const todos = [...flujos.values()].map((w) => ({ id: w.id, name: w.name, active: w.active, isArchived: !!w.isArchived }))
+      const tam = o.porPagina ?? 100, desde = Number(new URLSearchParams(p.split('?')[1]).get('cursor') ?? 0)
+      return { data: todos.slice(desde, desde + tam), nextCursor: desde + tam < todos.length ? String(desde + tam) : null }
+    }
     const id = p.split('/')[2]
     if (m === 'GET') return copia(flujos.get(id)!)
     if (m === 'POST' && p === '/workflows') { const nuevo = { ...copia(body!), id: 'sub-nuevo', active: false }; flujos.set(nuevo.id, nuevo); return copia(nuevo) }
@@ -94,6 +99,16 @@ describe('el motor del alta del lector · guardas sin escritura', () => {
     const r = await correr(sim)
     expect(r.estado).toBe('hecho')
     expect(r.idFichas).toBe('sub-nuevo')
+  })
+  it('🔴 paginación: el sub-flujo previo está en la SEGUNDA página ⇒ se reusa, no se crea un duplicado', async () => {
+    const id = 'k1IZ5eGfGbUeMQR8'
+    const relleno: Flujo[] = Array.from({ length: 3 }, (_, i) => ({ id: `otro-${i}`, name: `otro ${i}`, nodes: [], connections: {}, active: true }))
+    const sim = n8n({ porPagina: 2, previos: [...relleno, { ...copia(SUB), id, active: false }] })
+    const r = await correr(sim)
+    expect(r.estado).toBe('hecho')
+    expect(r.idFichas).toBe(id)
+    expect(sim.escrituras()).not.toContain('POST /workflows')
+    expect(sim.llamadas.filter((l) => l === 'GET /workflows').length).toBeGreaterThanOrEqual(3)
   })
   it('sin --ejecutar: plan, CERO escrituras', async () => {
     const sim = n8n()
@@ -165,6 +180,14 @@ describe('el motor del alta del lector · (e) nunca deja un estado a medias', ()
     expect(huella(sim.puerta())).toBe(huella(ANTES))
     expect(huella(sim.puerta().activeVersion)).toBe(huella(ANTES))
     expect(sim.escrituras().filter((l) => l === `POST /workflows/${ID_PUERTA}/activate`)).toHaveLength(2)
+  })
+  it('🔴 (e) la restauración misma LANZA (el PUT de restaurar cae) ⇒ restaurada === false y «NO LOGRADA», nunca un sí falso', async () => {
+    // 1.er PUT de la puerta (el parche) cae → se restaura; el 2.º PUT (el de restaurar) también cae
+    const sim = n8n({ romper: (m, p) => m === 'PUT' && p.includes(ID_PUERTA) })
+    const r = await correr(sim)
+    expect(r.estado).toBe('fallido')
+    expect(r.restaurada).toBe(false)
+    expect(r.motivo).toMatch(/NO LOGRADA/)
   })
   it('🔴 (e) el PUT de la puerta falla ⇒ fallido, se restaura y queda IGUAL al respaldo', async () => {
     const sim = n8n({ romper: (m, p, n) => m === 'PUT' && p.includes(ID_PUERTA) && n === 1 })
