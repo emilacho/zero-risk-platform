@@ -129,7 +129,7 @@ describe('el almacén REAL (base falsa)', () => {
   it('dos sobres a la vez: el segundo pierde la carrera por el índice único y devuelve la v2 que ganó, sin abrir otra', async () => {
     const real = new DbFalsa().semilla('oficina_encargos', [fila('BRF-0001'), fila('BRF-0001', { version_encargo: 2, estado: 'abierto', id: 'ganadora' })])
     let primera = true
-    const db = { from: (t: string) => { const c = real.from(t); return { select: (cols?: string) => { if (primera && t === 'oficina_encargos') { primera = false; const l = real.tablas['oficina_encargos'].filter((f) => f.version_encargo === 1); return { eq() { return this }, order() { return this }, limit() { return Promise.resolve({ data: l, error: null }) } } } return c.select(cols) }, insert: (f: Record<string, unknown>) => c.insert(f) } } }
+    const db = { from: (t: string) => { const c = real.from(t); return { select: (cols?: string) => { if (primera && t === 'oficina_encargos') { primera = false; const l = real.tablas['oficina_encargos'].filter((f) => f.version_encargo === 1); return { eq() { return this }, in() { return this }, order() { return this }, limit() { return Promise.resolve({ data: l, error: null }) } } } return c.select(cols) }, insert: (f: Record<string, unknown>) => c.insert(f) } } }
     const r = await almacenDeSupabase(db as never).crearEncargo(nuevo())
     expect(r.ok && !r.nuevo && r.encargo.id === 'ganadora' && r.encargo.version_encargo === 2).toBe(true)
     expect(real.tablas['oficina_encargos']).toHaveLength(2)

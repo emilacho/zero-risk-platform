@@ -18,7 +18,7 @@ import { aporteDePrompts, esAporteDePrompts } from './prompts'
 import { idasYVueltas, participacion, pedidosSinContestar, verificarCitas } from './libro'
 import { COTAS, type Accion, type Aporte, type EstadoMesa, type TipoDePieza } from './tipos'
 
-export interface ContextoDeLaMesa { gasto_usd: number; tope_usd: number; hayImagenGenerada: boolean; /** lo que queda por gastar DESPUÉS de la mesa; el calendario no dibuja ni pasa por la jefatura de la pieza: 0 */ reserva_posterior_usd?: number; /** 31-oct · la mesa de concepto: cuántas integraciones mínimas (rondas) antes de dar por buena la pieza; por omisión 1 (las demás mesas) */ rondas_minimas?: number; /** T8 · el tipo de pieza (el video reserva lo del brazo); sin él, carrusel/kit */ tipo?: TipoDePieza }
+export interface ContextoDeLaMesa { gasto_usd: number; tope_usd: number; hayImagenGenerada: boolean; /** lo que queda por gastar DESPUÉS de la mesa; el calendario no dibuja ni pasa por la jefatura de la pieza: 0 */ reserva_posterior_usd?: number; /** 31-oct · la mesa de concepto: cuántas integraciones mínimas (rondas) antes de dar por buena la pieza; por omisión 1 (las demás mesas) */ rondas_minimas?: number; /** T8 · el tipo de pieza (el video reserva lo del brazo); sin él, carrusel/kit */ tipo?: TipoDePieza; /** 17-nov · «creativos en cada paso» · cuántas RONDAS de aportes tiene la mesa (dato `limites.rondas_de_la_mesa`): hechas esas integraciones, los especialistas ya no aportan ni contestan pedidos; la dirección sí cierra (citas, prompts, pregunta del traductor). Sin él, sin límite de rondas (lo de siempre) */ rondas_max?: number }
 
 export const techoDe = (tope: number): number => +(tope * COTAS.TECHO_SOBRE_TOPE).toFixed(6)
 const fallosDe = (libro: Aporte[], agente: string): number => libro.filter((a) => a.tipo === 'nota' && a.de === agente && a.texto.startsWith('turno_fallido')).length
@@ -88,8 +88,11 @@ export function siguienteDeLaMesa(est: EstadoMesa, libro: Aporte[], ctx: Context
     return { accion: 'seguir_a_dibujar', motivo: agotada }
   }
 
+  // 17-nov · la mesa corta: con las rondas hechas, solo la dirección sigue (contesta lo que se le devolvió, integra, se le devuelven citas, el ingeniero escribe los prompts)
+  const rondasHechas = typeof ctx.rondas_max === 'number' && ctx.rondas_max > 0 && libro.filter((a) => a.tipo === 'integra').length >= ctx.rondas_max
+
   // 4 · pedidos sin contestar
-  const pend = pedidosAtendibles(est, libro)
+  const pend = pedidosAtendibles(est, libro).filter((p) => !rondasHechas || p.para === dir.agente)
   const alPortero = porteroNombre ? pend.find((p) => p.para === porteroNombre) : undefined
   if (alPortero) return { accion: 'material', pedido_id: alPortero.id, que: alPortero.texto, para_que: alPortero.texto, de: alPortero.de }
   const aUnCompanero = pend.find((p) => p.para !== porteroNombre)
@@ -101,7 +104,7 @@ export function siguienteDeLaMesa(est: EstadoMesa, libro: Aporte[], ctx: Context
   const integrasHechas = libro.filter((a) => a.tipo === 'integra').length
   const ultInt = ultimaIntegracion(libro)
   const hizo = participacion(libro, ultInt && integrasHechas < rondasMin ? ultInt.n : 0)
-  const faltan = especialistasPertinentes(est.directorio_congelado, est.tipo, ctx.hayImagenGenerada, est.condiciones ?? []).filter((a) => !hizo[a] && fallosDe(libro, a) < COTAS.REINTENTOS_DE_TURNO)
+  const faltan = rondasHechas ? [] : especialistasPertinentes(est.directorio_congelado, est.tipo, ctx.hayImagenGenerada, est.condiciones ?? []).filter((a) => !hizo[a] && fallosDe(libro, a) < COTAS.REINTENTOS_DE_TURNO)
   if (faltan.length) return { accion: 'turno', agente: faltan[0], tipo: 'aportar', responde_a: null, motivo: 'su especialidad es obligatoria en esta pieza' }
 
   // 6 · aportes nuevos desde la última integración → integra la dirección

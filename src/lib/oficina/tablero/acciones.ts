@@ -2,6 +2,7 @@
  * Las acciones del tablero, TRAMO 1 (30-oct): rehacer una pieza que falló, el cliente (editar · nuevo · baja) y la oficina (encender/apagar · tope de gasto).
  * Ciclo del plan (01-nov · tramo 2): plan-cambios · plan-aprobar (en `plan.ts`). (manual-campos es la ruta PATCH /api/manual/{client_id}/campos; pieza-nueva se retiró: las piezas salen solo de la campaña.)
  */
+import { gruposHermanos } from '../mesa/con-mesa'
 import { almacenDeSupabase } from '../../cadena/almacen-supabase'
 import { abrirEncargo } from '../orquestador'
 import { TARGET_STEP_PRODUCIR } from '../sobre'
@@ -51,7 +52,7 @@ export const rehacerPieza: Manejador = async ({ db, puertos }, { cuerpo }) => {
   if (enc.dry_run === true) return rechazo(409, 'es_un_ensayo', 'un ensayo no se rehace desde el tablero', t)
   // GO Lenovo 11-nov 18:30 (decisión 2) · también una pieza CORTADA POR TOPE (no está terminada); la regla de abajo (`decidirReapertura`) ya la acepta con causa declarada
   if (enc.estado !== 'fallido' && enc.estado !== 'cerrado_por_tope') return rechazo(409, 'no_fallo', `solo se rehace una pieza que falló o que se cortó por tope (esta está «${String(enc.estado)}»)`, t)
-  const hermanos = await db.from('oficina_encargos').select('id, version_encargo, dry_run').eq('parte_id', enc.parte_id).eq('brief_id', enc.brief_id).eq('tipo_de_grupo', enc.tipo_de_grupo)
+  const hermanos = await db.from('oficina_encargos').select('id, version_encargo, dry_run').eq('parte_id', enc.parte_id).eq('brief_id', enc.brief_id).in('tipo_de_grupo', gruposHermanos(String(enc.tipo_de_grupo)))
   if (hermanos.error) return rechazo(500, 'oficina_error', hermanos.error.message, t)
   const mayor = ((hermanos.data as Fila[] | null) ?? []).filter((x) => x.dry_run !== true).reduce((m, x) => Math.max(m, Number(x.version_encargo)), 0)
   if (Number(enc.version_encargo) < mayor) return rechazo(409, 'hay_una_version_mas_nueva', 'esa pieza ya tiene una versión más nueva: rehaz la última', t)

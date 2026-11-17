@@ -47,7 +47,15 @@ function deLaMesa(v1: Plantilla, tipo: 'carrusel_mesa' | 'kit_mesa'): Plantilla 
 }
 
 export const CARRUSEL_MESA: Plantilla = deLaMesa(CARRUSEL_IG_CON_JEFATURA, 'carrusel_mesa')
-export const KIT_MESA: Plantilla = deLaMesa(KIT_HISTORIAS_CON_JEFATURA, 'kit_mesa')
+/**
+ * 17-nov · «creativos en cada paso» (GO Lenovo · firma de Emilio 07:18 · punto 1) · la mesa CORTA de las historias: 3 asientos (dirección visual, prompts, texto) y UNA ronda de aportes.
+ * Quien dirige (la dirección creativa) y el portero no son asientos: dirigen o traen material. El tope por pieza es el de siempre (`TOPE_DE_LA_MESA_USD`, techo ×1,2).
+ * Ni la jefatura entra a la mesa ni la mesa revisa a otra mesa: la jefatura revisa la PIEZA después, como siempre.
+ */
+export const ASIENTOS_DE_LA_MESA_CORTA = ['marketing_instagram_curator', 'design-image-prompt-engineer', 'content-creator'] as const
+export const RONDAS_DE_LA_MESA_CORTA = 1
+const KIT_MESA_BASE = deLaMesa(KIT_HISTORIAS_CON_JEFATURA, 'kit_mesa')
+export const KIT_MESA: Plantilla = { ...KIT_MESA_BASE, limites: { ...KIT_MESA_BASE.limites, asientos: [...ASIENTOS_DE_LA_MESA_CORTA], rondas_de_la_mesa: RONDAS_DE_LA_MESA_CORTA } }
 
 /**
  * 31-oct · nuevo orden de la cadena · `brief_mesa` y `concepto_mesa`: las dos mesas de la CADENA. Un solo paso `mesa`: no hay imágenes, observador, traductor ni jefatura de pieza;

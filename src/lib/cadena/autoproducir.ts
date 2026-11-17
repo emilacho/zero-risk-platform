@@ -18,6 +18,7 @@ import { autorizarLlamada, cadena, compuerta, err, leerSeco, type Respuesta } fr
 import { avisoDeGastoIlegible, avisoDelTope, cierreDelTope, costoEsperadoDeLaPieza, decidirTope, esperandoPorVenir, filasPorVenir, medirGastoDeCampana, type AvisoDelTope, type DecisionDelTope } from './tope-de-campana'
 import { hoyEnZona } from './campanas'
 import { familiaDeFila } from './familia'
+import { CLAVE_DE_LA_PALANCA, topesConMesa } from '../oficina/mesa/con-mesa'
 import { filaSinFamilia } from './sin-familia'
 import { decidirPuerta, TARGET_STEP_PRODUCIR, type ConfigDeOficina, type Sobre } from '@/lib/oficina/sobre'
 
@@ -93,11 +94,17 @@ export type CampanaDelTope = Pick<Campana, 'id' | 'client_id' | 'tope_gasto_usd'
  *     recibió ya está en lo comprometido; una con encargo (fallido, sin gasto) o cuyo sobre nunca llegó, no → se suma (y deja de guardar lugar por fecha).
  */
 export async function decidirTopeDelParte(
-  al: Pick<Almacen, 'leerGastoDeCampana' | 'formatos' | 'configDeLaOficina'>, c: CampanaDelTope, parteId: string, todos: SobreDeProducir[],
+  al: Pick<Almacen, 'leerGastoDeCampana' | 'formatos' | 'configDeLaOficina'> & Partial<Pick<Almacen, 'leerConfig'>>, c: CampanaDelTope, parteId: string, todos: SobreDeProducir[],
   filasDelCalendario: Awaited<ReturnType<Almacen['filas']>> | null, cuando: ReadonlyMap<string, { fecha: string; hora: string | null }>,
   o: { cuestan?: ReadonlySet<string>; enCamino?: ReadonlyArray<{ parte_id: string; brief_id: string; familia: string | null }>; ahora?: Date } = {},
 ): Promise<DecisionDelTope> {
-  const l = await al.leerGastoDeCampana(c.id, parteId)
+  const l0 = await al.leerGastoDeCampana(c.id, parteId)
+  // 17-nov · «creativos en cada paso» · con la palanca del cliente encendida, la pieza de una familia con versión con mesa se reserva con lo de esa versión (la que de verdad corre en la oficina).
+  //   Sin palanca, ilegible o sin la versión activa: los topes y lo esperado quedan IGUALES (`topesConMesa`).
+  let palanca: unknown = null
+  try { palanca = al.leerConfig ? await al.leerConfig(CLAVE_DE_LA_PALANCA) : null } catch { palanca = null }
+  const conMesa = topesConMesa(l0.topes_de_familia, l0.reservas_de_familia, palanca, c.client_id)
+  const l = { ...l0, topes_de_familia: conMesa.topes, reservas_de_familia: conMesa.reservas }
   // lo más cercano primero también ENTRE partes: sin el calendario no se sabe qué va antes, y eso es gasto ilegible (no «nada antes»)
   if (!filasDelCalendario) throw new Error('no se pudo leer el calendario de la campaña')
   const formatos = await al.formatos()
