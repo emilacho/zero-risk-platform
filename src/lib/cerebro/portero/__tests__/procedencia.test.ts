@@ -134,6 +134,11 @@ describe('la fecha de los metadatos del archivo (sin red: los bytes de nuestro a
     expect(fechaDeLosMetadatos(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 0, 0, 0]))).toBeNull()
     expect(fechaDeLosMetadatos(Buffer.from([0xff, 0xd8, 0x00, 0x00]))).toBeNull()
     expect(fechaDeLosMetadatos(jpegConExif({ original: '2026:08:23 14:12:24' }).subarray(0, 30))).toBeNull()
+    expect(fechaExifComoIso('1989:12:31 23:59:59')).toBeNull() // CC6 q10: el piso de año se mide
+    expect(fechaExifComoIso('1990:01:01 00:00:00')).toBe('1990-01-01T00:00:00.000Z')
+    expect(fechaExifComoIso('2100:12:31 23:59:59')).toBe('2100-12-31T23:59:59.000Z')
+    expect(fechaExifComoIso('2200:01:01 10:00:00')).toBeNull()
+    expect(fechaDeLosMetadatos(jpegConExif({ original: '1500:06:01 12:00:00' }))).toBeNull()
     expect(fechaExifComoIso('2026:02:30 10:00:00')).toBeNull()
     expect(fechaExifComoIso('2026:13:01 10:00:00')).toBeNull()
     expect(fechaExifComoIso('2026:08:23 24:00:00')).toBeNull()

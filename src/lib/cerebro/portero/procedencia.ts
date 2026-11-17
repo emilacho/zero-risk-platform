@@ -122,7 +122,8 @@ export function fechaExifComoIso(t: string): string | null {
   const m = t.match(/^(\d{4}):(\d{2}):(\d{2}) (\d{2}):(\d{2}):(\d{2})$/)
   if (!m) return null
   const [a, mes, d, h, mi, s] = m.slice(1).map(Number)
-  if (a < 1990 || mes < 1 || mes > 12 || d < 1 || d > 31 || h > 23 || mi > 59 || s > 59) return null
+  // años fuera de 1990–2100 son metadatos rotos o de fábrica: «no consta» (CC6 q10, 17-nov)
+  if (a < 1990 || a > 2100 || mes < 1 || mes > 12 || d < 1 || d > 31 || h > 23 || mi > 59 || s > 59) return null
   const f = new Date(Date.UTC(a, mes - 1, d, h, mi, s))
   return f.getUTCDate() === d ? f.toISOString() : null
 }
