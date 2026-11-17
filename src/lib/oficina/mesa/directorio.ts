@@ -33,7 +33,9 @@ export function esPertinente(t: Tarjeta, tipo: TipoDePieza, hayImagenGenerada: b
 /** los especialistas cuyo aporte es obligatorio (sin la dirección y sin el portero: ellos no «aportan», dirigen o traen material) */
 export function especialistasPertinentes(directorio: Tarjeta[], tipo: TipoDePieza, hayImagenGenerada: boolean, condiciones: readonly string[] = []): string[] {
   // una tarjeta de DIRECCIÓN entra como miembro solo si lo dice con `<tipo>:miembro` (el director creativo es miembro del calendario y dirige carruseles y kits)
-  return directorio.filter((t) => (t.rol === 'miembro' || (t.rol === 'direccion' && marcaMiembro(t, tipo))) && esPertinente(t, tipo, hayImagenGenerada, condiciones)).map((t) => t.agente)
+  // Sprint 4 · E · quien CRITICA este tipo no aporta en él aunque su tarjeta también diga `<tipo>` (observación de CC7): el rol de crítica manda; si no, su aporte se leería como la crítica
+  const critico = criticoDe(directorio, tipo)?.agente
+  return directorio.filter((t) => (t.rol === 'miembro' || (t.rol === 'direccion' && marcaMiembro(t, tipo))) && t.agente !== critico && esPertinente(t, tipo, hayImagenGenerada, condiciones)).map((t) => t.agente)
 }
 const marcaMiembro = (t: Tarjeta, tipo: TipoDePieza): boolean => t.pertinente_en.includes(`${tipo}:${CONDICION_MIEMBRO}`)
 

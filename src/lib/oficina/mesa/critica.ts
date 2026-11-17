@@ -35,7 +35,8 @@ export function criticaDeLaRonda(est: EstadoMesa, libro: Aporte[]): Aporte | nul
   const critico = criticoDeLaMesa(est)
   if (!critico) return null
   const desde = ultimaIntegracion(libro)?.n ?? 0
-  return [...libro].reverse().find((a) => a.n > desde && a.de === critico && (a.tipo === 'aporta' || a.tipo === 'responde') && a.texto.trim()) ?? null
+  // solo cuenta lo que entró rotulado como crítica (el turno `criticar`): otro aporte del mismo agente no es la crítica
+  return [...libro].reverse().find((a) => a.n > desde && a.de === critico && (a.tipo === 'aporta' || a.tipo === 'responde') && esCritica(a.texto)) ?? null
 }
 
 /**

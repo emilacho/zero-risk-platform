@@ -90,6 +90,21 @@ describe('E · el planificador: la crítica va después de los aportes y antes d
     expect(siguienteDeLaMesa(est({ turnos: 24 }), ronda1(), ctx())).toMatchObject({ agente: DIRECCION, tipo: 'integrar', motivo: expect.stringContaining('cierra con lo que hay') })
     expect(siguienteDeLaMesa(est(), ronda1(), ctx(5, 7))).toMatchObject({ agente: DIRECCION, tipo: 'integrar', motivo: expect.stringContaining('cierra con lo que hay') })
   })
+  it('si lo único nuevo es de la dirección (contestó un pedido tras integrar), no hay crítica: no gasta un turno sobre nada del equipo (CC7 · m04)', () => {
+    const integrada = [...ronda1(), critica(), A({ de: DIRECCION, tipo: 'integra', texto: '## Citas\nA2 usé: algo con motivo\nA3 usé: otra cosa con motivo' })]
+    const l = [...integrada, A({ de: 'content-creator', tipo: 'pide', para: DIRECCION, texto: '¿la lámina 2 lleva foto?' }), A({ de: DIRECCION, tipo: 'responde', texto: 'Sí, la foto propia del cliente.' })]
+    expect(criticaPendiente(est(), l, false)).toBeNull()
+    expect(siguienteDeLaMesa(est(), l, ctx())).not.toMatchObject({ tipo: 'criticar' })
+    // control: si quien escribe después de integrar es del equipo, sí hay crítica
+    expect(criticaPendiente(est(), [...integrada, A({ de: 'content-creator', tipo: 'responde', texto: 'Otra propuesta para la lámina 2.' })], false)).toBe(CRITICO)
+  })
+  it('una tarjeta con `<tipo>` y `<tipo>:critica` a la vez critica y NO aporta: su aporte no se confunde con la crítica (CC7 · observación del encendido)', () => {
+    const doble = DIR.map((t) => (t.agente === CRITICO ? { ...t, pertinente_en: ['carrusel', 'carrusel:critica'] } : t))
+    expect(especialistasPertinentes(doble, 'carrusel', true)).toEqual(['content-creator', 'carousel-designer'])
+    expect(siguienteDeLaMesa(est({ directorio_congelado: doble }), ronda1(), ctx())).toMatchObject({ agente: CRITICO, tipo: 'criticar' })
+    // un aporte suyo SIN rótulo no es la crítica de la ronda
+    expect(criticaPendiente(est({ directorio_congelado: doble }), [...ronda1(), A({ de: CRITICO, tipo: 'aporta', texto: 'un aporte cualquiera' })], false)).toBe(CRITICO)
+  })
   it('la mesa corta (rondas hechas) no abre crítica', () => {
     const l = [...ronda1(), critica(), A({ de: DIRECCION, tipo: 'integra', texto: '## Citas\nA2 usé: algo con motivo' }), A({ de: 'content-creator', tipo: 'responde' })]
     expect(criticaPendiente(est(), l, true)).toBeNull()
@@ -115,6 +130,15 @@ describe('E · lo que lee la crítica y lo que sabe la dirección', () => {
       expect(deCritica).toContain('## Tu turno · CRÍTICA')
     }
     expect(tareaDeLaCritica(CRITICO)).toMatch(/«sin dato» y no lo supongas/)
+  })
+  it('una crítica de más de 8000 caracteres se recorta DECLARADO, con los dos números (CC7 · m12)', () => {
+    const texto = `A2 choca con un hecho. ${'x'.repeat(9000)}COLA-QUE-NO-LLEGA`
+    const largo = conMarcaDeLaCritica(texto).length
+    const t = armarTarea({ tipo: 'integrar', agente: DIRECCION, tarjeta: DIR[0], est: est(), libro: [...ronda1(), critica(texto)], c: C('carrusel') })
+    expect(t).toContain(`[… recortado: 8000 de ${largo} caracteres de la crítica]`)
+    expect(t).not.toContain('COLA-QUE-NO-LLEGA')
+    // control: la que cabe no lleva aviso
+    expect(armarTarea({ tipo: 'integrar', agente: DIRECCION, tarjeta: DIR[0], est: est(), libro: [...ronda1(), critica('corta')], c: C('carrusel') })).not.toContain('recortado:')
   })
   it('la dirección recibe la crítica COMPLETA y el pedido de escribir «Crítica:» en las citas', () => {
     const larga = `A2 choca con un hecho. ${'detalle '.repeat(500)}FIN-DE-LA-CRITICA`
