@@ -369,6 +369,13 @@ describe('COMPORTAMIENTO · la cadena en seco con agente simulado (ensayo por la
     expect(m.al.fichasDeOferta).toEqual([])
     expect(m.al.campanas.every((c) => c.estado !== 'necesita_humano')).toBe(true)
   })
+  it('🔴 17-nov · el sub-flujo del lector que SE CAE (su id fuera de la lista de flujos → 403) no frena: la cadena abre igual, sin fichas', async () => {
+    const m = mundo({ config: { flujos: [...Object.values(IDS).filter((x) => x !== IDS.fichas), ID_VIGIA, ID_PARTE] } })
+    const r = await correr(m, sobreAbrir({ _simulacros: simulacros(m.cliente, { fichas: [{ fichas: [], pendientes: [] }] }) }))
+    expect(r[0].json.resultado).toBe('cadena_abierta')
+    expect(m.al.corridas.filter((c) => c.paso === 'fichas')).toEqual([])
+    expect(m.al.fichasDeOferta).toEqual([])
+  })
   it('🔴 17-nov · con fichas simuladas, la cadena las guarda (US$ 0) antes del calendario', async () => {
     const m = mundo()
     const sede = m.cliente.sedes[0].clave
