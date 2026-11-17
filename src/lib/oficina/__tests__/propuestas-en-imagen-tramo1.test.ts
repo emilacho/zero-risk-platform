@@ -38,8 +38,8 @@ describe('propuestas en imagen · la integración → propuestas_imagen (contrat
     expect(p.clase).toBe('kit')
     expect(p.propuestas.map((x) => [x.id, x.nombre])).toEqual([['P1', 'La puerta'], ['P2', 'El origen'], ['P3', 'La mesa']])
     expect(p.propuestas[0].laminas).toEqual([
-      // con «Imagen: ninguna» el traductor del kit no guarda «Qué se ve» (comportamiento de hoy, de CC3): se_ve va ausente, no se inventa
-      { n: 1, rol: 'e01', headline: 'ya llegó.' },
+      // con «Imagen: ninguna» el «Qué se ve» se conserva (CC3 #1126 + `seVeDe` · 🟡 CC6): la lámina no lleva imagen ni foto, pero su dirección visual llega a la tarjeta
+      { n: 1, rol: 'e01', headline: 'ya llegó.', se_ve: 'la puerta abierta de la cocina' },
       { n: 2, rol: 'e01-c2', headline: 'Nació en Olón.', body: 'Ahora pídelo desde casa.', cta: 'naufrago.ec', foto: { origen: 'real', foto_id: '062ec4fa' } },
     ])
     expect(p.propuestas[0]).toMatchObject({ concepto: 'la puerta', objetivo: 'que pidan desde casa', por_que: 'el origen convence' })
