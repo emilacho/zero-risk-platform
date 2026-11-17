@@ -5,7 +5,7 @@
 import { BRIEF_GUIA_NO_REGLA, type ElementoDelKit } from './brief'
 import { AVISO_DEL_CEREBRO, describirReglas, FUNCION_DEL_BRIEF, FUNCION_DEL_MANUAL, FUNCION_DEL_PLAN, FUNCION_DEL_PORTERO, resumenDelEncargo, seccionDelPerfil, type ContextoDePedido } from './pedidos'
 import type { ContextoDelRevisor, ResumenDelEncargo } from './ciego'
-import { ROLES_DE_LAMINA, LIMITES_DE_LAMINA } from './salida'
+import { ROLES_DE_LAMINA, LIMITES_DE_LAMINA, LIMITES_DE_ESTRUCTURA } from './salida'
 import { seccionDeImagenSinFoto } from './prompts-sin-invencion'
 import type { Ficha, Limites } from './tipos'
 
@@ -36,12 +36,13 @@ export const CONTRATOS_LAMINAS: Record<string, string> = {
   'observacion_imagenes.v1': '{"imagenes": [{"indice": 0, "reglas": [{"id": "o1", "presente": true, "evidencia": "…"}], "texto_en_imagen": ["…"], "marcas": ["…"], "personas": 0, "producto": "…", "elementos_visibles": ["…"], "dato_sin_verificar": false}], "preferencia": [0]}  (presente = true | false | "no_se_ve"; dato_sin_verificar = true si la imagen muestra un precio, una cifra, un sello, una certificación, una etiqueta, una norma o la lectura de un instrumento que nadie verificó; describes, no apruebas)',
   'copy_base.v1': '{"texto_base": "TODO el texto que irá en las láminas, una idea por línea", "pie_de_foto": "…", "hashtags": ["…"], "llamado": "…", "nota_para_quien_publica": "…", "necesito": []}',
   'laminas.v1': `{"laminas": [{"rol": "${ROLES_DE_LAMINA.join('|')}", "eyebrow": "(≤ ${LIMITES_DE_LAMINA.eyebrow} caracteres CONTADOS con espacios y signos; si no cabe, acórtalo o déjalo vacío)", "headline": "(≤ ${LIMITES_DE_LAMINA.headline})", "body": "(≤ ${LIMITES_DE_LAMINA.body})", "cta": "(≤ ${LIMITES_DE_LAMINA.cta}; en una sola lámina)"}], "necesito": []}`,
-  'estructura.v1': '{"elementos": [{"ref": "e01", "rol": "…", "beat": "…", "foto_slot": "<ref de la imagen>", "mood": "…", "sugerencia_interactiva": "(opcional)"}]}  (SIN ningún campo de texto de imagen)',
+  // 17-nov · GO creativos punto 6: el agente recibe los topes CLAROS (contados con espacios y signos), los mismos que comprueba el esquema
+  'estructura.v1': `{"elementos": [{"ref": "e01", "rol": "(≤ ${LIMITES_DE_ESTRUCTURA.rol} caracteres CONTADOS con espacios y signos)", "beat": "(≤ ${LIMITES_DE_ESTRUCTURA.beat})", "foto_slot": "<ref de la imagen>", "mood": "(≤ ${LIMITES_DE_ESTRUCTURA.mood})", "sugerencia_interactiva": "(opcional; ≤ ${LIMITES_DE_ESTRUCTURA.sugerencia_interactiva})"}]}  (SIN ningún campo de texto de imagen)`,
   'copy_kit.v1': `{"elementos": [{"ref": "e01", "eyebrow": "(≤ ${LIMITES_DE_LAMINA.eyebrow} caracteres CONTADOS con espacios y signos; si no cabe, acórtalo o déjalo vacío)", "headline": "…", "body": "…", "cta": "…", "acompanamiento": "texto de acompañamiento (pie o texto del estado)", "hashtags": ["…"]}], "necesito": []}`,
   'resolucion_copy_base.v1': '{"respuestas": [{"id": "…", "estado": "tomada|no_tomada", "razon": "…"}], "copia": {"texto_base": "…", "pie_de_foto": "…", "hashtags": ["…"], "llamado": "…", "nota_para_quien_publica": "…"}}  (copia solo si cambias algo; completa)',
   'resolucion_laminas.v1': '{"respuestas": [{"id": "…", "estado": "tomada|no_tomada", "razon": "…"}], "laminas": [{"rol": "…", "headline": "…", "body": "…", "cta": "…"}]}  (laminas solo si cambias algo; la lista completa)',
   'resolucion_copy_kit.v1': '{"respuestas": [{"id": "…", "estado": "tomada|no_tomada", "razon": "…"}], "elementos": [{"ref": "e01", "headline": "…"}]}  (solo los elementos que cambias)',
-  'resolucion_estructura.v1': '{"respuestas": [{"id": "…", "estado": "tomada|no_tomada", "razon": "…"}], "elementos": [{"ref": "e01", "rol": "…", "beat": "…", "mood": "…"}]}  (solo los elementos que cambias; sin texto de imagen)',
+  'resolucion_estructura.v1': `{"respuestas": [{"id": "…", "estado": "tomada|no_tomada", "razon": "…"}], "elementos": [{"ref": "e01", "rol": "(≤ ${LIMITES_DE_ESTRUCTURA.rol})", "beat": "(≤ ${LIMITES_DE_ESTRUCTURA.beat})", "mood": "(≤ ${LIMITES_DE_ESTRUCTURA.mood})"}]}  (solo los elementos que cambias; sin texto de imagen)`,
 }
 
 const seccionDeFichas = (fs: Ficha[]) => (fs.length ? fs.map((f) => `- [${f.id}] (${f.gravedad}) en ${f.donde}: ${f.que ?? ''} · contra: ${f.contra_que ?? ''} · propuesta: ${f.propuesta ?? ''}`).join('\n') : '- (ninguna)')

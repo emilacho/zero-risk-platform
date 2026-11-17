@@ -66,12 +66,13 @@ describe('las salidas reales que mataron las piezas', () => {
     expect(con.ok).toBe(true)
     if (con.ok) { expect(con.valor.paleta).toEqual(['#FF4500', '#1A1A1A', '#FFFFFF']); expect(con.normalizados).toHaveLength(3) }
   })
-  it('BRF-0004 · el eyebrow de 26 NO se recorta (texto del autor): falla visible con la medida; el reintento se la dice', () => {
+  it('BRF-0004 · el eyebrow de 26 NO se recorta (texto del autor): se DEVUELVE para acortar con la medida (17-nov · punto 6: hasta 2 veces más); después, falla visible', () => {
     const primero = procesarSalida(BRF_0004, 'copy_kit.v1', 0, 1, conLimpieza)
     expect(primero).toMatchObject({ ok: false, accion: 'reintentar' })
-    if (!primero.ok && primero.accion === 'reintentar') expect(primero.mensaje_de_error).toContain('elementos[0].eyebrow: texto demasiado largo (máx. 24; el tuyo tiene 26)')
-    const segundo = procesarSalida(BRF_0004, 'copy_kit.v1', 1, 1, conLimpieza)
-    expect(segundo).toMatchObject({ ok: false, accion: 'falla_visible' })
+    if (!primero.ok && primero.accion === 'reintentar') expect(primero.mensaje_de_error).toContain('elementos[0].eyebrow: tiene 26 caracteres y el tope es 24 (sobran 2)')
+    expect(procesarSalida(BRF_0004, 'copy_kit.v1', 1, 1, conLimpieza)).toMatchObject({ ok: false, accion: 'reintentar' })
+    expect(procesarSalida(BRF_0004, 'copy_kit.v1', 2, 1, conLimpieza)).toMatchObject({ ok: false, accion: 'reintentar' })
+    expect(procesarSalida(BRF_0004, 'copy_kit.v1', 3, 1, conLimpieza)).toMatchObject({ ok: false, accion: 'falla_visible' })
   })
   it('BRF-0004 · con el interruptor ENCENDIDO (así quedó el 27-oct) el eyebrow que no cabe se descarta, se anota, y lo demás del autor queda tal cual', () => {
     expect(DESCARTAR_EYEBROW_LARGO).toBe(true)

@@ -141,6 +141,22 @@ describe('SALA 2 · carrusel · punta a punta con modelo simulado', () => {
     expect(tareas['laminas']).toHaveLength(2); expect(tareas['laminas'][1]).toMatch(/recorte literal/)
     expect(ultima.cuerpo).toMatchObject({ estado: 'cerrado', con_desacuerdo: false })
   })
+  it('🔴 17-nov · punto 6 · un titular que pasa su tope DOS veces seguidas no mata el encargo: se le devuelve para acortar (con la medida) y, al tercer intento corto, sigue limpio', async () => {
+    const { M, id } = await abiertoC()
+    const larga = LAMINAS.map((l, i) => (i === 0 ? { ...l, headline: 'x'.repeat(95) } : l))
+    const { tareas, ultima } = await correr(M, id, guionCarrusel({ laminas: (n) => ({ texto: j({ laminas: n <= 2 ? larga : LAMINAS }) }) }))
+    expect(tareas['laminas']).toHaveLength(3)
+    expect(tareas['laminas'][1]).toContain('$.laminas[0].headline: tiene 95 caracteres y el tope es 90 (sobran 5)')
+    expect(tareas['laminas'][2]).toContain('sobran 5')
+    expect(ultima.cuerpo).toMatchObject({ estado: 'cerrado', con_desacuerdo: false })
+  })
+  it('🔴 17-nov · punto 6 · el tope de vueltas es explícito: si sigue largo tras 1 + 2 correcciones, falla visible (nunca un ciclo sin fin)', async () => {
+    const { M, id } = await abiertoC()
+    const larga = LAMINAS.map((l, i) => (i === 0 ? { ...l, headline: 'x'.repeat(95) } : l))
+    const { tareas, ultima } = await correr(M, id, guionCarrusel({ laminas: () => ({ texto: j({ laminas: larga }) }) }))
+    expect(tareas['laminas']).toHaveLength(4)
+    expect(ultima.cuerpo).toMatchObject({ estado: 'fallido' })
+  })
   it('si el diseñador sigue escribiendo texto nuevo tras el reintento, la pieza sale con desacuerdo (ficha que bloquea), nunca se corrige a mano', async () => {
     const { M, id } = await abiertoC()
     const mala = LAMINAS.map((l, i) => (i === 1 ? { ...l, headline: 'Hoy todo cambia para siempre' } : l))
