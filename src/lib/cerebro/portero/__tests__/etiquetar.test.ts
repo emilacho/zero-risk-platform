@@ -52,7 +52,7 @@ describe('el camino feliz: UNA llamada, escribe EXACTAMENTE las 9 columnas de et
     const r = await etiquetar(deps, cuerpo())
     expect(r.status).toBe(200)
     expect(salida(r)).toMatchObject({ modo: 'etiquetado', escribio: true, llamo_al_modelo: true })
-    expect(salida(r).etiqueta).toEqual({ que_muestra: 'un plato de pescado con arroz sobre una mesa de madera', producto_visto: ['Servicio uno'], texto_visible: 'PLATO DEL DÍA', confianza: 'alta', con_personas: false, tipo_de_toma: 'producto', formato: null })
+    expect(salida(r).etiqueta).toEqual({ que_muestra: 'un plato de pescado con arroz sobre una mesa de madera', producto_visto: ['Servicio uno'], texto_visible: 'PLATO DEL DÍA', confianza: 'alta', con_personas: false, tipo_de_toma: 'producto', es_captura: null, formato: null })
     expect(espia.bajadas).toEqual([`${ALMACEN}/${A}/f1.jpg`])
     expect(espia.peticiones).toHaveLength(1)
     expect(espia.escrituras).toHaveLength(1)
@@ -510,5 +510,34 @@ describe('una foto ya etiquetada se salta salvo que se pida `forzar`', () => {
     const l = base.llamadas.find((x: Record<string, any>) => x.tabla === 'client_social_images') as Record<string, any>
     expect(l.columnas).toContain('etiquetada_en')
     expect(l.donde).toEqual({ client_id: A, id: 'f-etq' })
+  })
+})
+
+describe('17-nov · ENCARGO 1 · el etiquetador reconoce una captura de pantalla y la saca de las fotos (con su motivo, sin borrar nada)', () => {
+  it('🔴 «es_captura: si» → escribe las 9 de la etiqueta + clase captura_web con el motivo (quién, cuándo y lo que vio)', async () => {
+    const { deps, espia } = armar(bueno({ es_captura: 'si', que_muestra: 'Captura de pantalla de la web con un aviso de cookies' }))
+    const r = await etiquetar(deps, cuerpo())
+    expect(salida(r).etiqueta.es_captura).toBe(true)
+    expect(espia.escrituras[0].valores).toMatchObject({ clase: 'captura_web', clase_motivo: `el etiquetador la vio como captura de pantalla (${AHORA.toISOString().slice(0, 10)}): Captura de pantalla de la web con un aviso de cookies` })
+    expect(salida(r).columnas_escritas).toEqual(expect.arrayContaining(['clase', 'clase_motivo']))
+  })
+  it('🔴 «es_captura: no», ausente o raro → no toca la clase (un «no» nunca devuelve una captura a foto)', async () => {
+    for (const extra of [{ es_captura: 'no' }, {}, { es_captura: 'quizás' }]) {
+      const { deps, espia } = armar(bueno(extra))
+      await etiquetar(deps, cuerpo())
+      expect(espia.escrituras[0].valores).not.toHaveProperty('clase')
+      expect(espia.escrituras[0].valores).not.toHaveProperty('clase_motivo')
+    }
+  })
+  it('con `solo_toma` nunca escribe la clase, aunque diga que es captura', async () => {
+    const t = tablas()
+    t.client_social_images = [foto('f1', A, { etiquetada_en: '2026-10-02T00:00:00Z' })]
+    const { deps, espia } = armar(bueno({ es_captura: 'si' }), {}, t)
+    await etiquetar(deps, cuerpo({ solo_toma: true }))
+    expect(Object.keys(espia.escrituras[0].valores).sort()).toEqual(['con_personas', 'formato', 'tipo_de_toma'])
+  })
+  it('la instrucción le pide «es_captura» y lo muestra en la forma del JSON', () => {
+    expect(INSTRUCCION_DEL_ETIQUETADOR).toMatch(/«es_captura»: «si» si la imagen es una CAPTURA DE PANTALLA/)
+    expect(INSTRUCCION_DEL_ETIQUETADOR).toMatch(/"es_captura":"no"\}$/)
   })
 })

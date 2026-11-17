@@ -17,11 +17,11 @@ const tablas = () => ({
   client_sedes: [], cerebro_fichas: [], cerebro_ingresos: [], cerebro_pedidos: [], agents: [{ name: 'creative-director' }], costs: [], agent_invocations: [],
   apify_raw: [], client_brain_chunks: [], cerebro_portero_corridas: [],
 })
-const vista = (id: string, origen: OrigenDeFoto, etiquetada: boolean): FotoVista => ({ foto_id: id, origen, nivel: origen === 'propia' ? 'propio' : 'competencia', gusto: null, cuenta: 'c', tipo: 'post_image', medio: 'imagen', url: `https://x/${id}.jpg`, publicada_en: null, copiada_en: null, etiquetada, que_muestra: etiquetada ? `foto ${id}` : null, producto_visto: [], texto_visible: null, confianza: etiquetada ? 'alta' : null, con_personas: null, tipo_de_toma: null, formato: null, no_se_pudo_leer: false })
+const vista = (id: string, origen: OrigenDeFoto, etiquetada: boolean): FotoVista => ({ foto_id: id, origen, nivel: origen === 'propia' ? 'propio' : 'competencia', gusto: null, cuenta: 'c', tipo: 'post_image', medio: 'imagen', url: `https://x/${id}.jpg`, publicada_en: null, copiada_en: null, etiquetada, que_muestra: etiquetada ? `foto ${id}` : null, producto_visto: [], texto_visible: null, confianza: etiquetada ? 'alta' : null, con_personas: null, tipo_de_toma: null, formato: null, no_se_pudo_leer: false, procedencia: 'instagram', lugar: 'no consta', fecha: 'no consta' })
 function respuesta(fotos: FotoVista[]): RespuestaDeFotos {
   const por_origen = { propia: { total: 0, etiquetadas: 0 }, competencia: { total: 0, etiquetadas: 0 }, referencia: { total: 0, etiquetadas: 0 } }
   for (const f of fotos) { por_origen[f.origen].total++; if (f.etiquetada) por_origen[f.origen].etiquetadas++ }
-  return { ok: true, cliente: CL, total: fotos.length, devueltas: fotos.length, por_origen, sin_etiquetar: fotos.filter((f) => !f.etiquetada).length, fotos, modelos_llamados: 0, costo_usd: 0 }
+  return { ok: true, cliente: CL, total: fotos.length, devueltas: fotos.length, por_origen, sin_etiquetar: fotos.filter((f) => !f.etiquetada).length, fotos, capturas_de_la_web: 0, modelos_llamados: 0, costo_usd: 0 }
 }
 /** un almacén de fotos simulado: `etiquetar` marca como etiquetadas las pendientes y cuenta las llamadas */
 function almacen(iniciales: FotoVista[]) {

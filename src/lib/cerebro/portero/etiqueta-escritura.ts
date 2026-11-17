@@ -2,6 +2,7 @@
  * ESCRIBIR LA ETIQUETA DE UNA FOTO · el ÚNICO lugar del cerebro que escribe en `client_social_images`, y solo estas columnas: las 6 de la etiqueta y, desde el relevo 19,
  * las 3 de la «toma» (`con_personas`, `tipo_de_toma`, `formato`). Se aceptan EXACTAMENTE tres combinaciones: las 6 solas (etiqueta vieja), las 9 (etiqueta completa) o
  * las 3 solas (poner la toma a una foto ya etiquetada).
+ * 17-nov (ENCARGO 1 de Cerebro): a la etiqueta completa se le pueden sumar las 2 de la CLASE (`clase` = «captura_web» + `clase_motivo`), nunca solas ni a medias.
  *
  * UN `PATCH` (actualizar) de UNA foto, filtrado por el id de la foto Y por el cliente (nunca uno sin el otro). Jamás inserta ni borra filas, jamás toca
  * `producto`, `url`, `caption` ni ninguna otra columna: pedirle otra se rechaza SIN hacer la petición. Una prueba permanente del repositorio vigila que nadie
@@ -12,15 +13,18 @@ import { FORMATOS_VALIDOS } from './formato'
 
 export const COLUMNAS_DE_LA_ETIQUETA = ['que_muestra', 'producto_visto', 'etiquetada_en', 'etiqueta_modelo', 'texto_visible', 'etiqueta_confianza'] as const
 export const COLUMNAS_DE_LA_TOMA = ['con_personas', 'tipo_de_toma', 'formato'] as const
-/** todo lo que este archivo puede escribir en la tabla: nada más */
+/** todo lo que este archivo puede escribir en la tabla con una etiqueta: nada más */
 export const COLUMNAS_QUE_ESCRIBE = [...COLUMNAS_DE_LA_ETIQUETA, ...COLUMNAS_DE_LA_TOMA] as const
+/** 17-nov · la clase de la imagen: solo junto con la etiqueta completa (las 9), y solo para marcarla captura de la web con su motivo */
+export const COLUMNAS_DE_LA_CLASE = ['clase', 'clase_motivo'] as const
 export const CONFIANZAS_VALIDAS = ['alta', 'media', 'baja'] as const
 export const TIPOS_DE_TOMA_VALIDOS = ['producto', 'ambiente', 'personas', 'texto_afiche', 'otro'] as const
 
 export interface ValoresDeLaToma { con_personas: boolean | null; tipo_de_toma: (typeof TIPOS_DE_TOMA_VALIDOS)[number] | null; formato: 'vertical' | 'cuadrado' | 'horizontal' | null }
 export interface ValoresDeLaEtiquetaBase { que_muestra: string; producto_visto: string[]; etiquetada_en: string; etiqueta_modelo: string; texto_visible: string; etiqueta_confianza: (typeof CONFIANZAS_VALIDAS)[number] }
 /** las 6 solas · las 6 + las 3 · o las 3 solas (el escritor rechaza cualquier otra mezcla antes de hacer la petición) */
-export interface ValoresDeEtiqueta extends Partial<ValoresDeLaEtiquetaBase>, Partial<ValoresDeLaToma> {}
+export interface ValoresDeLaClase { clase: 'captura_web'; clase_motivo: string }
+export interface ValoresDeEtiqueta extends Partial<ValoresDeLaEtiquetaBase>, Partial<ValoresDeLaToma>, Partial<ValoresDeLaClase> {}
 export interface ResultadoDeEscritura { ok: boolean; detalle?: string }
 
 /** un id o un cliente que no sea un identificador simple podría romper el filtro de la dirección */
@@ -31,8 +35,15 @@ export function crearEscritor(args: { urlDeLaBase: string; llave: string; fetchI
   return async (a: { foto_id: string; cliente: string; valores: ValoresDeEtiqueta }): Promise<ResultadoDeEscritura> => {
     const columnas = Object.keys(a.valores)
     const v = a.valores as Record<string, unknown>
-    const sobran = columnas.filter((c) => !(COLUMNAS_QUE_ESCRIBE as readonly string[]).includes(c))
+    const sobran = columnas.filter((c) => !([...COLUMNAS_QUE_ESCRIBE, ...COLUMNAS_DE_LA_CLASE] as readonly string[]).includes(c))
     if (sobran.length) return { ok: false, detalle: `columna no permitida: ${sobran.join(', ')}` }
+    if (COLUMNAS_DE_LA_CLASE.some((c) => columnas.includes(c))) {
+      // la clase va solo con la etiqueta completa (las 9), las dos juntas, y solo para marcar «captura_web» con un motivo de verdad
+      if (!COLUMNAS_QUE_ESCRIBE.every((c) => columnas.includes(c))) return { ok: false, detalle: 'la clase solo se escribe junto con la etiqueta completa' }
+      if (!COLUMNAS_DE_LA_CLASE.every((c) => columnas.includes(c))) return { ok: false, detalle: 'la clase va siempre con su motivo' }
+      if (v.clase !== 'captura_web') return { ok: false, detalle: 'la clase solo puede pasar a «captura_web»' }
+      if (typeof v.clase_motivo !== 'string' || v.clase_motivo.trim().length < 10) return { ok: false, detalle: 'falta el motivo de la clase' }
+    }
     const hayBase = COLUMNAS_DE_LA_ETIQUETA.some((c) => columnas.includes(c))
     const hayToma = COLUMNAS_DE_LA_TOMA.some((c) => columnas.includes(c))
     // una etiqueta a medias no se escribe: o las 6 de la etiqueta completas, o ninguna; la toma, completa (las 3) o ninguna

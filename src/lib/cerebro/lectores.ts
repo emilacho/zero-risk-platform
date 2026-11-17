@@ -16,6 +16,7 @@ import { aprobacionesPorPlan, esDeUnaParte, estadoDeLaSalida, filaConDecisionRea
 import { avisoDeProvisionales } from '../manual/lectura'
 import { validacionDelManual, versionVigente } from '../manual/campos-del-manual'
 import { AVISO_DE_HORARIO_CERRADA, AVISO_DE_HORARIO_POR_ABRIR, estadoDeLasSedes, esLineaDeHorarioOAtencion } from '../sedes/por-abrir'
+import { esCapturaDeLaWeb, frasePLF } from './portero/procedencia'
 
 export interface Contexto {
   consulta: Consulta
@@ -282,7 +283,7 @@ export function fuenteDeLaCopia(f: Fila): { fuente: string | null; esPublicacion
   return { fuente: null, esPublicacion }
 }
 export async function leerFotos(ctx: Contexto): Promise<Salida> {
-  const r = await leer(ctx, { tabla: 'client_social_images', columnas: ['id', 'owner_role', 'post_id', 'tipo', 'medio', 'estado', 'url', 'caption', 'posted_at', 'post_url', 'producto', 'producto_fuente', 'que_muestra', 'producto_visto', 'created_at'], donde: { client_id: ctx.cliente } })
+  const r = await leer(ctx, { tabla: 'client_social_images', columnas: ['id', 'owner_role', 'post_id', 'tipo', 'medio', 'estado', 'url', 'caption', 'posted_at', 'post_url', 'producto', 'producto_fuente', 'que_muestra', 'producto_visto', 'created_at', 'handle', 'clase', 'clase_motivo', 'procedencia', 'oferta', 'sede_id', 'lugar_fuente', 'fecha_origen', 'fecha_fuente'], donde: { client_id: ctx.cliente } })
   if (r.error) return fallo(['fotos'], r.error)
   const claves: string[] = []
   const lineas = r.filas.map((f) => {
@@ -291,7 +292,9 @@ export async function leerFotos(ctx: Contexto): Promise<Salida> {
     const esLogo = medio === 'logo' || /logo/.test(String(f.tipo ?? '').toLowerCase())
     const esVideo = !esLogo && (medio === 'reel' || medio === 'video')
     const origenDeLaCopia = fuenteDeLaCopia(f)
-    const clase = esLogo ? 'logo' : esVideo ? 'portada_de_video' : 'foto'
+    // 17-nov · una captura de pantalla de la web se guarda y se lee entera (todo es todo), pero con su clase propia: no es una foto y no se entrega como imagen
+    const esCaptura = !esLogo && !esVideo && esCapturaDeLaWeb(f)
+    const clase = esLogo ? 'logo' : esVideo ? 'portada_de_video' : esCaptura ? 'captura_web' : 'foto'
     // una foto, una portada o un logo PROPIOS son archivos: no vencen (su clase propia). Lo de un competidor sigue siendo un anuncio y vence
     const plazo: ClaseDePlazo = !rol.propio ? 'anuncio_competencia' : 'archivo_propio'
     const productoDeLaColumna = Array.isArray(f.producto) ? (f.producto as unknown[]).filter((p): p is string => typeof p === 'string') : null
@@ -302,14 +305,14 @@ export async function leerFotos(ctx: Contexto): Promise<Salida> {
     const queMuestra = texto(f.que_muestra)
     const publicado = iso(f.posted_at)
     const leyenda = texto(f.caption)
-    const nombre = esLogo ? 'Logotipo' : esVideo ? 'Portada de video' : f.owner_role === 'referencia' ? 'Foto de referencia' : 'Foto'
+    const nombre = esLogo ? 'Logotipo' : esVideo ? 'Portada de video' : esCaptura ? 'Captura de la web' : f.owner_role === 'referencia' ? 'Foto de referencia' : 'Foto'
     // la línea que lee el portero DISTINGUE cada foto: clase · fecha · producto (o, sin producto, el comienzo de su texto)
     const distintivo = producto && producto.length ? producto.join(' / ') : leyenda ? recorte(leyenda, 40) : 'sin producto ni texto'
     claves.push(String(f.post_id ?? f.id).slice(0, 12))
     return linea(ctx, {
       ref: `client_social_images:${f.id}`, estante: rol.propio ? 'E3' : 'E5', clase,
       titulo: `${nombre} · ${(publicado ?? iso(f.created_at) ?? 'sin fecha').slice(0, 10)} · ${distintivo}`,
-      que_es: `${origenDeLaCopia.esPublicacion ? '' : `copia propia${origenDeLaCopia.fuente ? ` de ${origenDeLaCopia.fuente}` : ''} · `}${publicado ? `publicada el ${publicado.slice(0, 10)} · ` : ''}${origenDeLaCopia.esPublicacion ? 'texto de la publicación' : 'texto asociado'}: ${leyenda ? `«${recorte(leyenda)}»` : 'sin texto'} · producto: ${producto && producto.length ? producto.join(', ') : 'no declarado'}${queMuestra ? ` · qué muestra (según el etiquetador): ${recorte(queMuestra)}` : ''}`,
+      que_es: `${origenDeLaCopia.esPublicacion ? '' : `copia propia${origenDeLaCopia.fuente ? ` de ${origenDeLaCopia.fuente}` : ''} · `}${publicado ? `publicada el ${publicado.slice(0, 10)} · ` : ''}${origenDeLaCopia.esPublicacion ? 'texto de la publicación' : 'texto asociado'}: ${leyenda ? `«${recorte(leyenda)}»` : 'sin texto'} · producto: ${producto && producto.length ? producto.join(', ') : 'no declarado'}${queMuestra ? ` · qué muestra (según el etiquetador): ${recorte(queMuestra)}` : ''} · ${frasePLF(f)}${esCaptura ? ` · es una captura de pantalla, no una foto${texto(f.clase_motivo) ? ` (${recorte(String(f.clase_motivo), 120)})` : ''}` : ''}`,
       // la vigencia es de la ÚLTIMA VERIFICACIÓN (cuando se capturó), no de la fecha en que se publicó
       origen: rol.origen, estado: rol.estado, fecha: iso(f.created_at) ?? publicado, plazo,
       // el video no se guarda: el enlace es el de la publicación (la dirección del archivo caduca)
