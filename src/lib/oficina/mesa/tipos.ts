@@ -146,6 +146,8 @@ export interface EstadoMesa {
   video?: import('./pedidos').ParametrosDelVideo
   /** 17-nov · propuestas también en IMAGEN · solo kit, carrusel y foto: cuántas propuestas presenta la mesa (`limites.propuestas`), congelado al abrir; ausente = una pieza, como hoy */
   imagen?: { propuestas: number }
+  /** 17-nov · GO Lenovo (encendido de imagen) · lo que costaron los turnos de agente de esta mesa, en todas sus pasadas (la cota de la mesa se mide contra esto) */
+  gasto_de_los_turnos_usd?: number
   turno_abierto: { n: number; agente: string; tipo: 'dirigir' | 'aportar' | 'responder' | 'integrar' | 'devolver_citas' | 'redactar_prompts' | 'traducir'; responde_a: string | null; /** lo que el cerebro entregó a este agente al abrirse el turno (se consulta UNA vez: la reentrega del turno muestra lo mismo) */ notas_del_dueno?: LecturaDeNotas } | null
 }
 

@@ -31,7 +31,9 @@ describe('las plantillas de imagen con propuestas (solo código)', () => {
     expect(topeDelBorradorDeImagenDe(hoy)).toBe(Math.round(3 * Number(hoy.limites.imagenes_generadas_max) * 0.02 * 100) / 100)
     expect(con.pasos[i + 2].vuelve_a).toMatchObject({ paso: 'mesa', max: 2 })
     expect(propuestasDeLaPlantilla(con)).toBe(PROPUESTAS_DE_IMAGEN)
-    expect(con.limites.tope_encargo_usd).toBe(Number(hoy.limites.tope_encargo_usd) * 3)
+    // GO Lenovo (cota de la mesa): el tope sale de la cuenta, nunca menos que el de hoy × 3
+    const sinTope = { ...con, limites: { ...con.limites, tope_encargo_usd: 0 } } as Plantilla
+    expect(con.limites.tope_encargo_usd).toBe(Math.max(Number(hoy.limites.tope_encargo_usd) * 3, Math.ceil(coberturaDelTope(sinTope, 0).requerido)))
     // la de hoy queda igual (no se comparten objetos)
     expect(JSON.stringify(hoy)).toBe(antes)
     expect(propuestasDeLaPlantilla(hoy)).toBe(1)

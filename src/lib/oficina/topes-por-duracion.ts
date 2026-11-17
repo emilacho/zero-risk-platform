@@ -103,12 +103,21 @@ export function aplicarTopesPorDuracion(p: Plantilla): { plantilla: Plantilla; e
 /** lo que se reserva para VOLVER desde `paso` a su destino: los topes de los pasos que se repiten (destino → paso, inclusive) y, si el destino es la mesa,
  *  un turno de la mesa · pura · sin destino válido, infinito (nunca cabe). 17-nov · T7b: vive aquí para que la guarda de las vueltas (`orquestador-video`)
  *  y lo requerido al abrir (`coberturaDelTope`) usen LA MISMA cuenta. */
+/** 17-nov · GO Lenovo (encendido de imagen: «nunca cortar a medias; mejor un tope que cubra el trabajo») · la COTA DE LA MESA por pasada (dato `limites.cota_de_la_mesa_usd`,
+ *  un número > 0): lo que sus turnos pueden gastar en una pasada, integración incluida; la mesa la hace cumplir (`cotaAgotada`). null sin el dato · pura */
+export function cotaDeLaMesa(pl: Pick<Plantilla, 'limites'>): number | null {
+  const v = (pl?.limites as Record<string, unknown> | undefined)?.cota_de_la_mesa_usd
+  return typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : null
+}
+/** lo que se reserva por cada pasada de la mesa: su cota si la plantilla la trae; si no, un turno (como siempre) */
+export const reservaPorPasadaDeLaMesa = (pl: Pick<Plantilla, 'limites'>): number => cotaDeLaMesa(pl) ?? COTAS.RESERVA_POR_TURNO_USD
+
 export function costoDeVolver(pl: Plantilla, paso: Paso): number {
   const de = pl.pasos.findIndex((x) => x.clave === paso.vuelve_a?.paso)
   const a = pl.pasos.findIndex((x) => x.clave === paso.clave)
   if (de < 0 || a < de) return Number.POSITIVE_INFINITY
   const topes = pl.pasos.slice(de, a + 1).reduce((s, x) => s + (Number(x.tope_usd) || 0), 0)
-  return +(topes + (pl.pasos[de].funcion === 'mesa' ? COTAS.RESERVA_POR_TURNO_USD : 0)).toFixed(6)
+  return +(topes + (pl.pasos[de].funcion === 'mesa' ? reservaPorPasadaDeLaMesa(pl) : 0)).toFixed(6)
 }
 
 /**
@@ -128,7 +137,7 @@ const seSalta = (s: Paso) => (VUELTAS_QUE_SE_SALTAN_SI_NO_CABEN.funciones as rea
 export function coberturaDelTope(p: Plantilla, tope: number): { requerido: number; cubre: boolean; detalle: string } {
   const pasos = Array.isArray(p?.pasos) ? p.pasos : []
   const gastan = pasos.filter((s) => (num(s.tope_usd) ?? 0) > 0)
-  const mesa = pasos.some((s) => s.funcion === 'mesa') ? COTAS.RESERVA_POR_TURNO_USD : 0
+  const mesa = pasos.some((s) => s.funcion === 'mesa') ? reservaPorPasadaDeLaMesa(p) : 0
   const pasada = gastan.reduce((a, s) => a + (num(s.tope_usd) ?? 0), 0) + mesa
   const vueltas = pasos
     .filter((s) => (num(s.vuelve_a?.max) ?? 0) > 0 && !seSalta(s))
@@ -139,13 +148,13 @@ export function coberturaDelTope(p: Plantilla, tope: number): { requerido: numbe
   const iMesa = pasos.findIndex((s) => s.funcion === 'mesa')
   // 17-nov · propuestas en imagen · tramo 2b (punto 4 de CC6): la mesa de imagen CON propuestas guarda lo que sigue con la misma cuenta (borradores + rondas + final)
   const deLaMesa = iMesa >= 0 && guardaLoQueSigue(p)
-    ? r4(pasos.slice(0, iMesa).reduce((a, s) => a + Math.max(0, num(s.tope_usd) ?? 0), 0) + COTAS.RESERVA_POR_TURNO_USD + loQueSigueDeLaMesa(p, { vueltas: {} }))
+    ? r4(pasos.slice(0, iMesa).reduce((a, s) => a + Math.max(0, num(s.tope_usd) ?? 0), 0) + reservaPorPasadaDeLaMesa(p) + loQueSigueDeLaMesa(p, { vueltas: {} }))
     : 0
   const requerido = Math.max(porPasos, deLaMesa)
   const cubre = num(tope) !== null && tope + 1e-9 >= requerido
-  const partes = gastan.map((s) => `${s.clave} ${s.tope_usd}`).concat(mesa ? [`un turno de la mesa ${mesa}`] : [])
+  const partes = gastan.map((s) => `${s.clave} ${s.tope_usd}`).concat(mesa ? [cotaDeLaMesa(p) !== null ? `la cota de la mesa ${mesa}` : `un turno de la mesa ${mesa}`] : [])
   const deVueltas = vueltas.map((x) => `${x.max} × la vuelta de «${x.clave}» (${r4(x.costo)})`)
-  return { requerido, cubre, detalle: `el tope del encargo (US$ ${tope}) ${cubre ? 'cubre' : 'NO cubre'} el peor caso con cada paso a su tope (US$ ${requerido}: una pasada ${partes.join(' + ') || 'sin gasto'}${deVueltas.length ? ` + ${deVueltas.join(' + ')}` : ''} = ${porPasos}${deLaMesa > porPasos ? `; pero la mesa ${(FAMILIAS_MESA as Record<string, string>)[String(p.familia)] === 'video' ? 'del video' : 'con propuestas'} guarda ${deLaMesa} antes de su primer turno (su turno + lo que sigue + la jefatura), y manda eso` : ''})` }
+  return { requerido, cubre, detalle: `el tope del encargo (US$ ${tope}) ${cubre ? 'cubre' : 'NO cubre'} el peor caso con cada paso a su tope (US$ ${requerido}: una pasada ${partes.join(' + ') || 'sin gasto'}${deVueltas.length ? ` + ${deVueltas.join(' + ')}` : ''} = ${porPasos}${deLaMesa > porPasos ? `; pero la mesa ${(FAMILIAS_MESA as Record<string, string>)[String(p.familia)] === 'video' ? 'del video' : 'con propuestas'} guarda ${deLaMesa} antes de su primer turno (${cotaDeLaMesa(p) !== null ? 'su cota' : 'su turno'} + lo que sigue + la jefatura), y manda eso` : ''})` }
 }
 
 /** 17-nov · ¿la mesa de esta plantilla guarda lo que sigue con `loQueSigueDeLaMesa`? La del video siempre; la de imagen solo CON propuestas (dato `limites.propuestas` > 1:
@@ -161,6 +170,20 @@ export const guardaLoQueSigue = (p: Plantilla): boolean => (FAMILIAS_MESA as Rec
  *   que mientras la mesa trabaja la ronda del dueño `e.vueltas` aún no la tiene; si el último paso hecho vuelve a ESTA mesa y su condición se cumple (lo mismo
  *   que decide `siguientePaso`), esa ronda ya está ocurriendo y no se reserva otra vez.
  */
+/** 17-nov · GO Lenovo · cuántas pasadas de la mesa van, la de ahora incluida: 1 + las vueltas a la mesa ya contadas + la que está en curso (el motor la cuenta recién al
+ *  registrar su primer paso, como en `loQueSigueDeLaMesa`) · pura */
+export function pasadasDeLaMesa(p: Plantilla, e: { vueltas?: Record<string, number> } & Partial<Estado>): number {
+  const pasos = Array.isArray(p?.pasos) ? p.pasos : []
+  const i = pasos.findIndex((s) => s.funcion === 'mesa')
+  if (i < 0) return 1
+  const clave = pasos[i].clave
+  const hechas = pasos.filter((s) => s.vuelve_a?.paso === clave).reduce((a, s) => a + Math.max(0, e.vueltas?.[s.clave] ?? 0), 0)
+  const ult = typeof e.ultimo === 'number' && e.ultimo >= 0 ? pasos[e.ultimo] : undefined
+  const v = ult?.vuelve_a
+  const enCurso = ult && v && v.paso === clave && (e.vueltas?.[ult.clave] ?? 0) < v.max && evaluar(v.si, e as Estado) ? 1 : 0
+  return 1 + hechas + enCurso
+}
+
 export function loQueSigueDeLaMesa(p: Plantilla, e: { vueltas?: Record<string, number> } & Partial<Estado>): number {
   const pasos = Array.isArray(p?.pasos) ? p.pasos : []
   const i = pasos.findIndex((s) => s.funcion === 'mesa')
