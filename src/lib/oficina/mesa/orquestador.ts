@@ -21,8 +21,8 @@ import { imagenesDelTurno } from './fotos-a-la-vista'
 import { condicionesDeLaPieza, direccionDe, especialistasPertinentes, ingenieroDePrompts, porteroDe } from './directorio'
 import { condicionesDelVideo } from './condiciones-de-video'
 import { FORMATO_DE_PIEZA, destinatarioDe, leerRespuestaSobreNotas, quitarLineasDeNotas, rastroDeLasNotas, seccionDeNotasDelDueno, tareaParaConsultar } from './aprendizaje'
-import { fichaDeLaHoja, separarRespuestas } from '../sentido-contra-la-ficha'
-import { leerIndice, pedidoDelIndice } from './indice-del-cerebro'
+import { separarRespuestas } from '../sentido-contra-la-ficha'
+import { leerIndice, pedidoDelIndice, piezaParaElCerebro } from './indice-del-cerebro'
 import { tableroParaLaJefatura } from './libro'
 import { siguienteDeLaMesa, techoDe, type ContextoDeLaMesa } from './planificador'
 import { traducirPieza, hayImagenesAGenerar, pedidoDeImagen, type ConceptoDeImagen, type OpcionesDeTraduccion, type Traduccion } from './traductor'
@@ -280,14 +280,14 @@ export async function avanzarMesa(P: Puertos, enc0: Encargo, pl: Plantilla, indi
     if (est.marcas.apertura_enriquecida !== true) {
       const portero = porteroDe(est.directorio_congelado)?.agente
       est = { ...est, marcas: { ...est.marcas, apertura_enriquecida: true } }
-      // 18-nov · LA MESA LEE EL ÍNDICE DEL CEREBRO (firma de Emilio 16:53 Zúrich): en las mesas de pieza, UNA lectura al abrir, diciendo lo suyo (oferta/sede,
-      //   canal, tema, la pieza). Con el índice no sale el pedido mezclado: cada turno lee la base entera y pide por número (`pedir_fichas`).
+      // 18-nov · LA MESA LEE EL ÍNDICE DEL CEREBRO (firma de Emilio 16:53 Zúrich), SIN CASILLAS (corrección 19:19 Zúrich): en las mesas de pieza, UNA lectura al abrir
+      //   con la HOJA completa de la pieza (brief + plan). Con el índice no sale el pedido mezclado: cada turno lee la base completa y pide por número (`pedir_fichas`).
       //   Si el índice no responde, la mesa NO se frena: queda la marca con el motivo y abre con el pedido de siempre.
       if (P.indice && !esDeLaCadena(est.tipo)) {
         const bf = baseDeLaminas(enc.estado_del_motor)
-        const ped = pedidoDelIndice({ client_id: enc.client_id, encargo_id: enc.id, fila: enc.sala_ref?.fila, oferta: fichaDeLaHoja(bf.brief.texto).oferta, canal: bf.brief.red, tema: bf.brief.protagonista, agente: 'oficina-creativa' })
+        const ped = pedidoDelIndice({ client_id: enc.client_id, agente: 'oficina-creativa', pieza: piezaParaElCerebro({ encargo_id: enc.id, fila: enc.sala_ref?.fila, brief_texto: bf.brief.texto, plan_texto: bf.F.plan_texto }) })
         const r = await P.indice.indice(ped)
-        const ix = r.ok ? leerIndice(r.body, ped.sede ?? null) : null
+        const ix = r.ok ? leerIndice(r.body) : null
         if (ix) est = { ...est, indice: ix }
         else est = { ...est, marcas: { ...est.marcas, indice_sin_respuesta: r.ok ? 'el índice no trajo huella ni lista' : String(r.error).slice(0, 300) } }
       }

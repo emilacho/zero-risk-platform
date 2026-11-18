@@ -87,9 +87,9 @@ servidor.tool(
 servidor.tool(
   'pedir_fichas',
   'Te trae, en este mismo turno, el original completo de las fichas del índice «Lo que sabemos del cliente» que pidas por su número. Si un número no existe, dice «no consta».',
-  { numeros: z.array(z.number().int().positive()).min(1).describe('los números del índice que quieres leer completos'), para_que: z.string().optional().describe('para qué los necesitas') },
-  async ({ numeros, para_que }) => {
-    const r = await llamar('pedir_fichas', { numeros, para_que })
+  { numeros: z.array(z.number().int().positive()).min(1).describe('los números del índice que quieres leer completos') },
+  async ({ numeros }) => {
+    const r = await llamar('pedir_fichas', { numeros })
     return r.ok ? bien(typeof r.cuerpo?.fichas === 'string' ? r.cuerpo.fichas : r.cuerpo) : fallo(r.error)
   },
 )

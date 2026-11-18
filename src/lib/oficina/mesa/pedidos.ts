@@ -317,7 +317,7 @@ const REGLAS_DURAS = (c: ContextoDeTurno): string => [
 ].join('\n')
 
 /** 18-nov · con el índice del cerebro, el empleado pide por número los originales completos y los lee en su mismo turno */
-const HERRAMIENTA_PEDIR_FICHAS = '- `pedir_fichas(numeros, para_que)`: te trae, en este mismo turno, el original completo de las fichas del índice «Lo que sabemos del cliente» que pidas por su número. Si un número no existe, dice «no consta».'
+const HERRAMIENTA_PEDIR_FICHAS = '- `pedir_fichas(numeros)`: te trae, en este mismo turno, el original completo de las fichas del índice «Lo que sabemos del cliente» que pidas por su número. Si un número no existe, dice «no consta».'
 
 const HERRAMIENTAS = [
   '## Cómo trabajas con el equipo',

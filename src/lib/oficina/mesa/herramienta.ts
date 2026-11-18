@@ -8,7 +8,8 @@ import type { Respuesta } from '../orquestador'
 import type { Puertos } from '../puertos'
 import { porteroDe } from './directorio'
 import { huellaDePedido, idasYVueltas } from './libro'
-import { fichasEnTexto, leerEntrega, numerosPedidos } from './indice-del-cerebro'
+import { fichasEnTexto, leerEntrega, numerosPedidos, piezaParaElCerebro } from './indice-del-cerebro'
+import { baseDeLaminas } from '../orquestador-laminas'
 import { COTAS, esFamiliaMesa, type EstadoMesa, type TipoDeAporte } from './tipos'
 
 const r = (status: number, cuerpo: Record<string, unknown>): Respuesta => ({ status, cuerpo })
@@ -40,8 +41,10 @@ export async function registrarHerramienta(P: Puertos, cuerpo: unknown): Promise
     if (!P.indice || !est.indice) return r(200, { ok: false, motivo: 'esta pieza no tiene el índice del cerebro: usa pedir_material si de verdad te falta algo' })
     const numeros = numerosPedidos(b.numeros)
     if (!numeros.length) return r(200, { ok: false, motivo: 'di qué números del índice quieres (por ejemplo [3, 12])' })
-    const para_que = typeof b.para_que === 'string' && b.para_que.trim() ? b.para_que.trim() : undefined
-    const e = await P.indice.entregar({ cliente: enc.client_id, numeros, huella: est.indice.huella, pieza: { encargo_id: enc.id, ...(enc.sala_ref?.fila !== undefined ? { fila: enc.sala_ref.fila } : {}) }, turno: `${abierto.tipo}:${de}`, agente: de, ...(para_que ? { para_que } : {}) })
+    // sin casillas: la pieza va con su hoja completa (el cerebro rechaza `para_que` y cualquier casilla)
+    const bf = baseDeLaminas(enc.estado_del_motor)
+    const pieza = piezaParaElCerebro({ encargo_id: enc.id, fila: enc.sala_ref?.fila, brief_texto: bf.brief.texto, plan_texto: bf.F.plan_texto })
+    const e = await P.indice.entregar({ cliente: enc.client_id, agente: de, turno: `${abierto.tipo}:${de}`, pieza, numeros, huella: est.indice.huella })
     if (!e.ok) return r(200, { ok: false, motivo: `el cerebro no respondió (${e.error}); sigue con lo que tienes y no des por sabido lo que no leíste` })
     const fichas = leerEntrega(e.body, numeros)
     return r(200, { ok: true, fichas: fichasEnTexto(fichas) })
