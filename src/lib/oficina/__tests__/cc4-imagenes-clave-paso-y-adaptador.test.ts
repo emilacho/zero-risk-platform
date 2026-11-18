@@ -53,6 +53,35 @@ describe('el paso imagenes_clave pasa al generador las fotos de los personajes d
   })
 })
 
+// 18-nov · 🟡 de CC7 a #1179 (m22, m23)
+describe('cuando una foto no viaja y en el cuadro de cierre', () => {
+  const personajes = [{ id: 'el-personaje', nombre: 'El personaje', descripcion: 'el de la marca', fotos_ids: [PERSONAJE_1.id, PERSONAJE_2.id] }]
+  it('🔴 m22 · la ruta dice que una de las otras fotos no viajó: queda la sugerencia «salió sin 1 de sus fotos» nombrándola, y la imagen guarda solo la que sí', async () => {
+    const M = crearMemoria({})
+    const imagen = M.P.imagen
+    M.P.imagen = async (p) => {
+      const r = await imagen(p)
+      return r.ok && p.otras_fotos?.length ? { ...r, referencia: { usada: true, otras_usadas: [p.otras_fotos[0].url], otras_omitidas: [{ url: p.otras_fotos[1].url, motivo: 'la foto vino vacía' }] } } : r
+    }
+    const planos = [{ n: 1, desde: 0, hasta: 3, se_ve: 'el personaje mira el plato', producto: true, foto_id: PLATO.id, personajes: ['el-personaje'] }]
+    const s = await ejecutarCodigoV(M.P, encargoConPersonaje(personajes, planos) as never, VIDEO_MESA, PASO)
+    const f = (s.res.fichas ?? []).find((x) => x.id.includes('otras-fotos-1'))
+    expect(f?.que).toContain('salió sin 1 de sus fotos de referencia')
+    expect(f?.que).toContain(PERSONAJE_2.id)
+    expect(f?.gravedad).toBe('sugerencia')
+    const a = s.res.artefacto as unknown as ImagenesClave
+    expect(a.propuestas![0].planos[0]).toMatchObject({ otras_referencias_ids: [PERSONAJE_1.id] })
+  })
+  it('🔴 m23 · el plano largo pide su cuadro de cierre con la MISMA base y las mismas otras fotos que su arranque', async () => {
+    const M = crearMemoria({})
+    const planos = [{ n: 1, desde: 0, hasta: 6, se_ve: 'el personaje mira el plato', movimiento: 'la cámara se acerca', estado_final: 'el plato en primer plano', producto: true, foto_id: PLATO.id, personajes: ['el-personaje'] }]
+    await ejecutarCodigoV(M.P, encargoConPersonaje(personajes, planos) as never, VIDEO_MESA, PASO)
+    expect(M.llamadas.imagen).toBe(2)
+    expect(M.llamadas.imagenFotos).toEqual([PLATO.id, PLATO.id])
+    expect(M.llamadas.imagenOtras).toEqual([[PERSONAJE_1.id, PERSONAJE_2.id], [PERSONAJE_1.id, PERSONAJE_2.id]])
+  })
+})
+
 describe('el adaptador manda las otras fotos a la ruta y lee lo que la ruta dice de ellas', () => {
   const ENV: Entorno = { baseUrl: 'https://app.test', internalKey: 'k', openaiKey: 'sk', revisorModelo: 'm', revisorPrecioEntrada: 1, revisorPrecioSalida: 1, slackToken: 'x', bucket: 'b' }
   const cuerpos: Array<Record<string, unknown>> = []
