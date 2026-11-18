@@ -96,6 +96,21 @@ describe('el tope · lo que NO cambia', () => {
     expect(r.texto).toContain('## De qué parte del plan sale\n«una frase que el plan no tiene»')
     expect(leerBriefCreativo(r.texto, ins).bloqueos.some((b) => /no se encuentra literal en el plan/.test(b))).toBe(true)
   })
+  it('🟡 t6 (CC7): en un bloque `>` con una cita literal y otra no, SOLO la no literal pierde sus «» y lleva la marca', () => {
+    const md = SIN_FALTAS.replace('## Objetivo', `> «${LITERAL}»\n> «${FICHA}»\n## Objetivo`)
+    const r = bajarCitasNoLiterales(md, FUENTES)
+    expect(r.bajadas.map((x) => x.cita)).toEqual([FICHA])
+    expect(r.texto.split('\n')).toContain(`«${LITERAL}» ${FICHA} ${MARCA}`)
+    expect(r.texto).not.toContain(`${LITERAL} ${MARCA}`)
+  })
+  it('🟡 t8 (CC7): «el manual dice: «…»» con una frase LITERAL del manual (que no está en el plan) no se toca, aunque se bajen otras', () => {
+    const MANUAL = 'Nuestra voz es cercana y clara con cada cliente que nos escribe.'
+    const md = brief().replace('Cercano y claro.', 'Cercano y claro; el manual dice: «Nuestra voz es cercana y clara con cada cliente».')
+    const r = bajarCitasNoLiterales(md, { plan: PLAN, manual: MANUAL })
+    expect(r.bajadas).toHaveLength(3)
+    expect(r.texto).toContain('el manual dice: «Nuestra voz es cercana y clara con cada cliente».')
+    expect(r.texto).not.toContain('resumen, no cita literal del manual')
+  })
   it('🟡 m6: aunque en el mismo brief se bajen otras citas, un `> «…»` no literal en «De qué parte del plan sale» queda TAL CUAL (y sigue devolviendo)', () => {
     const md = brief().replace('## De qué parte del plan sale\n«Pedidos entregados atribuibles a pauta — semanal»', '## De qué parte del plan sale\n> «una frase que el plan no tiene en ninguna parte»')
     const r = bajarCitasNoLiterales(md, FUENTES)
