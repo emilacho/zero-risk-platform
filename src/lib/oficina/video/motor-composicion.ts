@@ -14,7 +14,8 @@
 import type { Puertos } from '../puertos'
 import type { DisenoDeAnuncio } from '../../../../packages/carousel-engine/src/anuncio'
 import type { GrupoDeSubtitulo } from '../../../../packages/carousel-engine/src/video-html'
-import { armarVideoCompuesto, type PlanoParaComponer } from './composicion-del-video'
+// el armado se carga solo al rendir: la plantilla del video arrastra el motor de dibujo (satori), que no debe cargarse con el orquestador
+import type { PlanoParaComponer } from './composicion-del-video'
 import { agruparPalabras, leerPalabras, type EnergiaDeSubtitulos } from './subtitulos'
 
 export const MINUTOS_PARA_ANALIZAR = 10
@@ -134,6 +135,7 @@ async function paso(P: PuertosDeComposicion, enc: { id: string; client_id: strin
   if (!c.render_id) {
     if (c.pedidos_de_render >= PEDIDOS_DE_RENDER_MAX) return sinComponer(c, `el render falló ${c.pedidos_de_render} veces`, true)
     const m = await ctx.marca()
+    const { armarVideoCompuesto } = await import('./composicion-del-video')
     const arm = armarVideoCompuesto({ planos: ctx.planos, clips: c.clips, relacion: ctx.relacion, resolucion: ctx.resolucion, nombre_del_video: NOMBRE_DEL_UNIDO, logo: m.logo, firma: m.firma, diseno: m.diseno, subtitulos: c.subtitulos })
     if (!arm.ok) return sinComponer({ ...c, avisos: sinRepetir([...c.avisos, ...m.avisos]) }, arm.motivo, false)
     const r = await S.rendir({ pedido: arm.pedido, archivos: [{ nombre: NOMBRE_DEL_UNIDO, url: c.unido.video_url }] })

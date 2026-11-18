@@ -823,8 +823,9 @@ export async function sondearPlanos(P: Puertos, enc: Encargo, enviados: PlanoEnv
   const unido: VideoUnido = { ok: true, status: 'completed', video_url: u.video_url, url_proveedor: null, costo_usd: costo, expires_at: vence, copia: 'bucket', aviso: null, planos: l.clips.map((c) => ({ n: c.n, request_id: c.request_id, costo_usd: c.costo_usd, video_url: c.video_url })) }
   // 18-nov · T5 tramo 3 · con `componer` encendido el unido pasa por el servicio de render (en seco, nunca: no hay video real)
   if (unido.video_url.startsWith(PREFIJO_DRY)) return unido
-  const pl = await plantillaDe(P, enc)
-  if (!componerEncendido(pl)) return unido
+  // la plantilla ya se leyó al abrir; si ahora no se puede leer, el unido sale como hoy (nunca se pierde el video por esto)
+  const pl = await plantillaDe(P, enc).catch(() => null)
+  if (!pl || !componerEncendido(pl)) return unido
   if (!P.componerVideo) return { ...unido, aviso: 'el video sale sin textos ni cierre de marca: el servicio de render no está configurado', compuesto: { compuesto: false, motivo: 'el servicio de render no está configurado', pedidos_de_render: 0, avisos: [] } }
   const g = datos(enc.estado_del_motor, 'guion') as unknown as GuionDeLaMesa | undefined
   return seguirComponiendo(P, enc, empezarComposicion(unido, l.clips, !!g?.subtitulos, ahora), ahora)
