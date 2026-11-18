@@ -135,6 +135,21 @@ describe('INTEGRACIÓN · almacén real (base falsa) + adaptadores + orquestador
 })
 
 describe('fuentes del cliente leídas de la base', () => {
+  // 18-nov · 🟡 de CC6 a #1156 (m1 + m4): el lector principal de material debe PEDIR `papel` y `duplicado_de`; la base falsa solo devuelve lo pedido
+  it('🔴 el rol sale del papel del cerebro y la copia no cuenta (el select pide papel, sin_motivo y duplicado_de)', async () => {
+    const db = sembrar()
+    db.tablas['client_social_images'].push(
+      { id: 'hashtag-1', client_id: CLIENTE, owner_role: 'propio', papel: 'mercado', estado: 'ok', url: 'https://fotos.test/hashtag-1.jpg', que_muestra: 'una mesa ajena' },
+      { id: 'copia-1', client_id: CLIENTE, owner_role: 'propio', papel: 'propio', duplicado_de: 'otra', estado: 'ok', url: 'https://fotos.test/copia-1.jpg', que_muestra: 'la misma foto' },
+      { id: 'sin-motivo-1', client_id: CLIENTE, owner_role: 'competidor', papel: 'mercado', sin_motivo: true, estado: 'ok', url: 'https://fotos.test/sm-1.jpg', que_muestra: 'de otra ciudad' },
+    )
+    const fu = await crearPuertos(db, ENV, fetchFalso().f).fuentes(CLIENTE)
+    if ('error' in fu) throw new Error(fu.error)
+    expect(fu.fotos).toHaveLength(16)
+    expect(fu.fotos.map((x) => x.id)).not.toContain('hashtag-1')
+    expect(fu.fotos.map((x) => x.id)).not.toContain('copia-1')
+    expect(fu.referencias?.map((x) => x.id)).toEqual(['ajena-1', 'hashtag-1'])
+  })
   it('manual, prohibidas, registro, teléfonos, usuarios, precios de la carta PROPIA, competidores, fotos y zona', async () => {
     const db = sembrar(); const P = crearPuertos(db, ENV, fetchFalso().f)
     const fu = await P.fuentes(CLIENTE)
