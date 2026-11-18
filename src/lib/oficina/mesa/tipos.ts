@@ -49,6 +49,19 @@ export const COTAS = {
   REINTENTOS_DE_TURNO: 3,
 } as const
 
+/**
+ * 18-nov · T7d (encargo de Lenovo, arreglo 1 · regla de Emilio: los límites técnicos al máximo sin preguntar). En la mesa de la GRAN IDEA (`concepto`) los conteos no son el freno.
+ * El director anotó 6 pedidos, el máximo por agente, y en su última integración el sistema le contestó con el tope. El freno de esa mesa es el DINERO: el tope de la pieza (10),
+ * la reserva por turno y el techo ×1,2 (`cotaAgotada` y `siguienteDeLaMesa`). Por eso los conteos suben a un valor que el dinero alcanza antes:
+ *  · 12 pedidos por agente: uno a cada especialista del equipo de la gran idea;
+ *  · profundidad 4: igual a las idas y vueltas por pareja (más profundidad no se puede usar);
+ *  · 48 turnos: con lo que reserva cada turno (0,60) y el tope de 10, el dinero corta mucho antes.
+ * Las demás mesas siguen con `COTAS`.
+ */
+export const COTAS_DE_LA_GRAN_IDEA = { MAX_PEDIDOS_POR_AGENTE: 12, MAX_PROFUNDIDAD: 4, MAX_TURNOS: 48 } as const
+export const profundidadMaximaDe = (tipo: TipoDePieza | undefined): number => (tipo === 'concepto' ? COTAS_DE_LA_GRAN_IDEA.MAX_PROFUNDIDAD : COTAS.MAX_PROFUNDIDAD)
+export const turnosMaximosDe = (tipo: TipoDePieza | undefined): number => (tipo === 'concepto' ? COTAS_DE_LA_GRAN_IDEA.MAX_TURNOS : COTAS.MAX_TURNOS)
+
 /** los 6 equipos del departamento de marketing (MAPA 01-nov · firma 01-nov 00:11Z) · claves estables de `oficina_equipos` (las mismas que usa el tablero) */
 export const CLAVES_DE_EQUIPO = ['direccion', 'estrategia', 'creativo', 'web', 'medios', 'relaciones'] as const
 export type ClaveDeEquipo = (typeof CLAVES_DE_EQUIPO)[number]

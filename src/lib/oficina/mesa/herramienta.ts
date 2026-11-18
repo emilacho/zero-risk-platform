@@ -8,7 +8,7 @@ import type { Respuesta } from '../orquestador'
 import type { Puertos } from '../puertos'
 import { porteroDe } from './directorio'
 import { huellaDePedido, idasYVueltas } from './libro'
-import { COTAS, esFamiliaMesa, type EstadoMesa, type TipoDeAporte } from './tipos'
+import { COTAS, COTAS_DE_LA_GRAN_IDEA, esFamiliaMesa, profundidadMaximaDe, type EstadoMesa, type TipoDeAporte } from './tipos'
 
 const r = (status: number, cuerpo: Record<string, unknown>): Respuesta => ({ status, cuerpo })
 const HERRAMIENTAS = ['mesa_pedir', 'mesa_devolver', 'pedir_material'] as const
@@ -35,10 +35,13 @@ export async function registrarHerramienta(P: Puertos, cuerpo: unknown): Promise
 
   const libro = await P.mesa.libro(encargoId)
   const hechos = libro.filter((a) => (a.tipo === 'pide' || a.tipo === 'devuelve') && a.de === de).length
-  if (hechos >= MAX_PEDIDOS_POR_AGENTE) return r(200, { ok: false, motivo: `ya anotaste ${MAX_PEDIDOS_POR_AGENTE} pedidos en esta pieza: decide con lo que hay` })
+  // 18-nov · la mesa de la gran idea lleva sus conteos al máximo (`COTAS_DE_LA_GRAN_IDEA`); las demás, los de siempre
+  const maxPedidos = est.tipo === 'concepto' ? COTAS_DE_LA_GRAN_IDEA.MAX_PEDIDOS_POR_AGENTE : MAX_PEDIDOS_POR_AGENTE
+  if (hechos >= maxPedidos) return r(200, { ok: false, motivo: `ya anotaste ${maxPedidos} pedidos en esta pieza: decide con lo que hay` })
   const respondiendo = abierto.responde_a ? libro.find((a) => a.id === abierto.responde_a) : undefined
   const profundidad = respondiendo ? respondiendo.profundidad + 1 : 0
-  if (profundidad > COTAS.MAX_PROFUNDIDAD) return r(200, { ok: false, motivo: `los pedidos encadenados llegaron a su tope (${COTAS.MAX_PROFUNDIDAD}): responde con lo que tienes` })
+  const maxProfundidad = profundidadMaximaDe(est.tipo)
+  if (profundidad > maxProfundidad) return r(200, { ok: false, motivo: `los pedidos encadenados llegaron a su tope (${maxProfundidad}): responde con lo que tienes` })
 
   let para: string, tipo: TipoDeAporte, texto: string
   const portero = porteroDe(est.directorio_congelado)
