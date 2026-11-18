@@ -59,6 +59,18 @@ function cerebroFalso(opc: { respuestas?: Fila[]; falla?: boolean; noLee?: boole
 const PEND = { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', client_id: C, sede_clave: null, tema: 'costos fijos mensuales', tema_norm: 'costo-fijo-mensual', pregunta: '¿cuánto pagas al mes en sueldos, luz y arriendo?', supuesto: 'unos US$ 3.000 al mes', canal: 'Tu oficina › Decisiones', oficina: 'financiera', agente: 'chief-financial-officer', estado: 'pendiente', workflow_id: 'X9F0zp6LQ2xGEYVS', workflow_execution_id: '220399', creado_en: '2026-11-06T02:00:00Z' }
 
 describe('preguntar', () => {
+  it('🔴 (G2a · 🟡 c10 de CC7) un supuesto de 5000 entra entero; uno de más del tope es 400 con motivo, antes de tocar la base', async () => {
+    const largo = 'y'.repeat(5000)
+    const b = baseFalsa(), k = cerebroFalso()
+    const ok = await rutaPreguntas({ db: b.db, cerebro: k.cerebro, ahora: AHORA, nuevoId: () => 'nuevo-id' }, { accion: 'preguntar', client_id: C, ...WF, preguntado_por: FIN, tema: 'costos fijos mensuales', pregunta: '¿cuánto pagas?', supuesto: largo, canal: 'Tu oficina › Decisiones' })
+    expect(ok.status).toBe(200)
+    expect(b.escrituras[0].datos.supuesto).toBe(largo)
+    const b2 = baseFalsa(), k2 = cerebroFalso()
+    const no = await rutaPreguntas({ db: b2.db, cerebro: k2.cerebro, ahora: AHORA, nuevoId: () => 'otro-id' }, { accion: 'preguntar', client_id: C, ...WF, preguntado_por: FIN, tema: 'costos fijos mensuales', pregunta: '¿cuánto pagas?', supuesto: 'y'.repeat(100_001), canal: 'Tu oficina › Decisiones' })
+    expect(no.status).toBe(400)
+    expect(JSON.stringify(no.body)).toMatch(/supuesto/)
+    expect(b2.escrituras).toHaveLength(0)
+  })
   it('registra la pregunta en la PLATAFORMA (nunca en una tabla del cerebro) con quién preguntó, el supuesto y la corrida', async () => {
     const b = baseFalsa(), k = cerebroFalso()
     const r = await rutaPreguntas({ db: b.db, cerebro: k.cerebro, ahora: AHORA, nuevoId: () => 'nuevo-id' }, { accion: 'preguntar', client_id: C, ...WF, preguntado_por: FIN, tema: 'costos fijos mensuales', pregunta: '¿cuánto pagas?', supuesto: 'unos US$ 3.000', canal: 'Tu oficina › Decisiones' })

@@ -159,10 +159,10 @@ describe('turno · entrada, pedido, aceptación y vuelta', () => {
     expect(r.cuerpo).not.toHaveProperty('callback_mode'); expect(r.cuerpo).not.toHaveProperty('images')
     expect(r.cuerpo.extra).toMatchObject({ indicacion_oficina: 'reglas', dispatch_key: 'e:3' })
   })
-  it('② armar sin thinking_mode en el pedido: el razonamiento queda APAGADO por omisión', () => {
+  it('② armar sin thinking_mode en el pedido: el razonamiento va al MÁXIMO por omisión (18-nov · G1; antes apagado)', () => {
     const t = turnoAgente(); delete (t.pedido as Record<string, unknown>).thinking_mode
     const e = json(ejecutar('turno-n0-entrada.js', entrada(t)))[0]
-    expect(json(ejecutar('turno-n1-armar.js', { input: [e] }))[0].cuerpo.thinking_mode).toBe('disabled')
+    expect(json(ejecutar('turno-n1-armar.js', { input: [e] }))[0].cuerpo.thinking_mode).toBe('maximo')
   })
   it('② armar con imágenes: las manda en base64', () => {
     const e = json(ejecutar('turno-n0-entrada.js', entrada(turnoAgente({ images: [{ url: 'https://x/a.png' }] }))))[0]
