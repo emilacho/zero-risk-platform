@@ -36,7 +36,9 @@ describe('el caso real: el reel de Olón (57101e2a)', () => {
   })
 
   it('la foto del personaje llega como IMAGEN, con su rótulo, a todos los turnos que crean, critican o integran', () => {
-    for (const tipo of LOS_QUE_VEN) expect(imagenesDelTurno(tipo, FIX.fotos), tipo).toContainEqual({ url: PERSONAJE.url, label: rotuloDeLaFoto(PERSONAJE.id) })
+    for (const tipo of LOS_QUE_VEN) expect(imagenesDelTurno(tipo, FIX.fotos), tipo).toContainEqual({ url: PERSONAJE.url, label: `foto:${PERSONAJE.id}` })
+    // el rótulo va escrito aquí, no con la función: es el mismo texto que la mesa pone en «Foto:» y que lee el traductor
+    expect(rotuloDeLaFoto('abc')).toBe('foto:abc')
   })
 
   it('tope: el máximo técnico del cable (20), sin repetidas, todas http(s) y todas de la lista que lee la mesa', () => {
