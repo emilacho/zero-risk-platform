@@ -6,6 +6,7 @@
  *  · Registra quién consultó (oficina, agente) en `cerebro_consultas`, sin gasto. Si ese registro falla se dice (`registrada: false`) y la consulta igual responde.
  *  · Orden que propone el cerebro a cualquier oficina: 1) esta lectura; 2) si no alcanza, el pedido (`/alimentar/pedido`), que AVISA cuando está (`avisar_a`).
  * Solo lectura: nunca escribe fichas.
+ * 18-nov · `publico=consumo|profesional`: la VOZ DEL PÚBLICO de ese tipo (sus clases, sin datos de personas privadas, con fuente, red, fecha y vigencia; ver `voz-del-publico.ts`).
  */
 import type { Db } from './alimentar'
 import { candidatasPorPalabras, fichasPorAtributo, type FichaCandidata } from './pedidos'
@@ -14,6 +15,8 @@ import { nivelDeFicha, ordenarPorEmbudo } from './embudo'
 import { adjuntoDelCliente } from './contexto-del-cliente'
 import type { Respuesta } from './rutas'
 import { ATRIBUCION_DEL_SUPUESTO, CLASE_DEL_SUPUESTO_ACEPTADO } from './supuestos-del-dueno'
+import { FUENTE_DE_LA_CLASE, TIPOS_DE_PUBLICO, clasesDelPublico, declaracionDelPublico, redDeLaFicha, textoSinPersonas, tipoDePublico } from './voz-del-publico'
+import { sinDatosPersonales } from './dueno'
 
 type Fila = Record<string, unknown>
 const lista = (x: unknown): Fila[] => (Array.isArray(x) ? (x as Fila[]) : [])
@@ -36,7 +39,9 @@ export interface ParametrosDeConsulta { client_id?: string | null; oficina?: str
   /** 02-nov · desde qué posición seguir (páginas de `todo`) */
   desde?: number | string | null
   /** 02-nov · true/«1»: el contenido entero, sin el recorte de ${LARGO_DEL_CONTENIDO} caracteres */
-  contenido_completo?: boolean | string | null }
+  contenido_completo?: boolean | string | null
+  /** 18-nov · `consumo` o `profesional`: la voz de ese tipo de público (sin `que` hace falta) */
+  publico?: string | null }
 const esSi = (v: unknown): boolean => v === true || ['1', 'true', 'si', 'sí'].includes(String(v ?? '').trim().toLowerCase())
 
 /** las sedes de una ficha: su columna `sede` (claves separadas por coma) o, si no, las de su rastro; vacío = vale para todas */
@@ -63,7 +68,14 @@ export async function rutaConsultar(deps: DepsDeConsultar, p: ParametrosDeConsul
   if (!UUID.test(clientId)) return err(400, 'entrada_invalida', '`client_id` debe ser un uuid')
   const oficina = txt(p.oficina).slice(0, 80), agente = txt(p.agente).slice(0, 80)
   if (!oficina || !agente) return err(400, 'entrada_invalida', '`oficina` y `agente` son obligatorios: se registra quién consulta (no hay lista de autorizados)')
-  const que = txt(p.que).slice(0, 400), atributo = txt(p.atributo).slice(0, 160), clase = txt(p.clase).slice(0, 400), sede = txt(p.sede_clave)
+  const que = txt(p.que).slice(0, 400), atributo = txt(p.atributo).slice(0, 160), sede = txt(p.sede_clave)
+  let clase = txt(p.clase).slice(0, 400)
+  // 18-nov · la voz del público: el tipo fija las clases (si además piden `clase`, solo las comunes)
+  const tipo = txt(p.publico) ? tipoDePublico(p.publico) : null
+  if (txt(p.publico) && !tipo) return err(400, 'entrada_invalida', `\`publico\` debe ser ${TIPOS_DE_PUBLICO.join(' o ')}`)
+  const clasesVoz = tipo ? clasesDelPublico(tipo, clase) : null
+  if (clasesVoz && !clasesVoz.length) return err(400, 'entrada_invalida', `ninguna de las clases pedidas es voz del público ${tipo}`)
+  if (clasesVoz) clase = clasesVoz.join(',')
   if (!que && !atributo && !clase) return err(400, 'entrada_invalida', 'pasa `que` (texto libre), `atributo` o `clase`: algo que buscar')
   const pedido = Number(p.limite)
   const todo = esSi(p.todo), contenidoCompleto = esSi(p.contenido_completo)
@@ -98,6 +110,8 @@ export async function rutaConsultar(deps: DepsDeConsultar, p: ParametrosDeConsul
     sumar(candidatasPorPalabras(que, cands, cands.length))
   }
   const vigente = (f: FichaCandidata) => !f.vigente_hasta || Date.parse(f.vigente_hasta) > ahora.getTime()
+  // la voz del público: SOLO sus clases, exactas (el texto libre o un prefijo no la mezclan con otra cosa)
+  if (clasesVoz) { const solo = elegidas.filter((x) => clasesVoz.includes(x.clase)); elegidas.length = 0; elegidas.push(...solo) }
   // las frescas primero (se conserva el orden de relevancia dentro de cada grupo)
   const orden = [...elegidas.filter(vigente), ...elegidas.filter((f) => !vigente(f))]
   const porRelevancia = orden.slice(desde, desde + limite)
@@ -106,15 +120,27 @@ export async function rutaConsultar(deps: DepsDeConsultar, p: ParametrosDeConsul
   const siguienteDesde = desde + porRelevancia.length < totalEncontradas ? desde + porRelevancia.length : null
   // 01-nov · el embudo en todo: lo propio primero y luego global → país → competencia → directa; dentro de cada nivel se conserva el orden de relevancia (una ficha no trae cifra de gusto)
   const ordenadas = ordenarPorEmbudo(porRelevancia, (c) => ({ nivel: nivelDeFicha(porId.get(c.id)?.alcance), gusto: null }))
+  let omitidas = 0
   const resultados = ordenadas.map((c) => {
     const f = porId.get(c.id) as Fila
-    const contenido = txt(f.contenido) || txt(f.que_es)
+    let contenido = txt(f.contenido) || txt(f.que_es)
+    let titulo = c.titulo || null
+    // la voz del público: sin datos de personas privadas (también en el título), con su fuente y su red
+    const voz = clasesVoz ? (() => {
+      const s = textoSinPersonas(c.clase, contenido)
+      const t = titulo ? sinDatosPersonales(titulo) : null
+      contenido = s.texto
+      titulo = t ? t.texto : null
+      if (s.omitido || t?.redactado) omitidas++
+      return { tipo_de_publico: tipo, fuente: FUENTE_DE_LA_CLASE[c.clase] ?? c.clase, red: redDeLaFicha(f.provenance_tag), datos_personales_omitidos: s.omitido || !!t?.redactado }
+    })() : null
     return {
-      ficha_id: c.id, nivel: nivelDeFicha(f.alcance), ref: c.ref, clase: c.clase, atributo: c.atributo || null, titulo: c.titulo || null,
+      ficha_id: c.id, nivel: nivelDeFicha(f.alcance), ref: c.ref, clase: c.clase, atributo: c.atributo || null, titulo,
       contenido: !contenidoCompleto && contenido.length > LARGO_DEL_CONTENIDO ? `${contenido.slice(0, LARGO_DEL_CONTENIDO)}…` : contenido,
       procedencia: procedenciaDe(f),
       fecha: f.observado_en ? String(f.observado_en) : null, fecha_de_la_fuente: f.fecha_fuente ? String(f.fecha_fuente) : null, reconfirmado_en: f.reconfirmado_en ? String(f.reconfirmado_en) : null,
       vigente_hasta: c.vigente_hasta, vencida: !vigente(c), sede: sedesDe(f).join(',') || null,
+      ...(voz ?? {}),
     }
   })
 
@@ -126,6 +152,7 @@ export async function rutaConsultar(deps: DepsDeConsultar, p: ParametrosDeConsul
     status: 200,
     body: {
       ok: true, client_id: clientId, consultado_por: { oficina, agente }, que: que || null, atributo: atributo || null, clase: clase || null, sede_clave: sede || null,
+      ...(tipo && clasesVoz ? { voz_del_publico: { ...declaracionDelPublico(tipo, clasesVoz, resultados, siguienteDesde !== null || desde > 0), voces_con_datos_omitidos: omitidas } } : {}),
       sin_dato: sinDato, total: ordenadas.length, resultados,
       total_encontradas: totalEncontradas, entregadas: ordenadas.length, desde, cortada: siguienteDesde !== null, siguiente_desde: siguienteDesde,
       ...(siguienteDesde !== null ? { aviso_de_corte: `hay ${totalEncontradas} fichas y van ${desde + ordenadas.length} (de la ${desde + 1} a la ${desde + ordenadas.length}): pide la siguiente página con desde=${siguienteDesde}${todo ? '' : ' (o todo=1 para traer todo por páginas)'}` } : {}), contexto_del_cliente: contexto,
