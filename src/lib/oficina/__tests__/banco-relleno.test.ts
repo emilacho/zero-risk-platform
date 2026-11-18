@@ -74,6 +74,22 @@ describe('relleno · la cuenta (la misma de la cadena)', () => {
     expect(con).toContain(idea('C1-I09', 'nueve'))
     expect(con).toContain(idea('C1-I03', 'pisa'))
   })
+  it('🔴 caso de CC7: el relleno escribe C1-I03 y luego C1-I02 (que choca); el que choca NO cae sobre C1-I03, que ya es de «tres»', () => {
+    const choca: Ap[] = [
+      { n: 1, de: 'a', tipo: 'aporta', texto: idea('C1-I01', 'uno') },
+      { n: 2, de: 'b', tipo: 'aporta', texto: idea('C1-I01', 'dos') },
+      { n: 3, de: 'dir', tipo: 'integra', texto: '## Gran idea\nLa mesa · noventa días' },
+      { n: 4, de: 'dir', tipo: 'aporta', texto: conCabeceraDelRelleno([idea('C1-I03', 'tres'), idea('C1-I02', 'cuatro')].join('\n'), 'abrir') },
+    ]
+    const t = textoParaLaCadena(choca, null, true)
+    expect(t).toContain(idea('C1-I02', 'uno'))
+    expect(t).toContain(idea('C1-I03', 'tres'))
+    expect(t).toContain(idea('C1-I04', 'cuatro'))
+    const ids = [...t.matchAll(/^- (C1-I\d{2,}) ·/gm)].map((m) => m[1])
+    expect(new Set(ids).size).toBe(ids.length)
+    const c = leerConcepto(t, { ...INS, prohibidas: [], fotos: [] })
+    expect(c.banco.map((i) => i.id).sort()).toEqual(['C1-I01', 'C1-I02', 'C1-I03', 'C1-I04'])
+  })
   it('🔴 el prefijo es el que YA usa el equipo en ese capítulo (aquí, el nombre: «Ccrecer»), no el número de orden', () => {
     const libro: Ap[] = [{ n: 1, de: 'miembro', tipo: 'aporta', texto: [idea('C1-I01', 'uno'), idea('C1-I02', 'dos'), idea('Ccrecer-I01', 'tres')].join('\n') }, { n: 2, de: 'dir', tipo: 'integra', texto: INTEGRA }]
     expect(rellenoPendiente(CONCEPTO(INS), libro)).toMatchObject({ capitulo: 'crecer', prefijo: 'crecer', desde: 2 })

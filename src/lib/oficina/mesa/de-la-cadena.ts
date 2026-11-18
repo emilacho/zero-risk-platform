@@ -181,9 +181,12 @@ export function ideasDeLosAportes(libro: Array<{ n?: number; de: string; tipo: s
         if (previa === undefined) ocupados.set(p.id, clave)
         else if (previa !== clave) {
           const cap = /^C([A-Za-z0-9_]+)-I\d{2,}$/.exec(p.id)?.[1] ?? ''
-          const n = (ultimo.get(cap) ?? 0) + 1
+          // el número nuevo sube mientras caiga sobre un id ya ocupado (el relleno no entra a la base · hueco hallado por CC7 en #1189)
+          let n = (ultimo.get(cap) ?? 0) + 1
+          const idDe = (k: number): string => `C${cap}-I${String(k).padStart(2, '0')}`
+          while (ocupados.has(idDe(n))) n++
           ultimo.set(cap, n)
-          const nuevo = `C${cap}-I${String(n).padStart(2, '0')}`
+          const nuevo = idDe(n)
           ocupados.set(nuevo, clave)
           limpia = `- ${nuevo} · ${p.resto}`
           vistas.add(limpia)
