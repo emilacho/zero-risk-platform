@@ -10,6 +10,7 @@ import type { FotoEtiquetada } from '../fotos'
 import { CABECERA_SALTAR_EDITOR } from '../../cadena/constantes'
 import { AGENTE_GANCHO_DE_VIDEO, METODO_GANCHO_POR_OMISION, fichasEnTexto, leerFichasPorRed, metodoDeAsiento } from '../../cadena/metodos'
 import { BRIEF_GUIA_NO_REGLA } from '../brief'
+import { TITULOS_DEL_BRIEF, TITULOS_OBLIGATORIOS_DEL_BRIEF } from '../../cadena/brief-creativo'
 import { fichaPorOmision } from '../../video/parametros'
 import { tareaDelIngeniero, type ImagenARedactar } from './prompts'
 import { seccionDeLaCriticaParaLaDireccion, tareaDeLaCritica } from './critica'
@@ -77,30 +78,16 @@ export const LISTA_DE_FOTOS = (fotos: FotoEtiquetada[]): string => {
   return propias.map((f) => `- ${f.id} · ${f.que_muestra ?? 'sin descripción'}${f.oferta?.trim() ? ` · oferta: ${f.oferta.trim()}` : ''}${f.con_personas ? ' · con personas' : ''}${f.etiqueta_confianza ? ` · confianza ${f.etiqueta_confianza}` : ''}`).join('\n')
 }
 
-/** 31-oct · brief creativo de la campaña (`brief_creativo.v1`): UN brief corto, con secciones fijas que el código lee; lo que falta se declara en «Faltantes», nunca se rellena */
+/**
+ * 31-oct · brief creativo de la campaña (`brief_creativo.v1`).
+ * 18-nov (T7 · DIAGNÓSTICO CC5 · GO Lenovo): UNA sola plantilla. Esta convención repetía sus propias secciones («## Mensaje», «por red: objetivo · llamado», sin «Público»)
+ * y contradecía la referencia del marco: en T7 el brief salió dos veces con el formato viejo. Ahora NO repite nada: remite a la referencia y sus títulos salen de la
+ * misma fuente (`TITULOS_DEL_BRIEF` de la cadena).
+ */
 const CONVENCION_DEL_BRIEF = [
-  'Entrega el BRIEF CREATIVO de la campaña con esta convención (secciones fijas, cortas; el código las lee):',
-  '```',
-  '## De qué parte del plan sale',
-  '<cita LITERAL del plan, entre comillas>',
-  '## Insight',
-  '<una verdad del público, en 1–2 frases>',
-  '## Mensaje',
-  '<UN solo mensaje de campaña>',
-  '## Objetivo',
-  '<objetivo de la campaña, medible> y por red: - <red>: objetivo · llamado',
-  '## Tono',
-  '<voz y trato del manual, en 2 líneas>',
-  '## Obligatorios',
-  '- vocabulario: … · - prohibido: … · - lo que no se dice: …',
-  '## Faltantes',
-  '- <campo>: <qué falta> (nunca se rellena)',
-  '## Contradicciones plan vs manual',
-  '- <qué> · plan dice · manual dice · qué se hizo',
-  '## Citas',
-  'A1 usé: <del portero> …',
-  '```',
-  'Un solo mensaje. Cita el plan literalmente. Nada de cifras ni datos del cliente sin fuente: lo que no esté en el material del portero, el manual o el plan va en «Faltantes». Idioma y trato: los del manual del cliente.',
+  'Entrega el BRIEF CREATIVO de la campaña tal como lo pide la referencia «El brief creativo de campaña» del marco (sección 2): qué va en cada sección, cómo se cita y lo que NO va en el brief está ahí. El código lee estas secciones, cada una como `## Título`:',
+  ...TITULOS_DEL_BRIEF.map((t) => `- ## ${t}`),
+  `Obligatorias: ${TITULOS_OBLIGATORIOS_DEL_BRIEF.join(' · ')}. Nada de cifras ni datos del cliente sin fuente: lo que no esté en el material del portero, el manual o el plan va en «Faltantes», nunca se rellena. Toda cita va literal. Idioma y trato: los del manual del cliente.`,
 ].join('\n')
 
 /** 31-oct · concepto de campaña (`concepto.v1`, contrato de la cadena): gran idea paraguas + capítulos por fase + series + banco de ideas (líneas que el código lee) */
@@ -371,7 +358,7 @@ export function armarTarea(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarj
     dirigir: [
       '## Tu turno · DIRECCIÓN CREATIVA: abre la pieza',
       ...(c.tipo === 'brief'
-        ? ['Lee el manual, el plan, la estrategia (el marco) y lo que el portero trajo al tablero. Escribe el **brief creativo de la campaña**: UN insight, UN mensaje, objetivo, tono, obligatorios y faltantes declarados (nunca los rellenes). Si te falta material del cliente, pídelo con `pedir_material`.']
+        ? ['Lee el manual, el plan, la estrategia (el marco) y lo que el portero trajo al tablero. Escribe el **brief creativo de la campaña** con las secciones de la referencia «El brief creativo de campaña» del marco (lo único que hay que comunicar es UNA proposición; los faltantes se declaran, nunca se rellenan). Si te falta material del cliente, pídelo con `pedir_material`.']
         : c.tipo === 'concepto'
         ? ['PRIMERO lee el brief de la campaña con estos 6 criterios: (1) un solo mensaje, (2) insight real, (3) objetivo claro, (4) está planteado como problema y no como solución, (5) es fiel al plan y al manual, (6) se puede crear con lo que trajo el portero. Si alguno falla, **devuelve el brief UNA vez**: escribe una sección `## Devolución del brief` con los puntos que fallan y nada más (la mesa se cierra y la cadena pide un brief nuevo). Si el brief sirve, sigue: del brief y el manual, escribe **EL PROBLEMA en una frase**, y reparte lo que necesitas de cada compañero. Cada uno propondrá 2 o 3 caminos distintos con su porqué, pensados para 90 días.']
         : c.tipo === 'video'
