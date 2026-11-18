@@ -14,6 +14,7 @@ import { rutaVigilar } from '@/lib/portero-alimenta/vigilante'
 import { modoDelEntorno } from '@/lib/portero-alimenta/modo'
 import { umbralesDeAnomaliaDelEntorno } from '@/lib/portero-alimenta/anomalia'
 import { hechosDeLaCorridaDelVigilante, preguntarPorHttp } from '@/lib/portero-alimenta/hechos-preguntas'
+import { origenDeLaCorridaDelVigilante } from '@/lib/portero-alimenta/origen-de-lo-ajeno'
 import { baseDeRunSdk } from '@/lib/finanzas/conversa/modelo-run-sdk'
 
 export const dynamic = 'force-dynamic'
@@ -31,7 +32,9 @@ export async function POST(request: Request) {
     // 17-nov (ENCARGO 2 de Cerebro): en cada corrida, los HECHOS DEL NEGOCIO de cada cliente revisado y las preguntas de sus huecos. Va DESPUÉS del vigilante y aparte:
     // nunca cambia lo que el vigilante decidió ni su código de respuesta; si falla, lo dice en su propio campo
     const hechos = await hechosDeLaCorridaDelVigilante({ db, preguntar: preguntarPorHttp({ base: baseDeRunSdk(process.env), llave: process.env.INTERNAL_API_KEY ?? '' }) }, cuerpo, r.body).catch((e) => ({ error: e instanceof Error ? e.message : String(e) }))
-    return NextResponse.json(hechos ? { ...r.body, hechos_del_negocio: hechos } : r.body, { status: r.status })
+    // 17-nov (ENCARGO 3 de Cerebro, fase B): de dónde viene cada foto y video ajeno (papel, vía, nivel, motivo). Igual: aparte, nunca cambia al vigilante
+    const origen = await origenDeLaCorridaDelVigilante(db, cuerpo, r.body).catch((e) => ({ error: e instanceof Error ? e.message : String(e) }))
+    return NextResponse.json({ ...r.body, ...(hechos ? { hechos_del_negocio: hechos } : {}), ...(origen ? { origen_de_lo_ajeno: origen } : {}) }, { status: r.status })
   } catch (e) {
     return NextResponse.json({ error: 'vigilante_error', detalle: e instanceof Error ? e.message : String(e) }, { status: 500 })
   }

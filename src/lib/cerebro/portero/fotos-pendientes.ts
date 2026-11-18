@@ -11,7 +11,7 @@
  */
 import type { Consulta, Fila } from '../consulta'
 import { CLAVE_DE_LA_BODEGA } from './clave-de-la-bodega'
-import { gustoDe, nivelDeOrigen, ordenarPorEmbudo } from '../../portero-alimenta/embudo'
+import { gustoDe, nivelDeOrigen, ordenarPorEmbudo, rolEfectivo } from '../../portero-alimenta/embudo'
 import { datosPLF, esCapturaDeLaWeb, type FechaDeLaImagen, type Lugar, type NO_CONSTA, type Procedencia } from './procedencia'
 
 /** cuántas etiquetas por cliente y día (≈ US$ 0,08 con el costo medido de ~US$ 0,008 por foto; dentro del tope diario del cliente) */
@@ -40,7 +40,7 @@ const RANGO_DE_ORIGEN: Record<OrigenDeFoto, number> = { propia: 0, referencia: 1
 export function idsDeFotosRepetidas(filas: Fila[]): Set<string> {
   const mejor = new Map<string, Fila>()
   const peor = (a: Fila, b: Fila) => { // ¿a es mejor que b?
-    const d = RANGO_DE_ORIGEN[origenDeLaFoto(a.owner_role)] - RANGO_DE_ORIGEN[origenDeLaFoto(b.owner_role)]
+    const d = RANGO_DE_ORIGEN[origenDeLaFoto(rolEfectivo(a))] - RANGO_DE_ORIGEN[origenDeLaFoto(rolEfectivo(b))]
     return d !== 0 ? d < 0 : String(a.id) < String(b.id)
   }
   for (const f of filas) {
@@ -82,7 +82,7 @@ export interface FotoVista {
   fecha: FechaDeLaImagen | typeof NO_CONSTA
 }
 
-const COLUMNAS_DE_LECTURA = ['video_id', 'id', 'owner_role', 'handle', 'tipo', 'medio', 'estado', 'url', 'posted_at', 'created_at', 'etiquetada_en', 'que_muestra', 'producto_visto', 'texto_visible', 'etiqueta_confianza', 'con_personas', 'tipo_de_toma', 'formato', 'etiqueta_modelo', 'duplicado_de', 'hash_archivo', 'post_url', 'clase', 'procedencia', 'oferta', 'sede_id', 'lugar_fuente', 'fecha_origen', 'fecha_fuente']
+const COLUMNAS_DE_LECTURA = ['video_id', 'id', 'owner_role', 'papel', 'handle', 'tipo', 'medio', 'estado', 'url', 'posted_at', 'created_at', 'etiquetada_en', 'que_muestra', 'producto_visto', 'texto_visible', 'etiqueta_confianza', 'con_personas', 'tipo_de_toma', 'formato', 'etiqueta_modelo', 'duplicado_de', 'hash_archivo', 'post_url', 'clase', 'procedencia', 'oferta', 'sede_id', 'lugar_fuente', 'fecha_origen', 'fecha_fuente']
 
 export interface PedidoDeFotos { cliente: string; origen?: OrigenDeFoto | null; soloEtiquetadas?: boolean; limite?: number }
 export type RespuestaDeFotos =
@@ -107,7 +107,7 @@ export async function listarFotos(consulta: Consulta, p: PedidoDeFotos): Promise
   const vistas: FotoVista[] = r.filas
     .filter((f) => !txt(f.duplicado_de) && !repetidas.has(String(f.id)) && !esCapturaDeLaWeb(f))
     .map((f) => ({
-      foto_id: String(f.id), origen: origenDeLaFoto(f.owner_role), nivel: nivelDeOrigen(origenDeLaFoto(f.owner_role), txt(deTendencia.get(String(f.video_id))?.nivel)), gusto: gustoDe(deTendencia.get(String(f.video_id)) ?? null), cuenta: txt(f.handle), tipo: txt(f.tipo), medio: txt(f.medio), url: txt(f.url),
+      foto_id: String(f.id), origen: origenDeLaFoto(rolEfectivo(f)), nivel: nivelDeOrigen(origenDeLaFoto(rolEfectivo(f)), txt(deTendencia.get(String(f.video_id))?.nivel)), gusto: gustoDe(deTendencia.get(String(f.video_id)) ?? null), cuenta: txt(f.handle), tipo: txt(f.tipo), medio: txt(f.medio), url: txt(f.url),
       publicada_en: txt(f.posted_at), copiada_en: txt(f.created_at), etiquetada: !!txt(f.etiquetada_en), que_muestra: txt(f.que_muestra), producto_visto: lista(f.producto_visto),
       texto_visible: txt(f.texto_visible), confianza: txt(f.etiqueta_confianza), con_personas: typeof f.con_personas === 'boolean' ? f.con_personas : null,
       tipo_de_toma: txt(f.tipo_de_toma), formato: txt(f.formato), no_se_pudo_leer: txt(f.etiqueta_modelo) === 'sin-lectura', ...datosPLF(f),
@@ -154,13 +154,13 @@ export async function etiquetarPendientes(deps: DepsDeEtiquetarPendientes, p: Pe
   for (const cliente of p.clientes) {
     const inf: InformeDeEtiquetas = { cliente, pendientes: 0, etiquetadas_hoy_antes: 0, intentadas: 0, etiquetadas: 0, fallidas: [], omitidas_por_tope: 0, omitidas_por_plazo: 0, repetidas_omitidas: 0, costo_usd: 0 }
     informes.push(inf)
-    const r = await deps.consulta({ tabla: 'client_social_images', columnas: ['id', 'owner_role', 'estado', 'etiquetada_en', 'duplicado_de', 'hash_archivo', 'created_at'], donde: { client_id: cliente === CLAVE_DE_LA_BODEGA ? null : cliente, estado: 'ok' }, orden: { columna: 'created_at', descendente: false }, limite: 1000 })
+    const r = await deps.consulta({ tabla: 'client_social_images', columnas: ['id', 'owner_role', 'papel', 'estado', 'etiquetada_en', 'duplicado_de', 'hash_archivo', 'created_at'], donde: { client_id: cliente === CLAVE_DE_LA_BODEGA ? null : cliente, estado: 'ok' }, orden: { columna: 'created_at', descendente: false }, limite: 1000 })
     if (r.error) { inf.error = r.error.slice(0, 200); continue }
     const repetidas = idsDeFotosRepetidas(r.filas)
     const filas: Fila[] = r.filas.filter((f) => !txt(f.duplicado_de) && !repetidas.has(String(f.id)))
     inf.repetidas_omitidas = r.filas.filter((f) => !txt(f.duplicado_de) && repetidas.has(String(f.id)) && !txt(f.etiquetada_en)).length
     inf.etiquetadas_hoy_antes = filas.filter((f) => (txt(f.etiquetada_en) ?? '').slice(0, 10) === hoy).length
-    const pendientes = filas.filter((f) => !txt(f.etiquetada_en)).sort((a, b) => Number(origenDeLaFoto(a.owner_role) !== 'propia') - Number(origenDeLaFoto(b.owner_role) !== 'propia'))
+    const pendientes = filas.filter((f) => !txt(f.etiquetada_en)).sort((a, b) => Number(origenDeLaFoto(rolEfectivo(a)) !== 'propia') - Number(origenDeLaFoto(rolEfectivo(b)) !== 'propia'))
     inf.pendientes = pendientes.length
     const cupo = Math.max(0, tope - inf.etiquetadas_hoy_antes)
     inf.omitidas_por_tope = Math.max(0, pendientes.length - cupo)
