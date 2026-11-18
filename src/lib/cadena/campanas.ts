@@ -14,13 +14,14 @@ import { abrirEsperaDe, cancelarEsperasDeCampana, ponerNecesitaHumano, resolverE
 // r75 · 'cadena_apagada': con la cadena apagada la puerta ya NO reenvía al brief viejo (un solo camino de briefs): deja el plan guardado, anota que no se generan briefs y cierra el viaje con este resultado
 export const RESULTADOS_DE_CABLE = ['cadena_abierta', 'lote_briefeado', 'necesita_humano', 'plan_no_coincide', 'pasarela_ok', 'cadena_apagada'] as const
 
+// 18-nov (GO de Lenovo · botón «Flujo de la campaña», punto 2 de CC3): también se para MIENTRAS se planifica, y la pausa vuelve al MISMO estado (no se salta la planificación)
 const TRANSICIONES: Record<EstadoCampana, EstadoCampana[]> = {
-  abierta: ['estrategia', 'necesita_humano', 'cerrada'],
-  estrategia: ['calendario', 'necesita_humano', 'cerrada'],
-  calendario: ['activa', 'necesita_humano', 'cerrada'],
+  abierta: ['estrategia', 'necesita_humano', 'pausada', 'cerrada'],
+  estrategia: ['calendario', 'necesita_humano', 'pausada', 'cerrada'],
+  calendario: ['activa', 'necesita_humano', 'pausada', 'cerrada'],
   activa: ['necesita_humano', 'pausada', 'cerrada'],
   necesita_humano: ['estrategia', 'calendario', 'activa', 'pausada', 'cerrada'],
-  pausada: ['activa', 'necesita_humano', 'cerrada'],
+  pausada: ['abierta', 'estrategia', 'calendario', 'activa', 'necesita_humano', 'cerrada'],
   cerrada: [],
   reemplazada: [],
 }

@@ -19,6 +19,7 @@ import type { Almacen, Campana, EsperaFila } from './almacen'
 import { activarYArrancar, type ResultadoDelArranque } from './arranque'
 import { autorizarLlamada, cadena, err, type Respuesta } from './autorizar'
 import { abrirEsperaDe, resolverEsperas } from './nucleo'
+import { anotarSiPausadaPorElTablero, leerPausaDelTablero } from './flujo-de-campana'
 import type { Estrategia } from './tipos'
 
 export const TIPO_DE_ESPERA = 'revision_jefatura'
@@ -69,6 +70,14 @@ export function fechasPedidasDe(campana: Pick<Campana, 'fecha_inicio' | 'fecha_f
 export interface ResultadoDePasar { arranque?: ResultadoDelArranque; ya_pasada?: boolean; ok?: boolean; pasada_sin_revision?: boolean; estado_de_la_campana: string; fechas_pedidas?: FechaPedida[]; aviso?: string }
 
 async function transicion(al: Almacen, campana: Campana, tipo: TipoRetenible, ahora: string): Promise<{ ya: boolean; fechas_pedidas?: FechaPedida[]; arranque?: ResultadoDelArranque }> {
+  // 18-nov · botón «Flujo de la campaña»: pausada por el tablero mientras esperaba la revisión → la revisión cierra, la campaña sigue pausada y al reanudar vuelve al estado siguiente
+  const pausa = campana.estado === 'pausada' ? leerPausaDelTablero(campana.estado_motivo) : null
+  if (pausa) {
+    const desde: readonly string[] = tipo === 'estrategia' ? ['abierta', 'estrategia'] : ['calendario']
+    if (!desde.includes(pausa.vuelve_a)) return { ya: true }
+    await anotarSiPausadaPorElTablero(al, campana, tipo === 'estrategia' ? 'calendario' : 'activa', ahora)
+    return { ya: false }
+  }
   if (tipo === 'estrategia') {
     // ya pasó: la campaña ya está en `calendario` o más allá
     if (campana.estado !== 'estrategia' && campana.estado !== 'abierta') return { ya: true }
