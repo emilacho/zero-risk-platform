@@ -113,7 +113,7 @@ const cuerpo = {
   force_restart: true,
   dry_run: false,
   max_budget_usd: p.max_budget_usd,
-  thinking_mode: p.thinking_mode || 'disabled',
+  thinking_mode: p.thinking_mode || 'maximo',
   extra,
   ...(Array.isArray(p.images) && p.images.length ? { images: p.images, images_mode: 'base64' } : {}),
 }

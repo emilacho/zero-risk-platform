@@ -201,7 +201,7 @@ describe('② Armar el pedido · el pedido REAL a run-sdk', () => {
   }
   it('lleva el flujo y la ejecución ARRIBA del cuerpo, force_restart, vuelta por el corredor, el tope del paso y la clave del paso', () => {
     const c = real({ thinking_mode: undefined }).cuerpo
-    expect(c).toMatchObject({ agent: 'jefe-marketing', client_id: 'c1', workflow_id: 'wf-jefatura', workflow_execution_id: 'ex-1', callback_url: 'https://n8n.test/resume/ex-1', callback_mode: 'runner', force_restart: true, dry_run: false, max_budget_usd: 0.2, thinking_mode: 'disabled' })
+    expect(c).toMatchObject({ agent: 'jefe-marketing', client_id: 'c1', workflow_id: 'wf-jefatura', workflow_execution_id: 'ex-1', callback_url: 'https://n8n.test/resume/ex-1', callback_mode: 'runner', force_restart: true, dry_run: false, max_budget_usd: 0.2, thinking_mode: 'maximo' })
     expect(c.extra.dispatch_key).toBe(`${REV}:revision_fondo:1`)
   })
   it('REGLA DURA del editor: `extra` solo lleva claves de la lista cerrada; jamás workflow_execution_id (aunque el pedido lo traiga)', () => {

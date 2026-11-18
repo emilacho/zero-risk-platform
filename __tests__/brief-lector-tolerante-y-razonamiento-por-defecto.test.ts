@@ -83,17 +83,17 @@ describe('el nodo ④ con la respuesta real: parte VÁLIDO, reparación declarad
 
 describe('🔴 el razonamiento va APAGADO por defecto: la cadena normal no vuelve al fallo de los 32.000', () => {
   const cuerpo = async (prev: Record<string, unknown>) => (await correrNodo('n3-armar-cuerpo.js', { input: [{ name: 'Náufrago' }], refs: { '② ¿Ya hay parte de este plan? · guarda': { client_id: CID, dry_run: false, manual_texto: 'm', plan_id: 'p', plan_texto: 'x', manual_version: 1, manual_id: 'm', ...prev } } }))[0].json.cuerpo
-  it('el sobre SIN `razonamiento` (así llega de planeación) ⇒ disabled · con valor ⇒ el valor · `completo` ⇒ razonamiento completo (null)', async () => {
-    expect((await sobre({}))[0].json.razonamiento).toBe('disabled')
-    for (const v of ['disabled', 'low', 'medium']) expect((await sobre({ razonamiento: v }))[0].json.razonamiento).toBe(v)
+  it('el sobre SIN `razonamiento` (así llega de planeación) ⇒ maximo · con valor ⇒ el valor · `completo` ⇒ razonamiento completo (null)', async () => {
+    expect((await sobre({}))[0].json.razonamiento).toBe('maximo') // 18-nov · G1 «nada se recorta»: por defecto al máximo (antes apagado)
+    for (const v of ['disabled', 'low', 'medium', 'high', 'xhigh', 'max', 'maximo']) expect((await sobre({ razonamiento: v }))[0].json.razonamiento).toBe(v)
     expect((await sobre({ razonamiento: 'completo' }))[0].json.razonamiento).toBeNull()
   })
-  it.each([['high'], [''], [null], [true], [0], ['DISABLED']])('valor mal escrito (%j) ⇒ se DETIENE antes de gastar', async (v) => {
+  it.each([['alto'], ['MAX'], [''], [null], [true], [0], ['DISABLED']])('valor mal escrito (%j) ⇒ se DETIENE antes de gastar', async (v) => {
     await expect(sobre({ razonamiento: v })).rejects.toThrow(/BRIEF_RAZONAMIENTO_INVALIDO/)
   })
-  it('🔴 de punta a punta: el sobre sin el campo ⇒ el redactor RECIBE thinking_mode:"disabled" · con `completo` no recibe la clave (como antes)', async () => {
+  it('🔴 de punta a punta: el sobre sin el campo ⇒ el redactor RECIBE thinking_mode:"maximo" (18-nov · G1) · con `completo` no recibe la clave (como antes)', async () => {
     const [{ json: s }] = await sobre({})
-    expect(await cuerpo({ razonamiento: s.razonamiento })).toMatchObject({ thinking_mode: 'disabled', agent: 'campaign-brief-agent' })
+    expect(await cuerpo({ razonamiento: s.razonamiento })).toMatchObject({ thinking_mode: 'maximo', agent: 'campaign-brief-agent' })
     const [{ json: c }] = await sobre({ razonamiento: 'completo' })
     expect(Object.prototype.hasOwnProperty.call(await cuerpo({ razonamiento: c.razonamiento }), 'thinking_mode')).toBe(false)
   })
