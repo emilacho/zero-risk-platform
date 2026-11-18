@@ -97,14 +97,14 @@ export const esDeLaLlave = (clave: string, base: string): boolean => clave === b
 
 /**
  * 18-nov · LA BOLSA AL TRIPLE DE LO MEDIDO (firma de Emilio: todo tope = el triple de lo medido) · la bolsa de PLANIFICACIÓN que no alcanza para el paso se lleva a
- * la de su regla (`bolsaDePlanificacion`: lo medido por semana × las semanas de ESTA campaña × 3), sin pasar NUNCA el tope de gasto de la campaña. Así una campaña
+ * la de su regla (`bolsaDePlanificacion`: 3 × (la estrategia + las tandas de ESTA campaña), con lo medido), sin pasar NUNCA el tope de gasto de la campaña. Así una campaña
  * que nació con la bolsa vieja (US$ 6 fijos, como Náufrago) alcanza la suya. Una vez: si ya está en ese valor (o más), no se toca. El lector tiene su bolsa y no cambia.
  * Devuelve la bolsa nueva, o null si no hay nada que agrandar.
  */
 export function bolsaAgrandada(campana: Pick<Campana, 'presupuesto_planificacion_usd' | 'tope_gasto_usd' | 'fecha_inicio' | 'fecha_fin' | 'semanas_de_tanda'>, paso: Paso): number | null {
   if (PASOS_CON_PRESUPUESTO_PROPIO.has(paso)) return null
   const tope = Number(campana.tope_gasto_usd)
-  const techo = Math.min(bolsaDePlanificacion(medidaDeCampana(campana).totalSemanas), campana.tope_gasto_usd !== null && campana.tope_gasto_usd !== undefined && Number.isFinite(tope) && tope > 0 ? tope : Infinity)
+  const techo = Math.min(bolsaDePlanificacion(medidaDeCampana(campana).totalTandas), campana.tope_gasto_usd !== null && campana.tope_gasto_usd !== undefined && Number.isFinite(tope) && tope > 0 ? tope : Infinity)
   const actual = Number(campana.presupuesto_planificacion_usd)
   return Number.isFinite(actual) && actual < techo ? techo : null
 }

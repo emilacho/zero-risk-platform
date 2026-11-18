@@ -67,18 +67,17 @@ export const PRESUPUESTO_PLANIFICACION_POR_OMISION = 6
 /** 18-nov · firma de Emilio (DECISION-EMILIO-topes-con-margen-triple): todo tope de gasto = el triple de lo medido */
 export const MULTIPLO_DE_LA_BOLSA = 3
 /**
- * 18-nov · lo MEDIDO (SELECT de `cadena_corridas`, 18-nov ~14:50Z, solo lectura): la campaña de Náufrago `36e66179` gastó US$ 5,14 en planificar la estrategia
- * (0,77 + su corrección 0,65) y 3 tandas de calendario con su corrección cada una (0,73 + 0,63 · 0,55 + 0,59 · 0,54 + 0,68), que cubren 12 semanas (3 × 4):
- * 5,14 / 12 = 0,43 por semana de campaña (la corrección de cada paso va adentro).
+ * 18-nov · lo MEDIDO (SELECT de `cadena_corridas`, 18-nov ~14:50Z, solo lectura) en la campaña de Náufrago `36e66179`, US$ 5,14 en total:
+ *   · la ESTRATEGIA, una vez por campaña: 0,7712 + su corrección 0,6502 = 1,42;
+ *   · cada TANDA de calendario con su corrección: (0,7261 + 0,6336) · (0,5466 + 0,5925) · (0,5417 + 0,6779) = 3,72 / 3 = 1,24.
+ * Cuenta firmada por Lenovo 15:12Z («estrategia fija + por tanda»): ninguna campaña queda corta, porque la estrategia es un costo fijo que una cuenta por semana no ve.
  */
-export const COSTO_DE_PLANIFICACION_POR_SEMANA_USD = 0.43
-/**
- * La bolsa de planificación de una campaña: lo medido por semana × sus semanas × 3, nunca menos que la de siempre. 12 semanas → US$ 15,48; 13 → 16,77.
- * (Una campaña corta no baja de 6: la estrategia es un costo fijo que la cuenta por semana no ve.)
- */
-export function bolsaDePlanificacion(totalSemanas: number): number {
-  const n = Number.isFinite(totalSemanas) && totalSemanas > 0 ? totalSemanas : 0
-  return Math.max(PRESUPUESTO_PLANIFICACION_POR_OMISION, Math.round(COSTO_DE_PLANIFICACION_POR_SEMANA_USD * n * MULTIPLO_DE_LA_BOLSA * 100) / 100)
+export const COSTO_DE_LA_ESTRATEGIA_USD = 1.42
+export const COSTO_POR_TANDA_USD = 1.24
+/** La bolsa de planificación de una campaña: 3 × (la estrategia + cada una de sus tandas), nunca menos que la de siempre. 3 tandas → US$ 15,42 · 4 tandas (Náufrago) → 19,14. */
+export function bolsaDePlanificacion(totalTandas: number): number {
+  const n = Number.isFinite(totalTandas) && totalTandas > 0 ? totalTandas : 0
+  return Math.max(PRESUPUESTO_PLANIFICACION_POR_OMISION, Math.round(MULTIPLO_DE_LA_BOLSA * (COSTO_DE_LA_ESTRATEGIA_USD + COSTO_POR_TANDA_USD * n) * 100) / 100)
 }
 
 export async function modeloDeLaCadena(al: Almacen): Promise<string> {

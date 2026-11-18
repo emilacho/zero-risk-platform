@@ -10,13 +10,14 @@ import { describe, it, expect } from 'vitest'
 import { abrirCampana, calendarioGuardar, calendarioPreparar, estrategiaPreparar, estrategiaGuardar, relojDeLaCadena, topeDelPaso } from '../index'
 import { bolsaAgrandada, esDeLaLlave, llaveDeReintentoDelPaso, prepararCorrida, tramoDeReintento } from '../nucleo'
 import { tramoDeReemision } from '../mesas'
-import { bolsaDePlanificacion, COSTO_DE_PLANIFICACION_POR_SEMANA_USD, medidaDeCampana, MULTIPLO_DE_LA_BOLSA, PRESUPUESTO_PLANIFICACION_POR_OMISION } from '../constantes'
+import { bolsaDePlanificacion, COSTO_DE_LA_ESTRATEGIA_USD, COSTO_POR_TANDA_USD, medidaDeCampana, MULTIPLO_DE_LA_BOLSA, PRESUPUESTO_PLANIFICACION_POR_OMISION } from '../constantes'
 import { AlmacenMemoria } from '../__fixtures__/almacen-memoria'
 import { clienteA, contextoDe, piezaBuena, tandaBuena } from '../__fixtures__/clientes'
 
 const A = clienteA()
 const AHORA = '2026-10-09T08:00:00Z' // tramo «am»
 const TARDE = '2026-10-09T14:00:00Z' // tramo «pm» del mismo día
+const LUNES = '2026-10-12T08:00:00Z' // con «día 1 = el día en que se abre» (#1175), una campaña de 12 semanas justas se abre un lunes
 const wf = (extra: Record<string, unknown> = {}) => ({ workflow_id: 'wf-cadena', workflow_execution_id: 'ex-1', ...extra })
 const falla = { success: false, error: 'E-OUTPUT-SCHEMA-MISSING', cost_usd: 0.2 }
 
@@ -41,34 +42,35 @@ async function tresFallas(al: AlmacenMemoria, id: string, ahora: string) {
   }
 }
 
-describe('la bolsa de planificación · lo medido × semanas × 3 (DECISION-EMILIO-topes-con-margen-triple)', () => {
-  // 12 semanas de un lunes a un domingo; 13 semanas cuando el día 1 no es lunes (Náufrago: viernes 06-nov → jueves 28-ene)
+describe('la bolsa de planificación · 3 × (estrategia + tandas), con lo medido (DECISION-EMILIO-topes-con-margen-triple · Lenovo 15:12Z)', () => {
+  // 12 semanas de un lunes a un domingo = 3 tandas; Náufrago (viernes 06-nov → jueves 28-ene) = 13 semanas = 4 tandas
   const DOCE = { fecha_inicio: '2026-11-16', fecha_fin: '2027-02-07' }
   const NAUFRAGO = { fecha_inicio: '2026-11-06', fecha_fin: '2027-01-28' }
-  it('la cuenta escrita: 0,43 por semana (5,14 / 12 semanas medidas) × semanas × 3', () => {
-    expect(COSTO_DE_PLANIFICACION_POR_SEMANA_USD).toBe(0.43)
+  it('la cuenta escrita: estrategia 1,42 + 1,24 por tanda, × 3', () => {
+    expect(COSTO_DE_LA_ESTRATEGIA_USD).toBe(1.42)
+    expect(COSTO_POR_TANDA_USD).toBe(1.24)
     expect(MULTIPLO_DE_LA_BOLSA).toBe(3)
-    expect(bolsaDePlanificacion(12)).toBe(15.48)
-    expect(bolsaDePlanificacion(13)).toBe(16.77)
-    expect(medidaDeCampana(DOCE).totalSemanas).toBe(12)
-    expect(medidaDeCampana(NAUFRAGO).totalSemanas).toBe(13)
+    expect(bolsaDePlanificacion(3)).toBe(15.42)
+    expect(bolsaDePlanificacion(4)).toBe(19.14)
+    expect(bolsaDePlanificacion(1)).toBe(7.98)
+    expect(medidaDeCampana(DOCE).totalTandas).toBe(3)
+    expect(medidaDeCampana(NAUFRAGO).totalTandas).toBe(4)
   })
-  it('una campaña corta no baja de los US$ 6 de siempre', () => {
+  it('nunca menos que los US$ 6 de siempre', () => {
     expect(PRESUPUESTO_PLANIFICACION_POR_OMISION).toBe(6)
-    expect(bolsaDePlanificacion(4)).toBe(6)
     expect(bolsaDePlanificacion(0)).toBe(6)
     expect(bolsaDePlanificacion(Number.NaN)).toBe(6)
   })
   it('la bolsa vieja de 6 crece hasta la de su regla; ya en ella (o más) no se toca', () => {
-    expect(bolsaAgrandada({ ...NAUFRAGO, presupuesto_planificacion_usd: 6, tope_gasto_usd: 150 }, 'calendario')).toBe(16.77)
-    expect(bolsaAgrandada({ ...DOCE, presupuesto_planificacion_usd: 6, tope_gasto_usd: null }, 'estrategia')).toBe(15.48)
-    expect(bolsaAgrandada({ ...DOCE, presupuesto_planificacion_usd: 15.48, tope_gasto_usd: 150 }, 'calendario')).toBeNull()
+    expect(bolsaAgrandada({ ...NAUFRAGO, presupuesto_planificacion_usd: 6, tope_gasto_usd: 150 }, 'calendario')).toBe(19.14)
+    expect(bolsaAgrandada({ ...DOCE, presupuesto_planificacion_usd: 6, tope_gasto_usd: null }, 'estrategia')).toBe(15.42)
+    expect(bolsaAgrandada({ ...DOCE, presupuesto_planificacion_usd: 15.42, tope_gasto_usd: 150 }, 'calendario')).toBeNull()
     expect(bolsaAgrandada({ ...DOCE, presupuesto_planificacion_usd: 25, tope_gasto_usd: 150 }, 'calendario')).toBeNull()
   })
   it('nunca pasa el tope de gasto de la campaña', () => {
     expect(bolsaAgrandada({ ...DOCE, presupuesto_planificacion_usd: 6, tope_gasto_usd: 10 }, 'calendario')).toBe(10)
     expect(bolsaAgrandada({ ...DOCE, presupuesto_planificacion_usd: 6, tope_gasto_usd: 6 }, 'calendario')).toBeNull()
-    expect(bolsaAgrandada({ ...DOCE, presupuesto_planificacion_usd: 6, tope_gasto_usd: 0 }, 'calendario')).toBe(15.48) // 0 = sin tope (como `topeDeLaCampana`)
+    expect(bolsaAgrandada({ ...DOCE, presupuesto_planificacion_usd: 6, tope_gasto_usd: 0 }, 'calendario')).toBe(15.42) // 0 = sin tope (como `topeDeLaCampana`)
   })
   it('la bolsa del lector no es de planificación: no crece', () => {
     expect(bolsaAgrandada({ ...DOCE, presupuesto_planificacion_usd: 6, tope_gasto_usd: 150 }, 'fichas')).toBeNull()
@@ -76,7 +78,7 @@ describe('la bolsa de planificación · lo medido × semanas × 3 (DECISION-EMIL
 })
 
 describe('la bolsa al triple · por el camino real', () => {
-  it('Náufrago: US$ 5,14 de la bolsa vieja de 6 → pasa sola a la de su regla (13 semanas = 16,77) y el paso corre (sin necesita_humano)', async () => {
+  it('Náufrago: US$ 5,14 de la bolsa vieja de 6 → pasa sola a la de su regla (4 tandas = 19,14) y el paso corre (sin necesita_humano)', async () => {
     const al = almacen(); const id = await abierta(al)
     const c = al.campanas[0]
     Object.assign(c, { tope_gasto_usd: 150, presupuesto_planificacion_usd: 6, fecha_inicio: '2026-11-06', fecha_fin: '2027-01-28' })
@@ -84,13 +86,13 @@ describe('la bolsa al triple · por el camino real', () => {
     const p = await prepararCorrida(al, c, 'calendario', 't1:v1:c0', 'wf', 'e', AHORA, 'm', 'h')
     expect(p.tipo).toBe('lista')
     if (p.tipo !== 'lista') return
-    expect(p.bolsa_agrandada).toEqual({ de: 6, a: 16.77 })
-    expect(al.campanas[0].presupuesto_planificacion_usd).toBe(16.77)
+    expect(p.bolsa_agrandada).toEqual({ de: 6, a: 19.14 })
+    expect(al.campanas[0].presupuesto_planificacion_usd).toBe(19.14)
     expect(al.campanas[0].estado).not.toBe('necesita_humano')
   })
   it('una campaña nueva nace con la bolsa de su regla, y con la bolsa que alcanza no se toca nada', async () => {
     const al = almacen(); await abierta(al)
-    const nace = bolsaDePlanificacion(medidaDeCampana(al.campanas[0]).totalSemanas)
+    const nace = bolsaDePlanificacion(medidaDeCampana(al.campanas[0]).totalTandas)
     expect(nace).toBeGreaterThan(6)
     expect(al.campanas[0].presupuesto_planificacion_usd).toBe(nace)
     const p = await prepararCorrida(al, al.campanas[0], 'estrategia', 'v1:c0', 'wf', 'e', AHORA, 'm', 'h')
@@ -100,10 +102,10 @@ describe('la bolsa al triple · por el camino real', () => {
   })
   it('🔴 el triple que tampoco alcanza: 409 sin cambiar el estado, UNA alerta (la segunda vez, ninguna)', async () => {
     const al = almacen(); const id = await abierta(al)
-    al.corridas.push({ id: 900, campana_id: id, paso: 'calendario', clave_idempotencia: 'antes', intento: 1, workflow_id: 'wf', workflow_execution_id: 'x', modelo: 'm', costo_usd: 17, estado: 'ok', plazo_en: null, error: null, revision_editor: 'saltada_por_diseno', salida_estructurada: true, esquema_hash: 'h', seco: true })
+    al.corridas.push({ id: 900, campana_id: id, paso: 'calendario', clave_idempotencia: 'antes', intento: 1, workflow_id: 'wf', workflow_execution_id: 'x', modelo: 'm', costo_usd: 25, estado: 'ok', plazo_en: null, error: null, revision_editor: 'saltada_por_diseno', salida_estructurada: true, esquema_hash: 'h', seco: true })
     const antes = al.campanas[0].estado
     al.campanas[0].presupuesto_planificacion_usd = 6 // nació con la bolsa vieja: crece a la suya, y aun así no alcanza
-    const suya = bolsaDePlanificacion(medidaDeCampana(al.campanas[0]).totalSemanas)
+    const suya = bolsaDePlanificacion(medidaDeCampana(al.campanas[0]).totalTandas)
     const r1 = await estrategiaPreparar(al, { ...wf(), campana_id: id }, AHORA)
     expect(r1.status).toBe(409)
     expect(r1.cuerpo).toMatchObject({ error: 'presupuesto_agotado', necesita_humano: false, reintenta: true })
@@ -132,16 +134,16 @@ describe('🔴 una campaña de 12 semanas planifica ENTERA sin pararse (la prueb
     }
     return dijo
   }
-  it('abierta para 84 días (12 semanas, 3 tandas): 8 pasadas, todas corren', async () => {
+  it('abierta un lunes para 84 días (12 semanas, 3 tandas): 8 pasadas, todas corren', async () => {
     const al = almacen()
-    await abrirCampana(al, { ...wf(), client_id: A.clientId, seco: true, dias_de_campana: 84 }, AHORA)
+    await abrirCampana(al, { ...wf(), client_id: A.clientId, seco: true, dias_de_campana: 84 }, LUNES)
     expect(medidaDeCampana(al.campanas[0])).toMatchObject({ totalSemanas: 12, totalTandas: 3 })
-    expect(al.campanas[0].presupuesto_planificacion_usd).toBe(15.48)
+    expect(al.campanas[0].presupuesto_planificacion_usd).toBe(15.42)
     expect(await planificar(al)).toEqual(Array(8).fill('lista'))
   })
   it('con la bolsa vieja de US$ 6 fijos (y sin dejarla crecer) se paraba a media planificación: la regla es la que la deja terminar', async () => {
     const al = almacen()
-    await abrirCampana(al, { ...wf(), client_id: A.clientId, seco: true, dias_de_campana: 84 }, AHORA)
+    await abrirCampana(al, { ...wf(), client_id: A.clientId, seco: true, dias_de_campana: 84 }, LUNES)
     Object.assign(al.campanas[0], { presupuesto_planificacion_usd: 6, tope_gasto_usd: 6 })
     expect(await planificar(al)).toContain('presupuesto_agotado')
   })
