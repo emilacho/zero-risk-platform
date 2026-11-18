@@ -22,15 +22,17 @@ import { claveDeAlcance, datosDeSede, sedesDeFicha } from './sedes-fuentes'
 import { CAMPO_DEL_ESTADO, estadoDeApertura, esTemaDeEstadoDeSede, sedeQueNombra, textoDeEstado, type EstadoDeSede } from '../sedes/por-abrir'
 import { reconciliarYEnviar, validar, type DepsDeRutas, type Respuesta } from './rutas'
 import { asumirSupuesto, CLASE_DEL_SUPUESTO_ACEPTADO, UUID } from './supuestos-del-dueno'
+import { TOPE_DEL_TEXTO_DEL_DUENO } from '../limites-de-tamano'
 
 type Fila = Record<string, unknown>
 const lista = (x: unknown): Fila[] => (Array.isArray(x) ? (x as Fila[]) : [])
 const txt = (x: unknown): string => (typeof x === 'string' ? x.trim() : '')
 const err = (status: number, error: string, detalle: string): Respuesta => ({ status, body: { error, detalle } })
 
-export const MAX_RESPUESTA = 2000
-export const MAX_PREGUNTA = 600
-export const MAX_TEMA = 80
+// 18-nov · G2 «nada se recorta» (CC5): lo que escribe Emilio llega entero, hasta el tope único del texto del dueño (antes respuesta 2000 y pregunta 600; el tema 80 sigue en la LLAVE, `temaNormal`)
+export const MAX_RESPUESTA = TOPE_DEL_TEXTO_DEL_DUENO
+export const MAX_PREGUNTA = TOPE_DEL_TEXTO_DEL_DUENO
+export const MAX_TEMA = TOPE_DEL_TEXTO_DEL_DUENO
 export const CLASE_DEL_DUENO = 'dato_del_dueno'
 export const PREFIJO_DE_ATRIBUTO = 'dueno:'
 /** canal con el que el dashboard empuja lo que el dueño escribe en el manual (30-oct): dato del manual por campo, nunca una nota para el aprendizaje */
