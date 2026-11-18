@@ -23,7 +23,7 @@ import { avisosDeCitasBajadas, bajarCitasNoLiterales, hallazgosDelBrief, insumos
 import { escribirHoja } from './hoja'
 import { fichasEnTexto as fichasDeOfertaEnTexto, type FichaDeOferta } from './ficha-de-oferta'
 import { filaSinFamilia, notaSinFamilia } from './sin-familia'
-import { hallazgosDelConcepto, idDeBrief, idDeConcepto, insumosDesdeEstrategia, leerConcepto, resumenDelBanco, resumenDeLaVersionAnterior, type ConceptoLeido, type InsumosDelConcepto } from './conceptos'
+import { hallazgosDelConcepto, idDeBrief, idDeConcepto, insumosDelBanco, insumosDesdeEstrategia, leerConcepto, resumenDelBanco, resumenDeLaVersionAnterior, type ConceptoLeido, type InsumosDelBanco, type InsumosDelConcepto } from './conceptos'
 import { sumarDias } from './fechas'
 import { medidaDeCampana } from './constantes'
 import { metodoDe } from './metodos'
@@ -72,7 +72,7 @@ export const HOLGURA_DE_MESA_MIN = 30
 export const TIPO_DE_ESPERA_DE_CONCEPTO = 'aprobacion_concepto'
 export const objetoDeEsperaDeConcepto = (version: number): string => `concepto:v${version}`
 
-export interface SobreParaLaOficina { tipo_de_mesa: 'brief' | 'concepto'; client_id: string; campana_id: string; version: number; dry_run: boolean; marco_texto: string; condiciones: string[] }
+export interface SobreParaLaOficina { tipo_de_mesa: 'brief' | 'concepto'; client_id: string; campana_id: string; version: number; dry_run: boolean; marco_texto: string; condiciones: string[]; /** 18-nov · relleno del banco: solo en la mesa de concepto; la oficina cuenta el banco con esto antes de entregar */ insumos_del_banco?: InsumosDelBanco }
 /**
  * El SOBRE con el que la puerta vuelve a entrar (31-oct · respuesta a CC2 «quién vuelve a entrar»): quien SABE del evento lo arma aquí y el flujo que ya corre lo lleva a la sala;
  * el vigía reemite el MISMO sobre de respaldo. La clave lleva la ETAPA (`campana:tanda-N:<etapa>`) para que la sala no lo trague como repetido cuando la pieza que faltaba ya está.
@@ -391,7 +391,7 @@ export async function conceptoAbrir(al: Almacen, cuerpo: Record<string, unknown>
     // hueco 1 de CC3: el mismo sobre otra vez (la oficina es idempotente); el marco se rearma con la nota persistida en la fila
     const sobre: SobreParaLaOficina = {
       tipo_de_mesa: 'concepto', client_id: campana.client_id, campana_id: campana.id, version: ultimo.version, dry_run: campana.seco,
-      marco_texto: marcoDelConcepto({ fichas: await fichasDeLaCampana(al, campana.id), ctx, estrategia, briefTexto: brief.texto_md ?? '', version: ultimo.version, nota: texto(ultimo.nota_de_emilio), inicio: campana.fecha_inicio, hoy: ahora.slice(0, 10), anterior: anteriorConCambios(todos, ultimo.version), perfil: await perfilParaLaMesa(al, campana.client_id, 'gran_idea') }), condiciones: condicionesDe(estrategia, await al.formatos()),
+      marco_texto: marcoDelConcepto({ fichas: await fichasDeLaCampana(al, campana.id), ctx, estrategia, briefTexto: brief.texto_md ?? '', version: ultimo.version, nota: texto(ultimo.nota_de_emilio), inicio: campana.fecha_inicio, hoy: ahora.slice(0, 10), anterior: anteriorConCambios(todos, ultimo.version), perfil: await perfilParaLaMesa(al, campana.client_id, 'gran_idea') }), condiciones: condicionesDe(estrategia, await al.formatos()), insumos_del_banco: insumosDelBanco(estrategia),
     }
     return { status: 200, cuerpo: { ya_abierta: true, version: ultimo.version, concepto_id: idDeConcepto(campana.id, ultimo.version), brief_version: brief.version, sobre } }
   }
@@ -412,7 +412,7 @@ export async function conceptoAbrir(al: Almacen, cuerpo: Record<string, unknown>
   await al.insertarConcepto(fila)
   const sobre: SobreParaLaOficina = {
     tipo_de_mesa: 'concepto', client_id: campana.client_id, campana_id: campana.id, version, dry_run: campana.seco,
-    marco_texto: marcoDelConcepto({ fichas: await fichasDeLaCampana(al, campana.id), ctx, estrategia, briefTexto: brief.texto_md ?? '', version, nota, inicio: campana.fecha_inicio, hoy: ahora.slice(0, 10), anterior: anteriorConCambios([...todos, fila], version), perfil: await perfilParaLaMesa(al, campana.client_id, 'gran_idea') }), condiciones: condicionesDe(estrategia, await al.formatos()),
+    marco_texto: marcoDelConcepto({ fichas: await fichasDeLaCampana(al, campana.id), ctx, estrategia, briefTexto: brief.texto_md ?? '', version, nota, inicio: campana.fecha_inicio, hoy: ahora.slice(0, 10), anterior: anteriorConCambios([...todos, fila], version), perfil: await perfilParaLaMesa(al, campana.client_id, 'gran_idea') }), condiciones: condicionesDe(estrategia, await al.formatos()), insumos_del_banco: insumosDelBanco(estrategia),
   }
   return { status: 200, cuerpo: { version, concepto_id: idDeConcepto(campana.id, version), brief_version: brief.version, plazo_mesa_min: plazoMin, sobre } }
 }
