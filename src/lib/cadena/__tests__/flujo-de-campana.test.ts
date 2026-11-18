@@ -417,3 +417,43 @@ describe('🟡 de CC7 (a2): el botón respeta la compuerta de la cadena', () => 
     expect((await estado(al, id)).estado).toBe('activa')
   })
 })
+
+describe('🟡 k1 de CC6: reanudar a activa ARRANCA la producción (como avanzar)', () => {
+  async function pausadaConArranque(al: AlmacenMemoria) {
+    const id = await activa(al)
+    await flujo(al, id, 'parar')
+    await al.escribirConfig('arranque_por_evento', true)
+    return id
+  }
+  it('desde el DORADO: reanudar deja activa, contesta el arranque hecho y deja sobres en la sala', async () => {
+    const al = almacen(); const id = await pausadaConArranque(al)
+    expect(al.sala.size).toBe(0)
+    const r = await flujo(al, id, 'reanudar')
+    expect(r.status).toBe(200); expect((await estado(al, id)).estado).toBe('activa')
+    expect(r.cuerpo.arranque).toMatchObject({ arranque: 'hecho' })
+    expect(al.sala.size).toBeGreaterThan(0)
+  })
+  it('desde el ROJO (sin causa que siga): reanudar a activa también arranca', async () => {
+    const al = almacen(); const id = await activa(al)
+    await al.actualizarCampana(id, { estado: 'necesita_humano', estado_motivo: 'el lector no encontró la fuente' })
+    await al.escribirConfig('arranque_por_evento', true)
+    const r = await flujo(al, id, 'reanudar')
+    expect(r.status).toBe(200); expect((await estado(al, id)).estado).toBe('activa')
+    expect(r.cuerpo.arranque).toMatchObject({ arranque: 'hecho' })
+    expect(al.sala.size).toBeGreaterThan(0)
+  })
+  it('reanudar a un estado que NO es activa (pausada en calendario) no arranca, aunque el interruptor esté encendido', async () => {
+    const al = almacen(); const id = await enCalendario(al)
+    await flujo(al, id, 'parar')
+    await al.escribirConfig('arranque_por_evento', true)
+    const r = await flujo(al, id, 'reanudar')
+    expect(r.status).toBe(200); expect((await estado(al, id)).estado).toBe('calendario')
+    expect(r.cuerpo).not.toHaveProperty('arranque'); expect(al.sala.size).toBe(0)
+  })
+  it('control: con el interruptor apagado, reanudar no deja sobres ni trae arranque (igual que avanzar)', async () => {
+    const al = almacen(); const id = await activa(al)
+    await flujo(al, id, 'parar')
+    const r = await flujo(al, id, 'reanudar')
+    expect(r.status).toBe(200); expect(r.cuerpo).not.toHaveProperty('arranque'); expect(al.sala.size).toBe(0)
+  })
+})
