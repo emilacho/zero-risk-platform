@@ -37,6 +37,13 @@ describe('(1) una sola plantilla del brief · lo que recibe la dirección creati
     expect(conv).toContain('## Cómo sabremos que funcionó')
     expect(conv).toContain('## Lo único que hay que comunicar')
   })
+  it('🟡 k5 (CC7): la línea «Obligatorias» nombra EXACTAMENTE las 8 del lector, no todas las secciones', () => {
+    const linea = CONVENCION_DE_LA_PIEZA('brief').split('\n').find((l) => l.startsWith('Obligatorias: '))!
+    const nombradas = linea.slice('Obligatorias: '.length).split('. ')[0].split(' · ')
+    expect(nombradas).toEqual(['De qué parte del plan sale', 'Insight', 'Lo único que hay que comunicar', 'Público', 'Objetivo', 'Cómo sabremos que funcionó', 'Tono', 'Obligatorios'])
+    expect(nombradas).not.toContain('Faltantes')
+    expect(nombradas).not.toContain('Citas')
+  })
   it('la convención sale de la MISMA fuente que el lector: cada sección del brief, una vez, con el título que pide la plantilla', () => {
     const conv = CONVENCION_DE_LA_PIEZA('brief')
     const pedidas = [...conv.matchAll(/^- ## (.+)$/gm)].map((m) => m[1].trim())
@@ -112,5 +119,25 @@ describe('(3) la devolución dice hasta dónde coincide la cita', () => {
   })
   it('con una elisión, la pista es del tramo que se rompe', () => {
     expect(hastaDondeCoincide(PLAN, 'Probamos dos ángulos por tanda … personas que compran zapatos')).toBe('personas que compran')
+  })
+  it('🟡 k4 (CC7): una cita del MANUAL rota a la mitad recibe la pista contra el manual, no contra el plan', () => {
+    const manual = 'Hablamos siempre de tú y con calma, como un vecino que te ayuda.'
+    const md = brief(['> «Envío en 24 horas a todo el país»']).replace('## Tono\nCercano y claro.', '## Tono\nEl manual dice: «Hablamos siempre de tú y con prisa, como un vecino que te ayuda.»')
+    const d = deCitas(leerBriefCreativo(md, { ...ins, manualTexto: manual }).bloqueos)
+    expect(d).toHaveLength(1)
+    expect(d[0]).toContain('no está literal en el manual')
+    expect(d[0]).toContain('coincide con el manual hasta «…Hablamos siempre de tú y con» y desde ahí cambia')
+  })
+  it('🟡 k6 (CC7): la pista lee el documento con el MISMO lector que el chequeo (plan guardado como JSON, con comillas y saltos escritos)', () => {
+    const planJson = JSON.stringify({ resumen: 'Plan de la tienda.', publico: 'El comprador dice "quiero probármela" y teme no poder devolverla.' })
+    const cita = 'El comprador dice "quiero probármela" y teme no poder cambiarla'
+    expect(hastaDondeCoincide(planJson, cita)).toBe('"quiero probármela" y teme no poder')
+    const md = brief(['> «Envío en 24 horas a todo el país»'], `> «${cita}.»`)
+    const d = deCitas(leerBriefCreativo(md, { ...ins, planTexto: planJson }).bloqueos)
+    expect(d.some((x) => x.includes('coincide con el plan hasta «…"quiero probármela" y teme no poder»'))).toBe(true)
+  })
+  it('🟡 k6 (CC7): con negritas en el plan, la pista da las palabras de antes del corte', () => {
+    const plan = 'El comprador **teme no poder devolverla** si no le queda.'
+    expect(hastaDondeCoincide(plan, 'El comprador teme no poder cambiarla si no le queda')).toBe('El comprador teme no poder')
   })
 })
