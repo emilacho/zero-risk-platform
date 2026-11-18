@@ -161,7 +161,9 @@ export function ideasDeLosAportes(libro: Array<{ n?: number; de: string; tipo: s
   }
   const salen = idsQueSalen(integracion)
   const ultimo = new Map<string, number>()
-  for (const t of [integracion, ...libro.map((a) => a.texto)]) {
+  // la base del número nuevo NO cuenta el relleno de la dirección: así el id que recibe una idea del equipo no cambia después de rellenar
+  // (la dirección vio ese id en «ya están»). La unicidad no depende de esto: cada línea se compara contra los ids ya ocupados.
+  for (const t of [integracion, ...libro.filter((a) => !(a.tipo === 'aporta' && a.de === dir && esRellenoDelBanco(a.texto))).map((a) => a.texto)]) {
     for (const m of t.matchAll(/\bC([A-Za-z0-9_]+)-I(\d{2,})\b/g)) ultimo.set(m[1], Math.max(ultimo.get(m[1]) ?? 0, Number(m[2])))
   }
   const vistas = new Set<string>()

@@ -9,12 +9,12 @@ import { describe, expect, it } from 'vitest'
 import { AlmacenMemoria } from '../../cadena/__fixtures__/almacen-memoria'
 import { clienteA, contextoDe } from '../../cadena/__fixtures__/clientes'
 import type { Campana, EstrategiaGuardada } from '../../cadena/almacen'
-import { insumosDelBanco, leerConcepto } from '../../cadena/conceptos'
+import { insumosDelBanco, insumosDesdeEstrategia, leerConcepto } from '../../cadena/conceptos'
 import { briefAbrir, conceptoAbrir, recibirBrief } from '../../cadena/mesas'
 import { capituloDelRelleno, conCabeceraDelRelleno, esRellenoDelBanco, rellenoPendiente, textoParaLaCadena, validarSobreDeLaCadena } from '../mesa/de-la-cadena'
 import { tareaDelRelleno } from '../mesa/pedidos'
 import { siguienteDeLaMesa } from '../mesa/planificador'
-import type { Aporte, EstadoMesa, Tarjeta } from '../mesa/tipos'
+import { COTAS, type Aporte, type EstadoMesa, type Tarjeta } from '../mesa/tipos'
 
 type Ap = { n?: number; de: string; tipo: string; texto: string }
 const real = JSON.parse(readFileSync(join(__dirname, '../__fixtures__/libro-concepto-5-0aa14d17-real.json'), 'utf8')) as { libro: Ap[] }
@@ -60,6 +60,23 @@ describe('relleno · la cuenta (la misma de la cadena)', () => {
     const t = textoParaLaCadena(libro, null, true)
     expect(t).toContain(idea('C2-I01', 'tres'))
     expect(t).toContain(idea('C2-I02', 'otra cosa'))
+  })
+  it('🔴 el id renumerado de una idea del equipo NO cambia después del relleno (la dirección lo vio en «ya están»); el relleno que choca es el que se mueve', () => {
+    const choca: Ap[] = [
+      { n: 1, de: 'a', tipo: 'aporta', texto: idea('C1-I01', 'uno') },
+      { n: 2, de: 'b', tipo: 'aporta', texto: idea('C1-I01', 'dos') },
+      { n: 3, de: 'dir', tipo: 'integra', texto: '## Gran idea\nLa mesa · noventa días' },
+    ]
+    const antes = textoParaLaCadena(choca, null, true)
+    expect(antes).toContain(idea('C1-I02', 'uno'))
+    const con = textoParaLaCadena([...choca, { n: 4, de: 'dir', tipo: 'aporta', texto: conCabeceraDelRelleno([idea('C1-I09', 'nueve'), idea('C1-I02', 'pisa')].join('\n'), 'abrir') }], null, true)
+    expect(con).toContain(idea('C1-I02', 'uno'))
+    expect(con).toContain(idea('C1-I09', 'nueve'))
+    expect(con).toContain(idea('C1-I03', 'pisa'))
+  })
+  it('🔴 el prefijo es el que YA usa el equipo en ese capítulo (aquí, el nombre: «Ccrecer»), no el número de orden', () => {
+    const libro: Ap[] = [{ n: 1, de: 'miembro', tipo: 'aporta', texto: [idea('C1-I01', 'uno'), idea('C1-I02', 'dos'), idea('Ccrecer-I01', 'tres')].join('\n') }, { n: 2, de: 'dir', tipo: 'integra', texto: INTEGRA }]
+    expect(rellenoPendiente(CONCEPTO(INS), libro)).toMatchObject({ capitulo: 'crecer', prefijo: 'crecer', desde: 2 })
   })
   it('un aporte de la dirección que NO es relleno sigue sin entrar al banco (como antes)', () => {
     const libro = [...base(), { n: 3, de: 'dir', tipo: 'aporta', texto: idea('C2-I02', 'suelta') }]
@@ -126,7 +143,11 @@ describe('relleno · el sobre (de la cadena a la oficina)', () => {
     expect(c.status).toBe(200)
     const sobre = c.cuerpo.sobre as Record<string, unknown>
     expect(sobre.insumos_del_banco).toEqual(insumosDelBanco(A.estrategia))
-    expect((sobre.insumos_del_banco as { fases: unknown[] }).fases.length).toBeGreaterThan(0)
+    // contra la lectura de la cadena al RECIBIR el concepto (no contra la misma función): mismas fases con semanas y mismas redes con huecos
+    const lector = insumosDesdeEstrategia(A.estrategia, [], [])
+    expect(sobre.insumos_del_banco).toEqual({ fases: lector.fases.map((f) => ({ clave: f.clave, semanas: f.semanas })), redes: lector.redes })
+    expect(lector.fases.length).toBeGreaterThan(0)
+    expect(lector.redes.length).toBeGreaterThan(0)
     // el cliente y la campaña de práctica no tienen id uuid (en producción sí): se cambian SOLO esos dos campos y el resto del sobre viaja tal cual
     const crudo = validarSobreDeLaCadena(sobre)
     expect(crudo.ok ? [] : crudo.errores).toEqual(['`client_id` debe ser un uuid', '`campana_id` debe ser un uuid'])
@@ -157,6 +178,12 @@ describe('relleno · el planificador (paso 7b)', () => {
     expect(siguienteDeLaMesa(est(), l, ctx({ gasto_usd: 4.95 }))).toMatchObject({ accion: 'seguir_a_dibujar' })
     // un aporte cualquiera del equipo sí sigue siendo nuevo
     expect(siguienteDeLaMesa(est(), [...l, A({ de: 'content-creator', tipo: 'aporta' })], ctx())).toMatchObject({ tipo: 'integrar' })
+  })
+  it('🔴 la dirección que agotó sus reintentos no recibe el turno de relleno (la mesa entrega lo que hay)', () => {
+    const l = integrada()
+    const fallos = Array.from({ length: COTAS.REINTENTOS_DE_TURNO }, () => A({ de: 'creative-director-mesa', tipo: 'nota', texto: 'turno_fallido · la dirección no contestó' }))
+    expect(siguienteDeLaMesa(est(), [...l, ...fallos], ctx({ relleno_del_banco: RP }))).not.toMatchObject({ tipo: 'rellenar_banco' })
+    expect(siguienteDeLaMesa(est(), [...l, ...fallos.slice(1)], ctx({ relleno_del_banco: RP }))).toMatchObject({ tipo: 'rellenar_banco' })
   })
   it('🔴 con la cota agotada no hay relleno (cierra con lo que hay)', () => {
     const r = siguienteDeLaMesa(est(), integrada(), ctx({ gasto_usd: 4.95, relleno_del_banco: RP }))
