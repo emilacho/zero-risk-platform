@@ -14,6 +14,8 @@ import { TITULOS_DEL_BRIEF, TITULOS_OBLIGATORIOS_DEL_BRIEF } from '../../cadena/
 import { fichaPorOmision } from '../../video/parametros'
 import { tareaDelIngeniero, type ImagenARedactar } from './prompts'
 import { seccionDeLaCriticaParaLaDireccion, tareaDeLaCritica } from './critica'
+import { fotosALaVista, fotosDeLaLista, REGLA_DE_LOS_ELEMENTOS_REALES } from './fotos-a-la-vista'
+import type { ImagenDelPedido } from '../../imagenes-del-pedido'
 
 export type TipoDeTurno = 'dirigir' | 'aportar' | 'responder' | 'integrar' | 'devolver_citas' | 'redactar_prompts' | 'criticar'
 
@@ -72,10 +74,11 @@ export function tableroEnTexto(libro: Aporte[], max = 12000): string {
   return salida.join('\n\n')
 }
 
-export const LISTA_DE_FOTOS = (fotos: FotoEtiquetada[]): string => {
-  const propias = fotos.filter((f) => (f.origen ?? 'propia') === 'propia').slice(0, 24)
+/** 18-nov · «los creativos ven las fotos»: con `aLaVista`, cada foto dice si llega adjunta como imagen o solo como descripción; sin él, la lista es la de siempre (la reusa el aviso del video) */
+export const LISTA_DE_FOTOS = (fotos: FotoEtiquetada[], aLaVista?: ReadonlySet<string>): string => {
+  const propias = fotosDeLaLista(fotos)
   if (!propias.length) return '(el cliente no tiene fotos propias disponibles)'
-  return propias.map((f) => `- ${f.id} · ${f.que_muestra ?? 'sin descripción'}${f.oferta?.trim() ? ` · oferta: ${f.oferta.trim()}` : ''}${f.con_personas ? ' · con personas' : ''}${f.etiqueta_confianza ? ` · confianza ${f.etiqueta_confianza}` : ''}`).join('\n')
+  return propias.map((f) => `- ${f.id} · ${f.que_muestra ?? 'sin descripción'}${f.oferta?.trim() ? ` · oferta: ${f.oferta.trim()}` : ''}${f.con_personas ? ' · con personas' : ''}${f.etiqueta_confianza ? ` · confianza ${f.etiqueta_confianza}` : ''}${aLaVista ? (aLaVista.has(f.id) ? ' · a la vista' : ' · solo descripción (no llega como imagen; si la necesitas, pídela con `pedir_material`)') : ''}`).join('\n')
 }
 
 /**
@@ -171,16 +174,17 @@ const PLANO_DE_LA_HOJA = (n: number, tiempos: string, extra = '') => [
   'Movimiento: … (UN solo movimiento de cámara: fija, paneo, acercamiento, cámara en mano…)',
   'Termina en: … (cómo queda el cuadro al final: posición, luz, utilería; el plano siguiente lo continúa)',
   'Texto en pantalla: … (solo si lo lleva; literal, corto: se compone en edición, la IA no lo escribe)',
-  'Foto: foto:<id de una foto propia> | ninguna   (solo en los planos de producto)',
-  'Personajes: <los nombres de «## Personajes» que salen en este plano> | ninguno   (solo si la pieza tiene personajes)',
+  'Foto: foto:<id de una foto propia>, foto:<id> · <por qué la elegiste, en una frase> | ninguna   (en todo plano que muestre un elemento real del cliente: producto o plato, el local, un uniforme, un empaque; la 1.ª es el cuadro, las demás van de referencia)',
+  'Personajes: <los nombres de «## Personajes» que salen en este plano> | ninguno   (solo si la pieza tiene personajes; un personaje de la marca que sale en cuadro va aquí)',
   'Prompt de imagen: … (en inglés: el cuadro clave del plano, sin texto en la imagen)',
   'Prompt de video: … (en inglés: solo el movimiento y la cámara desde ese cuadro, el proceso de la acción y cómo termina)',
 ].join('\n')
 
 /** 17-nov · Sprint 3 · T2 · la ficha de personaje: herramienta opcional (Emilio 11:58 «nada obligatorio»): la mesa la escribe solo si la pieza tiene personajes que vuelven en varios planos */
 const PERSONAJES_DE_LA_PIEZA = [
-  '## Personajes   (opcional: solo si alguien vuelve a salir en varios planos; si no, no escribas esta sección)',
+  '## Personajes   (opcional: solo si alguien vuelve a salir en varios planos, o si sale un personaje de la marca; si no, no escribas esta sección)',
   '- <Nombre>: <cómo es: edad, rasgos, pelo, ropa> · Fotos: foto:<id> (solo fotos propias que lo muestren; una persona real, solo con su permiso registrado)',
+  '- Un personaje de la marca (mascota, ilustración, figura) lleva SIEMPRE la foto que lo muestra en «Fotos:». Si ninguna lo muestra, se escribe como nuevo: «- <Nombre>: <cómo es> · creación nueva · basada en foto:<id>» (la foto es solo base de estilo), nunca «uno parecido» como si fuera el real.',
 ]
 
 const CIERRE_DE_LA_PIEZA = ['## Audio', '<lo que suena: música, ambiente, voz, diálogo o locución, lo que pida la pieza>', '## Pie', '<el pie de foto de la publicación>', '## Etiquetas', '#una #otra']
@@ -345,8 +349,9 @@ export function armarTarea(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarj
     c.tipo === 'concepto' ? '(el brief de la campaña ya es la lectura del plan: no se repite aquí)' : c.plan_texto ? recorta(c.plan_texto, DIETA[c.tipo].plan, 'el plan') : '(sin plan)',
     '',
     '## Fotos propias del cliente (ids para `Imagen: foto:<id>`)',
-    LISTA_DE_FOTOS(c.fotos),
+    LISTA_DE_FOTOS(c.fotos, new Set(fotosALaVista(c.fotos).map((f) => f.id))),
     '',
+    ...(fotosDeLaLista(c.fotos).length ? [REGLA_DE_LOS_ELEMENTOS_REALES, ''] : []),
     '## Tablero (aportes hasta ahora; cita con A<n>)',
     tableroEnTexto(libro),
     '',
@@ -523,9 +528,9 @@ export function seccionDeMetodo(agente: string, metodos: unknown, fichas: unknow
 }
 
 /** el pedido que consume el flujo de turnos de n8n (mismo molde que la v1: `agent_name`, `task`, `images`, `esquema`…) */
-export function pedidoDeAgente(o: { agente: string; task: string; encargo_id: string; client_id: string; dry_run: boolean; paso: string; reserva_usd: number; es_pieza?: boolean }): Record<string, unknown> {
+export function pedidoDeAgente(o: { agente: string; task: string; encargo_id: string; client_id: string; dry_run: boolean; paso: string; reserva_usd: number; es_pieza?: boolean; /** 18-nov · las fotos propias a la vista (`imagenesDelTurno`); sin ellas, el pedido de siempre */ images?: ImagenDelPedido[] }): Record<string, unknown> {
   return {
-    agent_name: o.agente, task: o.task, images: [], esquema: 'opinion_libre.v1',
+    agent_name: o.agente, task: o.task, images: o.images ?? [], esquema: 'opinion_libre.v1',
     // 04-nov · de qué trabajo es la llamada: el encargo es la pieza · las cadenas (brief, concepto) aún no tienen id firmado: «sin dato»
     ...(o.es_pieza ? { trabajo_tipo: 'pieza', trabajo_id: o.encargo_id } : {}),
     extra: { indicacion_oficina: 'Mesa de trabajo: aportas como profesional de tu especialidad; texto libre.', paso_de_la_oficina: o.paso, encargo_id: o.encargo_id, mesa: true, mesa_agente: o.agente },
