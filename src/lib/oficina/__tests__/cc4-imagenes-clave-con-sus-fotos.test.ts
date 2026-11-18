@@ -20,10 +20,10 @@ const P3 = [
   '- La gaviota: ave que roba un chifle · creación nueva · basada en foto:f00dcafe',
   '## Plano 1 · 0–2 s', 'Rol: captar', 'Se ve: la sombra del sombrero sobre la mesa', 'Foto: ninguna',
   '## Plano 2 · 2–5 s', 'Rol: giro', 'Se ve: el Náufrago mira el bowl de encebollado', 'Producto: sí',
-  'Foto: foto:a7512c1c · es el encebollado real', 'Personajes: El Náufrago',
+  'Foto: foto:a7512c1c · porque muestra el encebollado real', 'Personajes: El Náufrago',
   'Prompt de imagen: Medium shot of the skeleton character beside a bowl of encebollado on a coastal terrace',
   '## Plano 3 · 5–8 s', 'Rol: ambiente', 'Se ve: la gaviota se lleva un chifle', 'Personajes: La gaviota',
-  '## Plano 4 · 8–12 s', 'Rol: conclusión', 'Se ve: el bowl y el mar', 'Foto: foto:a7512c1c, foto:f00dcafe · el plato y la terraza', 'Personajes: El Pirata',
+  '## Plano 4 · 8–12 s', 'Rol: conclusión', 'Se ve: el bowl y el mar', 'Foto: foto:a7512c1c, foto:f00dcafe · plato real y terraza del local', 'Personajes: El Pirata',
   '## Personaje · El Pirata', 'Descripción: un pirata con parche',
 ].join('\n')
 
