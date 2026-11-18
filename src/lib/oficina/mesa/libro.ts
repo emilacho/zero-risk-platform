@@ -61,6 +61,73 @@ export function verificarCitas(texto: string, libro: Aporte[], pertinentes: stri
   return { ok: !inexistentes.length && !sin_cita.length && !descartes_sin_motivo.length && !usos_sin_motivo.length, inexistentes, sin_cita, descartes_sin_motivo, usos_sin_motivo }
 }
 
+/**
+ * 18-nov · LA DEVOLUCIÓN POR CITAS NO REESCRIBE LA PIEZA (decisión de Emilio 14:00, Lenovo 13:08Z opción 1, «corregir sin rehacer ni frenar»).
+ * El código sabe EXACTO qué falta (quién no está citado, qué cita no tiene motivo, qué cita apunta a un aporte que no existe); el director decide
+ * con criterio si cada aporte lo usó o lo descartó, y escribe SOLO esas líneas. El código las pega dentro de «## Citas» de su última integración.
+ */
+export interface FaltanCitas {
+  /** especialistas pertinentes sin cita válida, con las referencias de sus aportes en el tablero */
+  sin_cita: Array<{ agente: string; aportes: string[] }>
+  /** citas que existen pero no dicen por qué (menos de MOTIVO_MINIMO caracteres) */
+  sin_motivo: number[]
+  /** citas a aportes que no existen en el tablero: el código las quita (no hay criterio que aplicar) */
+  inexistentes: number[]
+}
+
+const TIPOS_CITABLES = ['dirige', 'aporta', 'responde', 'material']
+
+export function faltanCitasDe(v: VerificacionDeCitas, libro: Aporte[]): FaltanCitas {
+  return {
+    sin_cita: v.sin_cita.map((agente) => ({ agente, aportes: libro.filter((a) => a.de === agente && TIPOS_CITABLES.includes(a.tipo)).map(refDe) })),
+    sin_motivo: [...new Set([...v.usos_sin_motivo, ...v.descartes_sin_motivo])].sort((a, b) => a - b),
+    inexistentes: [...v.inexistentes].sort((a, b) => a - b),
+  }
+}
+
+/** lo que el director lee: exactamente qué falta, sin pedirle la pieza otra vez */
+export function textoDeLoQueFalta(f: FaltanCitas): string {
+  const lineas: string[] = []
+  for (const s of f.sin_cita) lineas.push(`- **${s.agente}** no está citado. Sus aportes: ${s.aportes.length ? s.aportes.join(', ') : '(no tiene aportes en el tablero)'}.`)
+  if (f.sin_motivo.length) lineas.push(`- Estas citas no dicen por qué: ${f.sin_motivo.map((n) => `A${n}`).join(', ')}. Vuelve a escribirlas con su motivo.`)
+  if (f.inexistentes.length) lineas.push(`- Estas citas apuntan a aportes que no existen en el tablero: ${f.inexistentes.map((n) => `A${n}`).join(', ')}. El código las quita; no hace falta que las repitas.`)
+  return lineas.length ? lineas.join('\n') : '- (el código no encontró qué falta: revisa tus citas)'
+}
+
+/** las líneas de cita, tal como las escribió el agente (las que lee `leerCitas`) */
+function lineasDeCita(texto: string): Array<{ n: number; linea: string }> {
+  const out: Array<{ n: number; linea: string }> = []
+  for (const linea of String(texto ?? '').split(/\r?\n/)) { const c = leerCitas(linea); if (c.length && !out.some((x) => x.n === c[0].n)) out.push({ n: c[0].n, linea: linea.trim() }) }
+  return out
+}
+
+const CABECERA_DE_CITAS = /^#{1,6}\s*Citas\b/i
+const CABECERA = /^#{1,6}\s/
+
+/**
+ * Pega en la sección «## Citas» de la integración las líneas de cita de la respuesta: una cita nueva de A<n> reemplaza la vieja de A<n>; las citas a
+ * aportes que no existen (`quitar`) salen. Todo lo demás de la integración queda tal cual (el banco, la crítica, la pieza). Lo que no es una línea de
+ * cita en la respuesta no entra: la pieza no se reescribe. Sin sección de citas, la crea al final. Puro.
+ */
+export function pegarCitas(integracion: string, respuesta: string, quitar: number[] = []): string {
+  const nuevas = lineasDeCita(respuesta)
+  const fuera = new Set([...nuevas.map((x) => x.n), ...quitar])
+  const lineas = String(integracion ?? '').split(/\r?\n/)
+  const ini = lineas.findIndex((l) => CABECERA_DE_CITAS.test(l.trim()))
+  if (ini < 0) {
+    if (!nuevas.length) return integracion
+    return [String(integracion ?? '').replace(/\s+$/, ''), '', '## Citas', ...nuevas.map((x) => x.linea)].join('\n')
+  }
+  let fin = lineas.findIndex((l, i) => i > ini && CABECERA.test(l.trim()))
+  if (fin < 0) fin = lineas.length
+  const vieja = lineas.slice(ini + 1, fin)
+  const seccion = vieja.filter((l) => { const c = leerCitas(l); return !(c.length && fuera.has(c[0].n)) })
+  if (!nuevas.length && seccion.length === vieja.length) return integracion
+  const cola: string[] = []
+  while (seccion.length && !seccion[seccion.length - 1].trim()) cola.push(seccion.pop() as string)
+  return [...lineas.slice(0, ini + 1), ...seccion, ...nuevas.map((x) => x.linea), ...cola, ...lineas.slice(fin)].join('\n')
+}
+
 const recorte = (t: string, n: number): string => { const x = t.replace(/\s+/g, ' ').trim(); return x.length > n ? `${x.slice(0, n)}…` : x }
 
 /**

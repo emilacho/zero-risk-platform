@@ -1,3 +1,4 @@
+import type { FaltanCitas } from './libro'
 /**
  * LA MESA · oficina creativa fluida (28-oct, firma de Emilio). Diseño: raw/tasks/2026-10-28-PROPUESTA-CC1-oficina-creativa-fluida + REVISION-CC3 (7 condiciones).
  * Una pieza la hace un EQUIPO sobre un tablero compartido (el libro de aportes). El código ORQUESTA (turnos, gasto, quién aportó); no dicta campos, largos ni orden.
@@ -164,12 +165,12 @@ export interface EstadoMesa {
   imagen?: { propuestas: number }
   /** 17-nov · GO Lenovo (encendido de imagen) · lo que costaron los turnos de agente de esta mesa, en todas sus pasadas (la cota de la mesa se mide contra esto) */
   gasto_de_los_turnos_usd?: number
-  turno_abierto: { n: number; agente: string; tipo: 'dirigir' | 'aportar' | 'responder' | 'integrar' | 'devolver_citas' | 'redactar_prompts' | 'criticar' | 'traducir'; responde_a: string | null; /** lo que el cerebro entregó a este agente al abrirse el turno (se consulta UNA vez: la reentrega del turno muestra lo mismo) */ notas_del_dueno?: LecturaDeNotas } | null
+  turno_abierto: { n: number; agente: string; tipo: 'dirigir' | 'aportar' | 'responder' | 'integrar' | 'devolver_citas' | 'redactar_prompts' | 'criticar' | 'traducir'; responde_a: string | null; /** lo que el cerebro entregó a este agente al abrirse el turno (se consulta UNA vez: la reentrega del turno muestra lo mismo) */ notas_del_dueno?: LecturaDeNotas; /** 18-nov · `devolver_citas`: lo que el código comprobó que falta (el director escribe solo esas líneas) */ faltan_citas?: FaltanCitas } | null
 }
 
 /** lo que decide el planificador */
 export type Accion =
-  | { accion: 'turno'; agente: string; tipo: 'dirigir' | 'aportar' | 'responder' | 'integrar' | 'devolver_citas' | 'redactar_prompts' | 'criticar'; responde_a: string | null; motivo: string }
+  | { accion: 'turno'; agente: string; tipo: 'dirigir' | 'aportar' | 'responder' | 'integrar' | 'devolver_citas' | 'redactar_prompts' | 'criticar'; responde_a: string | null; motivo: string; faltan_citas?: FaltanCitas }
   | { accion: 'material'; pedido_id: string; que: string; para_que: string; de: string }
   | { accion: 'traducir' }
   | { accion: 'cierre_por_tope'; razon: 'techo_de_gasto' }

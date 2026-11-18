@@ -22,7 +22,7 @@ import { condicionesDeLaPieza, direccionDe, especialistasPertinentes, ingenieroD
 import { condicionesDelVideo } from './condiciones-de-video'
 import { FORMATO_DE_PIEZA, destinatarioDe, leerRespuestaSobreNotas, quitarLineasDeNotas, rastroDeLasNotas, seccionDeNotasDelDueno, tareaParaConsultar } from './aprendizaje'
 import { separarRespuestas } from '../sentido-contra-la-ficha'
-import { tableroParaLaJefatura } from './libro'
+import { pegarCitas, tableroParaLaJefatura, textoDeLoQueFalta } from './libro'
 import { siguienteDeLaMesa, techoDe, type ContextoDeLaMesa } from './planificador'
 import { traducirPieza, hayImagenesAGenerar, pedidoDeImagen, type ConceptoDeImagen, type OpcionesDeTraduccion, type Traduccion } from './traductor'
 import { traducirGuion, type TraduccionDeGuion } from '../video/guion'
@@ -179,7 +179,7 @@ export async function pedidoDelTurno(P: Puertos, enc: Encargo, est: EstadoMesa, 
   const c = contextoDe(enc, est)
   const tipo = t.tipo as TipoDeTurno
   let faltanCitas: string | undefined
-  if (tipo === 'devolver_citas') faltanCitas = 'algunas especialidades del equipo (revisa cada aporte del tablero)'
+  if (tipo === 'devolver_citas') faltanCitas = t.faltan_citas ? textoDeLoQueFalta(t.faltan_citas) : '- algunas especialidades del equipo no están citadas (revisa cada aporte del tablero)'
   const biblioteca = await bibliotecaDelTurno(P, enc, est)
   const referencias = await referenciasDelTurno(P, enc, est)
   const metodo = [await metodoDelAsiento(P, t.agente), biblioteca, referencias].filter(Boolean).join('\n\n') || undefined
@@ -366,7 +366,7 @@ export async function avanzarMesa(P: Puertos, enc0: Encargo, pl: Plantilla, indi
 
     if (acc.accion === 'turno') {
       const lectura = await leerNotasDelTurno(P, enc, est, acc.agente)
-      const t = { n: turnoDe(enc.estado_del_motor), agente: acc.agente, tipo: acc.tipo, responde_a: acc.responde_a, ...(lectura ? { notas_del_dueno: lectura } : {}) }
+      const t = { n: turnoDe(enc.estado_del_motor), agente: acc.agente, tipo: acc.tipo, responde_a: acc.responde_a, ...(lectura ? { notas_del_dueno: lectura } : {}), ...(acc.faltan_citas ? { faltan_citas: acc.faltan_citas } : {}) }
       const est2: EstadoMesa = { ...est, turno_abierto: t, cierre_forzado: acc.tipo === 'integrar' && acc.motivo.startsWith('cierra con lo que hay') ? acc.motivo : est.cierre_forzado }
       enc = await guardarMesa(P, enc, est2)
       const p = await pedidoDelTurno(P, enc, est2, t)
@@ -638,6 +638,13 @@ export async function recibirResultadoMesa(P: Puertos, encargoId: string, n: num
   if (sinLineas.trim()) textoFinal = sinLineas
   // Sprint 4 · E · la crítica se rotula en el tablero: todos (y la jefatura) saben que es la crítica, y sus citas de ideas no se leen como ideas del banco
   if (t.tipo === 'criticar') textoFinal = conMarcaDeLaCritica(textoFinal)
+  // 18-nov · la devolución por citas NO reescribe la pieza: el director escribió solo las líneas de cita que faltaban y el código las pega dentro de «## Citas»
+  // de la integración devuelta. Se anota como un `integra` NUEVO con el texto COMPLETO (la cadena y la jefatura toman el último `integra` como la pieza); el viejo queda como registro.
+  if (t.tipo === 'devolver_citas') {
+    const libroAntes = await P.mesa.libro(enc.id)
+    const base = (t.responde_a ? libroAntes.find((a) => a.id === t.responde_a) : undefined) ?? [...libroAntes].reverse().find((a) => a.tipo === 'integra')
+    if (base) textoFinal = pegarCitas(base.texto, textoFinal, t.faltan_citas?.inexistentes ?? [])
+  }
   const tipoAporte: Record<string, TipoDeAporte> = { dirigir: 'dirige', aportar: 'aporta', responder: 'responde', integrar: 'integra', devolver_citas: 'integra', redactar_prompts: 'aporta', criticar: 'aporta' }
   const pedido = t.responde_a ? (await P.mesa.libro(enc.id)).find((a) => a.id === t.responde_a) : undefined
   await P.mesa.aportar(aporteNuevo(enc, t.agente, t.tipo === 'responder' ? pedido?.de ?? null : null, tipoAporte[t.tipo] ?? 'aporta', textoFinal, { responde_a: t.tipo === 'responder' || t.tipo === 'devolver_citas' ? t.responde_a : null, profundidad: pedido ? pedido.profundidad : 0, costo_usd: costo, workflow_execution_id: res.workflow_execution_id ?? null }))
