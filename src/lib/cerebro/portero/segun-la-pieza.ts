@@ -26,8 +26,8 @@ export interface Pieza {
 
 const esObjeto = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 const txt = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v.trim() : null)
-/** cómo se comparan dos sedes: minúsculas, sin tildes y sin espacios de más (exacto, no parecido) */
-export const normal = (t: string): string => t.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim().toLowerCase()
+/** cómo se comparan dos sedes: campo contra campo, exacto (solo sin espacios al borde y sin distinguir mayúsculas); las tildes NO se quitan (regla del portero) */
+export const normal = (t: string): string => t.trim().toLowerCase()
 
 /** ¿el pedido viene de una pieza? (trae `pieza`). Sin `pieza`, las rutas responden como antes */
 export const vieneConPieza = (cuerpo: Record<string, unknown>): boolean => cuerpo.pieza !== undefined

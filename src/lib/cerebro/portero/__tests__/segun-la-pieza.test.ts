@@ -183,8 +183,9 @@ describe('entrega a una pieza · por número con la huella', () => {
 
 describe('las piezas sueltas del contrato', () => {
   const f = (sede: string | null) => ({ sede }) as never
-  it('comparar sedes es exacto (sin tildes ni mayúsculas), no parecido', () => {
-    expect(deLaPieza(f('Olón'), 'olon')).toEqual({ de_la_pieza: true, marca: null })
+  it('comparar sedes es exacto, campo contra campo: solo espacios al borde y mayúsculas; las tildes cuentan', () => {
+    expect(deLaPieza(f(' Olon '), 'olon')).toEqual({ de_la_pieza: true, marca: null })
+    expect(deLaPieza(f('Olón'), 'olon')).toEqual({ de_la_pieza: false, marca: 'otra oferta: Olón' })
     expect(deLaPieza(f('olon norte'), 'olon')).toEqual({ de_la_pieza: false, marca: 'otra oferta: olon norte' })
     expect(deLaPieza(f(null), 'olon')).toEqual({ de_la_pieza: false, marca: null })
     expect(deLaPieza(f('guayaquil'), null)).toEqual({ de_la_pieza: true, marca: null })

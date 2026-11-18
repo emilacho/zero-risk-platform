@@ -6,7 +6,7 @@ import { NextResponse } from 'next/server'
 import { checkInternalKey } from '@/lib/internal-auth'
 import { armarIndice } from '@/lib/cerebro/portero/indice'
 import { consultaDelEntorno } from '@/lib/cerebro/portero/entorno'
-import { registrarEnLaBase } from '@/lib/cerebro/portero/rastro-entorno'
+import { registrarEnLaBase } from '@/lib/portero-alimenta/rastro-de-la-pieza'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
