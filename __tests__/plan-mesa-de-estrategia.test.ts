@@ -345,8 +345,8 @@ describe('hallazgos de CC3 sobre #903', () => {
   })
   it('🔴 un pedido demasiado grande lo declara, sin pasar del límite', () => {
     const paso = PLANTILLA_MESA.pasos[1]
-    const r = pedidoDelTurno(paso, { expediente: { texto: 'x'.repeat(700_000) } })
-    expect(r.length).toBeLessThanOrEqual(600_000)
+    const r = pedidoDelTurno(paso, { expediente: { texto: 'x'.repeat(1_600_000) } })
+    expect(r.length).toBeLessThanOrEqual(1_500_000)
     expect(r).toMatch(/AVISO: este pedido se recortó; faltan \d+ caracteres/)
     expect(pedidoDelTurno(paso, { expediente: { texto: 'x' } })).not.toContain('AVISO')
   })
