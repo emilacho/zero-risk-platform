@@ -60,7 +60,8 @@ const WINDOW_MS = 24 * 60 * 60 * 1000
 
 /** Techo run-scoped genérico por default · $8 (encima de ~$2-3 esperado · debajo del
  *  $25 canon). TUNABLE por env `RUN_SPEND_CAP_USD`. */
-export const DEFAULT_RUN_SPEND_CAP_USD = 8.0
+// 18-nov · Emilio: topes = 3 × lo medido (PARA-LENOVO-de-CC3-barrido-de-topes-de-gasto-medido-y-su-triple, GO 16:17Z): máx. medido de 24 h de un cliente sin tope propio = 8,01 (Náufrago trae 60 en su ficha) → 24,05
+export const DEFAULT_RUN_SPEND_CAP_USD = 24.05
 
 /**
  * ── CUPO DE ARRANQUE · opción A firmada por Emilio (20-oct, 15:15) ──
@@ -69,12 +70,14 @@ export const DEFAULT_RUN_SPEND_CAP_USD = 8.0
  * cliente olvidado en `onboarding` tendría el techo alto para siempre) el techo de 24 h es el MAYOR entre el general y `RUN_ONBOARDING_CAP_USD` (13 por omisión). Al pasar a `active` vuelve al general.
  * NO cambia: la vara por corrida (US$ 5), el cubo `system`, que (desde el 30-oct) `config.spend_cap_usd` de la ficha MANDA —sube o baja—, ni la política de fallo (sin dato de la ficha ⇒ techo general: falla hacia lo normal, nunca hacia lo alto).
  */
-export const DEFAULT_ONBOARDING_SPEND_CAP_USD = 13.0
+// 18-nov · Emilio: topes = 3 × lo medido (PARA-LENOVO-de-CC3-barrido-de-topes-de-gasto-medido-y-su-triple, GO 16:17Z): máx. medido en los primeros 7 días = 8,01 → 24,05
+export const DEFAULT_ONBOARDING_SPEND_CAP_USD = 24.05
 export const DEFAULT_ONBOARDING_DAYS = 7
 
 /** Techo del cubo `system` (corridas sin `client_id`) · firmado por Emilio 2026-08-23.
  *  TUNABLE por env `RUN_SPEND_CAP_SYSTEM_USD`. */
-export const DEFAULT_SYSTEM_SPEND_CAP_USD = 2.0
+// 18-nov · Emilio: topes = 3 × lo medido (PARA-LENOVO-de-CC3-barrido-de-topes-de-gasto-medido-y-su-triple, GO 16:17Z): máx. medido de 24 h sin cliente = 3,97 (09-oct, ya con el tope de 2) → 11,93
+export const DEFAULT_SYSTEM_SPEND_CAP_USD = 11.93
 
 /**
  * ── LA VARA POR CORRIDA · $5 · firmada por el Arquitecto 2026-08-25 02:45 UTC ──
@@ -117,7 +120,8 @@ export const DEFAULT_SYSTEM_SPEND_CAP_USD = 2.0
  *
  * TUNABLE por env `RUN_SCOPED_CAP_USD`.
  */
-export const DEFAULT_RUN_SCOPED_CAP_USD = 5.0
+// 18-nov · Emilio: topes = 3 × lo medido (PARA-LENOVO-de-CC3-barrido-de-topes-de-gasto-medido-y-su-triple, GO 16:17Z): máx. medido de una corrida = 4,52 (213037, 01-nov) → 13,58
+export const DEFAULT_RUN_SCOPED_CAP_USD = 13.58
 
 /**
  * VARA POR PLAN (GO de Lenovo tras el doble chequeo, 05-nov). Cada turno de la mesa, de finanzas y de la jefatura es otra ejecución, así que la vara por corrida no los ve juntos.

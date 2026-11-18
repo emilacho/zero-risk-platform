@@ -35,7 +35,8 @@ export const MAXIMO_OBSERVADO_DEL_CIERRE_USD = 0.25
 export const FACTOR_DE_RESERVA_DEL_CIERRE = 1.3
 const redondeaArriba = (x: number) => Math.ceil(x * 100 - 1e-9) / 100
 // 05-nov (GO de Lenovo): 0,45. El 04-nov el cierre costó 0,349 sobre una reserva de 0,33: el medido de arriba ya quedó corto
-export const RESERVA_DEL_CIERRE_USD = 0.45
+// 18-nov · Emilio: topes = 3 × lo medido (GO Lenovo 16:17Z): el cierre de la ronda 1 llegó a 0,6444 (06-nov) sobre la reserva de 0,45 → 3 × 0,6444 = 1,94
+export const RESERVA_DEL_CIERRE_USD = 1.94
 // el piso es la reserva general: el cierre de la ronda 2 trae más entradas (acuerdo + bloque_2 + planteo fijado 2) y la reserva es también el máximo que esa llamada puede cobrar
 export const PISO_DE_RESERVA_DEL_CIERRE_USD = RESERVA_DEL_CIERRE_USD
 // RE-CIERRE (19-oct): el cierre de la ronda 2 llega con hallazgos resueltos y el jefe los desglosa: medido, la MISMA entrada (~38-40 mil tokens) dio 5.293 tokens de salida en la v1 y 11.528 en la v2
@@ -50,7 +51,8 @@ export function reservaDelCierre2(costoDelCierre1?: number | null): number {
 
 const R1 = ['expediente']
 /** 04-nov · el techo del tope propio de un encargo; el plan lo abre con este valor en `semilla.tope_encargo_usd` (Emilio vía Lenovo: límites al máximo, ronda 2 incluida): las dos rondas con el mayor costo medido suman ≈ US$ 3 antes de leer el manual completo */
-export const TOPE_DEL_ENCARGO_USD = 5
+// 18-nov · Emilio: topes = 3 × lo medido (GO Lenovo 16:17Z): un encargo real llegó a 3,70 → 11,10
+export const TOPE_DEL_ENCARGO_USD = 11.1
 export const PLANTILLA_FINANCIERA: Plantilla = {
   tipo: 'financiera.v1',
   familia: 'financiera',

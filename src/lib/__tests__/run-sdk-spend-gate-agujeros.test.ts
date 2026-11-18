@@ -159,9 +159,9 @@ describe('C · el freno ya no se rinde en silencio', () => {
 
 // ═══════════════════════════════════════════════════════════════════════════
 describe('A · corridas sin cliente · cubo system', () => {
-  it('el techo por default es $2 · firmado por Emilio (peor día real: $0,6147)', () => {
-    expect(DEFAULT_SYSTEM_SPEND_CAP_USD).toBe(2)
-    expect(resolveSystemSpendCapUsd()).toBe(2)
+  it('el techo por default es $11,93 · firmado por Emilio 23-ago ($2, peor día real entonces: $0,6147) → 3 × lo medido, 18-nov (peor día sin cliente: $3,97)', () => {
+    expect(DEFAULT_SYSTEM_SPEND_CAP_USD).toBe(11.93)
+    expect(resolveSystemSpendCapUsd()).toBe(11.93)
   })
 
   // ROJO si: vuelve el `if (!clientId) return {blocked:false, reason:'no_client'}`.
@@ -178,7 +178,7 @@ describe('A · corridas sin cliente · cubo system', () => {
     expect(vistos[0]?.agent_slug).toBe('brand-strategist')
     // (b) medido contra SU techo, no sin techo
     expect(r.reason).toBe('system_under_cap')
-    expect(r.cap_usd).toBe(2)
+    expect(r.cap_usd).toBe(DEFAULT_SYSTEM_SPEND_CAP_USD)
     expect(r.spent_usd).toBeCloseTo(0.6147, 4)
     // (c) el caso real del 10-ago no se bloquea · queda visible
     expect(r.blocked).toBe(false)
@@ -187,7 +187,7 @@ describe('A · corridas sin cliente · cubo system', () => {
   it('el cubo system BLOQUEA cuando pasa su techo', async () => {
     const { vistos, notify } = espiaAvisos()
     const r = await checkRunSdkSpendCap(
-      stubSupabase({ invocaciones: () => [{ cost_usd: 2.5 }] }),
+      stubSupabase({ invocaciones: () => [{ cost_usd: 12.5 }] }),
       undefined,
       { notify, agentSlug: 'brand-strategist' },
     )
@@ -342,14 +342,14 @@ describe('FALLO ABIERTO ACOTADO · un fallo pasa · K seguidos NO', () => {
 
 describe('EL CUBO system BLOQUEA al tocar el techo · no sólo avisa', () => {
   // ROJO si: el `if (spent >= cap)` del cubo system se degrada a sólo-avisar.
-  it('exactamente $2 · frontera · BLOQUEA', async () => {
+  it('exactamente $11,93 · frontera · BLOQUEA', async () => {
     const { notify } = espiaAvisos()
     const r = await checkRunSdkSpendCap(
-      stubSupabase({ invocaciones: () => [{ cost_usd: 2 }] }),
+      stubSupabase({ invocaciones: () => [{ cost_usd: 11.93 }] }),
       null,
       { notify, agentSlug: 'brand-strategist' },
     )
-    expect(r.spent_usd).toBe(2)
+    expect(r.spent_usd).toBe(DEFAULT_SYSTEM_SPEND_CAP_USD)
     expect(r.blocked).toBe(true)
     expect(r.reason).toBe('system_over_cap')
   })
@@ -357,7 +357,7 @@ describe('EL CUBO system BLOQUEA al tocar el techo · no sólo avisa', () => {
   it('apenas debajo del techo · pasa y queda visible', async () => {
     const { vistos, notify } = espiaAvisos()
     const r = await checkRunSdkSpendCap(
-      stubSupabase({ invocaciones: () => [{ cost_usd: 1.99 }] }),
+      stubSupabase({ invocaciones: () => [{ cost_usd: 11.92 }] }),
       null,
       { notify, agentSlug: 'brand-strategist' },
     )
@@ -370,7 +370,7 @@ describe('EL CUBO system BLOQUEA al tocar el techo · no sólo avisa', () => {
     const { notify } = espiaAvisos()
     for (const slug of ['health-probe', 'smoke-test', null]) {
       const r = await checkRunSdkSpendCap(
-        stubSupabase({ invocaciones: () => [{ cost_usd: 2.5 }] }),
+        stubSupabase({ invocaciones: () => [{ cost_usd: 12.5 }] }),
         null,
         { notify, agentSlug: slug },
       )
@@ -412,7 +412,7 @@ describe('adiciones del Consejero', () => {
   // (c) ROJO si: el aviso al agotar deja de nombrar el acoplamiento.
   it('(c) al agotarse dice "cubo system agotado" y avisa que arrastra a las sondas', async () => {
     const { vistos, notify } = espiaAvisos()
-    await checkRunSdkSpendCap(stubSupabase({ invocaciones: () => [{ cost_usd: 2.5 }] }), null, {
+    await checkRunSdkSpendCap(stubSupabase({ invocaciones: () => [{ cost_usd: 12.5 }] }), null, {
       notify,
       agentSlug: 'brand-strategist',
     })
@@ -434,7 +434,7 @@ describe('adiciones del Consejero', () => {
 
     const { notify } = espiaAvisos()
     const r = await checkRunSdkSpendCap(
-      stubSupabase({ invocaciones: () => [{ cost_usd: 2.5 }] }),
+      stubSupabase({ invocaciones: () => [{ cost_usd: 12.5 }] }),
       null,
       { notify, agentSlug: 'system:health' },
     )

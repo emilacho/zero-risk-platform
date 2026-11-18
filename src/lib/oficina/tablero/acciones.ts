@@ -12,6 +12,7 @@ import { recalcularTablero } from './firmar-con-cambios'
 import { firmarTablero, revisionResolver } from './revisiones'
 import { empujarManualAlCerebro } from '../../brain/push-al-terminar'
 import { manualCambios } from './manual-cambios'
+import { DEFAULT_RUN_SPEND_CAP_USD } from '../../run-sdk-spend-gate'
 import { rutaDecidirPalabra, rutaValidarCampo, rutaValidarManual } from '../../manual/edicion-rutas'
 import { soltarEsperaYPedirPlan } from '../../manual/pedir-plan'
 import { confirmarGasto, esObjeto, rechazo, textoEntre, UUID, type Fila, type Manejador } from './comun'
@@ -164,7 +165,7 @@ export const clienteTope: Manejador = async ({ db }, { cuerpo }) => {
   config.spend_cap_usd = v
   const u = await db.from('clients').update({ config }).eq('id', cuerpo.client_id).select('id')
   if (u.error) return rechazo(500, 'clientes_error', u.error.message, toca)
-  const general = Number(process.env.RUN_SPEND_CAP_USD) > 0 ? Number(process.env.RUN_SPEND_CAP_USD) : 8
+  const general = Number(process.env.RUN_SPEND_CAP_USD) > 0 ? Number(process.env.RUN_SPEND_CAP_USD) : DEFAULT_RUN_SPEND_CAP_USD
   return { status: 200, cuerpo: { ok: true, client_id: cuerpo.client_id, tope_usd: v, tope_anterior_usd: anterior !== null && anterior > 0 ? anterior : null, general_usd: general, sobre_el_general: v > general }, toca: { ...toca, comentario: `tope de 24 h: ${anterior !== null && anterior > 0 ? anterior : 'sin tope propio'} → ${v}` } }
 }
 

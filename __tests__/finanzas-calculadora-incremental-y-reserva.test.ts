@@ -6,7 +6,7 @@ import { calcular } from '../src/lib/finanzas/calculadora'
 import { entradaDesdeLaConversa } from '../src/lib/finanzas/conversa/entrada'
 import type { DatoConProcedencia } from '../src/lib/finanzas/conversa/esquemas'
 import { plantillaDelEncargo } from '../src/lib/finanzas/conversa/orquestador'
-import { PISO_DE_RESERVA_DEL_RECIERRE_USD, PLANTILLA_FINANCIERA, RESERVA_DEL_CIERRE_USD, TECHO_DE_RESERVA_DEL_RECIERRE_USD, reservaDelCierre2 } from '../src/lib/finanzas/conversa/plantilla'
+import { PISO_DE_RESERVA_DEL_RECIERRE_USD, PLANTILLA_FINANCIERA, RESERVA_DEL_CIERRE_USD, TECHO_DE_RESERVA_DEL_RECIERRE_USD, TOPE_DEL_ENCARGO_USD, reservaDelCierre2 } from '../src/lib/finanzas/conversa/plantilla'
 import type { EncargoDeConversa, TurnoDeConversa } from '../src/lib/finanzas/conversa/puertos'
 import { lineaBaseSemanal } from '../src/lib/finanzas/linea-base'
 import type { Entrada } from '../src/lib/finanzas/tipos'
@@ -110,9 +110,9 @@ describe('LÍNEA BASE · de dónde sale (y de dónde no)', () => {
 })
 
 describe('RESERVA DEL CIERRE · lo medido + margen, sin bajar la defensa', () => {
-  it('05-nov · la reserva general es 0,45 (GO de Lenovo): el 04-nov el cierre costó 0,349', () => {
-    expect(RESERVA_DEL_CIERRE_USD).toBe(0.45)
-    expect(PLANTILLA_FINANCIERA.pasos.find((p) => p.clave === 'cierre')?.tope_usd).toBe(0.45)
+  it('la reserva general es 1,94 (0,45 del GO de Lenovo 05-nov → 3 × lo medido, 18-nov: el cierre de la ronda 1 llegó a 0,6444)', () => {
+    expect(RESERVA_DEL_CIERRE_USD).toBe(1.94)
+    expect(PLANTILLA_FINANCIERA.pasos.find((p) => p.clave === 'cierre')?.tope_usd).toBe(RESERVA_DEL_CIERRE_USD)
     for (const clave of ['fpa', 'fpa_2']) expect(PLANTILLA_FINANCIERA.pasos.find((p) => p.clave === clave)?.tope_usd).toBe(0.4)
     // el re-cierre (cierre_2) reserva más: piso 0,40
     expect(PLANTILLA_FINANCIERA.pasos.find((p) => p.clave === 'cierre_2')?.tope_usd).toBe(0.4)
@@ -137,7 +137,7 @@ describe('RESERVA DEL CIERRE · lo medido + margen, sin bajar la defensa', () =>
     const con = plantillaDelEncargo(enc(1), [turno('cierre', 0.33)])
     expect(con.pasos.find((p) => p.clave === 'cierre_2')?.tope_usd).toBe(0.43)
     expect(plantillaDelEncargo(enc(1), [turno('cierre', 0.21)]).pasos.find((p) => p.clave === 'cierre_2')?.tope_usd).toBe(0.4)
-    expect(con.pasos.find((p) => p.clave === 'cierre')?.tope_usd).toBe(0.45)
+    expect(con.pasos.find((p) => p.clave === 'cierre')?.tope_usd).toBe(RESERVA_DEL_CIERRE_USD)
     // un cierre fallido o sin costo no cuenta
     expect(plantillaDelEncargo(enc(1), [turno('cierre', 0.21, 'fallo')]).pasos.find((p) => p.clave === 'cierre_2')?.tope_usd).toBe(0.4)
     expect(plantillaDelEncargo(enc(1), [turno('cierre', 0)]).pasos.find((p) => p.clave === 'cierre_2')?.tope_usd).toBe(0.4)
@@ -159,8 +159,8 @@ describe('RESERVA DEL CIERRE · lo medido + margen, sin bajar la defensa', () =>
     const s = siguientePaso(estadoAntesDelCierre2(2.70), nueva)
     expect(s.accion).toBe('cierre_por_tope')
     expect(s.accion === 'cierre_por_tope' && s.razon).toBe('tope_de_gasto')
-    // y el tope del encargo sigue sin pasar del techo aunque la semilla pida más
-    expect(plantillaDelEncargo(enc(0, 9), [turno('cierre', 0.22)]).limites.tope_encargo_usd).toBe(5)
+    // y el tope del encargo sigue sin pasar del techo (US$ 11,10) aunque la semilla pida más
+    expect(plantillaDelEncargo(enc(0, 20), [turno('cierre', 0.22)]).limites.tope_encargo_usd).toBe(TOPE_DEL_ENCARGO_USD)
   })
 })
 

@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { estadoInicial } from '../src/lib/oficina/tipos'
-import { abrirConversacion, avanzar, topeDePruebaAutomatico, topeEfectivoDelEncargo } from '../src/lib/finanzas/conversa/orquestador'
+import { abrirConversacion, avanzar, TOPE_MAXIMO_POR_ENCARGO_USD, topeDePruebaAutomatico, topeEfectivoDelEncargo } from '../src/lib/finanzas/conversa/orquestador'
 import { almacenDeConversa } from '../src/lib/finanzas/conversa/almacen-supabase'
 import type { AlmacenDeConversa, EncargoDeConversa, PedidoAlModelo, PuertosDeConversa, Semilla } from '../src/lib/finanzas/conversa/puertos'
 import type { ConfigDeFinanzas } from '../src/lib/finanzas/ruta'
@@ -55,9 +55,9 @@ describe('la fórmula del tope de prueba · POR PEDIDO', () => {
     expect(topeDePruebaAutomatico({ tope_encargo_usd: 2, firma_tope: { ...FIRMA, valor: 2.5 } }, 0, 0).limite_usd).toBe(2.5)
     expect(topeDePruebaAutomatico({}, 0, 0).limite_usd).toBe(1.5) // nunca «sin tope»: el de la plantilla
     expect(topeDePruebaAutomatico({ tope_encargo_usd: 2.5 }, 0, 0).limite_usd).toBe(2.5)
-    expect(topeDePruebaAutomatico({ tope_encargo_usd: 9 }, 0, 0).limite_usd).toBe(5) // sin firma, el techo
+    expect(topeDePruebaAutomatico({ tope_encargo_usd: 20 }, 0, 0).limite_usd).toBe(TOPE_MAXIMO_POR_ENCARGO_USD) // sin firma, el techo (US$ 11,10 desde el 18-nov)
     for (const f of [{ ...FIRMA, quien: '' }, { ...FIRMA, valor: Number.NaN }, { ...FIRMA, papel: ' ' }, null]) {
-      expect(topeDePruebaAutomatico({ tope_encargo_usd: 9, firma_tope: f as never }, 0, 0).limite_usd).toBe(5)
+      expect(topeDePruebaAutomatico({ tope_encargo_usd: 20, firma_tope: f as never }, 0, 0).limite_usd).toBe(TOPE_MAXIMO_POR_ENCARGO_USD)
     }
   })
   it('el TOTAL del cliente solo con firma_tope_total válida: límite = lo firmado y base = todo lo cobrado al cliente', () => {

@@ -67,10 +67,12 @@ export const ANALISTAS: Readonly<Record<TipoDeAnalisis, Analista>> = {
   },
 }
 
-export const TOPE_POR_ANALISTA_USD = 1
+// 18-nov · Emilio: topes = 3 × lo medido (GO Lenovo 16:17Z): el analista más caro costó 0,3598 → 1,08
+export const TOPE_POR_ANALISTA_USD = 1.08
 export const TOPE_MAXIMO_POR_ANALISTA_USD = 2
 /** FIRMA de Emilio 01-nov 09:50Z: US$ 5 por sobre (5 analistas × US$ 1); antes US$ 4 dejaba fuera siempre al quinto */
-export const TOPE_DE_LA_MESA_USD = 5
+// 18-nov · sigue a la firma de arriba (5 analistas × su tope): con el analista en 1,08, el sobre pasa a 5,40 para que el quinto no quede fuera
+export const TOPE_DE_LA_MESA_USD = Math.round(5 * TOPE_POR_ANALISTA_USD * 100) / 100
 /** el informe que vuelve al plan (ADENDA 1: 6.000, no 2.500) y el material crudo que recibe cada analista */
 export const TOPE_DEL_INFORME = TOPE_REAL_DEL_PEDIDO
 export const TOPE_DEL_MATERIAL = TOPE_REAL_DEL_PEDIDO
