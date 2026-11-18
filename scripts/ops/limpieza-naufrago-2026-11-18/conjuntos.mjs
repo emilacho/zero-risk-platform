@@ -34,6 +34,8 @@ export const CONJUNTOS = [
   { tabla: 'estudio_piezas', donde: `client_id = '${C}'`, esperado: 8 },
   { tabla: 'autorevisiones_del_productor', donde: `client_id = '${C}'`, esperado: 2 },
   { tabla: 'workflow_checkpoints', donde: `client_id = '${C}'`, esperado: 65 },
+  // la sala por STREAM ENTERO (ADENDA 4 de CC7): BRIEF de la campaña y PIEZAS de las partes borradas; se quedan el alta, el plan y el reel (009abba3)
+  { tabla: 'sala_event_log', donde: `stream_id in (select stream_id from public.sala_event_log where client_id = '${C}' group by stream_id having bool_or(journey_type = 'BRIEF') or (bool_or(journey_type = 'PIEZAS') and not bool_or(coalesce(logical_period, '') || coalesce(idempotency_key, '') like '%009abba3%')))`, esperado: 82 },
 ]
 /** las 3 libretas: se respalda el VALOR ENTERO de la clave; la vuelta atrás lo repone tal cual */
 export const LIBRETAS = ['reubicacion_libreta', 'rehacer_fallidos_libreta', 'reintentos_piezas']

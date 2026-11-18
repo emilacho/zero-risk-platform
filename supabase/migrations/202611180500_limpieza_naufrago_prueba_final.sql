@@ -7,6 +7,7 @@
 --   · las salidas posteriores al plan: los 5 `campaign_piece` y 2 de los 3 `campaign_brief_pack` (`27a1febc`, `ce085548`).
 --   · la oficina (19 encargos y sus hijas), las 4 revisiones de `jefatura` de tipo `pieza`, 8 filas de la bandeja (gran idea y piezas),
 --     4 avisos de la campaña, `estudio_piezas`, `autorevisiones_del_productor`, `workflow_checkpoints`;
+--   · `sala_event_log`: 82 filas en 25 streams enteros (BRIEF de la campaña y PIEZAS de las partes borradas · ADENDA 4 de CC7). Quedan 35.
 --   · las llaves de Náufrago en 3 libretas de `cadena_config`.
 -- SE QUEDA: el manual, el plan (con su bandeja, sus eventos, su espera y sus 4 revisiones de `jefatura`), `finanzas_*`, todo el cerebro,
 --   la configuración, la bitácora de gasto y la web. Y el REEL `2ed549cc` (esperando a Emilio), con todo lo que necesita para seguir:
@@ -97,6 +98,14 @@ begin
   get diagnostics n = row_count; if n <> 4 then raise exception 'candado avisos: % (esperaba 4)', n; end if;
 
   -- ── 5 · las salidas posteriores al plan: las 5 piezas y 2 de los 3 partes (el del reel se queda)
+  -- los `ON DELETE SET NULL` (`hitl_queue`, `agent_outcomes`, `campaign_results` · `output_id`): se cuentan ANTES; hoy 0, así que no cambian nada
+  if (select count(*) from public.hitl_queue h join public.client_historical_outputs o on o.id = h.output_id
+       where o.client_id = c and (o.output_type = 'campaign_piece' or o.id in ('27a1febc-244d-40fa-b01a-5d1a234d1737', 'ce085548-56a0-4892-8852-74c1d2d54576')))
+     + (select count(*) from public.agent_outcomes h join public.client_historical_outputs o on o.id = h.output_id
+       where o.client_id = c and (o.output_type = 'campaign_piece' or o.id in ('27a1febc-244d-40fa-b01a-5d1a234d1737', 'ce085548-56a0-4892-8852-74c1d2d54576')))
+     + (select count(*) from public.campaign_results h join public.client_historical_outputs o on o.id = h.output_id
+       where o.client_id = c and (o.output_type = 'campaign_piece' or o.id in ('27a1febc-244d-40fa-b01a-5d1a234d1737', 'ce085548-56a0-4892-8852-74c1d2d54576'))) <> 0
+  then raise exception 'antes: hay filas que apuntan a las salidas que se borran (SET NULL): volver a contar'; end if;
   delete from public.client_historical_outputs
    where client_id = c
      and (output_type = 'campaign_piece'
@@ -110,6 +119,14 @@ begin
   get diagnostics n = row_count; if n <> 2 then raise exception 'candado autorevisiones_del_productor: % (esperaba 2)', n; end if;
   delete from public.workflow_checkpoints where client_id = c;
   get diagnostics n = row_count; if n <> 65 then raise exception 'candado workflow_checkpoints: % (esperaba 65)', n; end if;
+
+  -- ── 6b · la sala (INVENTARIO-CC7 ADENDA 4 · 🟢 CC6): por STREAM ENTERO (sin huecos de `sequence`). Se borran los streams BRIEF de la campaña
+  --        (su llave `${camp}:tanda-N:<etapa>` chocaría al reabrir) y los PIEZAS de las partes borradas. Se quedan el alta, el plan y los 2 del reel (009abba3).
+  delete from public.sala_event_log
+   where stream_id in (select stream_id from public.sala_event_log where client_id = c group by stream_id
+                        having bool_or(journey_type = 'BRIEF')
+                            or (bool_or(journey_type = 'PIEZAS') and not bool_or(coalesce(logical_period, '') || coalesce(idempotency_key, '') like '%009abba3%')));
+  get diagnostics n = row_count; if n <> 82 then raise exception 'candado sala_event_log: % (esperaba 82)', n; end if;
 
   -- ── 7 · las libretas de `cadena_config`: solo las llaves de Náufrago (las claves se quedan)
   update public.cadena_config set valor = valor - camp::text, actualizado_en = now()
@@ -140,6 +157,9 @@ begin
   if (select count(*) from public.eventos_de_emilio where client_id = c) <> 18 then raise exception 'después: la bitácora de Emilio no está entera (18)'; end if;
   if (select count(*) from public.esperas_del_dueno where client_id = c) <> 1 then raise exception 'después: la espera del manual no está'; end if;
   if (select count(*) from public.jefatura_revisiones where client_id = ct and artifact_type = 'plan') <> 4 then raise exception 'después: faltan las 4 revisiones del plan'; end if;
+  if (select count(*) from public.sala_event_log where client_id = c) <> 35 then raise exception 'después: la sala del alta, el plan y el reel no está entera (35)'; end if;
+  if (select count(*) from public.sala_event_log where client_id = c and journey_type = 'PIEZAS') <> 6 then raise exception 'después: faltan las 6 filas de la sala del reel'; end if;
+  if (select count(*) from public.plan_corridas where client_id = ct) <> 6 then raise exception 'después: las corridas del plan no están enteras (6)'; end if;
   if (select count(*) from public.cadena_campanas where id = camp) <> 1 then raise exception 'después: la campaña tiene que quedarse'; end if;
   if exists (select 1 from public.cadena_estrategias where campana_id = camp) or exists (select 1 from public.cadena_calendario_filas where campana_id = camp)
      or exists (select 1 from public.cadena_brief_creativo where campana_id = camp) or exists (select 1 from public.cadena_conceptos where campana_id = camp)

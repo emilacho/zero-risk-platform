@@ -57,6 +57,23 @@ describe('limpieza de Náufrago · 202611180500', () => {
     expect(cuerpo).not.toMatch(/output_type = 'campaign_plan_90d'[^;]*;\s*\n\s*get diagnostics/)
   })
 
+  it('la sala se borra por stream entero, y se quedan el alta, el plan y los streams del reel (009abba3)', () => {
+    const borrado = cuerpo.slice(cuerpo.indexOf('delete from public.sala_event_log'), cuerpo.indexOf("candado sala_event_log"))
+    expect(borrado).toMatch(/where stream_id in \(select stream_id from public\.sala_event_log where client_id = c group by stream_id/)
+    expect(borrado).toMatch(/bool_or\(journey_type = 'BRIEF'\)/)
+    expect(borrado).toContain("(bool_or(journey_type = 'PIEZAS') and not bool_or(coalesce(logical_period, '') || coalesce(idempotency_key, '') like '%009abba3%'))")
+    expect(borrado).not.toMatch(/journey_type = '(PRODUCE|ONBOARD)'/)
+    expect(cuerpo).toMatch(/from public\.sala_event_log where client_id = c\) <> 35/)
+    expect(cuerpo).toMatch(/from public\.sala_event_log where client_id = c and journey_type = 'PIEZAS'\) <> 6/)
+  })
+
+  it('los SET NULL hacia las salidas que se borran se cuentan ANTES del borrado', () => {
+    const antes = cuerpo.indexOf("then raise exception 'antes: hay filas que apuntan a las salidas que se borran")
+    expect(antes).toBeGreaterThan(-1)
+    expect(antes).toBeLessThan(cuerpo.indexOf('delete from public.client_historical_outputs'))
+    for (const t of ['hitl_queue', 'agent_outcomes', 'campaign_results']) expect(cuerpo).toMatch(new RegExp(`from public\\.${t} h join public\\.client_historical_outputs o on o\\.id = h\\.output_id`))
+  })
+
   it('la campaña queda vacía para reabrirla: se borran la estrategia, el calendario, el brief y la gran idea, y se comprueba', () => {
     for (const t of ['cadena_estrategias', 'cadena_calendario_filas', 'cadena_brief_creativo', 'cadena_conceptos']) expect(cuerpo).toMatch(new RegExp(`delete from public\\.${t} where campana_id = camp;`))
     expect(cuerpo).toMatch(/E-YA-ARMADA/)
