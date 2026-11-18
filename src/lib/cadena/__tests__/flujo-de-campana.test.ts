@@ -386,3 +386,34 @@ describe('correcciones de CC7 a 8292d2a', () => {
     expect(await vivas(al, id, 'campana_pausada')).toHaveLength(1)
   })
 })
+
+describe('🟡 de CC7 (a2): el botón respeta la compuerta de la cadena', () => {
+  async function real(al: AlmacenMemoria, estadoCadena: unknown, armar: (al: AlmacenMemoria) => Promise<string> = activa) {
+    const id = await armar(al)
+    await al.actualizarCampana(id, { seco: false })
+    await al.escribirConfig('estado_cadena', estadoCadena)
+    return id
+  }
+  it('con la cadena APAGADA y una campaña real: parar contesta lo de la compuerta (409 E-CADENA-APAGADA) y no cambia nada', async () => {
+    const al = almacen(); const id = await real(al, 'apagada')
+    const antes = await estado(al, id)
+    const r = await flujo(al, id, 'parar')
+    expect(r.status).toBe(409); expect(r.cuerpo.code).toBe('E-CADENA-APAGADA')
+    expect(await estado(al, id)).toEqual(antes)
+    expect(await vivas(al, id, 'campana_pausada')).toHaveLength(0)
+  })
+  it('en ENSAYO con un cliente que no está en la lista: reanudar contesta 409 E-CADENA-NO-ADMITIDO y la campaña sigue pausada', async () => {
+    const al = almacen(); const id = await real(al, 'encendida')
+    await flujo(al, id, 'parar')
+    await al.escribirConfig('estado_cadena', 'ensayo'); await al.escribirConfig('clientes_ensayo', ['otro-cliente'])
+    const r = await flujo(al, id, 'reanudar')
+    expect(r.status).toBe(409); expect(r.cuerpo.code).toBe('E-CADENA-NO-ADMITIDO')
+    expect((await estado(al, id)).estado).toBe('pausada')
+  })
+  it('con la cadena ENCENDIDA, la misma campaña real se para y se reanuda (el 409 es solo por la compuerta)', async () => {
+    const al = almacen(); const id = await real(al, 'encendida')
+    expect((await flujo(al, id, 'parar')).status).toBe(200)
+    expect((await flujo(al, id, 'reanudar')).status).toBe(200)
+    expect((await estado(al, id)).estado).toBe('activa')
+  })
+})
