@@ -16,6 +16,7 @@ import { clienteA, contextoDe, formatosDeLaMigracion } from '../__fixtures__/cli
 import type { Almacen, Campana, EstrategiaGuardada } from '../almacen'
 import { briefAbrir, conceptoAbrir, conceptoDecidir, hojaEscribir, recibirBrief, recibirConcepto } from '../mesas'
 import { CAMPO_OFERTA_CERRADA } from '../hoja'
+import type { FichaDeOferta } from '../ficha-de-oferta'
 import type { Fila, FormatosPorRed } from '../tipos'
 
 /** la tabla de producción: la siembra + los UPDATE de familia de las dos migraciones (mismas reglas) */
@@ -383,6 +384,19 @@ describe('17-nov · Sprint 4 · A entrega 2 · la hoja trae las fichas que escri
     expect(r.status, JSON.stringify(r.cuerpo)).toBe(200)
     expect(r.cuerpo.hoja).toContain(`- ${CAMPO_OFERTA_CERRADA}: el centro cerró el 10-oct (fuente: cerebro:dueno · ficha:f9 · dicho el 2026-10-11)`)
     expect((r.cuerpo.avisos as string[]).some((a) => a.includes('manda el cerebro'))).toBe(true)
+  })
+  it('🔴 CC7 (h6) · la lectura en vivo del cerebro REVIENTA ⇒ la hoja se arma igual, con la foto de la ficha y el aviso (nunca tumba el armado)', async () => {
+    const al = almacenHoja(formatosReales())
+    await conGranIdea(al)
+    await al.guardarFilas(CAMP, 1, 1, [filaH('f-foto', 'instagram', 'foto')])
+    const conCierre: { contenido: FichaDeOferta[] } & Omit<ReturnType<typeof ficha>, 'contenido'> = ficha(CAMP, 'la oferta del centro')
+    conCierre.contenido = [{ ...conCierre.contenido[0], no_se_puede_afirmar: [{ valor: 'el centro cerró', fuente: 'cerebro:dueno · ficha:f9', tipo: 'cierre_retiro' as const }] }]
+    al.fichasDeOferta.push(conCierre)
+    al.hechosDelNegocio = async () => { throw new Error('el cerebro no contesta') }
+    const r = await hojaEscribir(al, wfh({ semana: 1 }), AHORA)
+    expect(r.status, JSON.stringify(r.cuerpo)).toBe(200)
+    expect(r.cuerpo.hoja).toContain(`- ${CAMPO_OFERTA_CERRADA}: el centro cerró (fuente: cerebro:dueno · ficha:f9)`)
+    expect((r.cuerpo.avisos as string[]).some((a) => a.includes('no se pudieron leer en vivo'))).toBe(true)
   })
   it('🔴 sabotaje · el cierre del cerebro empieza DESPUÉS de la fila ⇒ la hoja no lo lleva', async () => {
     const al = almacenHoja(formatosReales())
