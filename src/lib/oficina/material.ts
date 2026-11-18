@@ -9,6 +9,7 @@
 import crypto from 'node:crypto'
 import { origenDeLaFoto, type OrigenDeFoto } from '../cerebro/portero/fotos-pendientes'
 import { esCapturaDeLaWeb } from '../cerebro/portero/procedencia'
+import { rolEfectivo } from '../portero-alimenta/embudo'
 import type { FotoEtiquetada } from './fotos'
 
 export { origenDeLaFoto, type OrigenDeFoto }
@@ -157,26 +158,31 @@ export function leerRespuestaDelPortero(body: unknown, clase: ClaseDeMaterial): 
 
 // ── fotos: propias vs referencias (UNA sola implementación del origen: la del portero)
 export type FilaDeFoto = Record<string, unknown>
-export function separarFotos(filas: FilaDeFoto[]): { propias: FotoEtiquetada[]; referencias: FotoEtiquetada[] } {
-  const propias: FotoEtiquetada[] = [], referencias: FotoEtiquetada[] = []
+/** 18-nov · fase B del cerebro: el origen sale de `papel` con la regla del cerebro (`rolEfectivo`: papel si existe, si no `owner_role`).
+ *  Una copia (`duplicado_de`) no cuenta: es la misma foto. Lo ajeno sin motivo (`sin_motivo`) va APARTE, nunca entre las referencias */
+export const esCopia = (x: FilaDeFoto): boolean => typeof x.duplicado_de === 'string' && x.duplicado_de.length > 0
+export function separarFotos(filas: FilaDeFoto[]): { propias: FotoEtiquetada[]; referencias: FotoEtiquetada[]; sin_motivo: FotoEtiquetada[] } {
+  const propias: FotoEtiquetada[] = [], referencias: FotoEtiquetada[] = [], sinMotivo: FotoEtiquetada[] = []
   for (const x of filas) {
-    const origen = origenDeLaFoto(x.owner_role)
+    if (esCopia(x)) continue
+    const origen = origenDeLaFoto(rolEfectivo(x))
     const f = { ...x, id: String(x.id), origen } as unknown as FotoEtiquetada
     if (origen === 'propia') propias.push(f)
+    else if (x.sin_motivo === true) sinMotivo.push(f)
     else referencias.push(f)
   }
-  return { propias, referencias }
+  return { propias, referencias, sin_motivo: sinMotivo }
 }
 /**
  * 17-nov · Sprint 4 · D (GO Lenovo sobre la observación de CC6 a #1137): una captura de la web NO es foto propia, pero SÍ sigue siendo referencia de estilo.
  * Las capturas (propias o de la competencia) salen de las propias y van a las referencias marcadas `captura_web`; una propia pasa como `referencia` (nunca se publica).
  * La regla de qué es captura es la del cerebro (`esCapturaDeLaWeb`, #1135).
  */
-export function separarFotosYCapturas(filas: FilaDeFoto[]): { propias: FotoEtiquetada[]; referencias: FotoEtiquetada[] } {
-  const { propias, referencias } = separarFotos(filas.filter((f) => !esCapturaDeLaWeb(f)))
+export function separarFotosYCapturas(filas: FilaDeFoto[]): { propias: FotoEtiquetada[]; referencias: FotoEtiquetada[]; sin_motivo: FotoEtiquetada[] } {
+  const { propias, referencias, sin_motivo } = separarFotos(filas.filter((f) => !esCapturaDeLaWeb(f)))
   const cap = separarFotos(filas.filter((f) => esCapturaDeLaWeb(f)))
   const capturas = [...cap.propias, ...cap.referencias].map((f) => ({ ...f, origen: f.origen === 'propia' ? 'referencia' : f.origen, captura_web: true, ...(f.origen === 'propia' ? { del_cliente: true } : {}) }) as FotoEtiquetada)
-  return { propias, referencias: [...referencias, ...capturas] }
+  return { propias, referencias: [...referencias, ...capturas], sin_motivo: [...sin_motivo, ...cap.sin_motivo] }
 }
 
 /** el rótulo que ve quien aprueba en la bandeja y el curador en su pedido */

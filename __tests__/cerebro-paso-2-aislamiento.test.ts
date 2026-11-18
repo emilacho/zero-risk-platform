@@ -141,6 +141,8 @@ export const PUEDEN_NOMBRARLAS = [
   /^src\/lib\/oficina\/mesa\/lectura-referencias\.ts$/,
   /^src\/lib\/oficina\/video\/referencias\.ts$/,
   /^src\/lib\/oficina\/__tests__\/(referencias-de-video|mesa-de-video-t8)\.test\.ts$/,
+  // 18-nov · la oficina lee el `papel` del cerebro (#1156): su prueba arma reels y momentos falsos con las mismas columnas de etiqueta que `referencias-de-video` (solo bases falsas, no escribe)
+  /^src\/lib\/oficina\/__tests__\/oficina-lee-papel\.test\.ts$/,
   // 17-nov · Sprint 3 · T1b (decisión Lenovo B · persona real solo con permiso registrado): la sala de video LEE `con_personas` de las fotos propias que ya trae
   //   `fuentes` para pedir permiso; no escribe ni consulta el cerebro. Solo la regla pura y su prueba (bases falsas)
   /^src\/lib\/oficina\/video\/permisos\.ts$/,
