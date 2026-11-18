@@ -12,6 +12,7 @@
  */
 import { criticoDe, direccionDe } from './directorio'
 import { COTAS, type Aporte, type EstadoMesa } from './tipos'
+import { LA_CRITICA_MIRA_LAS_FOTOS } from './fotos-a-la-vista'
 
 /**
  * cómo empieza la línea que la dirección escribe DENTRO de «## Citas» al integrar. Va en las citas a propósito: todas las convenciones (láminas, kit, foto, guion,
@@ -93,6 +94,7 @@ export function tareaDeLaCritica(agente: string): string {
     '- **Qué choca con un hecho**: algo que la oferta no es, no tiene, no ofrece, no está disponible donde o cuando se dice, o no se puede afirmar según el manual, el brief, el plan o el material del portero. Di cuál es el hecho y dónde está.',
     '- **Qué choca con el plan**: objetivo, público, fase, ruta o mensaje que el plan no sostiene.',
     '- **Qué falta probar**: lo que la propuesta da por hecho y nadie mostró con una fuente.',
+    LA_CRITICA_MIRA_LAS_FOTOS,
     '- **Qué está bien sostenido**: dilo en una línea, para que la dirección sepa qué no tocar.',
     'Lo que no es un hecho o no está en el plan es opinión: si la das, dila como tal y en una línea. No reescribas la pieza, no propongas ideas nuevas, no votes, no apruebes ni rechaces: la dirección decide.',
     'No copies líneas del banco ni de la pieza: cita su id. Si te falta un hecho para confrontar algo, dilo (o pídelo con `pedir_material`); no lo supongas.',
