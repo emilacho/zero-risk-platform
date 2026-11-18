@@ -4,9 +4,8 @@
  *
  *   · exige la llave interna, `dry_run` explícito y la firma REAL de la corrida (workflow_id + execution id): el redactor solo se invoca vía flujo;
  *   · PALANCA APAGADA POR OMISIÓN (`cadena_config.perfil_del_publico` = { encendida, clientes[] });
- *   · crédito de Apify leído por el mismo lector que la puerta del Servicio (#977), pero aquí una lectura caída es «sin crédito»;
- *   · voces: tabla propia `perfil_publico_voces` (fuera del cerebro) + fichas de habla del cerebro leídas por su consulta pública (US$ 0);
- *   · raspado por el Servicio de Apify existente, con la firma de quien llama; lo crudo se lee de vuelta de `apify_raw` por `llamado_por`;
+ *   · NO RASPA (firma de Emilio 18-nov · el único que raspa es el portero del cerebro): la voz del público se lee SOLO por la consulta
+ *     del cerebro (US$ 0); lo que el cerebro todavía no tiene se declara «fuente faltante»;
  *   · el perfil se archiva por la puerta de informes del cerebro (`POST /api/brain/alimentar/informe`), como cualquier oficina.
  */
 import { NextResponse } from 'next/server'

@@ -1,0 +1,104 @@
+/**
+ * PERFIL DEL PÚBLICO · NO RASPA (firma de Emilio 18-nov 00:56 · RESPUESTA-LENOVO-a-CC3-perfil-del-publico-sin-raspar · la certifica CC6).
+ * Una corrida REAL (no ensayo, palanca encendida) con las dependencias REALES de la puerta: lo único de afuera son la base, la consulta del
+ * cerebro, el filtro, el redactor y la red, que son dobles. La prueba es lo que NO pasa: ninguna llamada al Servicio de Apify, ninguna lectura
+ * de lo crudo de Apify, ninguna escritura de voces propias. La voz llega SOLO por la consulta del cerebro. US$ 0.
+ */
+import fs from 'node:fs'
+import path from 'node:path'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+const CLIENTE = '11111111-1111-4111-8111-111111111111'
+const uuid = (n: number) => `cccccccc-0000-4000-8000-${String(n).padStart(12, '0')}`
+const FRASES = ['el café está de lujo y la tostada con tomate es la mejor del barrio', 'siempre pido el cortado de avena antes de currar', 'un sitio muy majo para currar con el portátil']
+const fichas = (clase: string, n: number, desde: number) =>
+  Array.from({ length: n }, (_, i) => ({ ficha_id: uuid(desde + i), clase, contenido: `${FRASES[i % FRASES.length]} número ${desde + i}`, fecha_de_la_fuente: '2026-10-01' }))
+
+const h = vi.hoisted(() => ({
+  tablas: [] as string[],
+  escrituras: [] as string[],
+  consultas: [] as Array<Record<string, unknown>>,
+  resultados: [] as unknown[],
+  redactor: [] as string[],
+}))
+vi.mock('@/lib/supabase', () => {
+  const DATOS: Record<string, unknown[]> = {
+    agents: [{ name: 'feedback-synthesizer', is_active: true }],
+    clients: [{ industry: 'cafetería', market: 'Madrid', country: 'España' }],
+    client_icp_documents: [{ id: 'p-cafe', audience_segment: 'Vecinos que desayunan fuera', segment_priority: 1, job_titles: [], company_size: null, industries: [], geography: 'Madrid, España' }],
+  }
+  const consulta = (t: string) => {
+    h.tablas.push(t)
+    const o: Record<string, unknown> = {}
+    for (const m of ['select', 'eq', 'order', 'limit', 'in', 'contains']) o[m] = () => o
+    for (const m of ['insert', 'upsert', 'update', 'delete']) o[m] = () => { h.escrituras.push(`${m}:${t}`); return o }
+    o.then = (ok: (x: unknown) => unknown) => ok({ data: DATOS[t] ?? [], error: null })
+    return o
+  }
+  return { getSupabaseAdmin: () => ({ from: consulta }) }
+})
+vi.mock('@/lib/cadena/almacen-supabase', () => ({ almacenDeSupabase: () => ({ leerConfig: async () => ({ encendida: true, clientes: [CLIENTE] }) }) }))
+vi.mock('@/lib/portero-alimenta/consultar', () => ({
+  rutaConsultar: async (_ctx: unknown, pedido: Record<string, unknown>) => { h.consultas.push(pedido); return { status: 200, body: { resultados: h.resultados, siguiente_desde: null } } },
+}))
+vi.mock('@/lib/ingress-filter', () => ({ DEFAULT_ROUTE_POLICY: {}, runIngressFilter: async () => ({ allow: true }) }))
+vi.mock('@/lib/finanzas/conversa/modelo-run-sdk', () => ({
+  baseDeRunSdk: () => 'https://plataforma.test',
+  modeloRunSdk: () => ({ invocar: async (p: { tarea: string }) => { h.redactor.push(p.tarea); return { ok: true, salida: `## Cómo habla\n- «cortado de avena» [voz:${uuid(2)}]`, costo_usd: 0.1 } } }),
+}))
+
+import { correrPerfil } from '@/lib/perfil-del-publico/corrida'
+import { dependenciasReales } from '@/lib/perfil-del-publico/dependencias'
+
+const PUERTA_DE_APIFY = 'https://servicio-apify.test/webhook/apify'
+const red = vi.fn(async (_url: string | URL | Request) => new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'content-type': 'application/json' } }))
+const correr = () => correrPerfil(dependenciasReales({ client_id: CLIENTE, workflow_id: 'wf-perfil', workflow_execution_id: 'ex-1', idioma: null, trato: null }), { client_id: CLIENTE, dry_run: false, workflow_id: 'wf-perfil', workflow_execution_id: 'ex-1' })
+const urls = () => red.mock.calls.map((c) => String(c[0]))
+
+describe('el perfil del público NO raspa: lee la voz del público solo del cerebro', () => {
+  beforeEach(() => {
+    h.tablas.length = 0; h.escrituras.length = 0; h.consultas.length = 0; h.redactor.length = 0
+    red.mockClear()
+    vi.stubGlobal('fetch', red)
+    vi.stubEnv('APIFY_SERVICE_WEBHOOK_URL', PUERTA_DE_APIFY)
+    vi.stubEnv('INTERNAL_API_KEY', 'llave-de-prueba')
+  })
+  afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs() })
+
+  it('🔴 con la muestra en el cerebro: redacta y archiva, sin una sola llamada al Servicio de Apify ni lectura de lo crudo', async () => {
+    h.resultados = [...fichas('resenas', 40, 1), ...fichas('comentarios', 30, 100)]
+    const r = await correr()
+    expect(r).toMatchObject({ estado: 'hecho', llamadas_al_redactor: 1, voces_del_cerebro: 70, archivado: { ok: true } })
+    // la red: SOLO la puerta de informes del cerebro (archivar)
+    expect(urls()).toEqual(['https://plataforma.test/api/brain/alimentar/informe'])
+    expect(urls().some((u) => /apify/i.test(u))).toBe(false)
+    // la base: nada de lo crudo de Apify ni de una tabla de voces propia; y ninguna escritura
+    expect(h.tablas.filter((t) => /apify|perfil_publico_voces/.test(t))).toEqual([])
+    expect(h.escrituras).toEqual([])
+    // la voz llegó por la consulta del cerebro, con las clases de habla
+    expect(h.consultas).toHaveLength(1)
+    expect(String(h.consultas[0].clase).split(',')).toEqual(expect.arrayContaining(['comentarios', 'resenas', 'mencion']))
+    expect(h.redactor[0]).toContain(`[voz:${uuid(2)}]`)
+  })
+  it('🔴 sin muestra en el cerebro: NO sale a buscarla · declara la fuente faltante, no redacta y no llama a nadie', async () => {
+    h.resultados = fichas('resenas', 20, 1)
+    const r = await correr()
+    expect(r.publicos[0]).toMatchObject({ estado: 'muestra_insuficiente', fuentes_faltantes: expect.arrayContaining(['cerebro:comentarios', 'cerebro:mencion']) })
+    expect(r.cortes.join(' ')).toMatch(/fuente faltante: .*el cerebro todavía no la tiene/)
+    expect(red).not.toHaveBeenCalled()
+    expect(h.redactor).toEqual([])
+    expect(h.tablas.filter((t) => /apify/.test(t))).toEqual([])
+  })
+  it('el código del perfil no conoce ninguna puerta ni tabla de Apify (si alguien la vuelve a cablear, esto lo ve)', () => {
+    const dir = path.join(process.cwd(), 'src/lib/perfil-del-publico')
+    const archivos = [...fs.readdirSync(dir).filter((a) => a.endsWith('.ts')).map((a) => path.join(dir, a)), path.join(process.cwd(), 'src/app/api/perfil-del-publico/route.ts')]
+    for (const a of archivos) {
+      const src = fs.readFileSync(a, 'utf8')
+      expect(src, a).not.toMatch(/APIFY_SERVICE_WEBHOOK_URL|apify_raw|@\/lib\/apify|from '\.\.\/apify|perfil_publico_voces|leerUsoDelMes|creditoDeApify/)
+    }
+  })
+  it('control: la prueba de red ve una llamada a Apify si existiera (si no la viera, todo lo anterior sería ciego)', async () => {
+    await fetch(PUERTA_DE_APIFY, { method: 'POST' })
+    expect(urls().some((u) => /apify/i.test(u))).toBe(true)
+  })
+})
