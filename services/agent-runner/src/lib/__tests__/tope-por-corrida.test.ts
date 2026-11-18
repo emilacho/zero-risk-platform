@@ -300,4 +300,16 @@ describe('🔴 thinking_mode · opt-in puro', () => {
     await turno()
     expect((escrituraDe('agent_invocations')?.metadata as Record<string, unknown>).thinking_mode).toBe('maximo')
   })
+  it('🔴 (🟡 s3c de CC7) el corredor le pasa el MODELO a la regla: Haiku en `maximo` sin effort · Opus 5.5 en `disabled` con effort low (si no, 400)', async () => {
+    flujo = OK
+    await corrida({ thinkingMode: 'maximo', modelOverride: 'claude-haiku-4-5-20251001' })
+    expect(opcionesRecibidas).toMatchObject({ model: 'claude-haiku-4-5-20251001' })
+    expect(Object.prototype.hasOwnProperty.call(opcionesRecibidas, 'effort')).toBe(false)
+    expect(Object.prototype.hasOwnProperty.call(opcionesRecibidas, 'thinking')).toBe(false)
+    await turno(); escrituras.length = 0
+    await corrida({ thinkingMode: 'disabled', modelOverride: 'claude-opus-5-5' })
+    expect(opcionesRecibidas).toMatchObject({ model: 'claude-opus-5-5', effort: 'low' })
+    expect(Object.prototype.hasOwnProperty.call(opcionesRecibidas, 'thinking')).toBe(false)
+    await turno(); escrituras.length = 0
+  })
 })

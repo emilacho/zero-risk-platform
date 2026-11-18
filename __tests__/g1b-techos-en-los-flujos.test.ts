@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest'
 import { MODOS_DE_RAZONAMIENTO_DEL_PEDIDO } from '@/lib/razonamiento'
 import { TOPE_REAL_DEL_PEDIDO } from '@/lib/limites-de-tamano'
 import { pedidoDeAgente } from '@/lib/oficina/mesa/pedidos'
+import { armarPedidoDeAgente } from '@/lib/jefatura/revision/pedidos'
 
 const DIR = path.join(process.cwd(), 'scripts/worker-staging/g1b-techos')
 const IDS = ['bTbWL9lUvQCfStAz', 'o8qaF7bI0PKv2XGZ', 'lVCLzxQCKNkd3uS0', 'PQdIgbuFexuBsoh8', 'BNXqlaX1oHSfZIpF', 'ssLtwYPt7zxuvnM2', 'X9F0zp6LQ2xGEYVS']
@@ -53,6 +54,10 @@ describe('G1b · los flujos nuevos', () => {
   it('🔴 (🟡 d3 de CC6 en #1183) el turno de la MESA pide razonamiento al máximo, sea pieza o cadena', () => {
     const mesa = { agente: 'a', task: 't', encargo_id: 'enc-1', client_id: 'c', dry_run: true, paso: 'p', reserva_usd: 1 }
     for (const es_pieza of [true, false, undefined]) expect(pedidoDeAgente({ ...mesa, es_pieza }).thinking_mode, String(es_pieza)).toBe('maximo')
+  })
+  it('🔴 (🟡 s17 de CC7) el pedido de la JEFATURA pide razonamiento al máximo', () => {
+    const p = armarPedidoDeAgente({ agente: 'a', task: 't', esquema: 'e', indicacion: 'i', paso: 'p', revision_id: 'r', dispatch_key: 'd', max_budget_usd: 1, dry_run: true, client_id: 'c' } as never)
+    expect(p.thinking_mode).toBe('maximo')
   })
   it('🔴 el sobre del brief acepta exactamente los niveles de la plataforma, más «completo»', () => {
     const t = fs.readFileSync(path.join(process.cwd(), 'scripts/worker-staging/brief-parte-de-trabajo/n0-sobre.js'), 'utf8')
