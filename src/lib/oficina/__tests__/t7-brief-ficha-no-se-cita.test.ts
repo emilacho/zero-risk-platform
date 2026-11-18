@@ -7,9 +7,9 @@
  * Agnóstico al rubro: el plan y la ficha son de una tienda en línea inventada para la prueba.
  */
 import { describe, expect, it } from 'vitest'
-import { armarTarea, type ContextoDeTurno, type TipoDeTurno } from '@/lib/oficina/mesa/pedidos'
+import { armarTarea, CONVENCION_DE_LA_PIEZA, type ContextoDeTurno, type TipoDeTurno } from '@/lib/oficina/mesa/pedidos'
 import type { EstadoMesa } from '@/lib/oficina/mesa/tipos'
-import { leerBriefCreativo, REFERENCIA_DEL_BRIEF_CREATIVO, REGLA_DE_LA_CITA_DE_LISTA, REGLA_DE_LOS_HECHOS_DE_LA_FICHA } from '@/lib/cadena/brief-creativo'
+import { leerBriefCreativo, REFERENCIA_DEL_BRIEF_CREATIVO, REGLA_DE_LA_CITA_DE_LISTA, REGLA_DE_LOS_HECHOS_DE_LA_FICHA, TITULOS_DEL_BRIEF, TITULOS_OBLIGATORIOS_DEL_BRIEF } from '@/lib/cadena/brief-creativo'
 import { marcoDelBrief } from '@/lib/cadena/mesas'
 import { clienteA, contextoDe } from '@/lib/cadena/__fixtures__/clientes'
 
@@ -94,5 +94,18 @@ describe('(2) de una lista se cita UN punto · el chequeo de hoy', () => {
   it('un punto por cita pasa', () => {
     const l = leerBriefCreativo(brief(['Semana 2.'], ['- sin ficha de la oferta'], ['> «Pedidos entregados atribuibles a pauta — semanal»', '', '> «Devoluciones por talla — semanal»']), ins)
     expect(deCitas(l.bloqueos)).toEqual([])
+  })
+})
+
+describe('🟡 j8 (CC7): la convención de la mesa del brief NO tiene reglas propias', () => {
+  // lo que dice cada regla vive en la referencia del marco; la convención solo remite, lista los títulos y las obligatorias. Una línea más (p. ej. «lo de la ficha
+  // también se puede citar») contradiría la referencia sin que nada lo note.
+  const REMISION = 'Entrega el BRIEF CREATIVO de la campaña tal como lo pide la referencia «El brief creativo de campaña» del marco (sección 2): qué va en cada sección, cómo se cita y lo que NO va en el brief está ahí. El código lee estas secciones, cada una como `## Título`:'
+  const OBLIGATORIAS = `Obligatorias: ${TITULOS_OBLIGATORIOS_DEL_BRIEF.join(' · ')}. Nada de cifras ni datos del cliente sin fuente: lo que no esté en el material del portero, el manual o el plan va en «Faltantes», nunca se rellena. Toda cita va literal. Idioma y trato: los del manual del cliente.`
+  it('la convención es EXACTAMENTE: la remisión, un título por sección y la línea de obligatorias', () => {
+    expect(CONVENCION_DE_LA_PIEZA('brief').split('\n')).toEqual([REMISION, ...TITULOS_DEL_BRIEF.map((t) => `- ## ${t}`), OBLIGATORIAS])
+  })
+  it('y es lo que llega a la dirección en los turnos que entregan el brief', () => {
+    for (const t of ['integrar', 'devolver_citas'] as TipoDeTurno[]) expect(tarea(t)).toContain([REMISION, ...TITULOS_DEL_BRIEF.map((x) => `- ## ${x}`), OBLIGATORIAS].join('\n'))
   })
 })
