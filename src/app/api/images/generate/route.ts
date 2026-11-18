@@ -9,12 +9,14 @@ import { imageBytesFromItem, sniffImageFormat, type ImagesApiItem } from '@/lib/
 import { randomUUID } from 'node:crypto'
 import { checkInternalKey } from '@/lib/internal-auth'
 import { registrarImagenEnElLibro } from '@/lib/image-ledger'
-import { bajarFoto, cuerpoDeEdicion, referenciaPermitida } from '@/lib/imagen-sobre-foto'
+import { bajarFoto, bajarOtrasFotos, cuerpoDeEdicion, referenciaPermitida } from '@/lib/imagen-sobre-foto'
 
 // Sprint #6 Brazo 1 · GPT Image generation wrapper
 //
 // POST /api/images/generate
-// Body: { prompt, client_id?, agent_slug?, size?, model?, caller?, reference_image_url? }
+// Body: { prompt, client_id?, agent_slug?, size?, model?, caller?, reference_image_url?, reference_image_urls? }
+// reference_image_urls (18-nov · los creativos ven las fotos): las OTRAS fotos reales que siguen a la base (personajes, productos, lugares), en orden;
+//   van todas juntas a la edición (hasta MAX_FOTOS_POR_IMAGEN con la base). Sin base usable no se usan; cada una omitida dice por qué.
 // reference_image_url (sprint 1 · mejora 3): foto del cliente en el almacén del proyecto → /v1/images/edits sobre ella (conserva el producto);
 // si no se puede usar, se genera sin ella y la respuesta lo dice en `referencia`.
 // Modelo: body.model › env IMAGE_MODEL › 'gpt-image-1' (se retira el 23-oct-2026;
@@ -96,16 +98,24 @@ export async function POST(request: Request) {
   let openaiStatus = 0
   // sprint 1 · mejora 3 · con `reference_image_url` (una foto del cliente en NUESTRO almacén) la imagen se EDITA sobre esa foto; si la foto no se puede usar, se genera igual y se dice por qué
   const refUrl = sanitizeString(body.reference_image_url as string | undefined, 2000) || null
-  let referencia: { usada: boolean; motivo?: string } | null = null
+  let referencia: { usada: boolean; motivo?: string; otras_usadas?: string[]; otras_omitidas?: Array<{ url: string; motivo: string }> } | null = null
   let foto: { bytes: Buffer; tipo: string } | null = null
+  const almacen = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL
   if (refUrl) {
-    if (!referenciaPermitida(refUrl, process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL)) referencia = { usada: false, motivo: 'la foto no está en el almacén del proyecto: se generó sin ella' }
+    if (!referenciaPermitida(refUrl, almacen)) referencia = { usada: false, motivo: 'la foto no está en el almacén del proyecto: se generó sin ella' }
     else {
       const b = await bajarFoto(fetch, refUrl)
       if (b.ok) foto = { bytes: b.bytes, tipo: b.tipo }
       else referencia = { usada: false, motivo: `${b.motivo}: se generó sin ella` }
     }
   }
+  // 18-nov · GO «los creativos ven las fotos» · las OTRAS fotos reales del pedido (personajes, productos, lugares): solo si la base se pudo usar (la base manda
+  //   la composición); cada una que no sirve se omite y se dice por qué, sin frenar la imagen
+  const otrasUrls = (Array.isArray(body.reference_image_urls) ? (body.reference_image_urls as unknown[]) : [])
+    .map((u) => sanitizeString(typeof u === 'string' ? u : undefined, 2000)).filter((u): u is string => !!u)
+  const { otras, usadas: otrasUsadas, omitidas: otrasOmitidas } = await bajarOtrasFotos(fetch, otrasUrls, { base: refUrl, baseUsable: !!foto, almacen })
+  if (!foto && otrasOmitidas.length) referencia = { ...(referencia ?? { usada: false, motivo: 'el pedido trajo otras fotos sin foto base: se generó sin ellas' }), otras_omitidas: otrasOmitidas }
+  const conOtras = () => ({ ...(otrasUsadas.length ? { otras_usadas: otrasUsadas } : {}), ...(otrasOmitidas.length ? { otras_omitidas: otrasOmitidas } : {}) })
   const generar = () => fetch('https://api.openai.com/v1/images/generations', {
     method: 'POST',
     headers: {
@@ -120,14 +130,14 @@ export async function POST(request: Request) {
       openaiRes = await fetch('https://api.openai.com/v1/images/edits', {
         method: 'POST',
         headers: { Authorization: `Bearer ${openaiKey}` },
-        body: cuerpoDeEdicion({ prompt, model, size, quality, foto }),
+        body: cuerpoDeEdicion({ prompt, model, size, quality, foto, ...(otras.length ? { otras } : {}) }),
       })
       if (openaiRes.status >= 400) {
         // sin rejas: si OpenAI rechaza la edición, la imagen se genera igual (un pedido rechazado no se cobra) y se dice por qué
         const rechazo = (await openaiRes.json().catch(() => ({}))) as { error?: { message?: string } }
-        referencia = { usada: false, motivo: `OpenAI rechazó la edición sobre la foto (${openaiRes.status}${rechazo.error?.message ? ` · ${rechazo.error.message.slice(0, 160)}` : ''}): se generó sin ella` }
+        referencia = { usada: false, motivo: `OpenAI rechazó la edición sobre la foto (${openaiRes.status}${rechazo.error?.message ? ` · ${rechazo.error.message.slice(0, 160)}` : ''}): se generó sin ella`, ...(otrasUrls.length ? { otras_omitidas: otrasUrls.map((url) => ({ url, motivo: 'OpenAI rechazó la edición' })) } : {}) }
         openaiRes = await generar()
-      } else referencia = { usada: true }
+      } else referencia = { usada: true, ...conOtras() }
     } else openaiRes = await generar()
     openaiStatus = openaiRes.status
     openaiData = await openaiRes.json()

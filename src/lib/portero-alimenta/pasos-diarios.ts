@@ -6,6 +6,7 @@
  */
 import { diaConCorrida, raspadoEnPausa } from './modo'
 import { FUENTES_NUEVAS, fuentesNuevasEncendidas } from './fuentes-nuevas'
+import { comentariosDeLaIndustriaEncendidos } from './comentarios-de-la-industria'
 
 export type Db = { from(tabla: string): any }
 type Fila = Record<string, unknown>
@@ -28,7 +29,9 @@ export const PASOS_DEL_DIA_DE_UN_CLIENTE: readonly Paso[] = PASOS_DE_REDES
 export function pasosDelDia(dia: Date, env: Record<string, string | undefined> = process.env): readonly Paso[] {
   // la pausa del raspado programado (09-nov): el reloj no corre ningún paso (todos piden Apify o trabajan sobre lo que Apify trae); un paso pedido a mano corre igual
   if (raspadoEnPausa(dia, env)) return []
-  return diaConCorrida(dia, env) && fuentesNuevasEncendidas(env) ? PASOS : PASOS_DE_REDES
+  if (!diaConCorrida(dia, env) || !fuentesNuevasEncendidas(env)) return PASOS_DE_REDES
+  // los comentarios de la industria (encargo 6) tienen su propio interruptor, APAGADO por omisión: apagados, ni siquiera dejan renglón
+  return comentariosDeLaIndustriaEncendidos(env) ? PASOS : PASOS.filter((p) => p !== 'comentarios_industria')
 }
 
 export type Reclamo =

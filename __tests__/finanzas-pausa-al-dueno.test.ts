@@ -1142,7 +1142,7 @@ describe('tope y manual', () => {
     const m = mundo({ estado: 'en_curso' })
     m.C.almacen.crearEncargo = async (n) => ({ ok: true, encargo: { ...m.e, semilla: n.semilla }, nuevo: true })
     expect((await abrirConversacion(m.C, { client_id: 'cli', dry_run: false, semilla: { manual_completo: 'x'.repeat(60_000) } })).status).toBe(200)
-    expect((await abrirConversacion(m.C, { client_id: 'cli', dry_run: false, semilla: { manual_completo: 'x'.repeat(700_000) } })).status).toBe(413)
+    expect((await abrirConversacion(m.C, { client_id: 'cli', dry_run: false, semilla: { manual_completo: 'x'.repeat(1_600_000) } })).status).toBe(413)
   })
   it('🔴 toda la oficina lo recibe en la apertura', async () => {
     const m = mundo({ estado: 'en_curso', pausaEncendida: false, semilla: { manual_completo: { voz: 'cercana' } }, arts: { acuerdo: {} } })

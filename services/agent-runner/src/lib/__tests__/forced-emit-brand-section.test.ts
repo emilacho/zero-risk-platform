@@ -115,10 +115,10 @@ describe('forceBrandSectionEmitViaMessagesApi · compele el tool', () => {
     expect(req.tools[0].name).toBe(EMIT_BRAND_SECTION_TOOL_NAME)
   })
 
-  it('usa 20.000 de salida · una sección es larga (el borrador real midió 9.874 ch)', async () => {
+  it('usa el techo del modelo (18-nov · G1: 128.000, antes 20.000) · una sección es larga (el borrador real midió 9.874 ch)', async () => {
     createMock.mockResolvedValue(conToolUse(SECCION))
     await forceBrandSectionEmitViaMessagesApi(ARGS)
-    expect(createMock.mock.calls[0][0].max_tokens).toBe(20000)
+    expect(createMock.mock.calls[0][0].max_tokens).toBe(128000)
   })
 
   it('le pasa al modelo la tarea y lo que alcanzó a narrar', async () => {

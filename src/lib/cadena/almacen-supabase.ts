@@ -49,6 +49,9 @@ import { perfilPorHttp } from '@/lib/perfil-del-publico/por-http'
 import { aperturaDeLasSedes, estadoDeLasSedes } from '../sedes/por-abrir'
 import { esloganDelCliente, reglaDelEslogan } from '../manual/campos-del-manual'
 
+/** la forma de un id de viaje de la sala (`sala_event_log.stream_id` es uuid) */
+export const UUID_DEL_VIAJE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 /** las tablas de la cadena que usa el archivo de una campaña (`oficina/archivo-de-campana.ts`): solo este archivo las nombra */
 export const tablasDelArchivo = <D>(db: { from(t: string): D }) => ({
   campanas: () => db.from('cadena_campanas'),
@@ -316,6 +319,9 @@ export function almacenDeSupabase(): Almacen {
       return planParaLaCadena(planes, clientId)
     },
     async journeyExiste(journeyId, clientId) {
+      // 18-nov · HALLAZGO CC6 en T7: `sala_event_log.stream_id` es uuid. Un id que no lo es (p. ej. el id de un flujo de n8n que falta en `flujos`) NO es un viaje:
+      // se contesta «no existe» sin preguntar. Antes Postgres cortaba con 22P02, salía el 500 genérico y no el 403 E-WORKFLOW-DESCONOCIDO / E-VIAJE.
+      if (!UUID_DEL_VIAJE.test(journeyId)) return false
       return (await lista<{ stream_id: string }>(db.from('sala_event_log').select('stream_id').eq('stream_id', journeyId).eq('client_id', clientId).limit(1))).length > 0
     },
     // el estado del brazo lo lee el almacén de la sala (el ÚNICO que nombra esas tablas: lo vigila una prueba permanente)

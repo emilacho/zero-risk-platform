@@ -18,7 +18,7 @@ import { especialistasPertinentes, direccionDe, ingenieroDePrompts } from './dir
 import { aporteDePrompts, esAporteDePrompts } from './prompts'
 import { criticaPendiente } from './critica'
 import { idasYVueltas, participacion, pedidosSinContestar, verificarCitas } from './libro'
-import { COTAS, type Accion, type Aporte, type EstadoMesa, type TipoDePieza } from './tipos'
+import { COTAS, profundidadMaximaDe, turnosMaximosDe, type Accion, type Aporte, type EstadoMesa, type TipoDePieza } from './tipos'
 
 export interface ContextoDeLaMesa { gasto_usd: number; tope_usd: number; hayImagenGenerada: boolean; /** 17-nov · GO Lenovo · la cota de la mesa (dato de la plantilla): lo gastado por sus turnos y lo permitido (cota × pasadas) */ cota_de_la_mesa?: { gastado: number; permitido: number }; /** 17-nov · T7b · lo que sigue es EXACTO (sale de los pasos de la plantilla, como en el video): la integración final tampoco pasa del TOPE (el motor frena en el tope, no en el techo; pasarlo cortaría el encargo después) */ techo_es_el_tope?: boolean; /** lo que queda por gastar DESPUÉS de la mesa; el calendario no dibuja ni pasa por la jefatura de la pieza: 0 */ reserva_posterior_usd?: number; /** 31-oct · la mesa de concepto: cuántas integraciones mínimas (rondas) antes de dar por buena la pieza; por omisión 1 (las demás mesas) */ rondas_minimas?: number; /** T8 · el tipo de pieza (el video reserva lo del brazo); sin él, carrusel/kit */ tipo?: TipoDePieza; /** 17-nov · «creativos en cada paso» · cuántas RONDAS de aportes tiene la mesa (dato `limites.rondas_de_la_mesa`): hechas esas integraciones, los especialistas ya no aportan ni contestan pedidos; la dirección sí cierra (citas, prompts, pregunta del traductor). Sin él, sin límite de rondas (lo de siempre) */ rondas_max?: number }
 
@@ -42,7 +42,8 @@ const turnoDelIngeniero = (agente: string, motivo: string): Accion => ({ accion:
 
 /** ¿se agotó alguna cota que obliga a «cerrar con lo que hay»? devuelve la razón o null */
 export function cotaAgotada(est: EstadoMesa, ctx: ContextoDeLaMesa): string | null {
-  if (est.turnos >= COTAS.MAX_TURNOS) return `se usaron los ${COTAS.MAX_TURNOS} turnos de la mesa`
+  const maxTurnos = turnosMaximosDe(est.tipo)
+  if (est.turnos >= maxTurnos) return `se usaron los ${maxTurnos} turnos de la mesa`
   // 17-nov · GO Lenovo · la cota de la mesa: un turno más (lo que se reserva por turno) no cabe en lo permitido → cierra con lo que hay (la integración usa esa reserva)
   const c = ctx.cota_de_la_mesa
   if (c && c.gastado + COTAS.RESERVA_POR_TURNO_USD > c.permitido + 1e-9) return `los turnos de la mesa llevan ${c.gastado.toFixed(2)} y uno más (${COTAS.RESERVA_POR_TURNO_USD}) pasa su cota (${c.permitido})`
@@ -55,7 +56,7 @@ export function cotaAgotada(est: EstadoMesa, ctx: ContextoDeLaMesa): string | nu
 export function pedidosAtendibles(est: EstadoMesa, libro: Aporte[]): Aporte[] {
   const activos = new Set(est.directorio_congelado.filter((t) => t.activo).map((t) => t.agente))
   return pedidosSinContestar(libro).filter((p) => {
-    if (!p.para || p.profundidad > COTAS.MAX_PROFUNDIDAD) return false
+    if (!p.para || p.profundidad > profundidadMaximaDe(est.tipo)) return false
     if (!activos.has(p.para)) return false
     if (fallosDe(libro, p.para) >= COTAS.REINTENTOS_DE_TURNO) return false
     return idasYVueltas(libro, p.de, p.para) <= COTAS.MAX_IDAS_VUELTAS_POR_PAREJA

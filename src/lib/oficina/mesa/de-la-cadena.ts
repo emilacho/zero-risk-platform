@@ -127,12 +127,22 @@ export function ideasDeLosAportes(libro: Array<{ n?: number; de: string; tipo: s
   return out
 }
 
+/**
+ * 18-nov · T7d (encargo de Lenovo, arreglo 2): la integración de la gran idea abrió con la charla del director («Voy a leer el tablero completo…», «El sistema indica que ya se alcanzó
+ * el límite…») y eso fue lo primero que se leyó en la bandeja. Regla exacta: lo que va ANTES de la primera sección `## ` no se entrega. Sin ninguna sección, el texto queda igual.
+ */
+export function sinCharlaAntesDeLaPrimeraSeccion(texto: string): string {
+  const m = /^##\s/m.exec(texto)
+  return m && m.index > 0 ? texto.slice(m.index).trim() : texto
+}
+
 /** el tablero integrado de la mesa (lo último que escribió la dirección), o lo que el equipo alcanzó a escribir si no hubo integración.
- *  `conIdeasDeLosAportes` (solo la mesa de concepto): agrega detrás de la integración las líneas de idea de los aportes (ver `ideasDeLosAportes`). */
+ *  `conIdeasDeLosAportes` (solo la mesa de concepto): agrega detrás de la integración las líneas de idea de los aportes (ver `ideasDeLosAportes`)
+ *  y quita la charla de la dirección antes de su primera sección (`sinCharlaAntesDeLaPrimeraSeccion`). */
 export function textoParaLaCadena(libro: Array<{ n?: number; de: string; tipo: string; texto: string }>, piezaTexto: string | null | undefined, conIdeasDeLosAportes = false): string {
   const ult = [...libro].reverse().find((a) => a.tipo === 'integra' && a.texto.trim())
   if (ult) {
-    const integracion = ult.texto.trim()
+    const integracion = conIdeasDeLosAportes ? sinCharlaAntesDeLaPrimeraSeccion(ult.texto.trim()) : ult.texto.trim()
     const ideas = conIdeasDeLosAportes ? ideasDeLosAportes(libro, integracion) : []
     return ideas.length ? `${integracion}\n\n${TITULO_IDEAS_DE_LOS_APORTES}\n\n${ideas.join('\n')}` : integracion
   }

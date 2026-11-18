@@ -380,8 +380,15 @@ export async function repartirCorrecciones(al: Almacen, ahora: string, creadores
   if (!al.correccionesPendientes || !al.correccionActualizar) return { aplicado, lineas }
   // las alarmas de duras sin tomar que Slack no confirmó (una por incidente: se reintentan, no se duplican)
   if (al.alarmasPendientes) for (const c of await al.alarmasPendientes()) { await alarmaSiFrena(al, c, ahora); if (c.alarma_en === null) aplicado.push(`${c.llave}: alarma de regla dura reintentada`) }
+  // 18-nov · botón «Flujo de la campaña»: con la campaña `pausada` no se abre ni se reintenta ninguna mesa de corrección; la corrección queda como está (sin gastar intentos) y sigue al reanudar
+  const pausadas = new Map<string, boolean>()
+  const estaPausada = async (id: string) => {
+    if (!pausadas.has(id)) pausadas.set(id, (await al.campana(id))?.estado === 'pausada')
+    return pausadas.get(id) === true
+  }
   for (const c of await al.correccionesPendientes()) {
     try {
+      if (await estaPausada(c.campana_id)) continue
       const sondeo = sondeos[c.destino]
       if (sondeo) {
         // la marca va antes de la primera llamada (la puerta del puerto exige «en manos del creador»); después, se sondea en cada vuelta

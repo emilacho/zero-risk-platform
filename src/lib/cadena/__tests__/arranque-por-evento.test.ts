@@ -18,6 +18,8 @@ import { clienteA, contextoDe, tandaBuena } from '../__fixtures__/clientes'
 
 const A = clienteA()
 const AHORA = '2026-10-09T12:00:00Z'
+// 18-nov (día 1 = apertura): estas pruebas no son del día 1; la campaña se abre el lunes que antes ponía la regla, para que sus fechas sigan siendo las mismas
+const ABRE = '2026-10-12T12:00:00Z'
 const HOY_DEL_LOTE = '2026-10-12T10:00:00Z'
 const wf = (extra: Record<string, unknown> = {}) => ({ workflow_id: 'wf-cadena', workflow_execution_id: 'ex-1', ...extra })
 const almacen = (config: Record<string, unknown> = {}, extra: Partial<ConstructorParameters<typeof AlmacenMemoria>[0]> = {}) => new AlmacenMemoria({
@@ -27,7 +29,7 @@ const almacen = (config: Record<string, unknown> = {}, extra: Partial<Constructo
 const ok = (o: unknown, costo = 0.3) => ({ success: true, structured_output: o, cost_usd: costo })
 /** deja la campaña en `calendario` con la tanda 1 lista para guardar: el último paso (guardar el calendario) lo hace cada prueba, que es lo que mueve la campaña a `activa` en el camino REAL */
 async function hastaElCalendario(al: AlmacenMemoria, ahora = AHORA) {
-  const c = await abrirCampana(al, { ...wf(), client_id: A.clientId, seco: true }, ahora)
+  const c = await abrirCampana(al, { ...wf(), client_id: A.clientId, seco: true }, ahora === AHORA ? ABRE : ahora)
   const id = (c.cuerpo.campana as { id: string }).id
   const p = await estrategiaPreparar(al, { ...wf(), campana_id: id }, ahora)
   await estrategiaGuardar(al, { ...wf(), campana_id: id, corrida_id: p.cuerpo.corrida_id, resultado: ok(A.estrategia as Estrategia) }, ahora)
@@ -198,7 +200,7 @@ describe('LA LLAVE DE LOTE lleva la huella de sus filas (el hueco: filas de la m
 describe('LA CAMPAÑA NACE con la producción automática solo si el interruptor lo manda', () => {
   const abrir = async (config: Record<string, unknown>) => {
     const al = almacen(config)
-    const r = await abrirCampana(al, { ...wf(), client_id: A.clientId, seco: true }, AHORA)
+    const r = await abrirCampana(al, { ...wf(), client_id: A.clientId, seco: true }, ABRE)
     return (r.cuerpo.campana as { autoproducir: boolean }).autoproducir
   }
   it('por omisión nace en false (como hoy); con `autoproducir_por_omision: true` nace en true', async () => {
