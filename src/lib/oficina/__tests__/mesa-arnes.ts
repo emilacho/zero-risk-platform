@@ -39,11 +39,12 @@ export const pieza = (laminas = LAMINAS_OK, citas = CITAS_COMPLETAS) => `${secci
 export type Turno = { paso: string; agente: string; tipo: string; task: string; n: number; /** S2-7 · las imágenes que recibe el agente (si el pedido las trae) */ images?: string[] }
 export type Responder = (t: Turno, veces: number) => { texto?: string; error?: string; costo_usd?: number } | undefined
 
-export async function montar(o: { dry_run?: boolean; tope?: number; aprendizaje?: NonNullable<Memoria['P']['aprendizaje']> } = {}) {
+export async function montar(o: { dry_run?: boolean; tope?: number; aprendizaje?: NonNullable<Memoria['P']['aprendizaje']>; /** 18-nov · el índice del cerebro (falso) */ indice?: NonNullable<Memoria['P']['indice']> } = {}) {
   const M: Memoria = crearMemoria({ parte: parteCon(BRIEF_CARRUSEL), plantilla: CARRUSEL_MESA, tope: o.tope })
   const MS: MesaEnMemoria = crearMesaEnMemoria()
   M.P.mesa = MS
   if (o.aprendizaje) M.P.aprendizaje = o.aprendizaje
+  if (o.indice) M.P.indice = o.indice
   const a = await abrirEncargo(M.P, { cuerpo: { parte_id: PARTE, brief_id: 'BRF-0100', dry_run: o.dry_run ?? true, familia: 'carrusel_mesa' }, client_id: CLIENTE, target_step_id: TARGET_STEP_PRODUCIR })
   return { M, MS, a, id: String(a.cuerpo.encargo_id) }
 }

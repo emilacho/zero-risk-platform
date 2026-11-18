@@ -83,6 +83,17 @@ servidor.tool(
   },
 )
 
+// 18-nov · la mesa lee el índice del cerebro: el empleado pide por número los originales completos y los lee en ESTE turno (texto plano, no JSON)
+servidor.tool(
+  'pedir_fichas',
+  'Te trae, en este mismo turno, el original completo de las fichas del índice «Lo que sabemos del cliente» que pidas por su número. Si un número no existe, dice «no consta».',
+  { numeros: z.array(z.number().int().positive()).min(1).describe('los números del índice que quieres leer completos'), para_que: z.string().optional().describe('para qué los necesitas') },
+  async ({ numeros, para_que }) => {
+    const r = await llamar('pedir_fichas', { numeros, para_que })
+    return r.ok ? bien(typeof r.cuerpo?.fichas === 'string' ? r.cuerpo.fichas : r.cuerpo) : fallo(r.error)
+  },
+)
+
 servidor.connect(new StdioServerTransport()).catch((e) => {
   process.stderr.write(`mesa-server: ${(e && e.message) || e}\n`)
   process.exit(1)

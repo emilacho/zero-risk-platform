@@ -147,6 +147,15 @@ export interface PuertoDelCerebro {
   leerPedido(id: string): Promise<{ ok: true; body: Record<string, unknown> } | { ok: false; error: string; http?: number }>
 }
 
+/**
+ * 18-nov · EL ÍNDICE DEL CEREBRO para la mesa (contrato con CC-CEREBRO): el índice de la pieza (`POST /api/brain/portero/indice`, una vez al abrir)
+ * y la entrega por número (`POST /api/brain/portero/entregar`, cuando un empleado usa `pedir_fichas`). Sin modelo, US$ 0.
+ */
+export interface PuertoDelIndice {
+  indice(p: import('./mesa/indice-del-cerebro').PedidoDelIndice): Promise<{ ok: true; body: Record<string, unknown> } | { ok: false; error: string; http?: number }>
+  entregar(p: import('./mesa/indice-del-cerebro').PedidoDeFichas): Promise<{ ok: true; body: Record<string, unknown> } | { ok: false; error: string; http?: number }>
+}
+
 /** 31-oct · las mesas de brief y de concepto entregan su tablero a la cadena (o dicen que no pudieron): la fila de `cadena_brief_creativo` / `cadena_conceptos` la cierra la propia cadena (contrato: raw/tasks/2026-10-31-CONTRATO-CC2-puertos-de-las-mesas-brief-y-concepto-para-CC1). Primera entrega que cierra gana. */
 export type EntregaALaCadena = { ok: true; estado?: string; ya_cerrada?: boolean; /** el sobre con el que la puerta de la cadena vuelve a entrar (si el próximo paso no es de una persona): la oficina lo deja pasar tal cual, no lo lee */ siguiente?: { sobre: object } } | { ok: false; error?: string }
 export interface PuertoDeLaCadena {
@@ -231,6 +240,8 @@ export interface Puertos {
   video?: PuertoDeVideo
   /** MATERIAL · el portero. Opcional: sin él (o con `material_activo` apagado) la oficina funciona exactamente como antes */
   cerebro?: PuertoDelCerebro
+  /** 18-nov · EL ÍNDICE DEL CEREBRO para la mesa. Opcional: sin él (interruptor `OFICINA_MESA_INDICE` apagado) la mesa abre con el pedido de siempre */
+  indice?: PuertoDelIndice
   /** LA MESA · el directorio vivo y el libro de aportes. Opcional: sin él las familias `*_mesa` no abren (fallan visibles) y las v1 funcionan igual */
   mesa?: PuertoMesa
   /** CHEQUEO GRATIS de la puerta del portero (n8n `zero-risk/portero`): manda un cuerpo vacío con las dos llaves y espera el rechazo de VALIDACIÓN del portero (no llama al modelo, no cuesta). Opcional: sin él no se comprueba */

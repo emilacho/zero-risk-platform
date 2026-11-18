@@ -54,14 +54,14 @@ describe('mesa MCP · montaje', () => {
 describe('mesa MCP · allowedTools', () => {
   it('con el conector montado, las tres herramientas están en allowedTools; sin él, ninguna', () => {
     const con = deriveAllowedTools({ mesa: {} })
-    expect(con).toEqual(expect.arrayContaining(['mcp__mesa__mesa_pedir', 'mcp__mesa__mesa_devolver', 'mcp__mesa__pedir_material']))
+    expect(con).toEqual(expect.arrayContaining(['mcp__mesa__mesa_pedir', 'mcp__mesa__mesa_devolver', 'mcp__mesa__pedir_material', 'mcp__mesa__pedir_fichas']))
     expect(deriveAllowedTools({}).some((t) => t.startsWith('mcp__mesa__'))).toBe(false)
   })
 
   it('cada herramienta que el servidor ofrece está en allowedTools (ninguna queda muda)', () => {
     const fuente = fs.readFileSync(path.join(__dirname, '..', 'mcp', 'mesa-server.js'), 'utf8')
     const ofrecidas = [...fuente.matchAll(/servidor\.tool\(\s*'([a-z_]+)'/g)].map((m) => m[1])
-    expect(ofrecidas.sort()).toEqual(['mesa_devolver', 'mesa_pedir', 'pedir_material'])
+    expect(ofrecidas.sort()).toEqual(['mesa_devolver', 'mesa_pedir', 'pedir_fichas', 'pedir_material'])
     const lista = deriveAllowedTools({ mesa: {} })
     for (const t of ofrecidas) expect(lista, t).toContain(`mcp__mesa__${t}`)
   })

@@ -117,6 +117,8 @@ export interface LecturaDeNotas { notas: NotaLeida[]; destinatario: string | nul
 
 /** lo que la mesa guarda en el artefacto `mesa` del encargo */
 export interface EstadoMesa {
+  /** 18-nov · el índice del cerebro que la mesa pidió UNA vez al abrir (base de la pieza + índice numerado + huella): lo leen todos los turnos */
+  indice?: import('./indice-del-cerebro').IndiceDeLaMesa
   tipo: TipoDePieza
   /** condiciones del directorio que la CADENA declara al abrir una mesa suya (p. ej. `si_instagram`, `si_video`): una tarjeta con `<tipo>:<condición>` solo es pertinente si la condición está aquí */
   condiciones?: string[]
