@@ -57,9 +57,9 @@ const startedAt = Date.now()
 
 const app = express()
 
-// Express defaults are fine for a single-machine service. Limit body size to
-// avoid abuse: the SDK accepts long prompts but 1MB is plenty (the route on
-// Vercel sanitizes to 8KB task + 50 char agent name long before we see it).
+// Límite del cuerpo: 4 MB. Es el techo real de transporte del corredor (el «1MB is plenty» y el «8KB task» de antes eran viejos).
+// 18-nov · G1 «nada se recorta» (CC5): el pedido llega hasta TOPE_REAL_DEL_PEDIDO = 1.500.000 caracteres (`src/lib/limites-de-tamano.ts`);
+// aun a 2 bytes por carácter son 3 MB y caben. Una prueba ata los dos números (`run-sdk/__tests__/task-cap.test.ts`).
 app.use(express.json({ limit: '4mb' }))
 
 // ── Auth ─────────────────────────────────────────────────────────────────

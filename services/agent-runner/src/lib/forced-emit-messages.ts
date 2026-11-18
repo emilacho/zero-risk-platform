@@ -17,6 +17,27 @@
  */
 import Anthropic from '@anthropic-ai/sdk'
 
+/**
+ * TECHO DE LA SALIDA FORZADA · 18-nov · firma de Emilio «nada se recorta» (G1 del barrido de topes · CC5) · de 20.000 a 128.000 tokens, el máximo de los
+ * modelos de 1 M (referencia oficial de modelos). Con un `max_tokens` tan alto el SDK exige flujo continuo (sin él lanza «Streaming is strongly recommended»),
+ * por eso las tres llamadas pasan por `pedirRespuestaCompleta`: `messages.stream(...).finalMessage()` devuelve el mismo mensaje que `create`.
+ */
+export const TECHO_DE_SALIDA_FORZADA = 128000
+/** el techo que admite cada modelo · pedir más que su máximo da 400 · Haiku 4.5 y Sonnet 4.5 = 64.000 · Opus 4.1 = 32.000 (referencia oficial de modelos) */
+export function techoDeSalidaDelModelo(modelo: string): number {
+  if (/^claude-(haiku-4-5|sonnet-4-5|opus-4-5)/.test(modelo)) return 64000
+  if (/^claude-opus-4-(0|1)/.test(modelo)) return 32000
+  return TECHO_DE_SALIDA_FORZADA
+}
+
+type ClienteDeMensajes = Pick<Anthropic, 'messages'>
+/** el mensaje completo por flujo continuo · un cliente inyectado en pruebas que solo trae `create` sigue funcionando (el real siempre trae `stream`) */
+export async function pedirRespuestaCompleta(client: ClienteDeMensajes, params: Anthropic.MessageCreateParamsNonStreaming): Promise<Anthropic.Message> {
+  const mensajes = client.messages as unknown as { stream?: (p: Anthropic.MessageCreateParamsNonStreaming) => { finalMessage: () => Promise<Anthropic.Message> } }
+  if (typeof mensajes.stream === 'function') return mensajes.stream(params).finalMessage()
+  return client.messages.create(params)
+}
+
 /** Bare tool name (NOT the `mcp__discovery-output__` SDK namespace). */
 export const EMIT_DISCOVERY_OUTPUT_TOOL_NAME = 'emit_discovery_output'
 
@@ -164,9 +185,9 @@ export async function forceFidelityEmitViaMessagesApi(
   const client = args.createClient ? args.createClient() : buildAnthropicClient()
   const work = args.researchText?.trim() || '(judging completed but not captured as text)'
 
-  const resp = await client.messages.create({
+  const resp = await pedirRespuestaCompleta(client, {
     model: args.model,
-    max_tokens: 20000,
+    max_tokens: techoDeSalidaDelModelo(args.model),
     system: args.systemPrompt,
     messages: [
       { role: 'user', content: args.task },
@@ -370,11 +391,10 @@ export async function forceBrandSectionEmitViaMessagesApi(
   const client = args.createClient ? args.createClient() : buildAnthropicClient()
   const work = args.researchText?.trim() || '(section drafted but not captured as text)'
 
-  const resp = await client.messages.create({
+  const resp = await pedirRespuestaCompleta(client, {
     model: args.model,
-    // 8.000 como el de descubrimiento (no 2.000 como el del judge): una sección puede
-    // traer 7-13 campos de texto largo · el borrador real medido fue de 9.874 caracteres.
-    max_tokens: 20000,
+    // una sección puede traer 7-13 campos de texto largo · el borrador real medido fue de 9.874 caracteres · 18-nov: al máximo (G1)
+    max_tokens: techoDeSalidaDelModelo(args.model),
     system: args.systemPrompt,
     messages: [
       { role: 'user', content: args.task },
@@ -443,9 +463,9 @@ export async function forceEmitViaMessagesApi(args: ForceEmitArgs): Promise<Forc
   const client = args.createClient ? args.createClient() : buildAnthropicClient()
   const research = args.researchText?.trim() || '(research completed but not captured as text)'
 
-  const resp = await client.messages.create({
+  const resp = await pedirRespuestaCompleta(client, {
     model: args.model,
-    max_tokens: 20000,
+    max_tokens: techoDeSalidaDelModelo(args.model),
     system: args.systemPrompt,
     messages: [
       { role: 'user', content: args.task },

@@ -33,7 +33,23 @@ describe('los límites técnicos están al máximo', () => {
   })
   it('🔴 la salida forzada de un empleado no se queda corta', () => {
     const t = leer('services/agent-runner/src/lib/forced-emit-messages.ts')
-    expect(t.match(/max_tokens: \d+/g)).toEqual(['max_tokens: 20000', 'max_tokens: 20000', 'max_tokens: 20000'])
+    // 18-nov · G1 «nada se recorta»: las tres van al techo de cada modelo (128.000 en los de 1 M) y por flujo continuo
+    expect(t.match(/max_tokens: [^,\n]+/g)).toEqual(Array(3).fill('max_tokens: techoDeSalidaDelModelo(args.model)'))
+    expect(t.match(/await pedirRespuestaCompleta\(client, \{/g)).toHaveLength(3)
+    expect(t).not.toMatch(/client\.messages\.create\(\{/)
+  })
+  it('🔴 18-nov G1 · el techo forzado es el máximo de cada modelo y va por flujo continuo', async () => {
+    const m = await import('../services/agent-runner/src/lib/forced-emit-messages')
+    for (const modelo of ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-sonnet-4-6', 'claude-opus-4-7', 'claude-opus-4-6']) expect(m.techoDeSalidaDelModelo(modelo), modelo).toBe(128000)
+    expect(m.techoDeSalidaDelModelo('claude-haiku-4-5-20251001')).toBe(64000)
+    // con un cliente que trae `stream` (el real), se usa el flujo continuo y NO `create`
+    const mensaje = { content: [], usage: { input_tokens: 1, output_tokens: 2 } }
+    const create = (): never => { throw new Error('no debía llamar a create') }
+    let recibido: { max_tokens?: number } | undefined
+    const cliente = { messages: { create, stream: (p: { max_tokens: number }) => { recibido = p; return { finalMessage: async () => mensaje } } } }
+    const r = await m.pedirRespuestaCompleta(cliente as never, { model: 'claude-opus-5-5', max_tokens: 128000, messages: [{ role: 'user', content: 'x' }] })
+    expect(r).toBe(mensaje)
+    expect(recibido?.max_tokens).toBe(128000)
   })
   it('🔴 la puerta vieja de agentes espera lo mismo que la nueva', () => {
     expect(leer('src/app/api/agents/run/route.ts')).toContain('AbortSignal.timeout(790_000)')
