@@ -25,8 +25,11 @@ describe('limpieza de Náufrago · 202611180500', () => {
     const escrituras = lineas.map((l, i) => ({ l, i })).filter(({ l }) => /^\s*(delete from|update public\.)/.test(l))
     expect(escrituras.length).toBeGreaterThanOrEqual(28)
     for (const { i } of escrituras) {
-      const siguiente = lineas.slice(i + 1, i + 12).find((x) => /get diagnostics n = row_count/.test(x))
-      expect(siguiente, `sin candado después de la línea ${i + 1}: ${lineas[i].trim()}`).toMatch(/if n <> \d+ then raise exception 'candado /)
+      // 🟡 de CC6 (04:12Z): el candado tiene que ser el SUYO · entre la escritura y su `get diagnostics` no puede haber otra escritura
+      const j = lineas.findIndex((x, k) => k > i && /get diagnostics n = row_count/.test(x))
+      expect(j, `sin candado después de la línea ${i + 1}: ${lineas[i].trim()}`).toBeGreaterThan(i)
+      expect(lineas.slice(i + 1, j).filter((x) => /^\s*(delete from|update public\.)/.test(x)), `la línea ${i + 1} no tiene candado propio: ${lineas[i].trim()}`).toEqual([])
+      expect(lineas[j]).toMatch(/if n <> \d+ then raise exception 'candado /)
     }
   })
 
