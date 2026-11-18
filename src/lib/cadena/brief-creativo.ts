@@ -193,6 +193,15 @@ export function citasEntreComillas(cita: string): string[] {
 
 export interface CitaQueNoAparece { cita: string; seccion: string; fuente: 'plan' | 'manual' }
 
+/** las citas de un bloque `>` (líneas seguidas ya unidas), como las lee el chequeo */
+function partesDelBloque(b: string): string[] {
+  // 17-nov (Sprint 4 · C): varias citas seguidas (`> «A»` + `> «B»`, p. ej. las rutas del plan) forman un bloque; cada «…» se comprueba sola, no el bloque entero
+  const varias = /^\s*(?:«[^«»]*»\s*){2,}$/.test(b)
+  const entera = varias ? null : /^\s*«([\s\S]*)»\s*$/.exec(b)
+  const partes = entera ? [entera[1]] : [...b.matchAll(/«([^»]+)»/g)].map((m) => m[1])
+  return partes.length ? partes : [b]
+}
+
 /**
  * TODAS LAS CITAS DEL BRIEF SON LITERALES (10-nov · GO de Lenovo tras el brief v4 de Náufrago, que puso «playa» DENTRO de una cita del plan que dice «costa»).
  * Se comprueban, en cualquier sección menos «De qué parte del plan sale» (tiene su propio chequeo):
@@ -218,11 +227,7 @@ export function citasQueNoAparecen(md: string, fuentes: { plan: string; manual?:
     }
     if (cur.length) bloques.push(cur.join(' '))
     for (const b of bloques) {
-      // 17-nov (Sprint 4 · C): varias citas seguidas (`> «A»` + `> «B»`, p. ej. las rutas del plan) forman un bloque; cada «…» se comprueba sola, no el bloque entero
-      const varias = /^\s*(?:«[^«»]*»\s*){2,}$/.test(b)
-      const entera = varias ? null : /^\s*«([\s\S]*)»\s*$/.exec(b)
-      const partes = entera ? [entera[1]] : [...b.matchAll(/«([^»]+)»/g)].map((m) => m[1])
-      for (const c of partes.length ? partes : [b]) {
+      for (const c of partesDelBloque(b)) {
         if (normalizar(c).length < MIN_CARACTERES_DE_CITA) continue
         if (!enAlguno(c)) out.push({ cita: c, seccion, fuente: 'plan' })
       }
@@ -236,9 +241,78 @@ export function citasQueNoAparecen(md: string, fuentes: { plan: string; manual?:
       if (!citaLiteralEn(fuente === 'manual' ? fuentes.manual! : fuentes.plan, c)) out.push({ cita: c, seccion, fuente })
     }
   }
-  const vistas = new Set<string>()
-  return out.filter((x) => { const k = `${x.fuente}|${normalizar(x.cita)}`; if (vistas.has(k)) return false; vistas.add(k); return true })
+  return sinRepetidas(out)
 }
+function sinRepetidas(xs: CitaQueNoAparece[]): CitaQueNoAparece[] {
+  const vistas = new Set<string>()
+  return xs.filter((x) => { const k = `${x.fuente}|${normalizar(x.cita)}`; if (vistas.has(k)) return false; vistas.add(k); return true })
+}
+
+/**
+ * 18-nov (T7 · GO Lenovo opción 3, para que Emilio la confirme o la revierta): tres briefs seguidos volvieron por UNA o DOS citas no literales entre ~30
+ * (una palabra cambiada, el encabezado de una tabla pegado a la celda, un valor de la ficha). La regla NO cambia: lo que va entre comillas es literal y lo
+ * verifica el código, exacto. Lo que cambia: hasta `TOPE_DE_CITAS_A_RESUMEN` citas no literales se BAJAN a prosa (sin `> «…»`, con la marca de resumen)
+ * y se anotan en «Faltantes»; el brief sigue con un aviso por cada una. Con más, no se toca nada y el brief vuelve como siempre.
+ * Detecta con LA MISMA lectura que `citasQueNoAparecen` (bloques `>` y citas atribuidas; no «De qué parte del plan sale», que tiene su propio chequeo).
+ */
+export const TOPE_DE_CITAS_A_RESUMEN = 3
+const marcaDeResumen = (de: 'plan' | 'manual' | 'bloque'): string =>
+  `*(resumen, no cita literal ${de === 'bloque' ? 'del plan ni del manual' : `del ${de}`})*`
+export interface CitasBajadas { texto: string; bajadas: CitaQueNoAparece[] }
+export function bajarCitasNoLiterales(md: string, fuentes: { plan: string; manual?: string }): CitasBajadas {
+  const fallan = citasQueNoAparecen(md, fuentes)
+  if (!fallan.length || fallan.length > TOPE_DE_CITAS_A_RESUMEN) return { texto: md, bajadas: [] }
+  const doc = { plan: textoDelDocumento(fuentes.plan), manual: fuentes.manual == null ? undefined : textoDelDocumento(fuentes.manual) }
+  const enAlguno = (c: string) => citaLiteralEn(doc.plan, c) || (!!doc.manual && citaLiteralEn(doc.manual, c))
+  const bajadas: CitaQueNoAparece[] = []
+  const trozos: Array<{ cabeza: string | null; k: Seccion | null; titulo: string; cuerpo: string[] }> = [{ cabeza: null, k: null, titulo: '', cuerpo: [] }]
+  for (const l of md.replace(/\r/g, '').split('\n')) {
+    const h = /^##\s+(.*\S)\s*$/.exec(l)
+    if (h && !/^#/.test(h[1])) trozos.push({ cabeza: l, k: tituloConocido({ titulo: h[1], resto: '', cuerpo: '' }), titulo: h[1], cuerpo: [] })
+    else trozos[trozos.length - 1].cuerpo.push(l)
+  }
+  for (const tz of trozos) {
+    if (tz.cabeza == null || tz.k === 'De qué parte del plan sale') continue
+    const seccion = tz.k ?? tz.titulo.trim()
+    // bloques `>`: el bloque con una cita no literal pasa a prosa entera (las literales de ese bloque quedan con sus «»)
+    const out: string[] = []
+    for (let i = 0; i < tz.cuerpo.length; ) {
+      if (!/^\s*>/.test(tz.cuerpo[i])) { out.push(tz.cuerpo[i]); i++; continue }
+      const ini = i
+      while (i < tz.cuerpo.length && /^\s*>/.test(tz.cuerpo[i])) i++
+      const lineas = tz.cuerpo.slice(ini, i)
+      const b = lineas.map((l) => /^\s*>\s?(.*)$/.exec(l)![1].trim()).join(' ')
+      const malas = partesDelBloque(b).filter((c) => normalizar(c).length >= MIN_CARACTERES_DE_CITA && !enAlguno(c))
+      if (!malas.length) { out.push(...lineas); continue }
+      let prosa = b
+      for (const c of malas) prosa = prosa.includes(`«${c}»`) ? prosa.replace(`«${c}»`, `${c} ${marcaDeResumen('bloque')}`) : `${prosa} ${marcaDeResumen('bloque')}`
+      out.push(prosa)
+      bajadas.push(...malas.map((c) => ({ cita: c, seccion, fuente: 'plan' as const })))
+    }
+    // citas atribuidas en la línea («el plan dice: «…»»): la que no es literal pierde sus «» (y así deja de leerse como cita)
+    tz.cuerpo = out.join('\n').replace(/\b(plan|manual)(\s+(?:dice|declara|indica|señala|afirma|pide|establece)(?:\s+que)?\s*:?\s*)«([^»]+)»/giu, (todo, quien: string, medio: string, c: string) => {
+      const fuente = quien.toLowerCase() === 'manual' ? 'manual' : 'plan'
+      if (normalizar(c).length < MIN_CARACTERES_DE_CITA || (fuente === 'manual' && !doc.manual)) return todo
+      if (citaLiteralEn(fuente === 'manual' ? doc.manual! : doc.plan, c)) return todo
+      bajadas.push({ cita: c, seccion, fuente })
+      return `${quien}${medio}${c} ${marcaDeResumen(fuente)}`
+    }).split('\n')
+  }
+  const lista = sinRepetidas(bajadas)
+  const faltantes = trozos.find((tz) => tz.k === 'Faltantes')
+  if (faltantes) {
+    // las líneas nuevas van después de lo que ya había, y antes de las líneas en blanco del final (que se conservan tal cual)
+    let blancas = 0
+    while (faltantes.cuerpo.length && !faltantes.cuerpo[faltantes.cuerpo.length - 1].trim()) { faltantes.cuerpo.pop(); blancas++ }
+    for (const x of lista) faltantes.cuerpo.push(`- cita no literal (en «## ${x.seccion}»): se dejó como resumen, sin comillas · ${x.cita.replace(/[«»]/g, '').slice(0, 80)}…`)
+    for (let i = 0; i < blancas; i++) faltantes.cuerpo.push('')
+  }
+  const texto = trozos.flatMap((tz) => (tz.cabeza == null ? tz.cuerpo : [tz.cabeza, ...tz.cuerpo])).join('\n')
+  return { texto, bajadas: lista }
+}
+/** el aviso de cada cita que se bajó a resumen (el brief sigue; la gran idea lo ve) */
+export const avisosDeCitasBajadas = (bajadas: CitaQueNoAparece[]): string[] =>
+  bajadas.map((x) => `la cita «${x.cita.slice(0, 80)}» (en «## ${x.seccion}») no estaba literal en el ${x.fuente === 'manual' ? 'manual' : 'plan'} · se dejó como resumen, sin comillas, y se anotó en «Faltantes»`)
 
 export function leerBriefCreativo(md: string, ins: InsumosDelBrief): BriefCreativoLeido {
   const secciones = seccionesDe(md)
@@ -353,6 +427,9 @@ export const REGLA_DE_LOS_HECHOS_DE_LA_FICHA = 'Un `> «…»` (o «el plan dice
 /** 18-nov (T7 segundo intento · la (b) del DIAGNÓSTICO de CC5): el brief v1 unió cuatro viñetas del plan con «. » en una sola cita */
 export const REGLA_DE_LA_CITA_DE_LISTA = 'Si lo que citas es una LISTA del documento (viñetas o números), cita UN punto por `> «…»`, tal cual; nunca juntes varios puntos en una sola cita ni los unas con un punto o una coma: así ya no está literal en el documento.'
 
+/** 18-nov (T7 · GO Lenovo opción 3): el brief v2 del sobre c trajo 31 `> «…»` (números sueltos, citas repetidas); con tantas, una o dos fallan siempre */
+export const REGLA_DE_CITAR_POCO = 'Cita POCO: solo la frase del plan o del manual que sostiene una decisión del brief y que los creativos necesitan leer tal cual. No cites números sueltos ni celdas de indicadores (escríbelos con su fuente, sin comillas), ni la misma frase dos veces; lo demás dilo con tus palabras, sin comillas.'
+
 export const REFERENCIA_DEL_BRIEF_CREATIVO = [
   '# El brief creativo de campaña (brief_creativo.v1) · UNO por campaña, corto',
   'Escribe EXACTAMENTE estas secciones (markdown, `## Título`); lo que no sepas se declara en «Faltantes», nunca se rellena.',
@@ -378,4 +455,6 @@ export const REFERENCIA_DEL_BRIEF_CREATIVO = [
   // 18-nov (T7 segundo intento · GO Lenovo opción 1): una lista se cita por punto, y lo de la ficha nunca va en una cita
   REGLA_DE_LA_CITA_DE_LISTA,
   REGLA_DE_LOS_HECHOS_DE_LA_FICHA,
+  // 18-nov (T7 · GO Lenovo opción 3): la causa de fondo, un brief con 31 citas
+  REGLA_DE_CITAR_POCO,
 ].join('\n')

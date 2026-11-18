@@ -357,8 +357,10 @@ describe('10-nov · TODAS las citas son literales, también por el camino real (
     const r = await briefRevalidar(al, wf({ campana_id: id }), AHORA)
     expect(r.cuerpo).toMatchObject({ pasa: true, version: 2 })
   })
-  it('una cita del manual ALTERADA devuelve el brief al recibirlo y sigue roja al revalidarlo', async () => {
-    const { al, id } = await detenidaPorElBrief(conManual('Café de la casa. Servimos almuerzos'))
+  // 18-nov (T7 · GO Lenovo opción 3): hasta 3 citas no literales se bajan a resumen al recibir (`t7-cita-no-literal-a-resumen.test.ts`) ⇒ para que el brief VUELVA
+  // hacen falta más de 3. Lo que esta prueba protege no cambia: recibir y revalidar leen el MANUAL.
+  it('más de 3 citas del manual ALTERADAS devuelven el brief al recibirlo y sigue rojo al revalidarlo', async () => {
+    const { al, id } = await detenidaPorElBrief(conManual('Café de la casa. Servimos almuerzos» · manual dice «Café de la casa. Servimos cenas» · manual dice «Café de la casa. Servimos meriendas» · manual dice «Café de la casa. Servimos onces'))
     const v2 = al.briefsCreativos.find((b) => b.campana_id === id && b.version === 2)!
     expect(v2.estado).toBe('devuelta')
     expect((v2.leido as { bloqueos: string[] }).bloqueos.join('\n')).toContain('no está literal en el manual')

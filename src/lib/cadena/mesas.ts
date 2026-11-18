@@ -19,7 +19,7 @@ import type { Almacen, BriefCreativoGuardado, Campana, ConceptoGuardado, Context
 import { autorizarLlamada, cadena, err, WORKFLOW_DEL_TABLERO, type Respuesta } from './autorizar'
 import type { ResultadoDeEmision } from './autoproducir'
 import { briefAnteriorParaElMarco, ordenDeAnalisisDeImpacto } from './cambios-pedidos'
-import { hallazgosDelBrief, insumosDelBrief, leerBriefCreativo, REFERENCIA_DEL_BRIEF_CREATIVO, type BriefCreativoLeido } from './brief-creativo'
+import { avisosDeCitasBajadas, bajarCitasNoLiterales, hallazgosDelBrief, insumosDelBrief, leerBriefCreativo, REFERENCIA_DEL_BRIEF_CREATIVO, type BriefCreativoLeido } from './brief-creativo'
 import { escribirHoja } from './hoja'
 import { fichasEnTexto as fichasDeOfertaEnTexto, type FichaDeOferta } from './ficha-de-oferta'
 import { filaSinFamilia, notaSinFamilia } from './sin-familia'
@@ -330,25 +330,29 @@ export async function recibirBrief(al: Almacen, p: EntregaDeBrief, ahora: string
   }
   const estr = await al.ultimaEstrategia(campana.id)
   const ctx = await al.cargarContexto(campana.client_id, campana.plan_id)
+  // 18-nov (T7 · GO Lenovo opción 3): hasta 3 citas no literales se bajan a resumen (sin comillas, anotadas en «Faltantes») ANTES de leer; se guarda ESE texto
+  const ins = insumosDelBrief(ctx, estr?.contenido.canales)
+  const { texto: textoDelBrief, bajadas } = bajarCitasNoLiterales(p.texto as string, { plan: ins.planTexto, manual: ins.manualTexto })
+  const avisosDeBajadas = avisosDeCitasBajadas(bajadas)
   // tramo 2 del revisor de registro: con la jefatura reteniendo `registro`, el registro se lee como AVISO y, si nada más bloquea, la jefatura lo revisa antes de validar
   if (await seRevisaElRegistro(al, campana, ctx)) {
-    const leidoA = leerBriefCreativo(p.texto as string, { ...insumosDelBrief(ctx, estr?.contenido.canales), registroSoloAviso: true })
+    const leidoA = conAvisos(leerBriefCreativo(textoDelBrief, { ...ins, registroSoloAviso: true }), avisosDeBajadas)
     if (!bloqueosDelBrief(leidoA).length) {
-      await al.actualizarBriefCreativo(campana.id, p.version, { ...base, texto_md: p.texto, leido: leidoA as unknown as Record<string, unknown> })
-      const { r, vence_en } = await abrirRegistro(al, { doc: 'brief', campana, version: p.version, texto: p.texto as string, registro: registroFijado(ctx)!, origenes: origenesDelCliente(ctx) }, ahora)
+      await al.actualizarBriefCreativo(campana.id, p.version, { ...base, texto_md: textoDelBrief, leido: leidoA as unknown as Record<string, unknown> })
+      const { r, vence_en } = await abrirRegistro(al, { doc: 'brief', campana, version: p.version, texto: textoDelBrief, registro: registroFijado(ctx)!, origenes: origenesDelCliente(ctx) }, ahora)
       if (r.estado === 'esperando') {
         // la mesa no se da por vencida mientras la jefatura revisa: su plazo pasa a ser el de la espera (más la holgura)
         await al.actualizarBriefCreativo(campana.id, p.version, { plazo_en: masMinutos(vence_en, HOLGURA_DE_MESA_MIN) })
         return { ok: true, estado: EN_REVISION_DE_REGISTRO }
       }
       if (r.estado === 'cerrada') return aplicarVueltaDeRegistro(al, r.salida, ahora)
-      return cerrarBriefDeRegistro(al, campana, p.version, p.texto as string, leidoA, avisoDePistas(pistasDeRegistro(registroFijado(ctx)!, p.texto as string), `la jefatura no abrió la revisión: ${r.motivo}`), ahora)
+      return cerrarBriefDeRegistro(al, campana, p.version, textoDelBrief, leidoA, avisoDePistas(pistasDeRegistro(registroFijado(ctx)!, textoDelBrief), `la jefatura no abrió la revisión: ${r.motivo}`), ahora)
     }
   }
-  const leido = leerBriefCreativo(p.texto as string, insumosDelBrief(ctx, estr?.contenido.canales))
+  const leido = conAvisos(leerBriefCreativo(textoDelBrief, ins), avisosDeBajadas)
   const bloquea = bloqueosDelBrief(leido)
   const estado = bloquea.length ? 'devuelta' : 'validada'
-  await al.actualizarBriefCreativo(campana.id, p.version, { ...base, estado, texto_md: p.texto, leido: leido as unknown as Record<string, unknown>, devolucion_texto: bloquea.length ? bloquea.map((b) => `- ${b}`).join('\n') : null })
+  await al.actualizarBriefCreativo(campana.id, p.version, { ...base, estado, texto_md: textoDelBrief, leido: leido as unknown as Record<string, unknown>, devolucion_texto: bloquea.length ? bloquea.map((b) => `- ${b}`).join('\n') : null })
   if (estado === 'devuelta' && (await agotoLaReapertura(al, campana.id, p.version))) await ponerNecesitaHumano(al, campana, `el brief creativo se devolvió por código dos veces: ${bloquea.slice(0, 3).join(' · ')}`, ahora)
   return { ok: true, estado, ...(await siguienteDespuesDe(al, campana.id)) }
 }
