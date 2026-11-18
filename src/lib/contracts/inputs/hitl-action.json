@@ -15,8 +15,8 @@
     },
     "approver": { "type": ["string", "null"], "maxLength": 100 },
     "approved_by": { "type": ["string", "null"], "maxLength": 100 },
-    "reason": { "type": ["string", "null"], "maxLength": 2000 },
-    "notes": { "type": ["string", "null"], "maxLength": 4000 },
+    "reason": { "type": ["string", "null"], "maxLength": 100000 },
+    "notes": { "type": ["string", "null"], "maxLength": 100000 },
     "client_id": { "type": ["string", "null"], "maxLength": 100 },
     "metadata": { "type": ["object", "null"] }
   }

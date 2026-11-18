@@ -60,7 +60,9 @@ export function interpretarInteractividad(payload: unknown): Intencion {
     if (!hitl_id || !UUID.test(hitl_id)) return ignorar('el formulario no trae un id de pieza válido')
     const valor = campo(campo(campo(campo(vista, 'state'), 'values'), BLOQUE_DEL_MOTIVO), CAMPO_DEL_MOTIVO)
     const comentario = texto(campo(valor, 'value'))
-    return { tipo: 'rechazar', hitl_id, autor, canal: texto(meta.canal), ts: texto(meta.ts), comentario: comentario ? comentario.slice(0, MAX_COMENTARIO) : null }
+    // 18-nov · G2 «nada se recorta» (CC5): arriba del tope se dice por qué, no se corta en silencio
+    if (comentario && comentario.length > MAX_COMENTARIO) return ignorar(`el motivo pasa de ${MAX_COMENTARIO} caracteres (tiene ${comentario.length})`)
+    return { tipo: 'rechazar', hitl_id, autor, canal: texto(meta.canal), ts: texto(meta.ts), comentario }
   }
   return ignorar(`tipo «${String(payload.type)}» no atendido`)
 }
@@ -80,7 +82,9 @@ export function interpretarEvento(cuerpo: unknown): Intencion {
   if (!canal || !ts || !autor) return ignorar('mensaje incompleto')
   if (!hilo_ts || hilo_ts === ts) return ignorar('no es una respuesta dentro de un hilo')
   if (!t) return ignorar('mensaje sin texto')
-  return { tipo: 'comentar', canal, hilo_ts, ts, autor, texto: t.slice(0, MAX_COMENTARIO) }
+  // 18-nov · G2 «nada se recorta» (CC5): lo que escribe Emilio llega entero, hasta el tope único del texto del dueño: arriba del tope se dice por qué, no se corta en silencio
+  if (t.length > MAX_COMENTARIO) return ignorar(`el comentario pasa de ${MAX_COMENTARIO} caracteres (tiene ${t.length})`)
+  return { tipo: 'comentar', canal, hilo_ts, ts, autor, texto: t }
 }
 
 /** «general: …» al inicio hace que la nota valga para todos los clientes; sin eso es del cliente de la pieza */

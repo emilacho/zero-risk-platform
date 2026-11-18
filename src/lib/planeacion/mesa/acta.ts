@@ -25,6 +25,7 @@ export interface AporteV1 { agente: string; resumen: string; recomendaciones: Ar
 
 /** cuánto se tolera que los pesos no sumen 1: redondeos de quien escribe */
 export const TOLERANCIA_DE_PESOS = 0.02
+// 18-nov · §4 del inventario G2 (CC5): «es obligatorio» también salía cuando el texto pasaba de 4000; ahora el mensaje dice las dos cosas
 const texto = (v: unknown, max = 4000): v is string => typeof v === 'string' && v.trim() !== '' && v.length <= max
 const objeto = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 
@@ -32,19 +33,19 @@ export function validarActa(v: unknown): { ok: true; valor: ActaV1 } | { ok: fal
   const e: string[] = []
   if (!objeto(v)) return { ok: false, errores: ['el acta debe ser un objeto'] }
   const num = v.numero
-  if (!objeto(num) || typeof num.meta !== 'number' || !Number.isFinite(num.meta) || num.meta <= 0 || !texto(num.por_que)) e.push('numero: { meta (número > 0), por_que } es obligatorio')
-  for (const k of ['servicio', 'audiencia', 'oferta', 'camino', 'prueba']) if (!texto(v[k])) e.push(`${k} es obligatorio`)
+  if (!objeto(num) || typeof num.meta !== 'number' || !Number.isFinite(num.meta) || num.meta <= 0 || !texto(num.por_que)) e.push('numero: { meta (número > 0), por_que } es obligatorio (texto de 1 a 4000 caracteres)')
+  for (const k of ['servicio', 'audiencia', 'oferta', 'camino', 'prueba']) if (!texto(v[k])) e.push(`${k} es obligatorio (texto de 1 a 4000 caracteres)`)
   if (!Array.isArray(v.canales) || !v.canales.length) e.push('canales debe traer al menos uno')
   else {
     v.canales.forEach((c, i) => {
-      if (!objeto(c) || !texto(c.canal, 60) || typeof c.peso !== 'number' || !Number.isFinite(c.peso) || c.peso < 0 || c.peso > 1 || !texto(c.razon)) e.push(`canales[${i}]: { canal, peso entre 0 y 1, razon } es obligatorio`)
+      if (!objeto(c) || !texto(c.canal, 60) || typeof c.peso !== 'number' || !Number.isFinite(c.peso) || c.peso < 0 || c.peso > 1 || !texto(c.razon)) e.push(`canales[${i}]: { canal, peso entre 0 y 1, razon } es obligatorio (texto de 1 a 4000 caracteres)`)
     })
     const activos = v.canales.filter((c) => objeto(c) && c.activo !== false) as Array<{ peso?: unknown }>
     const suma = activos.reduce((s, c) => s + (typeof c.peso === 'number' ? c.peso : 0), 0)
     if (activos.length && Math.abs(suma - 1) > TOLERANCIA_DE_PESOS) e.push(`los pesos de los canales activos suman ${suma.toFixed(2)}: deben sumar 1`)
   }
   if (!Array.isArray(v.no_se_hace)) e.push('no_se_hace debe ser una lista (puede ir vacía)')
-  else v.no_se_hace.forEach((n, i) => { if (!objeto(n) || !texto(n.que) || !texto(n.por_que)) e.push(`no_se_hace[${i}]: { que, por_que } es obligatorio`) })
+  else v.no_se_hace.forEach((n, i) => { if (!objeto(n) || !texto(n.que) || !texto(n.por_que)) e.push(`no_se_hace[${i}]: { que, por_que } es obligatorio (texto de 1 a 4000 caracteres)`) })
   if (v.no_se !== undefined && (!Array.isArray(v.no_se) || !v.no_se.every((x) => typeof x === 'string'))) e.push('no_se debe ser una lista de textos')
   if (e.length) return { ok: false, errores: e }
   return { ok: true, valor: { ...(v as unknown as ActaV1), esquema: 'acta.v1', no_se: Array.isArray(v.no_se) ? (v.no_se as string[]) : [] } }
@@ -56,10 +57,10 @@ const rangoValido = (r: unknown): r is RangoDeCosto => objeto(r) && typeof r.min
 export function validarAporte(v: unknown, agente: string): { ok: true; valor: AporteV1; avisos: string[] } | { ok: false; errores: string[] } {
   if (!objeto(v)) return { ok: false, errores: ['el aporte debe ser un objeto'] }
   const e: string[] = []
-  if (!texto(v.resumen)) e.push('resumen es obligatorio')
+  if (!texto(v.resumen)) e.push('resumen es obligatorio (texto de 1 a 4000 caracteres)')
   const recs = Array.isArray(v.recomendaciones) ? v.recomendaciones : null
   if (!recs) e.push('recomendaciones debe ser una lista')
-  else recs.forEach((r, i) => { if (!objeto(r) || !texto(r.que) || !texto(r.razon)) e.push(`recomendaciones[${i}]: { que, razon } es obligatorio`) })
+  else recs.forEach((r, i) => { if (!objeto(r) || !texto(r.que) || !texto(r.razon)) e.push(`recomendaciones[${i}]: { que, razon } es obligatorio (texto de 1 a 4000 caracteres)`) })
   if (e.length) return { ok: false, errores: e }
   const avisos: string[] = []
   let costo: RangoDeCosto | undefined
