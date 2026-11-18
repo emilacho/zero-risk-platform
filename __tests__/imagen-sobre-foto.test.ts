@@ -90,6 +90,39 @@ describe('con foto del cliente: se EDITA sobre la foto', () => {
   })
 })
 
+// 18-nov · 🟡 de CC7 a #1179 (m7, m8) · las OTRAS fotos del pedido llegan a la edición como `image[]` detrás de la base, y la respuesta dice cuáles viajaron y cuáles no
+describe('con otras fotos (`reference_image_urls`): van todas a la edición y la respuesta lo dice', () => {
+  const OTRA_URL = `${SUPA}/storage/v1/object/public/client-social-images/cliente/personaje.jpg`
+  const AJENA = 'https://otro.ejemplo/personaje.jpg'
+  const OTRA = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 9, 9, 9, 9])
+  const redConOtra = () => fetchMock.mockImplementation(async (url: string) => {
+    if (url === FOTO_URL) return fotoOk()
+    if (url === OTRA_URL) return fotoOk(OTRA)
+    if (url.endsWith('/v1/images/edits')) return imagenOk()
+    if (url.endsWith('/v1/images/generations')) return imagenOk()
+    throw new Error(`dirección inesperada ${url}`)
+  })
+  it('🔴 m7 · la base y la otra van como `image[]`, en orden y con sus bytes; la de fuera del almacén no se baja ni viaja', async () => {
+    redConOtra()
+    const { status } = await post({ prompt: 'p', reference_image_url: FOTO_URL, reference_image_urls: [OTRA_URL, AJENA] })
+    expect(status).toBe(200)
+    expect(fetchMock.mock.calls.some((c) => c[0] === AJENA)).toBe(false)
+    const [[, init]] = llamadasA('/v1/images/edits')
+    const form = init.body as FormData
+    expect(form.get('image')).toBeNull()
+    const imgs = form.getAll('image[]') as File[]
+    expect(imgs).toHaveLength(2)
+    expect(Buffer.from(await imgs[0].arrayBuffer())).toEqual(JPG)
+    expect(Buffer.from(await imgs[1].arrayBuffer())).toEqual(OTRA)
+  })
+  it('🔴 m8 · `referencia` dice cuáles viajaron (`otras_usadas`) y cuáles no, con su motivo (`otras_omitidas`)', async () => {
+    redConOtra()
+    const { j } = await post({ prompt: 'p', reference_image_url: FOTO_URL, reference_image_urls: [OTRA_URL, AJENA] })
+    expect(j.referencia).toMatchObject({ usada: true, otras_usadas: [OTRA_URL] })
+    expect(j.referencia.otras_omitidas).toEqual([{ url: AJENA, motivo: expect.stringContaining('almacén') }])
+  })
+})
+
 describe('sin rejas: si la foto no sirve, se genera igual y se dice por qué', () => {
   it('🔴 una dirección fuera del almacén del proyecto NO se baja (la ruta no sale a buscar archivos a donde le digan)', async () => {
     red()
