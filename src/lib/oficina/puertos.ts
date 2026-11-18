@@ -199,7 +199,25 @@ export interface PuertoDeVideo {
   buscarPagados?(p: { client_id: string; huellas: string[] }): Promise<Array<{ huella: string; request_id: string; video_url: string; costo_usd: number }>>
 }
 
+/**
+ * 18-nov · Sprint 3 · T5 tramo 3 · EL SERVICIO DE RENDER para el VIDEO COMPUESTO (S2-5 · Railway · US$ 0). Todo es un trabajo en fila:
+ * se pide y se consulta en las vueltas del vigía. Nunca lanza: cada llamada devuelve ok o el error en palabras (`reintentar` = 429/5xx/red).
+ */
+type FalloDelServicio = { ok: false; error: string; reintentar: boolean }
+export type EstadoDelTrabajoDeRender = 'en_fila' | 'rindiendo' | 'listo' | 'fallido'
+export interface PuertoDeComposicionDeVideo {
+  /** pide el análisis del sonido: la voz del video unido (palabras, whisper local) y/o la música (golpes) */
+  analizar(p: { voz: { nombre: string; url: string } | null; musica: { nombre: string; url: string } | null; idioma: string }): Promise<{ ok: true; id: string } | FalloDelServicio>
+  analisis(id: string): Promise<{ ok: true; estado: EstadoDelTrabajoDeRender; error: string | null; resultado: import('../render-html/cliente').ResultadoDelAnalisis | null } | FalloDelServicio>
+  /** pide el render del documento `htmlDeVideo` armado con este pedido (el adaptador carga las fuentes de la marca); `archivos` = de dónde baja el servicio el video unido */
+  rendir(p: { pedido: import('../../../packages/carousel-engine/src/video-html').PedidoDeVideoCompuesto; archivos: Array<{ nombre: string; url: string }> }): Promise<{ ok: true; id: string; fonts_faltantes: string[] } | FalloDelServicio>
+  render(id: string): Promise<{ ok: true; estado: EstadoDelTrabajoDeRender; error: string | null; segundos_de_render: number | null } | FalloDelServicio>
+  bajar(id: string): Promise<{ ok: true; mp4: Buffer } | FalloDelServicio>
+}
+
 export interface Puertos {
+  /** 18-nov · T5 tramo 3 · el servicio de render del video compuesto · opcional: sin él (o sin `limites.video.componer`), el video unido sale como hoy */
+  componerVideo?: PuertoDeComposicionDeVideo
   /** (01-nov) lo que el revisor de la jefatura debe tener además del manual y el brief: resumen vivo, informes, lo que dijo el dueño y las páginas del sitio */
   carpetaParaRevisar?(clientId: string): Promise<Array<{ titulo: string; funcion?: string; texto: string }>>
   /** (17-nov · coherencia con los hechos) el bloque de hechos del negocio que define Cerebro. Opcional: sin él (o si falla) la revisión recibe el aviso «no hay bloque» y compara contra el manual y el plan */
