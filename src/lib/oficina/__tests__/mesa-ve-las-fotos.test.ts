@@ -93,6 +93,17 @@ describe('el caso real: el reel de Olón (57101e2a)', () => {
     expect(imagenesDelTurno('integrar', webMay).map((i) => i.label)).not.toContain(rotuloDeLaFoto(PERSONAJE.id))
   })
 
+  it('solo las fotos PROPIAS van a la vista: una de referencia ajena (de otra marca) nunca', () => {
+    const ajena = FIX.fotos.map((f) => (f.id === PERSONAJE.id ? { ...f, origen: 'competencia' as const } : f))
+    expect(imagenesDelTurno('integrar', ajena).map((i) => i.label)).not.toContain(rotuloDeLaFoto(PERSONAJE.id))
+  })
+
+  it('la confianza manda en ese orden: alta, media, baja y, al final, la que no tiene dato', () => {
+    const base = FIX.fotos.slice(0, 4).map((f) => ({ ...f, origen: 'propia' as const }))
+    const [sinDato, baja, media, alta] = [{ ...base[0], etiqueta_confianza: undefined }, { ...base[1], etiqueta_confianza: 'baja' as const }, { ...base[2], etiqueta_confianza: 'media' as const }, { ...base[3], etiqueta_confianza: 'alta' as const }]
+    expect(fotosALaVista([sinDato, baja, media, alta]).map((f) => f.id)).toEqual([alta.id, media.id, baja.id, sinDato.id])
+  })
+
   it('a igual confianza manda el orden de la lista (estable)', () => {
     const dos = [FIX.fotos[0], FIX.fotos[1]].map((f) => ({ ...f, origen: 'propia' as const, etiqueta_confianza: 'media' as const }))
     expect(fotosALaVista(dos).map((f) => f.id)).toEqual([dos[0].id, dos[1].id])
@@ -150,6 +161,8 @@ describe('la instrucción: nombrar la foto del elemento real y no inventarlo', (
     expect(REGLA_DE_LOS_ELEMENTOS_REALES).toMatch(/nombra la foto exacta que lo muestra/)
     expect(REGLA_DE_LOS_ELEMENTOS_REALES).toContain('No lo inventes como si fuera real: proponlo como **creación nueva**')
     expect(REGLA_DE_LOS_ELEMENTOS_REALES).toContain('«creación nueva · basada en foto:<id>»')
+    expect(REGLA_DE_LOS_ELEMENTOS_REALES).toContain('**Si ninguna foto muestra ese elemento, dilo.**')
+    expect(REGLA_DE_LOS_ELEMENTOS_REALES).toContain('si una foto lo muestra, se usa ESA foto; nunca se dibuja «uno parecido».')
     expect(REGLA_DE_LOS_ELEMENTOS_REALES).toMatch(/personaje de la marca/)
     expect(REGLA_DE_LOS_ELEMENTOS_REALES).toMatch(/imágenes reales/)
   })
