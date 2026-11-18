@@ -60,7 +60,7 @@ const WINDOW_MS = 24 * 60 * 60 * 1000
 
 /** Techo run-scoped genérico por default · $8 (encima de ~$2-3 esperado · debajo del
  *  $25 canon). TUNABLE por env `RUN_SPEND_CAP_USD`. */
-// 18-nov · Emilio: topes = 3 × lo medido (PARA-LENOVO-de-CC3-barrido-de-topes-de-gasto-medido-y-su-triple, GO 16:17Z): máx. medido de 24 h de un cliente sin tope propio = 8,01 (Náufrago trae 60 en su ficha) → 24,05
+// 18-nov · Emilio: topes = 3 × lo medido (PARA-LENOVO-de-CC3-barrido-de-topes-de-gasto-medido-y-su-triple, GO 16:17Z): máx. medido de 24 h de un cliente sin tope propio = 8,01 (el que trae 60 en su ficha queda fuera) → 24,05
 export const DEFAULT_RUN_SPEND_CAP_USD = 24.05
 
 /**
