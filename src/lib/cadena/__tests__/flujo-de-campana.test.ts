@@ -10,6 +10,9 @@ import {
   ESTADOS_EN_MARCHA, PREFIJO_DE_PAUSA_DEL_TABLERO, causaQueSigue, flujoCampana, flujoDeCampana, hitoDeLaCampana, leerPausaDelTablero, motivoBreve, motivoDePausaDelTablero,
 } from '../flujo-de-campana'
 import { ACCIONES } from '../acciones'
+import { briefAbrir, conceptoAbrir, hojaEscribir, CODIGO_CAMPANA_PAUSADA } from '../mesas'
+import { fichasPreparar } from '../pasos'
+import { estrategiaPasar, calendarioPasar } from '../revision-jefatura'
 import { topeDelPaso } from '../constantes'
 import { AlmacenMemoria } from '../__fixtures__/almacen-memoria'
 import { clienteA, contextoDe, tandaBuena } from '../__fixtures__/clientes'
@@ -288,5 +291,57 @@ describe('🔴 el paso en curso TERMINA, pero no despausa (pausa del tablero a m
     const { anotarSiPausadaPorElTablero } = await import('../flujo-de-campana')
     expect(await anotarSiPausadaPorElTablero(al, await estado(al, id), 'activa', LUEGO)).toBeNull()
     expect((await estado(al, id)).estado_motivo).toBe('pasaron 7 días en necesita_humano')
+  })
+})
+
+describe('🔴 con la campaña pausada no arranca nada nuevo (cada brazo con su prueba)', () => {
+  it('las 3 mesas (brief · gran idea · hoja) contestan 409 E-CAMPANA-PAUSADA y no abren nada', async () => {
+    const al = almacen(); const id = await activa(al)
+    await flujo(al, id, 'parar')
+    const antes = (await al.esperasVivas()).length
+    for (const abrir of [briefAbrir, conceptoAbrir, hojaEscribir]) {
+      const r = await abrir(al, { ...wf(), campana_id: id, version: 1 }, LUEGO)
+      expect(r.status).toBe(409); expect(r.cuerpo.code).toBe(CODIGO_CAMPANA_PAUSADA)
+    }
+    expect((await al.esperasVivas()).length).toBe(antes)
+  })
+  it('las mesas SÍ pasan el freno con la campaña en marcha (el 409 es solo por la pausa)', async () => {
+    const al = almacen(); const id = await activa(al)
+    for (const abrir of [briefAbrir, conceptoAbrir, hojaEscribir]) expect((await abrir(al, { ...wf(), campana_id: id, version: 1 }, LUEGO)).cuerpo.code).not.toBe(CODIGO_CAMPANA_PAUSADA)
+  })
+  it('el lector de fichas no corre pausada', async () => {
+    const al = almacen(); const id = await activa(al)
+    await flujo(al, id, 'parar')
+    const r = await fichasPreparar(al, { ...wf(), campana_id: id }, LUEGO)
+    expect(r.status).toBe(409); expect(r.cuerpo.code).toBe(CODIGO_CAMPANA_PAUSADA)
+  })
+  it('la jefatura que pasa la estrategia mientras está pausada NO la despausa: queda «vuelve a: calendario»', async () => {
+    const al = almacen(); al.retencion = async (tipo) => ({ retener: tipo === 'estrategia', motivo: 'jefatura_activa' })
+    const id = await abierta(al)
+    const p = await estrategiaPreparar(al, { ...wf(), campana_id: id }, AHORA)
+    const g = await estrategiaGuardar(al, { ...wf(), campana_id: id, corrida_id: p.cuerpo.corrida_id, resultado: ok(A.estrategia as Estrategia) }, AHORA)
+    expect(g.cuerpo.retenida_para_revision).toBeTruthy()
+    await flujo(al, id, 'parar', AHORA)
+    expect(leerPausaDelTablero((await estado(al, id)).estado_motivo)?.vuelve_a).toBe('estrategia')
+    const r = await estrategiaPasar(al, { ...wf(), campana_id: id, version: 1 })
+    expect(r.status).toBe(200)
+    const c = await estado(al, id)
+    expect(c.estado).toBe('pausada')
+    expect(leerPausaDelTablero(c.estado_motivo)?.vuelve_a).toBe('calendario')
+    await flujo(al, id, 'reanudar')
+    expect((await estado(al, id)).estado).toBe('calendario')
+  })
+  it('la jefatura que pasa la primera tanda mientras está pausada NO la activa ni arranca: queda «vuelve a: activa»', async () => {
+    const al = almacen(); al.retencion = async (tipo) => ({ retener: tipo === 'calendario', motivo: 'jefatura_activa' })
+    const id = await enCalendario(al)
+    const t = await calendarioPreparar(al, { ...wf(), campana_id: id, tanda: 1 }, AHORA)
+    await calendarioGuardar(al, { ...wf(), campana_id: id, tanda: 1, corrida_id: t.cuerpo.corrida_id, resultado: ok(tandaBuena(A)) }, AHORA)
+    expect((await estado(al, id)).estado).toBe('calendario')
+    await flujo(al, id, 'parar', AHORA)
+    const r = await calendarioPasar(al, { ...wf(), campana_id: id, tanda: 1 })
+    expect(r.status).toBe(200)
+    const c = await estado(al, id)
+    expect(c.estado).toBe('pausada'); expect(leerPausaDelTablero(c.estado_motivo)?.vuelve_a).toBe('activa')
+    expect(al.sala.size).toBe(0)
   })
 })
