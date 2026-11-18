@@ -197,10 +197,12 @@ function campos(lineas: string[]): Record<string, string> {
 }
 
 /** «0–3 s», «0-3s», «de 3 a 8 s» en el título del plano */
-function tiempos(titulo: string): { desde: number; hasta: number } | null {
-  const m = /(\d+)\s*(?:[–-]|a)\s*(\d+)\s*s\b/i.exec(titulo)
+/** 18-nov · hallazgo 1 de la ingeniería inversa del reel de Olón: la mesa escribe medios segundos («0–2.5 s», «2,5–5 s»); antes solo se leían enteros y
+ *  «2.5–5 s» se leía 5–5 (descartado) → el guion caía al mínimo con avisos de ritmo falsos. Punto o coma decimal. */
+export function tiempos(titulo: string): { desde: number; hasta: number } | null {
+  const m = /(?<![\d.,])(\d+(?:[.,]\d+)?)\s*(?:[–-]|a)\s*(\d+(?:[.,]\d+)?)\s*s\b/i.exec(titulo)
   if (!m) return null
-  const a = Number(m[1]), b = Number(m[2])
+  const a = Number(m[1].replace(',', '.')), b = Number(m[2].replace(',', '.'))
   return Number.isFinite(a) && Number.isFinite(b) && b > a ? { desde: a, hasta: b } : null
 }
 
@@ -370,6 +372,9 @@ export function traducirGuion(md: string, o: { preguntasHechas?: number; maxPreg
   } else if (Math.max(...planos.map((p) => p.hasta)) !== total) {
     const factor = total / Math.max(...planos.map((p) => p.hasta))
     planos.forEach((p, i) => { p.desde = Math.round(p.desde * factor); p.hasta = i === planos.length - 1 ? total : Math.round(p.hasta * factor) })
+  } else {
+    // 18-nov · los cortes con medio segundo («2.5 s») se redondean al segundo: el brazo de video y los clips trabajan con segundos enteros. 0–2.5–5–7.5–10 → 0–3–5–8–10
+    planos.forEach((p) => { p.desde = Math.round(p.desde); p.hasta = Math.max(p.desde + 1, Math.round(p.hasta)) })
   }
   const fotos: string[] = []
   for (const p of planos) if (p.foto_id && !fotos.includes(p.foto_id)) fotos.push(p.foto_id)
