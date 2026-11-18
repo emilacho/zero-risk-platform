@@ -20,6 +20,7 @@ const h = vi.hoisted(() => ({
   consultas: [] as Array<Record<string, unknown>>,
   resultados: [] as unknown[],
   redactor: [] as string[],
+  estado: 200,
 }))
 vi.mock('@/lib/supabase', () => {
   const DATOS: Record<string, unknown[]> = {
@@ -39,7 +40,7 @@ vi.mock('@/lib/supabase', () => {
 })
 vi.mock('@/lib/cadena/almacen-supabase', () => ({ almacenDeSupabase: () => ({ leerConfig: async () => ({ encendida: true, clientes: [CLIENTE] }) }) }))
 vi.mock('@/lib/portero-alimenta/consultar', () => ({
-  rutaConsultar: async (_ctx: unknown, pedido: Record<string, unknown>) => { h.consultas.push(pedido); return { status: 200, body: { resultados: h.resultados, siguiente_desde: null } } },
+  rutaConsultar: async (_ctx: unknown, pedido: Record<string, unknown>) => { h.consultas.push(pedido); return h.estado === 200 ? { status: 200, body: { resultados: h.resultados, siguiente_desde: null } } : { status: h.estado, body: { error: 'portero_caido' } } },
 }))
 vi.mock('@/lib/ingress-filter', () => ({ DEFAULT_ROUTE_POLICY: {}, runIngressFilter: async () => ({ allow: true }) }))
 vi.mock('@/lib/finanzas/conversa/modelo-run-sdk', () => ({
@@ -57,7 +58,7 @@ const urls = () => red.mock.calls.map((c) => String(c[0]))
 
 describe('el perfil del público NO raspa: lee la voz del público solo del cerebro', () => {
   beforeEach(() => {
-    h.tablas.length = 0; h.escrituras.length = 0; h.consultas.length = 0; h.redactor.length = 0
+    h.tablas.length = 0; h.escrituras.length = 0; h.consultas.length = 0; h.redactor.length = 0; h.estado = 200
     red.mockClear()
     vi.stubGlobal('fetch', red)
     vi.stubEnv('APIFY_SERVICE_WEBHOOK_URL', PUERTA_DE_APIFY)
@@ -88,6 +89,12 @@ describe('el perfil del público NO raspa: lee la voz del público solo del cere
     expect(red).not.toHaveBeenCalled()
     expect(h.redactor).toEqual([])
     expect(h.tablas.filter((t) => /apify/.test(t))).toEqual([])
+  })
+  it('🔴 la consulta al cerebro CAÍDA no se lee como «cerebro vacío»: la corrida falla diciendo por qué, sin redactar ni declarar fuentes faltantes falsas', async () => {
+    h.estado = 503
+    await expect(correr()).rejects.toThrow(/el portero no contestó la consulta \(503 portero_caido\)/)
+    expect(red).not.toHaveBeenCalled()
+    expect(h.redactor).toEqual([])
   })
   it('el código del perfil no conoce ninguna puerta ni tabla de Apify (si alguien la vuelve a cablear, esto lo ve)', () => {
     const dir = path.join(process.cwd(), 'src/lib/perfil-del-publico')
