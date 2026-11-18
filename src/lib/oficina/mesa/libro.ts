@@ -85,6 +85,9 @@ export function faltanCitasDe(v: VerificacionDeCitas, libro: Aporte[]): FaltanCi
   }
 }
 
+/** la integración que se devuelve por citas: la ÚLTIMA (el planificador devuelve la última integración) */
+export const integracionDevuelta = (libro: Aporte[]): Aporte | undefined => [...libro].reverse().find((a) => a.tipo === 'integra')
+
 /** lo que el director lee: exactamente qué falta, sin pedirle la pieza otra vez */
 export function textoDeLoQueFalta(f: FaltanCitas): string {
   const lineas: string[] = []

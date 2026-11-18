@@ -5,7 +5,7 @@
  * integración. Se anota un `integra` NUEVO con el texto completo (la cadena toma el último `integra` como la pieza: CC1); el viejo queda como registro.
  */
 import { describe, expect, it } from 'vitest'
-import { faltanCitasDe, pegarCitas, textoDeLoQueFalta, verificarCitas } from '../mesa/libro'
+import { faltanCitasDe, integracionDevuelta, pegarCitas, textoDeLoQueFalta, verificarCitas } from '../mesa/libro'
 import { estadoDeLaMesa } from '../mesa/orquestador'
 import { armarTarea, type ContextoDeTurno } from '../mesa/pedidos'
 import type { Aporte, EstadoMesa } from '../mesa/tipos'
@@ -22,6 +22,10 @@ describe('el código dice exactamente qué falta', () => {
   const f = faltanCitasDe(v, libro)
   it('quién no está citado, con las referencias de sus aportes; las citas sin motivo; las que apuntan a nada', () => {
     expect(f).toEqual({ sin_cita: [{ agente: 'carousel-designer', aportes: ['A3'] }, { agente: 'marketing_instagram_curator', aportes: ['A4', 'A5'] }], sin_motivo: [3], inexistentes: [9] })
+  })
+  it('un descarte sin motivo también cuenta como cita sin motivo', () => {
+    const l = [A(2, 'content-creator', 'aporta', 'x')]
+    expect(faltanCitasDe(verificarCitas('## Citas\nA2 descarté: no', l, ['content-creator']), l).sin_motivo).toEqual([2])
   })
   it('el texto para el director nombra a cada uno con sus aportes', () => {
     const t = textoDeLoQueFalta(f)
@@ -53,6 +57,18 @@ describe('pegarCitas: la pieza no se reescribe', () => {
   it('sin sección de citas, la crea al final; sin líneas de cita, la integración no cambia', () => {
     expect(pegarCitas('## Lámina 1\nTítulo: Hoy', 'A2 usé: el titular del día')).toBe('## Lámina 1\nTítulo: Hoy\n\n## Citas\nA2 usé: el titular del día')
     expect(pegarCitas(INTEGRACION, 'no tengo nada que agregar')).toBe(INTEGRACION)
+  })
+  it('una línea repetida del mismo aporte entra una sola vez (la primera)', () => {
+    const o = pegarCitas('## Citas\nA2 usé: los titulares', 'A3 usé: el ritmo de las láminas\nA3 descarté: lo pensé mejor y no')
+    expect(o).toBe('## Citas\nA2 usé: los titulares\nA3 usé: el ritmo de las láminas')
+  })
+  it('sin nada que cambiar, la integración vuelve idéntica (también con saltos de línea de Windows)', () => {
+    const crlf = '## Lámina 1\r\nTítulo: Hoy\r\n## Citas\r\nA2 usé: los titulares\r\n\r\n## Pie\r\nP'
+    expect(pegarCitas(crlf, 'sin citas nuevas')).toBe(crlf)
+  })
+  it('la integración devuelta es la última, no la primera', () => {
+    const l = [A(1, 'd', 'integra', 'primera'), A(2, 'x', 'aporta', 'y'), A(3, 'd', 'integra', 'segunda'), A(4, 'x', 'nota', 'n')]
+    expect(integracionDevuelta(l)?.texto).toBe('segunda')
   })
   it('lo pegado pasa la verificación que antes fallaba', () => {
     const libro = [A(2, 'content-creator', 'aporta', 'x'), A(3, 'carousel-designer', 'aporta', 'y'), A(4, 'marketing_instagram_curator', 'aporta', 'z')]

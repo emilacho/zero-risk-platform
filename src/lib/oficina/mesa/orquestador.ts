@@ -22,7 +22,7 @@ import { condicionesDeLaPieza, direccionDe, especialistasPertinentes, ingenieroD
 import { condicionesDelVideo } from './condiciones-de-video'
 import { FORMATO_DE_PIEZA, destinatarioDe, leerRespuestaSobreNotas, quitarLineasDeNotas, rastroDeLasNotas, seccionDeNotasDelDueno, tareaParaConsultar } from './aprendizaje'
 import { separarRespuestas } from '../sentido-contra-la-ficha'
-import { pegarCitas, tableroParaLaJefatura, textoDeLoQueFalta } from './libro'
+import { integracionDevuelta, pegarCitas, tableroParaLaJefatura, textoDeLoQueFalta } from './libro'
 import { siguienteDeLaMesa, techoDe, type ContextoDeLaMesa } from './planificador'
 import { traducirPieza, hayImagenesAGenerar, pedidoDeImagen, type ConceptoDeImagen, type OpcionesDeTraduccion, type Traduccion } from './traductor'
 import { traducirGuion, type TraduccionDeGuion } from '../video/guion'
@@ -642,7 +642,7 @@ export async function recibirResultadoMesa(P: Puertos, encargoId: string, n: num
   // de la integración devuelta. Se anota como un `integra` NUEVO con el texto COMPLETO (la cadena y la jefatura toman el último `integra` como la pieza); el viejo queda como registro.
   if (t.tipo === 'devolver_citas') {
     const libroAntes = await P.mesa.libro(enc.id)
-    const base = (t.responde_a ? libroAntes.find((a) => a.id === t.responde_a) : undefined) ?? [...libroAntes].reverse().find((a) => a.tipo === 'integra')
+    const base = integracionDevuelta(libroAntes)
     if (base) textoFinal = pegarCitas(base.texto, textoFinal, t.faltan_citas?.inexistentes ?? [])
   }
   const tipoAporte: Record<string, TipoDeAporte> = { dirigir: 'dirige', aportar: 'aporta', responder: 'responde', integrar: 'integra', devolver_citas: 'integra', redactar_prompts: 'aporta', criticar: 'aporta' }
