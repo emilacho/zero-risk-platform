@@ -243,7 +243,29 @@ describe('🔴 thinking_mode · opt-in puro', () => {
     expect(resolverRazonamiento(undefined, undefined)).toEqual({ ok: true, valor: null })
     expect(resolverRazonamiento(undefined, 'low')).toEqual({ ok: true, valor: 'low' })
     expect(resolverRazonamiento('disabled', 'low')).toEqual({ ok: true, valor: 'disabled' })
-    for (const malo of ['high', '', null, 3, true, 'DISABLED']) expect(resolverRazonamiento(malo).ok, JSON.stringify(malo)).toBe(false)
+    for (const malo of ['alto', 'MAX', 'maximum', '', null, 3, true, 'DISABLED']) expect(resolverRazonamiento(malo).ok, JSON.stringify(malo)).toBe(false)
+    // 18-nov · G1 «nada se recorta»: los niveles altos y `maximo` son válidos
+    for (const bueno of ['high', 'xhigh', 'max', 'maximo']) expect(resolverRazonamiento(bueno), bueno).toEqual({ ok: true, valor: bueno })
+  })
+  it('opcionDeRazonamiento con el modelo · 18-nov G1: el nivel se ajusta a lo que admite cada modelo (code.claude.com/docs/en/model-config)', () => {
+    // `maximo` ⇒ max en los que lo admiten
+    for (const m of ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-opus-4-7', 'claude-sonnet-4-6', 'claude-opus-4-6']) expect(opcionDeRazonamiento('maximo', m), m).toEqual({ effort: 'max' })
+    // xhigh no existe en Opus 4.6 / Sonnet 4.6 ⇒ high · sí en Opus 4.7 y 5.5
+    expect(opcionDeRazonamiento('xhigh', 'claude-sonnet-4-6')).toEqual({ effort: 'high' })
+    expect(opcionDeRazonamiento('xhigh', 'claude-opus-4-6')).toEqual({ effort: 'high' })
+    expect(opcionDeRazonamiento('xhigh', 'claude-opus-4-7')).toEqual({ effort: 'xhigh' })
+    expect(opcionDeRazonamiento('xhigh', 'claude-opus-5-5')).toEqual({ effort: 'xhigh' })
+    // Haiku 4.5 no acepta effort ⇒ se omite (no 400) · pero `disabled` sí se respeta
+    expect(opcionDeRazonamiento('maximo', 'claude-haiku-4-5-20251001')).toEqual({})
+    expect(opcionDeRazonamiento('low', 'claude-haiku-4-5-20251001')).toEqual({})
+    expect(opcionDeRazonamiento('disabled', 'claude-haiku-4-5-20251001')).toEqual({ thinking: { type: 'disabled' } })
+    // Opus 5.5 / Sonnet 5.5 no dejan apagar el razonamiento (400) ⇒ disabled baja a effort low
+    expect(opcionDeRazonamiento('disabled', 'claude-opus-5-5')).toEqual({ effort: 'low' })
+    expect(opcionDeRazonamiento('disabled', 'claude-sonnet-5-5')).toEqual({ effort: 'low' })
+    expect(opcionDeRazonamiento('disabled', 'claude-sonnet-4-6')).toEqual({ thinking: { type: 'disabled' } })
+    // sin modelo conocido ⇒ el nivel tal cual
+    expect(opcionDeRazonamiento('high')).toEqual({ effort: 'high' })
+    expect(opcionDeRazonamiento('max')).toEqual({ effort: 'max' })
   })
   it('opcionDeRazonamiento: disabled ⇒ thinking desactivado · low/medium ⇒ effort · sin modo ⇒ vacío', () => {
     expect(opcionDeRazonamiento('disabled')).toEqual({ thinking: { type: 'disabled' } })
@@ -266,7 +288,16 @@ describe('🔴 thinking_mode · opt-in puro', () => {
     await corrida({})
     expect(Object.prototype.hasOwnProperty.call(opcionesRecibidas, 'thinking')).toBe(false)
     expect(Object.prototype.hasOwnProperty.call(opcionesRecibidas, 'effort')).toBe(false)
+    // 18-nov · G1: el techo de respuesta va SIEMPRE al máximo (sin él, el SDK corta a 32.000 · corrida 158667) y el resto del entorno se conserva
+    const entorno = (opcionesRecibidas as { env?: Record<string, string | undefined> }).env
+    expect(entorno?.CLAUDE_CODE_MAX_OUTPUT_TOKENS).toBe('128000')
+    expect(entorno?.PATH ?? entorno?.Path).toBe(process.env.PATH ?? process.env.Path)
     await turno()
     expect((escrituraDe('agent_invocations')?.metadata as Record<string, unknown>).thinking_mode).toBeNull()
+    escrituras.length = 0
+    await corrida({ thinkingMode: 'maximo' })
+    expect(opcionesRecibidas).toMatchObject({ effort: 'max' })
+    await turno()
+    expect((escrituraDe('agent_invocations')?.metadata as Record<string, unknown>).thinking_mode).toBe('maximo')
   })
 })

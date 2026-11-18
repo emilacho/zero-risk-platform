@@ -202,7 +202,16 @@ describe('⑥ Vercel valida y reenvía `thinking_mode`', () => {
     await POST(req(pedido()))
     expect(Object.prototype.hasOwnProperty.call(alCorredor[2], 'thinking_mode')).toBe(false)
   })
-  it.each([['high'], [''], [null], [1], ['Disabled']])('🔴 thinking_mode mal escrito (%j) ⇒ 400 thinking_mode_invalid y el corredor NO se llama', async (v) => {
+  it.each([['high'], ['xhigh'], ['max'], ['maximo']])('🟢 18-nov G1 · thinking_mode %j (nivel alto) ⇒ pasa y el corredor lo recibe tal cual', async (v) => {
+    await POST(req(pedido({ thinking_mode: v })))
+    expect(alCorredor[0]).toMatchObject({ thinking_mode: v })
+  })
+  it('🟢 18-nov G1 · la lista de la ruta es la MISMA que valida el corredor (si se separan, uno rechaza lo que el otro acepta)', async () => {
+    const { MODOS_DE_RAZONAMIENTO_DEL_PEDIDO } = await import('@/lib/razonamiento')
+    const { MODOS_DE_RAZONAMIENTO } = await import('../services/agent-runner/src/lib/tope-por-corrida')
+    expect([...MODOS_DE_RAZONAMIENTO_DEL_PEDIDO]).toEqual([...MODOS_DE_RAZONAMIENTO])
+  })
+  it.each([['alto'], ['MAX'], [''], [null], [1], ['Disabled']])('🔴 thinking_mode mal escrito (%j) ⇒ 400 thinking_mode_invalid y el corredor NO se llama', async (v) => {
     const r = await POST(req(pedido({ thinking_mode: v })))
     expect(r.status).toBe(400)
     expect(await r.json()).toMatchObject({ error: 'thinking_mode_invalid', code: 'E-THINKING-INVALID' })

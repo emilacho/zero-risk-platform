@@ -38,7 +38,7 @@ describe('🔴 un pedido inválido se rechaza ANTES de medir el freno', () => {
     ['max_budget_usd', { max_budget_usd: 0 }, 'max_budget_usd_invalid'],
     ['max_budget_usd nulo', { max_budget_usd: null }, 'max_budget_usd_invalid'],
     ['thinking_mode', { thinking_mode: 'invalido' }, 'thinking_mode_invalid'],
-    ['thinking_mode en context', { context: { thinking_mode: 'high' } }, 'thinking_mode_invalid'],
+    ['thinking_mode en context', { context: { thinking_mode: 'alto' } }, 'thinking_mode_invalid'],
     ['images', { images: 'no-es-una-lista' }, 'images_invalid'],
   ])('%s inválido ⇒ 400 %s · el freno NO se mide · el corredor NO se llama', async (_n, extra, codigo) => {
     const r = await POST(req(pedido(extra as Record<string, unknown>)))

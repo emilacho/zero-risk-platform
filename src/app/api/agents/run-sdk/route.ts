@@ -68,6 +68,7 @@ import { pideLatido, responderConLatido } from '@/lib/latido-hacia-quien-llama'
 import { MODELOS_POR_CORRIDA, modeloPorCorridaValido } from '@/lib/modelo-por-corrida'
 import { resolverEsquema } from '@/lib/salida-estructurada'
 import { TOPE_REAL_DEL_PEDIDO } from '@/lib/limites-de-tamano'
+import { MODOS_DE_RAZONAMIENTO_DEL_PEDIDO } from '@/lib/razonamiento'
 
 export const runtime = 'nodejs'
 // Sprint 12 Track U · P0 #2 bump 300→800s · Track R audit identified Journey B
@@ -981,9 +982,10 @@ async function atender(request: Request) {
     const razCrudo = razArriba !== undefined ? razArriba : ctx.thinking_mode
     let razonamientoDelPedido: string | null = null
     if (razCrudo !== undefined) {
-      if (razCrudo !== 'disabled' && razCrudo !== 'low' && razCrudo !== 'medium') {
+      // 18-nov · G1 «nada se recorta» (CC5): suman los niveles altos y `maximo` (el corredor ajusta el nivel a lo que admite cada modelo · `tope-por-corrida.ts`)
+      if (typeof razCrudo !== 'string' || !(MODOS_DE_RAZONAMIENTO_DEL_PEDIDO as readonly string[]).includes(razCrudo)) {
         return NextResponse.json(
-          { error: 'thinking_mode_invalid', code: 'E-THINKING-INVALID', detail: 'thinking_mode debe ser disabled | low | medium · un valor mal escrito no se ignora' },
+          { error: 'thinking_mode_invalid', code: 'E-THINKING-INVALID', detail: `thinking_mode debe ser ${MODOS_DE_RAZONAMIENTO_DEL_PEDIDO.join(' | ')} · un valor mal escrito no se ignora` },
           { status: 400 },
         )
       }
