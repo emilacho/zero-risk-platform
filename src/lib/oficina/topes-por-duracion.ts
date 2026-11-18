@@ -125,7 +125,9 @@ export function costoDeVolver(pl: Plantilla, paso: Paso): number {
  * la revisión de las imágenes clave y la mirada del video. Esas nunca cortan un encargo, así que no se reservan al abrir. TODA otra vuelta (hoy: la ronda del
  * dueño, `aprobar_propuestas`, que el dueño pide y el código no puede saltar) SÍ se reserva, a su máximo. Una vuelta nueva cuenta por omisión (lado seguro).
  */
-export const VUELTAS_QUE_SE_SALTAN_SI_NO_CABEN = { funciones: ['pedido_de_video'], claves: ['revisar_imagenes_clave', 'mirar_video'] } as const
+// 18-nov · GO Lenovo 13:52Z · la vuelta de la JEFATURA a la mesa también se salta si no cabe (`puedeVolverALaMesa` → `cabeLaVuelta` antes de devolver, con cada paso a su tope):
+//   nunca corta a medias. Con la vuelta por regla dura (hasta 6, 202611181530) reservarla al abrir dejaría sin abrir a casi todas las piezas; sin caber, la regla dura queda «en corrección»
+export const VUELTAS_QUE_SE_SALTAN_SI_NO_CABEN = { funciones: ['pedido_de_video'], claves: ['revisar_imagenes_clave', 'mirar_video', 'jefatura'] } as const
 const seSalta = (s: Paso) => (VUELTAS_QUE_SE_SALTAN_SI_NO_CABEN.funciones as readonly string[]).includes(String(s.funcion ?? '')) || (VUELTAS_QUE_SE_SALTAN_SI_NO_CABEN.claves as readonly string[]).includes(s.clave)
 
 /**

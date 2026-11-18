@@ -12,6 +12,7 @@ import { fechaLimiteDelBrief, parsearBrief, planDeOrigen, proporcionDelBrief, ty
 import { briefEsDelEncargo, claseDeLaFamilia } from './familia-del-brief'
 import { claseDe } from './clase'
 import { chequeosDePost, type FuentesDelCliente } from './chequeos'
+import { corregirContactoDeLaPieza } from './contacto-ajeno'
 import type { ContextoDelRevisor } from './ciego'
 import { aUtc, chequeosDeEntrega, cuandoSePublica, manifiesto, nombreDeArchivo, textoParaCopiar, type ArchivoDeEntrega } from './entrega'
 import { registrarPaso, siguientePaso, type ResultadoDePaso } from './motor'
@@ -257,8 +258,11 @@ export function avisoDeFotosALaMesa(noHalladas: string[], ambiguas: string[], fo
 
 function chequeos(e: Estado, pl: Plantilla): SalidaCodigoV {
   const b = baseV(e)
-  const cv = datos(e, 'copy_video')
-  if (!cv) return { res: { costo_usd: 0, artefacto: { fichas: 0 } }, fallido: 'no hay pie ni etiquetas que chequear' }
+  const cv0 = datos(e, 'copy_video')
+  if (!cv0) return { res: { costo_usd: 0, artefacto: { fichas: 0 } }, fallido: 'no hay pie ni etiquetas que chequear' }
+  // 18-nov · GO Lenovo «lo exacto se autocorrige»: el teléfono o el @ ajeno del pie se reemplaza por el del cliente ANTES de chequear (sin modelo)
+  const auto = corregirContactoDeLaPieza(cv0, b.F.fuentes as FuentesDelCliente)
+  const cv = auto.pieza
   const fs = chequeosDePost({
     pieza: { pie_de_foto: txt(cv.pie_de_foto), hashtags: arr(cv.hashtags), llamado: typeof cv.llamado === 'string' ? cv.llamado : undefined },
     fuentes: b.F.fuentes as FuentesDelCliente,
@@ -280,7 +284,7 @@ function chequeos(e: Estado, pl: Plantilla): SalidaCodigoV {
     if (typeof lim.tope_por_video_usd === 'number' && v.costo_usd > lim.tope_por_video_usd + 1e-9) nueva('sugerencia', `el video cobró US$ ${v.costo_usd.toFixed(4)}, más que el tope por video (US$ ${lim.tope_por_video_usd})`, TOPE_POR_VIDEO, 'alarma de gasto al cierre: el dinero ya se gastó, la pieza sigue (Lenovo · revisión 2, pregunta 4: no bloquea)')
   }
   for (const a of arr(pv?.avisos_del_guion)) nueva('sugerencia', `el traductor del guion avisó: ${a}`, 'guion de la mesa', 'mirar el video con eso en mente')
-  return { res: { costo_usd: 0, artefacto: { fichas: fichas.length }, fichas, reemplazar_fichas: { origen: 'chequeo', donde: ['texto', 'hashtags', 'video'] } } }
+  return { res: { costo_usd: 0, artefacto: { fichas: fichas.length, ...(auto.declarado.length ? { autocorregido: auto.declarado } : {}) }, fichas, reemplazar_fichas: { origen: 'chequeo', donde: ['texto', 'hashtags', 'video'] }, ...(auto.declarado.length ? { otros_artefactos: { copy_video: cv } } : {}) } }
 }
 
 /** un mp4 mínimo (solo la caja `ftyp`): lo que se entrega en dry_run para que la hoja, el manifiesto y los chequeos de entrega se ejerzan sin red */

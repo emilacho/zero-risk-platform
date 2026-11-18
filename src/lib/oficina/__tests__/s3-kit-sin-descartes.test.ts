@@ -314,10 +314,11 @@ describe('(d) las reglas puras de la vuelta', () => {
     expect(sin.artefacto).toMatchObject({ re_imagen: true })
     expect(pedidas).toHaveLength(1)
   })
-  it('el aviso a la mesa nombra cada desacuerdo y dice que es la única vuelta', () => {
+  it('el aviso a la mesa nombra cada desacuerdo y dice que lo de criterio tiene una sola vuelta (18-nov: la regla dura vuelve las veces que haga falta)', () => {
     const a = avisoDeLaJefaturaALaMesa(['texto: falta la zona norte'])
     expect(a).toMatch(/- texto: falta la zona norte/)
-    expect(a).toMatch(/única vuelta/)
+    expect(a).toMatch(/Lo de criterio tiene esta sola vuelta/)
+    expect(a).toMatch(/Las reglas duras se toman sí o sí: si siguen rotas, la pieza vuelve otra vez/)
     expect(a).toMatch(/no lo inventes/)
   })
 })

@@ -177,9 +177,10 @@ describe('con notas: el productor se auto-revisa', () => {
     expect(t).toMatchObject({ choco: true, cambios: [{ nota_id: 'nota-2', campo: 'pie_de_foto', que_choca: 'la frase era larga', que_cambio: 'la acorté' }] })
     expect(t.clave_unica).toMatch(new RegExp(`^${id}:autorevision_texto:\\d+$`))
   })
-  it('la pieza corregida se vuelve a chequear por código: un teléfono inventado en la corrección no pasa', async () => {
+  // 18-nov · GO Lenovo «lo exacto se autocorrige»: un teléfono ajeno ya NO frena (se reemplaza por el del cliente). La regla dura que sigue mandando es el precio fuera de la lista
+  it('la pieza corregida se vuelve a chequear por código: un precio inventado en la corrección no pasa', async () => {
     const { M, id } = await abierto(undefined, NOTAS)
-    const r = await correr(M, id, guionPost({ autorevision_texto: () => ({ texto: conChoque({ ...PIEZA, pie_de_foto: 'Ceviche a $7.00. Llama al 0999999999.' }) }) }), 80)
+    const r = await correr(M, id, guionPost({ autorevision_texto: () => ({ texto: conChoque({ ...PIEZA, pie_de_foto: 'Ceviche a $9.99.' }) }) }), 80)
     expect(r.ultima.cuerpo).toMatchObject({ accion: 'cerrado' })
     const fs = M.encargos.get(id)!.estado_del_motor.fichas
     expect(fs.some((f) => f.origen === 'chequeo' && f.gravedad === 'bloquea')).toBe(true) // los chequeos duros siguen mandando sobre lo que el productor corrigió

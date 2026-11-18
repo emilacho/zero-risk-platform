@@ -4,6 +4,7 @@ import { TOPE_POR_VIDEO } from '../orquestador-video'
 import { TARGET_STEP_PRODUCIR, validarSobre } from '../sobre'
 import { codificarPng } from '../encaje'
 import { POST_IMG } from '../plantillas/post-img'
+import { datos } from '../ayudas'
 import { BUENOS_PROMPTS, CLIENTE, PARTE, PARTE_OTRO_PRODUCTO, PARTE_REAL, PIEZA_OK, FICHAS_VACIAS, FORMATO_1X1, crearMemoria, correr, direccionGenerada, direccionReal, observacion, REGLAS_CEVICHE, type Guion, type Memoria } from './memoria'
 
 const sobre = (o: Record<string, unknown> = {}) => ({ parte_id: PARTE, brief_id: 'BRF-0003', dry_run: true, familia: 'post_img', ...o })
@@ -622,6 +623,29 @@ describe('salida real (dry_run = false): pieza draft + bandeja con output_id y v
     await correr(M, id, guionGenerada())
     expect((M.llamadas.bandeja[0] as { expires_at: string | null }).expires_at).toBeNull()
   })
+  it('18-nov · GO Lenovo «lo exacto se autocorrige»: un teléfono y un @ AJENOS en el pie se reemplazan por los del cliente antes de chequear; la pieza llega a la bandeja corregida y declarada', async () => {
+    const M = crearMemoria()
+    const id = await abierto(M, sobre({ dry_run: false }))
+    const { ultima } = await correr(M, id, guionGenerada({ texto: JSON.stringify({ pie_de_foto: 'Ceviche a $7.00. Pide al 0988 111 222 o en @otra_marca.', hashtags: [] }) }))
+    expect(ultima.cuerpo).not.toHaveProperty('frenada')
+    expect(M.llamadas.salidas).toHaveLength(1)
+    const pie = String((M.llamadas.salidas[0] as { contenido: { pie_de_foto: string } }).contenido.pie_de_foto)
+    expect(pie).toBe('Ceviche a $7.00. Pide al +593 997 744 288 o en @naufrago.ec.')
+    const e = M.encargos.get(id)!.estado_del_motor
+    expect(datos(e, 'chequeos')?.autocorregido).toEqual([
+      'se corrigió solo: el teléfono 0988 111 222 → +593 997 744 288 (el del cliente)',
+      'se corrigió solo: el usuario @otra_marca → @naufrago.ec (el del cliente)',
+    ])
+    expect(e.fichas.filter((f) => /no es del cliente/.test(f.que ?? '') && f.estado === 'abierta')).toEqual([])
+  })
+  it('18-nov · el @ del cliente al final de la oración («@la_marca.») es del cliente: el punto no es parte del usuario (antes frenaba la pieza)', async () => {
+    const M = crearMemoria()
+    const id = await abierto(M, sobre({ dry_run: false }))
+    const { ultima } = await correr(M, id, guionGenerada({ texto: JSON.stringify({ pie_de_foto: 'Ceviche a $7.00. Síguenos en @naufrago.ec.', hashtags: [] }) }))
+    expect(ultima.cuerpo).not.toHaveProperty('frenada')
+    expect(M.llamadas.salidas).toHaveLength(1)
+    expect(datos(M.encargos.get(id)!.estado_del_motor, 'chequeos')?.autocorregido).toBeUndefined()
+  })
   it('regla dura 3 (precio fuera de la lista) que sigue rota tras la corrección: la pieza se FRENA (ni salida ni bandeja) y avisa UNA vez a #alertas', async () => {
     const M = crearMemoria()
     const id = await abierto(M, sobre({ dry_run: false }))
@@ -631,7 +655,7 @@ describe('salida real (dry_run = false): pieza draft + bandeja con output_id y v
     expect(M.llamadas.bandeja).toEqual([])
     const alarmas = M.llamadas.avisos.filter((a) => a.canal === 'alertas')
     expect(alarmas).toHaveLength(1)
-    expect(alarmas[0].texto).toMatch(/^🛑 Pieza frenada · .*precio/)
+    expect(alarmas[0].texto).toMatch(/^🔁 Pieza en corrección · .*precio/)
   })
   // revisión 2 · pregunta 4 · el gasto sobre el tope por video (la ficha llega aquí por el jefe: lo que se mide es el CIERRE, no quién la puso)
   const fichaDeTope = { que: 'el video cobró US$ 6.0000, más que el tope por video (US$ 5)', donde: 'video', contra_que: TOPE_POR_VIDEO, gravedad: 'sugerencia', propuesta: 'alarma de gasto' }
@@ -653,7 +677,7 @@ describe('salida real (dry_run = false): pieza draft + bandeja con output_id y v
     expect(ultima.cuerpo).toMatchObject({ accion: 'cerrado', frenada: true })
     const alarmas = M.llamadas.avisos.filter((a) => a.canal === 'alertas')
     expect(alarmas).toHaveLength(1)
-    expect(alarmas[0].texto).toMatch(/^🛑 Pieza frenada · .*precio.*💸 Gasto sobre el tope/)
+    expect(alarmas[0].texto).toMatch(/^🔁 Pieza en corrección · .*precio.*💸 Gasto sobre el tope/)
   })
   it('solo observaciones (criterio) al cierre: la pieza llega a la bandeja con su marca, sin «con desacuerdo» y con 0 alarmas', async () => {
     const M = crearMemoria()

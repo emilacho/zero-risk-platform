@@ -120,8 +120,13 @@ export interface DatosDelSentido {
   no_reabre: Hallazgo[]
   /** regla dura cuyo destino ya se devolvió y sigue rota: sin devolución nueva, pero sigue frenando la pieza (CC7 🟡 1) */
   duras_pendientes?: Hallazgo[]
-  /** RESPUESTA-LENOVO 17-nov punto 3 · regla dura que SIGUE ROTA tras la vuelta (el creador no la tomó, o no respondió): la pieza NO se publica y sale UNA alarma (sin «una persona decide») */
+  /**
+   * regla dura de la pieza que sigue rota y NO puede volver a su creador (sin mesa, sin dinero o sin vueltas): la pieza queda «en corrección», sin salida ni bandeja, con UNA alarma.
+   * 18-nov · GO Lenovo 13:52Z · antes: «tras la vuelta» frenaba siempre; ahora, mientras quepa otra vuelta, la pieza vuelve al creador con la regla y esto queda vacío.
+   */
   duras_no_tomadas?: Hallazgo[]
+  /** 18-nov · cuántas veces volvió la pieza a su creador por una regla dura (la que sigue rota tras la vuelta) */
+  vueltas_por_regla_dura?: number
   /** lo que respondió el creador de la pieza a las correcciones de la vuelta anterior (solo en la revisión que sigue a esa vuelta) */
   respuestas_del_creador?: RespuestaDelCreador[]
   vuelve_a: Destino[]
@@ -168,12 +173,32 @@ export function aplicarSalidaDeJefatura(pl: Pick<Plantilla, 'familia' | 'clase'>
   // salvo (18-nov · #1147) que la oferta esté cerrada en la fecha de la fila: D1 se mide igual (lo del jefe pasa tal cual: sin ficha no hay cita que verificar)
   const sen = o.sentido && (o.sentido.ficha.estado === 'con_ficha' || !!o.sentido.ficha.cierre) && !incompleta ? sentidoDeLaRevision(crudas, o.sentido) : null
   const lineas = sen ? sen.lineas : crudas
-  // lo que vuelve a un paso de la cadena NO se arregla rehaciendo la pieza: no hay vuelta a la mesa. Tras una vuelta con correcciones de sentido, la jefatura no reabre
-  const haciaAtras = !!sen && (sen.datos.devoluciones.length > 0 || (sen.datos.duras_pendientes?.length ?? 0) > 0 || sen.tras_la_vuelta)
-  const vuelve = lineas.length > 0 && !haciaAtras && o.puedeVolverALaMesa?.(costoDeLaJefatura(salida.costo_usd)) === true
+  // lo que vuelve a un paso de la cadena NO se arregla rehaciendo la pieza: no hay vuelta a la mesa
+  const aLaCadena = !!sen && (sen.datos.devoluciones.length > 0 || (sen.datos.duras_pendientes?.length ?? 0) > 0)
+  // 18-nov · GO Lenovo 13:52Z · tras una vuelta, lo de criterio no reabre, pero la REGLA DURA que sigue rota vuelve otra vez a su creador (solo ella), mientras quepa
+  const queVuelve = !sen ? lineas : sen.tras_la_vuelta ? sen.duras.a_la_mesa : lineas
+  const vuelve = queVuelve.length > 0 && !aLaCadena && o.puedeVolverALaMesa?.(costoDeLaJefatura(salida.costo_usd)) === true
+  if (sen && sen.duras.hallazgos.length) {
+    if (vuelve) {
+      // la regla dura viaja como corrección (con su número para que el creador responda): no queda «en corrección» todavía
+      if (sen.tras_la_vuelta) sen.datos.enviadas = sen.duras.enviadas
+      delete sen.datos.duras_no_tomadas
+    } else {
+      // sin vuelta posible (sin mesa, sin dinero o sin vueltas): la regla dura NUNCA llega a la bandeja como observación · la pieza queda «en corrección»
+      sen.datos.duras_no_tomadas = [...sen.duras.hallazgos, ...(sen.datos.duras_no_tomadas ?? []).filter((h) => !sen.duras.hallazgos.includes(h))]
+    }
+  }
+  // cuántas veces volvió la pieza por una regla dura que seguía rota tras la vuelta: se cuenta al volver y se conserva al cerrar (la bandeja y la alarma lo leen así)
+  if (sen) {
+    const antes = datosDeLaJefatura(e)?.sentido?.vueltas_por_regla_dura ?? 0
+    const ahora = antes + (vuelve && sen.tras_la_vuelta && sen.duras.hallazgos.length ? 1 : 0)
+    if (ahora > 0) sen.datos.vueltas_por_regla_dura = ahora
+  }
+  // las líneas de regla dura no se repiten como desacuerdo de criterio: o viajan a la mesa, o quedan «en corrección» (arriba)
+  const durasEnTexto = new Set(sen ? sen.duras.a_la_mesa : [])
   // fichas de FONDO que siguen sin tomarse: el mismo desacuerdo de siempre (jefe · bloquea · sin tomar); `cerrar` ya sabe contarlas
   //   (si la pieza vuelve a la mesa, el desacuerdo viaja como corrección y NO queda como ficha: la revisión de la vuelta decide)
-  const fichas: Ficha[] = (vuelve ? [] : sen ? lineas : deLaJefatura).map((d, i) => {
+  const fichas: Ficha[] = (vuelve ? [] : sen ? lineas.filter((l) => !durasEnTexto.has(l)) : deLaJefatura).map((d, i) => {
     const p = partirDesacuerdo(String(d))
     return { ...fichaNueva(`jefe-${e.pasos_ejecutados}-${i}`, 'jefe', p.donde, 'bloquea', p.que, 'revisión de la jefatura', 'observación de criterio: su creador ya la tuvo en su vuelta; queda declarada y la pieza sigue'), estado: 'no_tomada' as const, razon: 'la jefatura cerró sin que se tomara' }
   })
@@ -183,7 +208,7 @@ export function aplicarSalidaDeJefatura(pl: Pick<Plantilla, 'familia' | 'clase'>
   if (sen) {
     sen.datos.devoluciones.forEach((d, i) => fichas.push({ ...fichaNueva(`sentido-${e.pasos_ejecutados}-${i}`, 'jefe', d.destino, 'bloquea', `sentido · ${d.destino}: ${d.motivo}`, d.linea_de_la_ficha ? `ficha de la oferta: «${d.linea_de_la_ficha}»` : 'ficha de la oferta', d.dura ? `vuelve a ${d.destino}: regla dura, su creador la toma sí o sí` : `vuelve a ${d.destino}: su creador la toma, la toma en parte o no la toma, y dice por qué`), ...(d.dura ? { dura: true as const } : {}), estado: 'no_tomada' as const, razon: `devuelto a ${d.destino}` }))
     ;(sen.datos.duras_pendientes ?? []).forEach((h, i) => fichas.push({ ...fichaNueva(`sentido-dura-${e.pasos_ejecutados}-${i}`, 'jefe', h.destino, 'bloquea', `sentido · ${h.destino}: ${h.que}`, h.linea_de_la_ficha ? `ficha de la oferta: «${h.linea_de_la_ficha}»` : 'ficha de la oferta', `regla dura ya devuelta a ${h.destino} y sigue sin corregirse: no se publica hasta que su creador la corrija`), dura: true as const, estado: 'no_tomada' as const, razon: `regla dura ya devuelta a ${h.destino}` }))
-    ;(sen.datos.duras_no_tomadas ?? []).filter((h) => h.destino === 'pieza' || !o.sentido?.filaId).forEach((h, i) => fichas.push({ ...fichaNueva(`sentido-no-tomada-${e.pasos_ejecutados}-${i}`, 'jefe', 'pieza', 'bloquea', `sentido · pieza: ${h.que}`, h.linea_de_la_ficha ? `ficha de la oferta: «${h.linea_de_la_ficha}»` : 'ficha de la oferta', REGLA_DURA_NO_TOMADA), dura: true as const, estado: 'no_tomada' as const, razon: 'regla dura no tomada tras la vuelta' }))
+    ;(sen.datos.duras_no_tomadas ?? []).filter((h) => h.destino === 'pieza' || !o.sentido?.filaId).forEach((h, i) => fichas.push({ ...fichaNueva(`sentido-no-tomada-${e.pasos_ejecutados}-${i}`, 'jefe', 'pieza', 'bloquea', `sentido · pieza: ${h.que}`, h.linea_de_la_ficha ? `ficha de la oferta: «${h.linea_de_la_ficha}»` : 'ficha de la oferta', REGLA_DURA_NO_TOMADA), dura: true as const, estado: 'no_tomada' as const, razon: 'regla dura pendiente: su creador no tiene otra vuelta' }))
   }
   // la opinión libre de GPT llega como OPINIÓN (una ficha `externa` por dueño, nunca bloquea ni cuenta como desacuerdo), con lo que cada dueño decidió
   const externas = respuestas.filter((r) => r.origen === 'externa').sort((a, b) => (a.donde === 'texto' ? -1 : b.donde === 'texto' ? 1 : 0))
@@ -216,7 +241,7 @@ export function aplicarSalidaDeJefatura(pl: Pick<Plantilla, 'familia' | 'clase'>
   else if (opinion?.texto) otros['fichas_externas'] = { opinion: opinion.texto, modelo: opinion.modelo ?? null }
   // 💰 el gasto de la revisión SUMA al del encargo (R1 de CC#3): la oficina le pasó `tope − gasto` a la jefatura y los pasos que siguen (la re-imagen) deben ver lo que queda de verdad.
   // Solo suma al estado del encargo: NO se escribe otra fila en el libro (`oficina_gastos` no la lleva; el libro central `agent_invocations` ya la tiene).
-  const aLaMesa = vuelve ? { vuelve_a_la_mesa: true, aviso_a_la_mesa: [avisoDeLaJefaturaALaMesa(lineas), ...(sen ? pedidoDeRespuesta(sen.datos.enviadas) : [])].join('\n') } : {}
+  const aLaMesa = vuelve ? { vuelve_a_la_mesa: true, aviso_a_la_mesa: [avisoDeLaJefaturaALaMesa(queVuelve, !!sen?.tras_la_vuelta), ...(sen ? pedidoDeRespuesta(sen.datos.enviadas) : [])].join('\n') } : {}
   return { costo_usd: jefatura.costo_usd, artefacto: { ...reimagen, jefatura, ...aLaMesa }, ...(fichas.length ? { fichas } : {}), ...(Object.keys(otros).length ? { otros_artefactos: otros } : {}) }
 }
 
@@ -225,14 +250,17 @@ export function aplicarSalidaDeJefatura(pl: Pick<Plantilla, 'familia' | 'clase'>
  * los hallazgos que vuelven a la pieza se suman como líneas (van a la mesa o quedan como desacuerdo); los de la cadena quedan como devoluciones.
  */
 /** RESPUESTA-LENOVO 17-nov punto 3 · lo que dice la ficha de una regla dura no tomada: la pieza no se publica (nunca «una persona decide») */
-export const REGLA_DURA_NO_TOMADA = 'regla dura no tomada tras la vuelta: la pieza no se publica (firma de Emilio: se toma sí o sí)'
+export const REGLA_DURA_NO_TOMADA = 'regla dura pendiente: la pieza queda en corrección, sin publicarse ni ir a la bandeja (firma de Emilio: se toma sí o sí)'
 
 /** RESPUESTA-LENOVO 17-nov punto 3 · las reglas duras que siguen rotas tras la vuelta: si hay alguna, la pieza se FRENA en el cierre (ni salida ni bandeja) con UNA alarma */
 export function reglasDurasNoTomadas(e: Estado): Hallazgo[] {
   return datosDeLaJefatura(e)?.sentido?.duras_no_tomadas ?? []
 }
 
-function sentidoDeLaRevision(crudas: string[], s: NonNullable<OpcionesDeAplicacion['sentido']>): { lineas: string[]; datos: DatosDelSentido; tras_la_vuelta: boolean } {
+/** 18-nov · las reglas duras de la PIEZA en esta revisión: lo que se mide, el texto que viaja a la mesa y su número para la respuesta */
+interface DurasDeLaPieza { hallazgos: Hallazgo[]; a_la_mesa: string[]; enviadas: Enviada[] }
+
+function sentidoDeLaRevision(crudas: string[], s: NonNullable<OpcionesDeAplicacion['sentido']>): { lineas: string[]; datos: DatosDelSentido; tras_la_vuelta: boolean; duras: DurasDeLaPieza } {
   const ex = s.exactos ? s.exactos(s.ficha, s.textoDeLaPieza) : { hallazgos: [], declarado: [] }
   const jefe = hallazgosDelJefe(crudas, s.ficha)
   const hallazgos = [...ex.hallazgos, ...jefe.hallazgos]
@@ -246,15 +274,26 @@ function sentidoDeLaRevision(crudas: string[], s: NonNullable<OpcionesDeAplicaci
   const r = repartir(sigue, s.filaId, s.encargoId, s.yaDevueltas)
   const respuestas = tras ? leerRespuestas(s.previas!.enviadas, s.previas!.lineasDeRespuesta) : null
   const datos: DatosDelSentido = { ficha: s.ficha.estado, declarado: [...(s.declarado ?? []), ...ex.declarado], hallazgos, devoluciones: r.devoluciones, enviadas: tras ? [] : r.enviadas, no_reabre: [...noReabrePieza, ...r.no_reabre], ...(r.duras_pendientes.length ? { duras_pendientes: r.duras_pendientes } : {}), ...(tras && (durasPiezaQueSiguen.length || r.duras_pendientes.length) ? { duras_no_tomadas: [...durasPiezaQueSiguen, ...r.duras_pendientes] } : {}), ...(respuestas ? { respuestas_del_creador: respuestas } : {}), vuelve_a: r.vuelve_a, cita_no_verificada: r.cita_no_verificada }
-  return { lineas: [...jefe.resto, ...r.a_la_mesa], datos, tras_la_vuelta: tras }
+  // 18-nov · GO Lenovo 13:52Z · las duras de la pieza: tras la vuelta, las que siguen (numeradas de nuevo para la próxima respuesta); en la primera, las de `repartir`
+  const otraVez = tras ? repartir(durasPiezaQueSiguen, null, s.encargoId, s.yaDevueltas) : null
+  const duras: DurasDeLaPieza = otraVez
+    ? { hallazgos: durasPiezaQueSiguen, a_la_mesa: otraVez.a_la_mesa, enviadas: otraVez.enviadas }
+    : { hallazgos: sigue.filter((h) => aPieza(h) && esDura(h)), a_la_mesa: r.enviadas.filter((x) => x.dura).map((x) => x.texto), enviadas: r.enviadas.filter((x) => x.dura) }
+  return { lineas: [...jefe.resto, ...r.a_la_mesa], datos, tras_la_vuelta: tras, duras }
 }
 
 /** 17-nov · GO Lenovo (d) · lo que la mesa recibe cuando la pieza vuelve: los desacuerdos de la jefatura como corrección (la dirección integra y la mesa traduce otra vez). Puro */
-export function avisoDeLaJefaturaALaMesa(desacuerdos: string[]): string {
+export function avisoDeLaJefaturaALaMesa(desacuerdos: string[], soloReglasDuras = false): string {
+  // 18-nov · GO Lenovo 13:52Z · la regla dura vuelve las veces que haga falta (con el tope de dinero del encargo): ya no se dice «es la única vuelta»
+  if (soloReglasDuras) return [
+    'La jefatura volvió a revisar la pieza y estas REGLAS DURAS siguen rotas. Se toman sí o sí: corrígelas en la pieza (usa solo lo que dice la ficha; si un dato no está, quítalo y no lo inventes):',
+    ...desacuerdos.slice(0, 8).map((d) => `- ${d.slice(0, 400)}`),
+    'Mientras sigan rotas, la pieza no se publica ni va a la bandeja: queda en corrección.',
+  ].join('\n')
   return [
     'La jefatura revisó la pieza y quedaron estos desacuerdos sin resolver. Corrígelos en la pieza (si falta un dato que el brief pide, inclúyelo; si no lo tienes, dilo en la pieza y no lo inventes):',
     ...desacuerdos.slice(0, 8).map((d) => `- ${d.slice(0, 400)}`),
-    'Es la única vuelta: después, la pieza va a la bandeja con lo que quede marcado.',
+    'Lo de criterio tiene esta sola vuelta: después, la pieza va a la bandeja con lo que quede marcado. Las reglas duras se toman sí o sí: si siguen rotas, la pieza vuelve otra vez.',
   ].join('\n')
 }
 
