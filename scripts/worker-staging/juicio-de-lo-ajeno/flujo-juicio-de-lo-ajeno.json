@@ -1,0 +1,96 @@
+{
+ "name": "Zero Risk — Cerebro · juicio de lo ajeno (prueba y primera pasada) · CC-CEREBRO",
+ "nodes": [
+  {
+   "id": "w1",
+   "name": "Webhook · a mano (llave interna)",
+   "type": "n8n-nodes-base.webhook",
+   "typeVersion": 2,
+   "position": [
+    0,
+    0
+   ],
+   "webhookId": "cerebro-juicio-de-lo-ajeno",
+   "parameters": {
+    "httpMethod": "POST",
+    "path": "zero-risk/cerebro-juicio-de-lo-ajeno",
+    "responseMode": "lastNode",
+    "options": {}
+   }
+  },
+  {
+   "id": "e1",
+   "name": "⓪ Entrada",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    240,
+    0
+   ],
+   "parameters": {
+    "jsCode": "// ⓪ ENTRADA · el juicio de lo ajeno POR EL FLUJO (ADENDA 2 del encargo 4 · CC-CEREBRO · 18-nov).\n//  · Solo por webhook con la llave interna (x-api-key). Sin llave, sin client_id uuid o sin `dry_run` booleano: se DETIENE aquí y no llama a nadie.\n//  · El flujo y la ejecución salen de n8n ($workflow.id y $execution.id): son REALES; nadie los puede inventar desde afuera.\n//  · Como mucho 6 tandas por ejecución (≤ 6 llamadas · ≤ US$ 0,144 con el tope por llamada; y caben en los 280 s de la ruta).\nconst UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i\nconst h = $('Webhook · a mano (llave interna)').first().json\nconst esperada = String($env.INTERNAL_API_KEY || '')\nconst recibida = String((h.headers || {})['x-api-key'] || '')\nif (!esperada || recibida !== esperada) throw new Error('SIN_LLAVE · falta o no coincide x-api-key · se DETIENE')\nconst b = h.body || {}\nif (!UUID.test(String(b.client_id || ''))) throw new Error('SIN_CLIENTE · client_id debe ser un uuid · se DETIENE')\nif (typeof b.dry_run !== 'boolean') throw new Error('DRY_RUN_OBLIGATORIO · dry_run debe ser true o false · se DETIENE')\nconst ids = Array.isArray(b.ids) ? b.ids.map(String).filter((x) => UUID.test(x)) : undefined\nconst tandas = Number.isInteger(b.tandas) && b.tandas >= 1 && b.tandas <= 6 ? b.tandas : 2\nreturn [{ json: { client_id: b.client_id, dry_run: b.dry_run, escribir: b.escribir !== false, tandas, ...(ids ? { ids } : {}), workflow_id: String($workflow.id), workflow_execution_id: String($execution.id) } }]\n"
+   }
+  },
+  {
+   "id": "j1",
+   "name": "① Juicio de lo ajeno",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    480,
+    0
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "https://zero-risk-platform.vercel.app/api/brain/alimentar/juicio-de-lo-ajeno",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "Content-Type",
+       "value": "application/json"
+      },
+      {
+       "name": "x-api-key",
+       "value": "={{ $env.INTERNAL_API_KEY }}"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify($json) }}",
+    "options": {
+     "timeout": 300000
+    }
+   }
+  }
+ ],
+ "connections": {
+  "Webhook · a mano (llave interna)": {
+   "main": [
+    [
+     {
+      "node": "⓪ Entrada",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "⓪ Entrada": {
+   "main": [
+    [
+     {
+      "node": "① Juicio de lo ajeno",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1",
+  "timezone": "UTC"
+ }
+}
