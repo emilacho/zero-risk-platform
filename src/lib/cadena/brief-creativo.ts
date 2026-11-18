@@ -74,6 +74,12 @@ export const TITULO_DE_LA_SECCION: Partial<Record<Seccion, string>> = { Mensaje:
 /** los otros nombres que el lector acepta para una sección */
 const OTROS_NOMBRES: Partial<Record<Seccion, string[]>> = { Mensaje: ['Lo único que hay que comunicar'] }
 const tituloVisible = (k: Seccion): string => TITULO_DE_LA_SECCION[k] ?? k
+/**
+ * 18-nov (T7 · DIAGNÓSTICO CC5 · GO Lenovo): LOS TÍTULOS QUE PIDE LA PLANTILLA, de UNA sola fuente. La mesa del brief recibía dos plantillas (la referencia del marco y la
+ * convención vieja de la oficina, que pedía «## Mensaje», un llamado por red y nada de «Público»); ahora la convención de la mesa sale de aquí.
+ */
+export const TITULOS_DEL_BRIEF: readonly string[] = SECCIONES_DEL_BRIEF.map(tituloVisible)
+export const TITULOS_OBLIGATORIOS_DEL_BRIEF: readonly string[] = OBLIGATORIAS.map(tituloVisible)
 export const MAX_CARACTERES_DEL_MENSAJE = 260
 export const MIN_CARACTERES_DE_CITA = 12
 const CLICHES_DE_PUBLICO = ['todos', 'todo el mundo', 'toda la poblacion', 'publico general', 'cualquier persona', 'cualquiera', 'toda la gente', 'la gente']
@@ -141,9 +147,32 @@ export function seccionesObligatoriasQueFaltan(md: string): string[] {
 }
 
 /** ¿la cita está literal en el documento? Una elisión («…», «...», «[…]», «(…)») parte la cita: cada tramo tiene que estar */
+const tramosDeLaCita = (cita: string): string[] => cita.split(/\s*(?:\[\s*(?:…|\.\.\.)\s*\]|\(\s*(?:…|\.\.\.)\s*\)|…|\.\.\.)\s*/).filter((x) => normalizar(x).length >= 4)
 function citaLiteralEn(documento: string, cita: string): boolean {
-  const tramos = cita.split(/\s*(?:\[\s*(?:…|\.\.\.)\s*\]|\(\s*(?:…|\.\.\.)\s*\)|…|\.\.\.)\s*/).filter((x) => normalizar(x).length >= 4)
+  const tramos = tramosDeLaCita(cita)
   return tramos.length > 0 && tramos.every((x) => citaAparece(documento, x))
+}
+
+/**
+ * HASTA DÓNDE COINCIDE una cita que no es literal (18-nov · T7 · DIAGNÓSTICO CC5 · GO Lenovo, punto 3): solo TEXTO para la devolución, no juzga ni bloquea nada.
+ * En T7 la v2 del brief arregló unas citas y rompió otras porque solo sabía «no está literal». Devuelve las últimas palabras (máx. 6) del comienzo más largo del primer
+ * tramo que no aparece; '' si ni su comienzo aparece; null si la cita sí es literal. Compara con la MISMA lectura que el chequeo (`citaAparece`).
+ */
+export function hastaDondeCoincide(documento: string, cita: string): string | null {
+  const doc = textoDelDocumento(documento)
+  const roto = tramosDeLaCita(cita).find((x) => !citaAparece(doc, x))
+  if (roto == null) return null
+  const palabras = roto.trim().split(/\s+/)
+  let mejor = 0
+  for (let m = 1; m <= palabras.length; m++) {
+    if (citaAparece(doc, palabras.slice(0, m).join(' '))) mejor = m
+    else if (mejor > 0) break
+  }
+  return mejor ? palabras.slice(Math.max(0, mejor - 6), mejor).join(' ') : ''
+}
+const pistaDeLaCita = (documento: string, cita: string, nombre: string): string => {
+  const p = hastaDondeCoincide(documento, cita)
+  return p == null ? '' : p ? ` · coincide con el ${nombre} hasta «…${p}» y desde ahí cambia` : ` · ni su comienzo está en el ${nombre}`
 }
 
 /**
@@ -241,7 +270,9 @@ export function leerBriefCreativo(md: string, ins: InsumosDelBrief): BriefCreati
   }
   // 10-nov (GO de Lenovo): TODAS las citas son literales · una cita nunca se corrige
   for (const x of citasQueNoAparecen(md, { plan: ins.planTexto, manual: ins.manualTexto })) {
-    bloqueos.push(`la cita «${x.cita.slice(0, 80)}» (en «## ${x.seccion}») no está literal en el ${x.fuente === 'manual' ? 'manual' : 'plan'} · una cita nunca se corrige: cópiala tal cual y, si el cambio pedido la contradice, explícalo fuera de la cita`)
+    const nombre = x.fuente === 'manual' ? 'manual' : 'plan'
+    const pista = pistaDeLaCita(x.fuente === 'manual' ? ins.manualTexto ?? '' : ins.planTexto, x.cita, nombre)
+    bloqueos.push(`la cita «${x.cita.slice(0, 80)}» (en «## ${x.seccion}») no está literal en el ${nombre}${pista} · una cita nunca se corrige: cópiala tal cual y, si el cambio pedido la contradice, explícalo fuera de la cita`)
   }
 
   // objetivo por red: «- ig: objetivo · llamado»
@@ -311,6 +342,8 @@ export function hallazgosDelBrief(b: BriefCreativoLeido): Hallazgo[] {
  * 17-nov (Sprint 4 · C · el brief sin órdenes · vara IPA «Better Briefs»): el brief dice el problema, el público, LO ÚNICO que hay que comunicar con sus razones para creer,
  * las rutas vivas del plan, los límites y cómo se medirá. NO escribe el anuncio, no fija llamados ni formatos, no elige fotos; precio, horario y plazos van a la ficha de la oferta.
  */
+export const REGLA_DE_LA_CITA_DE_TABLA = 'Si lo que citas está en una TABLA del documento, cita UNA celda tal cual, cada una en su propio `> «…»`; la fila y la columna se nombran FUERA de la cita (por ejemplo, la línea «Fila 1, columna B:» y debajo `> «<el texto exacto de esa celda>»`). Nunca juntes una fila entera en una cita ni le agregues dentro los nombres de las columnas: así ya no está literal en el documento.'
+
 export const REFERENCIA_DEL_BRIEF_CREATIVO = [
   '# El brief creativo de campaña (brief_creativo.v1) · UNO por campaña, corto',
   'Escribe EXACTAMENTE estas secciones (markdown, `## Título`); lo que no sepas se declara en «Faltantes», nunca se rellena.',
@@ -331,4 +364,6 @@ export const REFERENCIA_DEL_BRIEF_CREATIVO = [
   '## Faltantes · «- <campo>: <qué falta>» (declarado, no rellenado) · ## Contradicciones plan vs manual · «- qué · plan dice · manual dice · qué se hizo» · ## Citas · «A1 usé: …» (de qué documento sale cada cosa).',
   'Lo que NO va en el brief: el texto final de un anuncio; el llamado a la acción y los formatos de las piezas; las fotos (ni elegidas ni citadas por número: las mira la mesa de la gran idea); el precio, el horario y los plazos escritos de memoria (solo llegan citados de la ficha de cada oferta, en «Hechos de las ofertas»).',
   'Toda cita (un bloque `> «…»` o «el plan dice: «…»» / «el manual dice: «…»») va LITERAL, copiada de su documento: una cita nunca se corrige; si algo la contradice, se explica fuera de ella.',
+  // 18-nov (T7 · DIAGNÓSTICO CC5 · GO Lenovo): las rutas y metas de un plan suelen venir en tablas; el brief aplanaba la fila y le sumaba los nombres de las columnas, y la cita dejaba de ser literal
+  REGLA_DE_LA_CITA_DE_TABLA,
 ].join('\n')
