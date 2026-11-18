@@ -7,13 +7,13 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { abrirCampana, avanzarCampana, calendarioGuardar, calendarioPreparar, estrategiaGuardar, estrategiaPreparar, relojDeLaCadena, type Estrategia } from '../index'
 import {
-  ESTADOS_EN_MARCHA, PREFIJO_DE_PAUSA_DEL_TABLERO, causaQueSigue, flujoCampana, flujoDeCampana, hitoDeLaCampana, leerPausaDelTablero, motivoBreve, motivoDePausaDelTablero,
+  ESTADOS_EN_MARCHA, PREFIJO_DE_PAUSA_DEL_TABLERO, causaQueSigue, topeDeLaPlanificacion, flujoCampana, flujoDeCampana, hitoDeLaCampana, leerPausaDelTablero, motivoBreve, motivoDePausaDelTablero,
 } from '../flujo-de-campana'
 import { ACCIONES } from '../acciones'
 import { briefAbrir, conceptoAbrir, hojaEscribir, CODIGO_CAMPANA_PAUSADA } from '../mesas'
 import { fichasPreparar } from '../pasos'
 import { estrategiaPasar, calendarioPasar } from '../revision-jefatura'
-import { topeDelPaso } from '../constantes'
+import { PASOS, PASOS_CON_PRESUPUESTO_PROPIO, topeDelPaso } from '../constantes'
 import { AlmacenMemoria } from '../__fixtures__/almacen-memoria'
 import { clienteA, contextoDe, tandaBuena } from '../__fixtures__/clientes'
 
@@ -197,10 +197,17 @@ describe('el rojo: intenta reanudar, revisando la causa ANTES', () => {
   it('la causa se mide con la MISMA regla que frena el paso (gastado + tope de un calendario > bolsa)', async () => {
     const al = almacen(); const id = await sinBolsa(al)
     const gastado = (await al.corridasDeCampana(id)).reduce((s, c) => s + (c.costo_usd ?? 0), 0)
-    await al.actualizarCampana(id, { presupuesto_planificacion_usd: gastado + topeDelPaso('calendario') })
+    await al.actualizarCampana(id, { presupuesto_planificacion_usd: gastado + topeDeLaPlanificacion() })
     expect(await causaQueSigue(al, await estado(al, id))).toBeNull()
-    await al.actualizarCampana(id, { presupuesto_planificacion_usd: gastado + topeDelPaso('calendario') - 0.01 })
+    await al.actualizarCampana(id, { presupuesto_planificacion_usd: gastado + topeDeLaPlanificacion() - 0.01 })
     expect(await causaQueSigue(al, await estado(al, id))).toMatch(/sigue sin alcanzar/)
+  })
+  it('el tope que se mide es el MAYOR de los pasos que gastan de la bolsa de planificación (no solo el del calendario · CC3)', () => {
+    const deLaPlanificacion = PASOS.filter((p) => !PASOS_CON_PRESUPUESTO_PROPIO.has(p))
+    expect(deLaPlanificacion).toEqual(expect.arrayContaining(['estrategia', 'calendario']))
+    expect(deLaPlanificacion).not.toContain('fichas')
+    for (const p of deLaPlanificacion) expect(topeDeLaPlanificacion()).toBeGreaterThanOrEqual(topeDelPaso(p))
+    expect(deLaPlanificacion.map(topeDelPaso)).toContain(topeDeLaPlanificacion())
   })
   it('la pausa del reloj (7 días) es roja y reanuda al estado que falte: con el calendario hecho, `activa`', async () => {
     const al = almacen(); const id = await activa(al)

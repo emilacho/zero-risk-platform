@@ -18,7 +18,7 @@
 import type { Almacen, Campana, EstadoCampana } from './almacen'
 import { autorizarLlamada, cadena, compuerta, err, type Respuesta } from './autorizar'
 import { arrancarAlActivar } from './arranque'
-import { medidaDeCampana, topeDelPaso } from './constantes'
+import { medidaDeCampana, PASOS, PASOS_CON_PRESUPUESTO_PROPIO, topeDelPaso } from './constantes'
 import { diasEntre, esFechaIso, lunesDe } from './fechas'
 import { abrirEsperaDe, bolsaDelPaso, resolverEsperas } from './nucleo'
 import { transicionValida } from './campanas'
@@ -93,11 +93,16 @@ export async function anotarSiPausadaPorElTablero(al: Almacen, c: Campana, a: En
   return al.actualizarCampana(c.id, { estado_motivo: motivoDePausaDelTablero(a, hitoDeLaCampana({ ...actual, estado: a }, ahora)) })
 }
 
+/** el tope mayor entre los pasos que gastan de la bolsa de planificación (todos los que no tienen bolsa propia) */
+export const topeDeLaPlanificacion = (): number => Math.max(...PASOS.filter((p) => !PASOS_CON_PRESUPUESTO_PROPIO.has(p)).map(topeDelPaso))
+
 /** la causa conocida que SIGUE impidiendo reanudar (hoy: la bolsa de planificación) · null = no se conoce ninguna que siga */
 export async function causaQueSigue(al: Almacen, c: Campana): Promise<string | null> {
   if (/presupuesto de planificación se agotó/i.test(String(c.estado_motivo ?? ''))) {
+    // la MISMA comparación que frena el paso (`prepararCorrida`, nucleo.ts) con el tope MAYOR de los pasos que gastan de esta bolsa (sugerencia de CC3):
+    // si un paso sube su esperado, una campaña parada en ESE paso no se da por resuelta antes de tiempo
     const { gastado, presupuesto } = await bolsaDelPaso(al, c, 'calendario')
-    if (gastado + topeDelPaso('calendario') > presupuesto) return `la bolsa de planificación sigue sin alcanzar (US$ ${gastado.toFixed(2)} de ${presupuesto})`
+    if (gastado + topeDeLaPlanificacion() > presupuesto) return `la bolsa de planificación sigue sin alcanzar (US$ ${gastado.toFixed(2)} de ${presupuesto})`
   }
   return null
 }
