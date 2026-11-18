@@ -428,11 +428,14 @@ export async function cerrarTanda(al: Almacen, p: { campana: Campana; formatos: 
   // J7 · lo mismo para el calendario: la PRIMERA tanda es la que mueve la campaña a `activa`; con la jefatura abriendo, se retiene hasta que cierre su revisión
   let retenida: { tipo: 'calendario'; tanda: number; objeto_id: string; vence_en: string } | null = null
   let arranque: ResultadoDelArranque | null = null
-  // 18-nov · botón «Flujo de la campaña»: pausada por el tablero mientras se armaba la primera tanda → la tanda se guarda y la campaña NO se activa (al reanudar vuelve a `activa` y el arranque corre ahí)
-  if (campana.estado === 'pausada' && leerPausaDelTablero(campana.estado_motivo)?.vuelve_a === 'calendario') await anotarSiPausadaPorElTablero(al, campana, 'activa', ahora)
-  else if (campana.estado === 'calendario') {
+  // 18-nov · botón «Flujo de la campaña»: pausada por el tablero mientras se armaba la primera tanda → la tanda se guarda y la campaña NO se activa.
+  // 🔴 de CC7: la pausa RESPETA la revisión de la jefatura. Si retiene, la espera se abre igual y la pausa sigue «vuelve a: calendario» (la `transicion` de la jefatura,
+  // al cerrar, la pasa a «vuelve a: activa»); si no retiene, «vuelve a: activa» ya, y el arranque corre al reanudar
+  const pausadaArmando = campana.estado === 'pausada' && leerPausaDelTablero(campana.estado_motivo)?.vuelve_a === 'calendario'
+  if (pausadaArmando || campana.estado === 'calendario') {
     const retencion = await retencionDe(al, 'calendario', campana.client_id)
-    if (retencion.retener) {
+    if (pausadaArmando && !retencion.retener) await anotarSiPausadaPorElTablero(al, campana, 'activa', ahora)
+    else if (retencion.retener) {
       const espera = await retenerParaRevision(al, campana, 'calendario', tanda, ahora)
       retenida = { tipo: 'calendario', tanda, objeto_id: espera.objeto_id, vence_en: espera.vence_en }
     } else arranque = (await activarYArrancar(al, campana, ahora)).arranque // 20-oct · parte 3: la campaña pasa a `activa` AQUÍ en el camino real; el arranque por evento tiene que salir de aquí también

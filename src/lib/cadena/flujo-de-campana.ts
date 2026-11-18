@@ -21,7 +21,18 @@ import { arrancarAlActivar } from './arranque'
 import { medidaDeCampana, PASOS, PASOS_CON_PRESUPUESTO_PROPIO, topeDelPaso } from './constantes'
 import { diasEntre, esFechaIso, lunesDe } from './fechas'
 import { abrirEsperaDe, bolsaDelPaso, resolverEsperas } from './nucleo'
-import { transicionValida } from './campanas'
+
+/**
+ * Las transiciones del BOTÓN, aparte de `TRANSICIONES` de `campanas.ts` (🟡 de CC7: la tabla general NO se ensancha; `avanzar` desde un flujo sigue como antes):
+ *   · parar: desde cualquier estado en marcha → `pausada` (solo se llega con el botón verde: no necesita otra revisión)
+ *   · reanudar: `pausada` → el estado anotado (cualquiera en marcha) · `necesita_humano` o la pausa del reloj → estrategia · calendario · activa (lo que falte)
+ */
+const DESDE_LA_DETENCION: readonly string[] = ['estrategia', 'calendario', 'activa']
+function puedePasar(desde: EstadoCampana, a: EstadoCampana): boolean {
+  if (desde === 'pausada') return enMarcha(a)
+  if (desde === 'necesita_humano') return DESDE_LA_DETENCION.includes(a)
+  return false
+}
 
 /** los estados en que la campaña está viva y avanzando: el botón está verde y se puede parar */
 export const ESTADOS_EN_MARCHA = ['abierta', 'estrategia', 'calendario', 'activa'] as const satisfies readonly EstadoCampana[]
@@ -96,6 +107,9 @@ export async function anotarSiPausadaPorElTablero(al: Almacen, c: Campana, a: En
 /** el tope mayor entre los pasos que gastan de la bolsa de planificación (todos los que no tienen bolsa propia) */
 export const topeDeLaPlanificacion = (): number => Math.max(...PASOS.filter((p) => !PASOS_CON_PRESUPUESTO_PROPIO.has(p)).map(topeDelPaso))
 
+/** 🟡 de CC7: la llave de la espera lleva la HORA (no solo el día): pausar, reanudar y volver a pausar el mismo día abre una espera nueva (la del reloj semanal es otra, `pausa:<id>:<día>`) */
+export const llaveDePausaDelTablero = (campanaId: string, ahora: string): string => `pausa-tablero:${campanaId}:${ahora}`
+
 /** la causa conocida que SIGUE impidiendo reanudar (hoy: la bolsa de planificación) · null = no se conoce ninguna que siga */
 export async function causaQueSigue(al: Almacen, c: Campana): Promise<string | null> {
   if (/presupuesto de planificación se agotó/i.test(String(c.estado_motivo ?? ''))) {
@@ -117,7 +131,7 @@ async function destinoTrasDetencion(al: Almacen, c: Campana): Promise<EnMarcha> 
 
 /** pasa la campaña a un estado en marcha: resuelve las esperas de la detención y, al quedar `activa`, el arranque corre como en `avanzar` */
 async function ponerEnMarcha(al: Almacen, c: Campana, a: EnMarcha, ahora: string) {
-  if (!transicionValida(c.estado, a)) throw new Error(`una campaña ${c.estado} no puede pasar a ${a}`)
+  if (!puedePasar(c.estado, a)) throw new Error(`una campaña ${c.estado} no puede pasar a ${a}`)
   if (c.estado === 'necesita_humano') await resolverEsperas(al, c.id, 'necesita_humano')
   if (c.estado === 'pausada') await resolverEsperas(al, c.id, 'campana_pausada')
   const n = await al.actualizarCampana(c.id, { estado: a, estado_motivo: null })
@@ -143,9 +157,8 @@ export async function flujoCampana(al: Almacen, cuerpo: Record<string, unknown>,
 
   if (quiero === 'parar') {
     if (antes.color !== 'verde') return { status: 200, cuerpo: { ya_estaba: true, campana: c, flujo: antes } }
-    if (!transicionValida(c.estado, 'pausada')) return err(409, 'E-TRANSICION', `una campaña ${c.estado} no puede pasar a pausada`)
     const n = await al.actualizarCampana(c.id, { estado: 'pausada', estado_motivo: motivoDePausaDelTablero(c.estado as EnMarcha, hitoDeLaCampana(c, ahora)) })
-    await abrirEsperaDe(al, n, 'campana_pausada', n.id, 'campaña pausada desde el tablero', ahora, {}, `pausa:${n.id}:${ahora.slice(0, 10)}`)
+    await abrirEsperaDe(al, n, 'campana_pausada', n.id, 'campaña pausada desde el tablero', ahora, {}, llaveDePausaDelTablero(n.id, ahora))
     return { status: 200, cuerpo: { campana: n, flujo: flujoDeCampana(n) } }
   }
 

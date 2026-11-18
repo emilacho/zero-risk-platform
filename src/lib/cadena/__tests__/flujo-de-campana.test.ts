@@ -20,6 +20,8 @@ import { clienteA, contextoDe, tandaBuena } from '../__fixtures__/clientes'
 const A = clienteA()
 const AHORA = '2026-10-09T12:00:00Z'
 const LUEGO = '2026-10-12T10:00:00Z'
+// 18-nov · con #1175 (día 1 = la apertura) la campaña se abre el lunes 12, para que las fechas de la tanda de prueba sigan dentro (lo mismo que hizo CC3 en sus pruebas); sin #1175 da igual
+const ABRE = '2026-10-12T08:00:00Z'
 const wf = (extra: Record<string, unknown> = {}) => ({ workflow_id: 'wf-cadena', workflow_execution_id: 'ex-1', ...extra })
 const tablero = (extra: Record<string, unknown> = {}) => ({ workflow_id: 'tablero', workflow_execution_id: 'tablero:flujo:1', ...extra })
 const almacen = () => new AlmacenMemoria({
@@ -29,7 +31,7 @@ const almacen = () => new AlmacenMemoria({
 const ok = (o: unknown, costo = 0.3) => ({ success: true, structured_output: o, cost_usd: costo })
 
 async function abierta(al: AlmacenMemoria) {
-  const c = await abrirCampana(al, { ...wf(), client_id: A.clientId, seco: true }, AHORA)
+  const c = await abrirCampana(al, { ...wf(), client_id: A.clientId, seco: true }, ABRE)
   return (c.cuerpo.campana as { id: string }).id
 }
 async function enCalendario(al: AlmacenMemoria) {
@@ -350,5 +352,37 @@ describe('🔴 con la campaña pausada no arranca nada nuevo (cada brazo con su 
     const c = await estado(al, id)
     expect(c.estado).toBe('pausada'); expect(leerPausaDelTablero(c.estado_motivo)?.vuelve_a).toBe('activa')
     expect(al.sala.size).toBe(0)
+  })
+})
+
+describe('correcciones de CC7 a 8292d2a', () => {
+  it('🔴 pausar ARMANDO la primera tanda con la jefatura reteniendo: la revisión se abre igual, reanudar vuelve a calendario (NO activa) y la jefatura la activa al cerrar', async () => {
+    const al = almacen(); al.retencion = async (tipo) => ({ retener: tipo === 'calendario', motivo: 'jefatura_activa' })
+    const id = await enCalendario(al)
+    const t = await calendarioPreparar(al, { ...wf(), campana_id: id, tanda: 1 }, AHORA)
+    await flujo(al, id, 'parar', AHORA)
+    const g = await calendarioGuardar(al, { ...wf(), campana_id: id, tanda: 1, corrida_id: t.cuerpo.corrida_id, resultado: ok(tandaBuena(A)) }, AHORA)
+    expect(g.status).toBe(200); expect(g.cuerpo.retenida_para_revision).toBeTruthy()
+    expect(leerPausaDelTablero((await estado(al, id)).estado_motivo)?.vuelve_a).toBe('calendario')
+    await flujo(al, id, 'reanudar')
+    expect((await estado(al, id)).estado).toBe('calendario')
+    expect(al.sala.size).toBe(0)
+    const r = await calendarioPasar(al, { ...wf(), campana_id: id, tanda: 1 })
+    expect(r.status).toBe(200)
+    expect((await estado(al, id)).estado).toBe('activa')
+  })
+  it('🟡 la tabla general NO se ensanchó: «avanzar» desde un flujo no pausa una campaña en estrategia ni calendario', async () => {
+    const al = almacen(); const id = await enCalendario(al)
+    const r = await avanzarCampana(al, wf({ campana_id: id, a: 'pausada' }), LUEGO)
+    expect(r.status).toBe(409)
+    expect((await estado(al, id)).estado).toBe('calendario')
+  })
+  it('🟡 pausar, reanudar y volver a pausar el MISMO día deja una espera de pausa viva (la llave lleva la hora)', async () => {
+    const al = almacen(); const id = await activa(al)
+    await flujo(al, id, 'parar', '2026-10-12T10:00:00Z')
+    await flujo(al, id, 'reanudar', '2026-10-12T10:05:00Z')
+    expect(await vivas(al, id, 'campana_pausada')).toHaveLength(0)
+    await flujo(al, id, 'parar', '2026-10-12T10:10:00Z')
+    expect(await vivas(al, id, 'campana_pausada')).toHaveLength(1)
   })
 })
