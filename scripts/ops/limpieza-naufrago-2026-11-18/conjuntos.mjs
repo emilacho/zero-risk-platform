@@ -36,6 +36,8 @@ export const CONJUNTOS = [
   { tabla: 'workflow_checkpoints', donde: `client_id = '${C}'`, esperado: 65 },
   // la sala por STREAM ENTERO (ADENDA 4 de CC7): BRIEF de la campaña y PIEZAS de las partes borradas; se quedan el alta, el plan y el reel (009abba3)
   { tabla: 'sala_event_log', donde: `stream_id in (select stream_id from public.sala_event_log where client_id = '${C}' group by stream_id having bool_or(journey_type = 'BRIEF') or (bool_or(journey_type = 'PIEZAS') and not bool_or(coalesce(logical_period, '') || coalesce(idempotency_key, '') like '%009abba3%')))`, esperado: 82 },
+  // camino (B) de Lenovo: la campaña misma, al final (la vuelta atrás la repone PRIMERO, antes que sus hijas)
+  { tabla: 'cadena_campanas', donde: `id = '${CAMP}' and client_id = '${C}'`, esperado: 1 },
 ]
 /** las 3 libretas: se respalda el VALOR ENTERO de la clave; la vuelta atrás lo repone tal cual */
 export const LIBRETAS = ['reubicacion_libreta', 'rehacer_fallidos_libreta', 'reintentos_piezas']
@@ -48,9 +50,11 @@ export const ARCHIVOS = [
 
 const ref = () => new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname.split('.')[0]
 /** una consulta por la API de administración; `soloLectura` la manda con read_only */
-export async function sql(query, soloLectura = true) {
+export async function sql(query, soloLectura = true, intento = 0) {
   const r = await fetch(`https://api.supabase.com/v1/projects/${ref()}/database/query`, { method: 'POST', headers: { Authorization: `Bearer ${process.env.SUPABASE_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }, body: JSON.stringify(soloLectura ? { query, read_only: true } : { query }) })
   const t = await r.text()
+  // la API limita las consultas seguidas (429, medido el 18-nov): espera creciente, máximo 5 intentos; nada más se reintenta
+  if (r.status === 429 && intento < 5) { await new Promise((ok) => setTimeout(ok, 2000 * 2 ** intento)); return sql(query, soloLectura, intento + 1) }
   if (!r.ok) throw new Error(`${r.status} ${t.slice(0, 800)}`)
   return JSON.parse(t)
 }

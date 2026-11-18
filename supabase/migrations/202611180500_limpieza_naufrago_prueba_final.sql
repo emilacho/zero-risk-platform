@@ -3,7 +3,8 @@
 -- Lista: INVENTARIO-CC7-limpieza-naufrago (ADENDA 3, lista final) + HALLAZGO-CC3-a-CC7-CC6-LENOVO (5 correcciones: el reel y el plan).
 --
 -- SE BORRA (solo Náufrago `0a2ffbd4…`):
---   · las hijas de la campaña `28de888e` (incluida la estrategia). La campaña SE QUEDA: camino (A), `reabrirCampana`.
+--   · la campaña `28de888e` y todas sus hijas (incluida la estrategia). Camino (B) de Lenovo (RESPUESTA-LENOVO reabrir-y-cotizacion, 04:21Z): la corrida
+--     abre una campaña NUEVA con `abrir` y el mismo plan. Condición cumplida: el reel no se rompe sin ella (RESPUESTA-CC3 el-reel-no-se-rompe-sin-su-campana).
 --   · las salidas posteriores al plan: los 5 `campaign_piece` y 2 de los 3 `campaign_brief_pack` (`27a1febc`, `ce085548`).
 --   · la oficina (19 encargos y sus hijas), las 4 revisiones de `jefatura` de tipo `pieza`, 8 filas de la bandeja (gran idea y piezas),
 --     4 avisos de la campaña, `estudio_piezas`, `autorevisiones_del_productor`, `workflow_checkpoints`;
@@ -29,11 +30,13 @@ do $limpieza$
 declare
   c   constant uuid := '0a2ffbd4-957c-4315-a37f-b9e4fbbbb312';  -- Náufrago
   ct  constant text := '0a2ffbd4-957c-4315-a37f-b9e4fbbbb312';  -- el mismo, en las tablas que lo guardan como texto
-  camp constant uuid := '28de888e-b3f2-4aca-86b3-2c7f7bf6685a'; -- la campaña (se queda, vacía)
+  camp constant uuid := '28de888e-b3f2-4aca-86b3-2c7f7bf6685a'; -- la campaña (se borra al final, después de sus hijas · camino B)
   reel constant uuid := '2ed549cc-f452-4261-b334-3b35a6dd5a4d'; -- el reel que espera a Emilio (se queda)
   parte_reel constant uuid := '009abba3-0da4-4d7e-9329-5f3bfe34ce36';
+  plan_de_camp text;
   n int;
 begin
+  plan_de_camp := (select plan_id::text from public.cadena_campanas where id = camp);
   -- ── 0 · lo que se queda, ANTES (si esto no cuadra, nada se toca)
   if (select count(*) from public.clients where id = c) <> 1 then raise exception 'candado: no está la ficha de Náufrago'; end if;
   if (select estado from public.cadena_campanas where id = camp and client_id = ct) is distinct from 'pausada' then raise exception 'candado: la campaña % no está pausada', camp; end if;
@@ -144,6 +147,10 @@ begin
    where clave = 'reintentos_piezas' and (select count(*) from jsonb_object_keys(valor) k where k like '2a93029a-%' or k like '27a1febc-%' or k like 'ce085548-%') = 7;
   get diagnostics n = row_count; if n <> 1 then raise exception 'candado reintentos_piezas: % (esperaba 1)', n; end if;
 
+  -- ── 7b · la campaña misma, al final (sus 10 hijas ya están vacías: son las únicas llaves foráneas hacia `cadena_campanas`)
+  delete from public.cadena_campanas where id = camp and client_id = ct and estado = 'pausada';
+  get diagnostics n = row_count; if n <> 1 then raise exception 'candado cadena_campanas: % (esperaba 1)', n; end if;
+
   -- ── 8 · DESPUÉS: lo borrado quedó en 0 y lo que se queda, intacto
   if (select count(*) from public.oficina_encargos where client_id = ct) <> 1 then raise exception 'después: quedan encargos de Náufrago además del reel'; end if;
   if (select count(*) from public.oficina_turnos where encargo_id = reel) <> 17 then raise exception 'después: el reel no tiene sus 17 turnos'; end if;
@@ -160,10 +167,9 @@ begin
   if (select count(*) from public.sala_event_log where client_id = c) <> 35 then raise exception 'después: la sala del alta, el plan y el reel no está entera (35)'; end if;
   if (select count(*) from public.sala_event_log where client_id = c and journey_type = 'PIEZAS') <> 6 then raise exception 'después: faltan las 6 filas de la sala del reel'; end if;
   if (select count(*) from public.plan_corridas where client_id = ct) <> 6 then raise exception 'después: las corridas del plan no están enteras (6)'; end if;
-  if (select count(*) from public.cadena_campanas where id = camp) <> 1 then raise exception 'después: la campaña tiene que quedarse'; end if;
-  if exists (select 1 from public.cadena_estrategias where campana_id = camp) or exists (select 1 from public.cadena_calendario_filas where campana_id = camp)
-     or exists (select 1 from public.cadena_brief_creativo where campana_id = camp) or exists (select 1 from public.cadena_conceptos where campana_id = camp)
-  then raise exception 'después: la campaña no quedó vacía (reabrirCampana frenaría con E-YA-ARMADA)'; end if;
+  if exists (select 1 from public.cadena_campanas where id = camp) then raise exception 'después: la campaña sigue ahí'; end if;
+  if plan_de_camp is null or exists (select 1 from public.cadena_campanas where client_id = ct and plan_id::text = plan_de_camp) then raise exception 'después: queda otra campaña con el mismo plan (abrir contestaría ya_abierta)'; end if;
+  if (select count(*) from public.client_historical_outputs where id = parte_reel and provenance_tag->>'campana_id' = camp::text) <> 1 then raise exception 'después: la parte del reel perdió su sello'; end if;
 
   raise notice 'limpieza de Náufrago: hecha · el reel % y el plan intactos', reel;
 end

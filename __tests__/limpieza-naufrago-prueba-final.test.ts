@@ -53,7 +53,9 @@ describe('limpieza de Náufrago · 202611180500', () => {
     expect(cuerpo).toMatch(/delete from public\.hitl_queue where client_id = c and type in \('concepto_review', 'content_piece_review'\);/)
     expect(cuerpo).toMatch(/delete from public\.jefatura_revisiones where client_id = ct and artifact_type = 'pieza';/)
     expect(cuerpo).not.toMatch(/delete from public\.esperas_del_dueno/)
-    expect(cuerpo).not.toMatch(/delete from public\.(client_brand_books|plan_aprobaciones|plan_cambios|finanzas_\w+|clients|cadena_campanas)\b/)
+    expect(cuerpo).not.toMatch(/delete from public\.(client_brand_books|plan_aprobaciones|plan_cambios|finanzas_\w+|clients)\b/)
+    // de `cadena_campanas` solo sale ESA campaña (camino B), nunca otra del cliente
+    expect(cuerpo.match(/delete from public\.cadena_campanas[^;]*;/g)).toEqual(["delete from public.cadena_campanas where id = camp and client_id = ct and estado = 'pausada';"])
     expect(cuerpo).not.toMatch(/output_type = 'campaign_plan_90d'[^;]*;\s*\n\s*get diagnostics/)
   })
 
@@ -74,8 +76,16 @@ describe('limpieza de Náufrago · 202611180500', () => {
     for (const t of ['hitl_queue', 'agent_outcomes', 'campaign_results']) expect(cuerpo).toMatch(new RegExp(`from public\\.${t} h join public\\.client_historical_outputs o on o\\.id = h\\.output_id`))
   })
 
-  it('la campaña queda vacía para reabrirla: se borran la estrategia, el calendario, el brief y la gran idea, y se comprueba', () => {
-    for (const t of ['cadena_estrategias', 'cadena_calendario_filas', 'cadena_brief_creativo', 'cadena_conceptos']) expect(cuerpo).toMatch(new RegExp(`delete from public\\.${t} where campana_id = camp;`))
-    expect(cuerpo).toMatch(/E-YA-ARMADA/)
+  it('camino (B): la campaña se borra DESPUÉS de todas sus hijas, y se comprueba que no quede ninguna con su plan y que la parte del reel conserve su sello', () => {
+    const hijas = ['cadena_filas_elegidas', 'cadena_validaciones', 'cadena_esperas', 'cadena_corridas', 'cadena_calendario_filas', 'cadena_brief_creativo', 'cadena_conceptos', 'cadena_estrategias', 'cadena_fichas_de_oferta', 'cadena_correcciones']
+    const campana = cuerpo.indexOf('delete from public.cadena_campanas')
+    for (const t of hijas) {
+      const i = cuerpo.indexOf(`delete from public.${t} where campana_id = camp;`)
+      expect(i, t).toBeGreaterThan(-1)
+      expect(i, t).toBeLessThan(campana)
+    }
+    expect(cuerpo).toMatch(/if exists \(select 1 from public\.cadena_campanas where id = camp\) then raise exception/)
+    expect(cuerpo).toMatch(/plan_de_camp is null or exists \(select 1 from public\.cadena_campanas where client_id = ct and plan_id::text = plan_de_camp\)/)
+    expect(cuerpo).toMatch(/where id = parte_reel and provenance_tag->>'campana_id' = camp::text\) <> 1/)
   })
 })
