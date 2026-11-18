@@ -8,6 +8,8 @@ import { clienteA, contextoDe, tandaBuena } from '../__fixtures__/clientes'
 
 const A = clienteA()
 const AHORA = '2026-10-09T12:00:00Z'
+// 18-nov (día 1 = apertura): estas pruebas no son del día 1; la campaña se abre el lunes que antes ponía la regla, para que sus fechas sigan siendo las mismas
+const ABRE = '2026-10-12T12:00:00Z'
 const wf = (extra: Record<string, unknown> = {}) => ({ workflow_id: 'wf-cadena', workflow_execution_id: 'e1', ...extra })
 const almacen = (config: Record<string, unknown> = {}) => new AlmacenMemoria({
   contextos: { [A.clientId]: contextoDe(A) }, planes: { [A.clientId]: [{ plan_id: 'plan-1', fecha: '2026-10-08' }] },
@@ -41,7 +43,7 @@ describe('el viaje de la sala', () => {
 describe('campañas activas para el vigía', () => {
   async function conActiva(config: Record<string, unknown>, seco: boolean) {
     const al = almacen({ estado_cadena: 'encendida', ...config })
-    await abrirCampana(al, { ...wf(), client_id: A.clientId, seco: true }, AHORA)
+    await abrirCampana(al, { ...wf(), client_id: A.clientId, seco: true }, ABRE)
     al.campanas[0].seco = seco
     al.campanas[0].estado = 'activa'
     return al
@@ -63,7 +65,7 @@ describe('estrategia: los tipos de fechas que pidió (la lista vacía es lo norm
   it('guardar devuelve fechas_pedidas por tipo y año de la campaña; vacía si el cliente no declaró', async () => {
     for (const [declara, esperado] of [[true, 2], [false, 0]] as const) {
       const al = almacen()
-      const c = await abrirCampana(al, { ...wf(), client_id: A.clientId, seco: true }, AHORA)
+      const c = await abrirCampana(al, { ...wf(), client_id: A.clientId, seco: true }, ABRE)
       const id = (c.cuerpo.campana as { id: string }).id
       const p = await estrategiaPreparar(al, { ...wf(), campana_id: id }, AHORA)
       const e = { ...A.estrategia, fechas_que_importan: declara ? A.estrategia.fechas_que_importan : [] }
@@ -77,7 +79,7 @@ describe('estrategia: los tipos de fechas que pidió (la lista vacía es lo norm
 describe('calendario rodante: ¿toca otra tanda?', () => {
   async function activa() {
     const al = almacen({ estado_cadena: 'encendida' })
-    const c = await abrirCampana(al, { ...wf(), client_id: A.clientId, seco: true }, AHORA)
+    const c = await abrirCampana(al, { ...wf(), client_id: A.clientId, seco: true }, ABRE)
     const id = (c.cuerpo.campana as { id: string }).id
     const p = await estrategiaPreparar(al, { ...wf(), campana_id: id }, AHORA)
     await estrategiaGuardar(al, { ...wf(), campana_id: id, corrida_id: p.cuerpo.corrida_id, resultado: { success: true, structured_output: A.estrategia } }, AHORA)
@@ -95,7 +97,7 @@ describe('calendario rodante: ¿toca otra tanda?', () => {
   })
   it('una campaña que no está activa o sin primera tanda no pide nada', async () => {
     const al = almacen()
-    const c = await abrirCampana(al, { ...wf(), client_id: A.clientId, seco: true }, AHORA)
+    const c = await abrirCampana(al, { ...wf(), client_id: A.clientId, seco: true }, ABRE)
     const id = (c.cuerpo.campana as { id: string }).id
     expect((await calendarioSiguiente(al, { ...wf(), campana_id: id }, AHORA)).cuerpo.tanda).toBeNull()
     al.campanas[0].estado = 'activa'

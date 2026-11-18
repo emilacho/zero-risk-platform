@@ -320,6 +320,8 @@ export async function calendarioPreparar(al: Almacen, cuerpo: Record<string, unk
     ofertas: ((await al.ultimasFichas?.(campana.id))?.contenido ?? []).map((f) => ({ clave: f.clave, nombre: f.nombre ?? null })),
     // 31-oct (FIRMA de Emilio): el método de colocación como capa local, solo con la gran idea; `cadena_config.metodos.calendario` lo apaga o lo reemplaza
     metodo: mesa.concepto ? await metodoDeCalendario(al) : undefined,
+    // 18-nov (DECISIÓN DE EMILIO · día 1 = apertura): el día 1 puede caer a media semana; la tarea dice qué días de la tanda quedan fuera
+    fechaInicio: campana.fecha_inicio, fechaFin: campana.fecha_fin,
   })
   return {
     status: 200,
