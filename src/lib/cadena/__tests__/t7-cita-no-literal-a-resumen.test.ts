@@ -7,9 +7,9 @@
 import { describe, expect, it } from 'vitest'
 import { AlmacenMemoria } from '../__fixtures__/almacen-memoria'
 import { clienteA, contextoDe } from '../__fixtures__/clientes'
-import type { Campana, EstrategiaGuardada } from '../almacen'
+import type { Campana, EstrategiaGuardada, ResultadoDeAbrirRegistro } from '../almacen'
 import { bajarCitasNoLiterales, citasQueNoAparecen, leerBriefCreativo, REFERENCIA_DEL_BRIEF_CREATIVO, REGLA_DE_CITAR_POCO, TOPE_DE_CITAS_A_RESUMEN } from '../brief-creativo'
-import { briefAbrir, recibirBrief } from '../mesas'
+import { briefAbrir, EN_REVISION_DE_REGISTRO, recibirBrief } from '../mesas'
 
 const PLAN = [
   '# Plan de la tienda',
@@ -193,5 +193,35 @@ describe('el camino real de la mesa (recibirBrief)', () => {
     const md = BRIEF_A(['', '> «Se publican 3 posts por semana en Instagram y 1 en Facebook»'])
     expect(await recibirBrief(al, entrega(md), AHORA)).toMatchObject({ ok: true, estado: 'validada' })
     expect(al.briefsCreativos[0].texto_md).toBe(md)
+  })
+})
+
+// ─── el camino del revisor de registro (la jefatura retiene «registro»): lo que se guarda, lo que va a la jefatura y lo que se cierra es el texto BAJADO ───
+describe('el camino del revisor de registro', () => {
+  const conRevisor = (puerto: () => Promise<ResultadoDeAbrirRegistro>) => {
+    const al = almacen()
+    al.retencion = async (tipo) => ({ retener: tipo === 'registro', motivo: tipo === 'registro' ? 'jefatura_activa' : 'tipo_no_activo' })
+    al.registro = puerto
+    return al
+  }
+  const UNA_MAL = BRIEF_A(['', '> «Se publican 3 posts por semana en Instagram y 2 en Facebook»'])
+  it('la revisión abierta (esperando): se guarda el texto bajado y a la jefatura le llega ESE texto', async () => {
+    const al = conRevisor(async () => ({ estado: 'esperando', revision_id: 'rev-1' }))
+    await briefAbrir(al, wf(), AHORA)
+    expect(await recibirBrief(al, entrega(UNA_MAL), AHORA)).toMatchObject({ ok: true, estado: EN_REVISION_DE_REGISTRO })
+    const b = al.briefsCreativos[0]
+    expect(b.texto_md).toContain(`Se publican 3 posts por semana en Instagram y 2 en Facebook ${MARCA}`)
+    expect((b.leido as { avisos: string[] }).avisos.some((x) => /se dejó como resumen/.test(x))).toBe(true)
+    expect(al.sobresDeRegistro).toHaveLength(1)
+    expect(al.sobresDeRegistro[0].payload.texto).toBe(b.texto_md)
+  })
+  it('la revisión que no abre: el brief se cierra con el texto bajado (validado, con el aviso)', async () => {
+    const al = conRevisor(async () => ({ estado: 'no_abre', motivo: 'sin cupo' }))
+    await briefAbrir(al, wf(), AHORA)
+    expect(await recibirBrief(al, entrega(UNA_MAL), AHORA)).toMatchObject({ ok: true, estado: 'validada' })
+    const b = al.briefsCreativos[0]
+    expect(b.texto_md).toContain(`Se publican 3 posts por semana en Instagram y 2 en Facebook ${MARCA}`)
+    expect(b.texto_md).not.toContain('> «Se publican 3 posts por semana en Instagram y 2 en Facebook»')
+    expect((b.leido as { avisos: string[] }).avisos.some((x) => /se dejó como resumen/.test(x))).toBe(true)
   })
 })
