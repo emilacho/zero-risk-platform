@@ -25,6 +25,11 @@ const actorFalso = (c: ClienteSintetico): Ejecutar => async (actor, input) => {
   if (actor.includes('ads-transparency')) return { items: [{ creativeId: 'CRX1', advertiserName: 'RIVAL UNO', domain: 'rivaluno.example', format: 'VIDEO', firstShown: '2026-09-01T00:00:00Z', lastShown: '2026-11-02T00:00:00Z', adHeadline: 'Oferta de temporada', region: c.iso.toUpperCase(), adUrl: 'https://adstransparency.google.com/x' }], costo_usd: 0.004 }
   if (actor.includes('google-trends')) return { items: [{ interestOverTime_timelineData: Array.from({ length: 93 }, (_, i) => ({ time: String(Date.parse('2026-08-02T00:00:00Z') / 1000 + i * 86400), value: [10 + (i % 7)], hasData: [true] })), interestBySubregion: [{ geoName: ciudadDe(c), value: [100], hasData: [true] }], relatedQueries_top: [{ query: 'precio', value: 100 }], relatedQueries_rising: [] }], costo_usd: 0.003 }
   if (actor.includes('google-events')) return { items: [{ title: `Feria de ${ciudadDe(c)}`, startDate: '2026-11-20T18:00:00', venue: 'Centro de convenciones', address: `${String(input.location).split(',')[0]}, ${c.pais}`, eventType: 'feria' }], costo_usd: 0.005 }
+  // encargo 6 · los comentarios de la industria (TikTok, Instagram, YouTube): la búsqueda y los comentarios, con la forma de cada actor
+  if (actor === 'streamers~youtube-scraper') return { items: [{ id: 'yt1', url: 'https://www.youtube.com/watch?v=yt1', viewCount: 900, channelName: 'Canal del Rubro' }], costo_usd: 0.004 }
+  if (actor === 'streamers~youtube-comments-scraper') return { items: [{ cid: 'yc1', comment: 'Me encantó, ¿dónde queda? escríbeme @fulano', voteCount: 3, publishedAt: '2026-10-30T10:00:00Z', author: '@fulano' }], costo_usd: 0.003 }
+  if (actor === 'clockworks~tiktok-comments-scraper') return { items: [{ cid: 'tc1', text: 'Qué rico se ve, quiero probar', diggCount: 9, createTimeISO: '2026-10-29T10:00:00Z', uniqueId: 'alguien' }], costo_usd: 0.002 }
+  if (actor === 'apify~instagram-comment-scraper') return { items: [{ id: 'ic1', text: 'Lo mejor que he probado este año', likesCount: 4, timestamp: '2026-10-28T10:00:00Z', ownerUsername: 'otra.persona' }], costo_usd: 0.002 }
   if (actor.includes('reddit')) return { items: [{ parsedId: 'h1', title: `${c.rubro.split(/ y |\(/)[0].split(' ').slice(0, 2).join(' ')} en ${c.pais}: ¿qué recomiendan?`, body: `Busco opciones en ${ciudadDe(c)}`, communityName: 'consultas', postUrl: 'https://www.reddit.com/r/consultas/comments/h1/', createdAt: '2026-10-30T12:00:00Z', score: 4, commentsCount: 1 }, { dataType: 'comment', parsedPostId: 'h1', body: 'A mí me fue bien con uno que atiende rápido', commentCreatedAt: '2026-10-31T12:00:00Z' }], costo_usd: 0.002 }
   return { items: [], costo_usd: 0 }
 }
@@ -34,7 +39,12 @@ const mundo = (c: ClienteSintetico): T => ({
     { client_id: c.id, ensayo: false, apify_function: 'own_google_maps_profile', created_at: '2026-11-03T10:00:00Z', respuesta: [{ title: c.nombre, city: ciudadDe(c), popularTimesHistogram: HIST }] },
     { client_id: c.id, ensayo: false, apify_function: 'google_maps_scraper', created_at: '2026-11-03T11:00:00Z', respuesta: [{ title: 'Rival Uno', city: ciudadDe(c), popularTimesHistogram: HIST }] },
   ],
-  cerebro_comentarios_competencia: [{ client_id: c.id, red: 'instagram', cuenta: 'rivaluno', post_ref: 'P1', post_url: 'https://www.instagram.com/p/P1/', comentario_ref: 'k1', texto: 'Me atendieron bien pero tardaron mucho en responder', me_gusta: 2, fecha_comentario: '2026-10-28T10:00:00Z' }],
+  // `nivel` lo pone la base por omisión ('competencia', migración 202611181400); la base falsa no tiene DEFAULT y se escribe aquí
+  cerebro_comentarios_competencia: [{ client_id: c.id, red: 'instagram', cuenta: 'rivaluno', post_ref: 'P1', post_url: 'https://www.instagram.com/p/P1/', comentario_ref: 'k1', texto: 'Me atendieron bien pero tardaron mucho en responder', me_gusta: 2, fecha_comentario: '2026-10-28T10:00:00Z', nivel: 'competencia' }],
+  cerebro_tendencias: [
+    { client_id: c.id, red: 'tiktok', nivel: 'pais', consulta: '#rubro', post_ref: 'tt1', url: 'https://www.tiktok.com/@creador/video/tt1', autor: 'creador', me_gusta: 5000, observado_en: '2026-11-01T10:00:00Z' },
+    { client_id: c.id, red: 'instagram', nivel: 'pais', consulta: '#rubro', post_ref: 'ig1', url: 'https://www.instagram.com/p/ig1/', autor: 'otro', me_gusta: 800, observado_en: '2026-11-01T10:00:00Z' },
+  ],
 })
 const ANALISTAS_QUE_RECIBEN: Record<FuenteNueva, { clase: string; analistas: TipoDeAnalisis[] }[]> = {
   anuncios_google: [{ clase: CLASES_NUEVAS.anuncios, analistas: ['competencia'] }],
@@ -43,6 +53,8 @@ const ANALISTAS_QUE_RECIBEN: Record<FuenteNueva, { clase: string; analistas: Tip
   eventos_locales: [{ clase: CLASES_NUEVAS.evento, analistas: ['mercado'] }],
   comentarios_ig_fb: [{ clase: CLASES_NUEVAS.comentarios, analistas: ['competencia', 'voz_del_publico'] }],
   foros: [{ clase: CLASES_NUEVAS.foro, analistas: ['mercado', 'voz_del_publico'] }],
+  // encargo 6: la clase existe y se consulta; sumarla a la mesa (CC3) y a la voz del público (#1167) va después, declarado
+  comentarios_industria: [],
 }
 
 describe('las seis fuentes integradas · diez clientes', () => {
@@ -52,7 +64,7 @@ describe('las seis fuentes integradas · diez clientes', () => {
       const base = crearBaseFalsa(t as never)
       const cli = clienteDe(c)
       for (const fuente of FUENTES_NUEVAS) {
-        const r = await correrFuenteNueva({ db: base.db, fuente, cliente: cli, clientId: c.id, ciudadesDeSedes: c.sedes.map((s) => s.ciudad), ahora: AHORA, ejecutar: actorFalso(c), leerComentarios: async () => ({ costo_usd: 0 }) })
+        const r = await correrFuenteNueva({ db: base.db, fuente, cliente: cli, clientId: c.id, ciudadesDeSedes: c.sedes.map((s) => s.ciudad), ahora: AHORA, ejecutar: actorFalso(c), leerComentarios: async () => ({ costo_usd: 0 }), env: { PORTERO_COMENTARIOS_INDUSTRIA: 'on' }, credito: async () => ({ hay_credito: true, leido: true, usado_usd: 5, credito_usd: 29, hasta: '2026-11-25', mensaje: null }) })
         expect(r.errores, fuente).toEqual([])
         expect(Number((r.resumen.fichas_armadas as number | undefined) ?? 0), `${fuente} sin fichas`).toBeGreaterThan(0)
       }
@@ -60,6 +72,12 @@ describe('las seis fuentes integradas · diez clientes', () => {
       // cada clase nueva existe con su alcance y sin dato personal
       const porClase = (k: string) => fichas.filter((f) => f.clase === k)
       for (const k of Object.values(CLASES_NUEVAS)) expect(porClase(k).length, k).toBeGreaterThan(0)
+      // la industria: una ficha por publicación (TikTok, Instagram, YouTube), alcance mercado, sin nadie que comente; y NO se mezcla con la competencia
+      const ind = porClase('comentarios_de_la_industria')
+      expect(ind.map((f) => (f.provenance_tag as { datos?: { red?: string } })?.datos?.red).sort()).toEqual(['instagram', 'tiktok', 'youtube'])
+      expect(ind.every((f) => f.alcance === 'mercado')).toBe(true)
+      expect(JSON.stringify(ind)).not.toMatch(/fulano|otra\.persona|alguien/)
+      expect(porClase(CLASES_NUEVAS.comentarios).map((f) => String(f.contenido)).join(' ')).not.toMatch(/Qué rico|mejor que he probado|encantó/)
       expect(porClase(CLASES_NUEVAS.busqueda)[0]).toMatchObject({ alcance: 'pais', propiedad: 'ajena' })
       expect(porClase(CLASES_NUEVAS.horas_propias)[0]).toMatchObject({ alcance: 'cliente', propiedad: 'propia' })
 

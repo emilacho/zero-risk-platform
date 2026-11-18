@@ -22,7 +22,7 @@ export async function listarComentariosDeLaCompetencia(consulta: Consulta, p: Pe
   if (!cliente) return { ok: false, error: 'entrada_invalida', detalle: 'falta `client_id`' }
   if (p.red && !REDES.includes(p.red)) return { ok: false, error: 'entrada_invalida', detalle: `\`red\` debe ser ${REDES.join(', ')}` }
   const limite = Math.min(Math.max(Math.trunc(p.limite ?? LIMITE_POR_DEFECTO_DE_COMENTARIOS) || LIMITE_POR_DEFECTO_DE_COMENTARIOS, 1), LIMITE_MAXIMO_DE_COMENTARIOS)
-  const r = await consulta({ tabla: 'cerebro_comentarios_competencia', columnas: ['id', 'red', 'cuenta', 'texto', 'me_gusta', 'fecha_comentario', 'post_url', 'observado_en'], donde: { client_id: cliente }, orden: { columna: 'fecha_comentario', descendente: true }, limite: 2000 })
+  const r = await consulta({ tabla: 'cerebro_comentarios_competencia', columnas: ['id', 'red', 'cuenta', 'texto', 'me_gusta', 'fecha_comentario', 'post_url', 'observado_en'], donde: { client_id: cliente, nivel: 'competencia' }, orden: { columna: 'fecha_comentario', descendente: true }, limite: 2000 })
   if (r.error) return { ok: false, error: 'error_de_lectura', detalle: r.error.slice(0, 200) }
   const cuenta = txt(p.cuenta)?.toLowerCase().replace(/^@/, '') ?? null
   const base = r.filas.filter((f: Fila) => (!p.red || f.red === p.red) && (!cuenta || String(f.cuenta).toLowerCase() === cuenta))

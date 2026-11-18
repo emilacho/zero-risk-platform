@@ -13,6 +13,7 @@ import { bodegaDelMundo, tendenciasDelCliente } from './tendencias-del-cliente'
 import { descubrirCuentas } from './cuentas-de-redes'
 import { comentariosDeRedes, comentariosDeVideosDeLaCompetencia, ejecutarComentarios, guardarComentariosDeLaCompetencia, REDES_DE_IG_Y_FB, REDES_DEL_PASO_DE_SIEMPRE } from './comentarios-de-redes'
 import { correrFuenteNueva, esFuenteNueva } from './fuentes-nuevas'
+import { creditoDeApify, creditoSinLeer, leerUsoDelMes } from '../apify/credito'
 import { transcribirVideos } from './transcripcion-de-videos'
 import type { RespuestaDeLlamada } from './juez'
 import type { Paso } from './pasos-diarios'
@@ -73,6 +74,9 @@ export async function correrPasoDeRedes(e: EntradaDePasoDeRedes): Promise<Result
       const f = await correrFuenteNueva({
         db: e.db, fuente: e.paso, cliente: cliente as never, clientId: e.clientId, ciudadesDeSedes: ciudades, ahora: e.ahora, ejecutar: ejecutarEnApify({ token: common.token, fetchImpl: e.fetch as never, esperaMs: e.paso === 'busquedas_google' ? 230_000 : e.paso === 'eventos_locales' ? 100_000 : 120_000 }),
         workflowId: e.registro?.workflowId, ejecucionId: e.registro?.ejecucionId,
+        env: entorno,
+        // la puerta de crédito de Apify (encargo 6): sin leerla no raspa la industria
+        credito: async () => { const u = await leerUsoDelMes({ token: common.token, fetchImpl: e.fetch as never }); return u.ok ? creditoDeApify(u.uso) : creditoSinLeer(u.detalle) },
         leerComentarios: async (cl) => {
           const cm = await comentariosDeRedes({ redes: REDES_DE_IG_Y_FB, cliente: cl, clientId: e.clientId, urlDeLaBase: common.urlDeLaBase, llave: common.llave, token: common.token, ahora: e.ahora, ejecutar: ejecutarComentarios({ token: common.token, fetchImpl: e.fetch as never }), fetchImpl: e.fetch as never })
           return { costo_usd: cm.costo_usd ?? 0, ...(cm.estado === 'error' || cm.estado === 'sin_base' || cm.estado === 'sin_token' ? { error: `comentarios de Instagram y Facebook: ${cm.estado}${cm.mensaje ? ` · ${cm.mensaje}` : ''}` } : {}), resumen: { estado: cm.estado, cuentas_conocidas: cm.cuentas_conocidas, leidas: cm.leidas, comentarios_nuevos: cm.competencia, por_red: cm.por_red, costo_usd: cm.costo_usd } }
