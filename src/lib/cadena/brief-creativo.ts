@@ -344,6 +344,15 @@ export function hallazgosDelBrief(b: BriefCreativoLeido): Hallazgo[] {
  */
 export const REGLA_DE_LA_CITA_DE_TABLA = 'Si lo que citas está en una TABLA del documento, cita UNA celda tal cual, cada una en su propio `> «…»`; la fila y la columna se nombran FUERA de la cita (por ejemplo, la línea «Fila 1, columna B:» y debajo `> «<el texto exacto de esa celda>»`). Nunca juntes una fila entera en una cita ni le agregues dentro los nombres de las columnas: así ya no está literal en el documento.'
 
+/**
+ * 18-nov (T7 segundo intento · GO Lenovo opción 1): el brief v2 de la campaña volvió devuelto porque puso un valor de la FICHA de la oferta dentro de `> «…»`.
+ * La ficha no promete valores literales (su `fuente` dice de dónde viene el dato, que puede resumir el plan · `indicaciones.ts`), así que un `> «…»` con un valor
+ * de la ficha nunca es literal del plan. El chequeo NO cambia (aceptar la ficha validaría un resumen como cita): se dice en la referencia dónde va cada cosa.
+ */
+export const REGLA_DE_LOS_HECHOS_DE_LA_FICHA = 'Un `> «…»` (o «el plan dice: «…»» / «el manual dice: «…»») cita SOLO frases literales del plan o del manual. Lo que sale de «# FICHAS DE LAS OFERTAS» NUNCA va dentro de una cita, aunque su fuente sea el plan (la ficha puede resumirlo): va solo en «Hechos de las ofertas», en su línea con «(fuente: …)». Si una ruta o una meta solo está en la ficha, nómbrala fuera de la cita y remite a «Hechos de las ofertas».'
+/** 18-nov (T7 segundo intento · la (b) del DIAGNÓSTICO de CC5): el brief v1 unió cuatro viñetas del plan con «. » en una sola cita */
+export const REGLA_DE_LA_CITA_DE_LISTA = 'Si lo que citas es una LISTA del documento (viñetas o números), cita UN punto por `> «…»`, tal cual; nunca juntes varios puntos en una sola cita ni los unas con un punto o una coma: así ya no está literal en el documento.'
+
 export const REFERENCIA_DEL_BRIEF_CREATIVO = [
   '# El brief creativo de campaña (brief_creativo.v1) · UNO por campaña, corto',
   'Escribe EXACTAMENTE estas secciones (markdown, `## Título`); lo que no sepas se declara en «Faltantes», nunca se rellena.',
@@ -355,15 +364,18 @@ export const REFERENCIA_DEL_BRIEF_CREATIVO = [
   '## Insight · una verdad del público en 1–2 frases, porque sin insight no hay idea, solo decoración.',
   '## Lo único que hay que comunicar · UNA proposición, máximo 2 frases, en lenguaje llano: lo que el público tiene que llevarse. NO es un anuncio ni un eslogan: sin llamado, sin dirección web ni teléfono, sin precio. Dos mensajes = ninguno.',
   '## Razones para creer · los hechos del plan o del manual que sostienen esa proposición, cada uno con de dónde sale, porque una promesa sin prueba no convence.',
-  '## Rutas vivas del plan · TODAS las rutas o hipótesis que el plan quiere probar, cada una como cita LITERAL del plan en un bloque `> «…»`, y cómo las prueba (por ejemplo, una contra otra por tanda), porque la mesa de la gran idea no ve el plan y tiene que crear para cada una; no elijas una por tu cuenta.',
-  '## Hechos de las ofertas · de cada oferta que toca la campaña, los hechos clave copiados de «# FICHAS DE LAS OFERTAS» (qué es, para quién y dónde, oferta y precio, cómo se compra, qué mostrar y qué nunca, obligatorios legales), uno por línea: «- <oferta> · <hecho> (fuente: <la de la ficha>)». Si una oferta no tiene ficha, escribe «sin ficha de la oferta»; nunca los escribas de memoria.',
+  '## Rutas vivas del plan · TODAS las rutas o hipótesis que el plan quiere probar, cada una como cita LITERAL del plan en un bloque `> «…»`, y cómo las prueba (por ejemplo, una contra otra por tanda), porque la mesa de la gran idea no ve el plan y tiene que crear para cada una; no elijas una por tu cuenta. Una ruta que solo está en la ficha de la oferta (no en el plan) NO se cita: nómbrala fuera de la cita y remite a «Hechos de las ofertas».',
+  '## Hechos de las ofertas · de cada oferta que toca la campaña, los hechos clave copiados de «# FICHAS DE LAS OFERTAS» (qué es, para quién y dónde, oferta y precio, cómo se compra, qué mostrar y qué nunca, obligatorios legales), uno por línea: «- <oferta> · <hecho> (fuente: <la de la ficha>)», nunca dentro de una cita `> «…»` (la ficha no es el plan). Si una oferta no tiene ficha, escribe «sin ficha de la oferta»; nunca los escribas de memoria.',
   '## Objetivo · el de la campaña CON SU NÚMERO tal como lo da el plan, y por red una línea «- <red>: objetivo», porque cada red pide una acción distinta. Si el plan no trae número, decláralo en «Faltantes».',
   '## Cómo sabremos que funcionó · cópialo del PLAN (los indicadores y la regla de revisión), porque sin medida no se puede decidir si seguir, ajustar o parar.',
   '## Tono · voz y trato que fija el manual, en 2 líneas (responde en el idioma y con el trato del manual del cliente), porque la voz es del cliente, no tuya.',
   '## Obligatorios · «- vocabulario: …» · «- prohibido: …» · «- lo que no se dice: …» · «- legales: …» (los de la ficha y el manual), porque son los límites que la pieza no puede cruzar.',
   '## Faltantes · «- <campo>: <qué falta>» (declarado, no rellenado) · ## Contradicciones plan vs manual · «- qué · plan dice · manual dice · qué se hizo» · ## Citas · «A1 usé: …» (de qué documento sale cada cosa).',
-  'Lo que NO va en el brief: el texto final de un anuncio; el llamado a la acción y los formatos de las piezas; las fotos (ni elegidas ni citadas por número: las mira la mesa de la gran idea); el precio, el horario y los plazos escritos de memoria (solo llegan citados de la ficha de cada oferta, en «Hechos de las ofertas»).',
+  'Lo que NO va en el brief: el texto final de un anuncio; el llamado a la acción y los formatos de las piezas; las fotos (ni elegidas ni citadas por número: las mira la mesa de la gran idea); el precio, el horario y los plazos escritos de memoria (solo llegan copiados de la ficha de cada oferta, con su fuente, en «Hechos de las ofertas»).',
   'Toda cita (un bloque `> «…»` o «el plan dice: «…»» / «el manual dice: «…»») va LITERAL, copiada de su documento: una cita nunca se corrige; si algo la contradice, se explica fuera de ella.',
   // 18-nov (T7 · DIAGNÓSTICO CC5 · GO Lenovo): las rutas y metas de un plan suelen venir en tablas; el brief aplanaba la fila y le sumaba los nombres de las columnas, y la cita dejaba de ser literal
   REGLA_DE_LA_CITA_DE_TABLA,
+  // 18-nov (T7 segundo intento · GO Lenovo opción 1): una lista se cita por punto, y lo de la ficha nunca va en una cita
+  REGLA_DE_LA_CITA_DE_LISTA,
+  REGLA_DE_LOS_HECHOS_DE_LA_FICHA,
 ].join('\n')
