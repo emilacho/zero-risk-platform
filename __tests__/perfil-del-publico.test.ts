@@ -33,7 +33,7 @@ function doble(o: Partial<DepsDeLaCorrida> & { publicos?: Record<string, unknown
     empleadoListo: vi.fn(async () => ({ ok: true as const })),
     leerFicha: vi.fn(async () => ({ rubro: 'cafetería', plaza: 'Madrid', pais: 'España', idioma: 'español de España', trato: 'tú' })),
     leerPublicos: vi.fn(async () => o.publicos ?? [PUBLICO_CAFE]),
-    leerVoces: vi.fn(async () => [...(o.delCerebro ?? [])]),
+    leerVoces: vi.fn(async () => ({ voces: [...(o.delCerebro ?? [])], corte: null as string | null })),
     filtroDeSeguridad: vi.fn(async () => true),
     redactar: vi.fn(async (tarea: string) => ({ ok: true as const, salida: o.salida ? o.salida(tarea) : '## Cómo habla\n- «sin dato»', costo_usd: 0.2 })),
     archivar: vi.fn(async () => ({ ok: true, detalle: 'archivado' })),
@@ -322,6 +322,12 @@ describe('muestra mínima: sin ella no se redacta, y se declara qué falta', () 
     expect(r.cortes.join(' ')).toContain(notaDeFuenteFaltante(['cerebro:comentarios', 'cerebro:mencion', 'cerebro:competidor_comentarios']))
     nadaGasto(d)
     expect(r.archivado).toBeUndefined()
+  })
+  it('lo que la lectura del cerebro dejó sin leer se declara en `cortes` (nunca es mudo)', async () => {
+    const { d } = doble({ leerVoces: vi.fn(async () => ({ voces: MUESTRA_CAFE(), corte: 'se leyeron 75 voces en 20 páginas y el cerebro tiene más: el perfil usa solo esas' })) })
+    const r = await correrPerfil(d, ENTRADA)
+    expect(r.cortes).toContain('se leyeron 75 voces en 20 páginas y el cerebro tiene más: el perfil usa solo esas')
+    expect(r.estado).toBe('hecho')
   })
   it('con el cerebro vacío: nada que redactar, todo declarado faltante', async () => {
     const { d } = doble()

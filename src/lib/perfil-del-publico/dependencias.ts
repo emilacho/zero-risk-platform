@@ -12,6 +12,8 @@ import { rutaConsultar } from '@/lib/portero-alimenta/consultar'
 import { AGENTE, CLASES_DE_HABLA, CLAVE_DE_LA_PALANCA, leerPalanca, OFICINA, vozDelCerebro, type VozConId } from './perfil'
 import { RUTA, type DepsDeLaCorrida } from './corrida'
 
+/** tope de páginas de la consulta por corrida (× 300 fichas por página); si se agota, se declara en `cortes` */
+export const PAGINAS_MAXIMAS_DE_VOCES = 20
 const txt = (x: unknown): string => (typeof x === 'string' ? x.trim() : '')
 const lista = (x: unknown): Record<string, unknown>[] => (Array.isArray(x) ? (x as Record<string, unknown>[]) : [])
 const db = () => getSupabaseAdmin()
@@ -44,15 +46,16 @@ export function dependenciasReales(a: { client_id: string; workflow_id: string; 
       // la voz del público que ya juntó el portero: SOLO por la consulta del cerebro (registra quién consultó · US$ 0 · nunca raspa)
       const voces: VozConId[] = []
       let desde = 0
-      for (let pagina = 0; pagina < 20; pagina++) {
+      for (let pagina = 0; ; pagina++) {
+        // el corte nunca es mudo (regla de la consulta): si se agota el tope de páginas y queda más, se dice
+        if (pagina >= PAGINAS_MAXIMAS_DE_VOCES) return { voces, corte: `se leyeron ${voces.length} voces en ${PAGINAS_MAXIMAS_DE_VOCES} páginas y el cerebro tiene más: el perfil usa solo esas` }
         const r = await rutaConsultar({ db: base() }, { client_id: a.client_id, oficina: OFICINA, agente: AGENTE, que: 'reseñas comentarios menciones cómo habla el público', clase: CLASES_DE_HABLA.join(','), todo: true, contenido_completo: true, desde })
         const c = r.body as { resultados?: unknown[]; siguiente_desde?: number | null; error?: string }
         if (r.status !== 200) throw new Error(`el portero no contestó la consulta (${r.status} ${c.error ?? ''})`)
         for (const x of lista(c.resultados)) { const v = vozDelCerebro(x); if (v) voces.push(v) }
-        if (typeof c.siguiente_desde !== 'number' || c.siguiente_desde <= desde) break
+        if (typeof c.siguiente_desde !== 'number' || c.siguiente_desde <= desde) return { voces, corte: null }
         desde = c.siguiente_desde
       }
-      return voces
     },
     async filtroDeSeguridad(texto) {
       const d = await runIngressFilter(

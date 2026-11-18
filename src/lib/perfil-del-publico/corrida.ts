@@ -33,8 +33,9 @@ export interface DepsDeLaCorrida {
   leerFicha(): Promise<FichaDelCliente | null>
   /** las filas del documento de público ideal de ESTE cliente */
   leerPublicos(): Promise<ReadonlyArray<Record<string, unknown>>>
-  /** la voz del público que el CEREBRO ya juntó para ESTE cliente, por su consulta (fuente `cerebro:<clase>`, id = id de la ficha) · nunca raspa */
-  leerVoces(): Promise<ReadonlyArray<VozConId>>
+  /** la voz del público que el CEREBRO ya juntó para ESTE cliente, por su consulta (fuente `cerebro:<clase>`, id = id de la ficha) · nunca raspa.
+   *  `corte`: si no se leyó todo lo que hay, por qué (se declara; nunca es mudo) */
+  leerVoces(): Promise<{ voces: ReadonlyArray<VozConId>; corte: string | null }>
   /** el filtro de seguridad que ya existe: true = pasa. Si lanza, la voz queda apartada (falla cerrado) */
   filtroDeSeguridad(texto: string): Promise<boolean>
   redactar(tarea: string, tope_usd: number, publico: PublicoObjetivo): Promise<ResultadoDelRedactor>
@@ -93,7 +94,9 @@ export async function correrPerfil(deps: DepsDeLaCorrida, e: EntradaDeLaCorrida)
   // 2 · la voz del público que ya juntó el cerebro, pasada por la red propia y el filtro existente
   const pasa = async (texto: string): Promise<boolean> => { if (pareceUnaOrden(texto)) return false; try { return (await deps.filtroDeSeguridad(texto)) === true } catch { return false } }
   const voces: VozConId[] = []
-  for (const v of await deps.leerVoces()) { if (await pasa(v.texto)) voces.push(v); else r.voces_apartadas++ }
+  const lectura = await deps.leerVoces()
+  if (lectura.corte) r.cortes.push(lectura.corte)
+  for (const v of lectura.voces) { if (await pasa(v.texto)) voces.push(v); else r.voces_apartadas++ }
   r.voces_del_cerebro = voces.length
   const textos: string[] = []
   const citas = new Set<string>()

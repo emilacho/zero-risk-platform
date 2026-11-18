@@ -21,6 +21,7 @@ const h = vi.hoisted(() => ({
   resultados: [] as unknown[],
   redactor: [] as string[],
   estado: 200,
+  pagina: 300,
 }))
 vi.mock('@/lib/supabase', () => {
   const DATOS: Record<string, unknown[]> = {
@@ -40,7 +41,20 @@ vi.mock('@/lib/supabase', () => {
 })
 vi.mock('@/lib/cadena/almacen-supabase', () => ({ almacenDeSupabase: () => ({ leerConfig: async () => ({ encendida: true, clientes: [CLIENTE] }) }) }))
 vi.mock('@/lib/portero-alimenta/consultar', () => ({
-  rutaConsultar: async (_ctx: unknown, pedido: Record<string, unknown>) => { h.consultas.push(pedido); return h.estado === 200 ? { status: 200, body: { resultados: h.resultados, siguiente_desde: null } } : { status: h.estado, body: { error: 'portero_caido' } } },
+  // el doble se porta como la consulta real (consultar.ts): sin `todo` entrega 10 y no pagina; con `todo`, páginas (`desde` + `siguiente_desde`);
+  // sin `contenido_completo` recorta cada ficha a 700 letras
+  rutaConsultar: async (_ctx: unknown, pedido: Record<string, unknown>) => {
+    h.consultas.push(pedido)
+    if (h.estado !== 200) return { status: h.estado, body: { error: 'portero_caido' } }
+    const desde = pedido.todo === true ? Number(pedido.desde ?? 0) : 0
+    const tam = pedido.todo === true ? h.pagina : 10
+    const trozo = (h.resultados as Array<Record<string, unknown>>).slice(desde, desde + tam).map((f) => {
+      const t = String(f.contenido)
+      return pedido.contenido_completo === true || t.length <= 700 ? f : { ...f, contenido: `${t.slice(0, 700)}…` }
+    })
+    const hay = pedido.todo === true && desde + tam < h.resultados.length
+    return { status: 200, body: { resultados: trozo, siguiente_desde: hay ? desde + tam : null } }
+  },
 }))
 vi.mock('@/lib/ingress-filter', () => ({ DEFAULT_ROUTE_POLICY: {}, runIngressFilter: async () => ({ allow: true }) }))
 vi.mock('@/lib/finanzas/conversa/modelo-run-sdk', () => ({
@@ -58,7 +72,7 @@ const urls = () => red.mock.calls.map((c) => String(c[0]))
 
 describe('el perfil del público NO raspa: lee la voz del público solo del cerebro', () => {
   beforeEach(() => {
-    h.tablas.length = 0; h.escrituras.length = 0; h.consultas.length = 0; h.redactor.length = 0; h.estado = 200
+    h.tablas.length = 0; h.escrituras.length = 0; h.consultas.length = 0; h.redactor.length = 0; h.estado = 200; h.pagina = 300
     red.mockClear()
     vi.stubGlobal('fetch', red)
     vi.stubEnv('APIFY_SERVICE_WEBHOOK_URL', PUERTA_DE_APIFY)
@@ -89,6 +103,28 @@ describe('el perfil del público NO raspa: lee la voz del público solo del cere
     expect(red).not.toHaveBeenCalled()
     expect(h.redactor).toEqual([])
     expect(h.tablas.filter((t) => /apify/.test(t))).toEqual([])
+  })
+  it('🔴 CC7 (d02·d04·d05) · pide TODO, con el contenido completo, y sigue las páginas: con 320 fichas llegan las 320 (la página 2 también)', async () => {
+    h.resultados = [...fichas('resenas', 200, 1), ...fichas('comentarios', 120, 300)]
+    const r = await correr()
+    expect(h.consultas).toHaveLength(2)
+    expect(h.consultas[0]).toMatchObject({ todo: true, contenido_completo: true, desde: 0 })
+    expect(h.consultas[1]).toMatchObject({ todo: true, contenido_completo: true, desde: 300 })
+    expect(r.voces_del_cerebro).toBe(320)
+    expect(r.cortes.join(' ')).not.toMatch(/el cerebro tiene más/)
+  })
+  it('sin `todo` la consulta entregaría 10 fichas: con 70 en el cerebro, el perfil igual las lee todas y redacta', async () => {
+    h.resultados = [...fichas('resenas', 40, 1), ...fichas('comentarios', 30, 100)]
+    const r = await correr()
+    expect(r).toMatchObject({ voces_del_cerebro: 70, llamadas_al_redactor: 1 })
+  })
+  it('🔴 el tope de páginas NO corta callado: si se agota y el cerebro tiene más, queda en `cortes`', async () => {
+    h.pagina = 3
+    h.resultados = fichas('resenas', 70, 1)
+    const r = await correr()
+    expect(h.consultas).toHaveLength(20)
+    expect(r.voces_del_cerebro).toBe(60)
+    expect(r.cortes).toContain('se leyeron 60 voces en 20 páginas y el cerebro tiene más: el perfil usa solo esas')
   })
   it('🔴 la consulta al cerebro CAÍDA no se lee como «cerebro vacío»: la corrida falla diciendo por qué, sin redactar ni declarar fuentes faltantes falsas', async () => {
     h.estado = 503
