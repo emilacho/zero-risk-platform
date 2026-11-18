@@ -63,17 +63,39 @@ export function promptDeEdicion(prompt: string): string {
   ].join('\n')
 }
 
-export interface PedidoDeEdicion { prompt: string; model: string; size: string; quality: string | null; foto: { bytes: Buffer; tipo: string } }
+/**
+ * 18-nov · GO Lenovo «los creativos ven las fotos» (firma de Emilio 14:16): una imagen puede llevar VARIAS fotos reales (la del plano y las de sus personajes,
+ * productos o lugares). Cuántas como máximo: las que admite la edición de OpenAI con los modelos gpt-image (16); la imagen 1 es la base.
+ */
+export const MAX_FOTOS_POR_IMAGEN = 16
 
-/** el cuerpo multipart de `/v1/images/edits` (la foto como `image`) */
+/** con varias fotos, el que pide dice en el brief qué es cada una («Image 2 is the character reference of …»); aquí solo la regla de no cambiar lo real */
+export function promptDeEdicionConVarias(prompt: string, n: number): string {
+  return [
+    `${n} real photos of the client are attached, in order (image 1 to image ${n}). Image 1 is the base of the image; the brief below says what each one shows.`,
+    'Every real element that appears in an attached photo (a character, a product or dish, a place, a uniform, a package) must look exactly as it does in its photo: same shape, colors, details, proportions and clothing. Do not redesign it.',
+    'Change only what the brief asks for (setting, light, angle, pose, props).',
+    'Do not reproduce any text, label, logo, phone number or sign from the photos, and do not add new text.',
+    '',
+    'Brief:',
+    prompt,
+  ].join('\n')
+}
+
+export interface PedidoDeEdicion { prompt: string; model: string; size: string; quality: string | null; foto: { bytes: Buffer; tipo: string }; /** las fotos que siguen a la base (18-nov) */ otras?: Array<{ bytes: Buffer; tipo: string }> }
+
+const extension = (tipo: string): string => (tipo === 'image/jpeg' ? 'jpg' : tipo === 'image/webp' ? 'webp' : 'png')
+
+/** el cuerpo multipart de `/v1/images/edits`: una foto como `image` (lo de siempre); varias, todas como `image[]` en orden, la base primero */
 export function cuerpoDeEdicion(p: PedidoDeEdicion): FormData {
   const form = new FormData()
+  const otras = (p.otras ?? []).slice(0, MAX_FOTOS_POR_IMAGEN - 1)
   form.append('model', p.model)
-  form.append('prompt', promptDeEdicion(p.prompt))
+  form.append('prompt', otras.length ? promptDeEdicionConVarias(p.prompt, otras.length + 1) : promptDeEdicion(p.prompt))
   form.append('size', p.size)
   form.append('n', '1')
   if (p.quality) form.append('quality', p.quality)
-  const ext = p.foto.tipo === 'image/jpeg' ? 'jpg' : p.foto.tipo === 'image/webp' ? 'webp' : 'png'
-  form.append('image', new Blob([new Uint8Array(p.foto.bytes)], { type: p.foto.tipo }), `referencia.${ext}`)
+  if (!otras.length) form.append('image', new Blob([new Uint8Array(p.foto.bytes)], { type: p.foto.tipo }), `referencia.${extension(p.foto.tipo)}`)
+  else [p.foto, ...otras].forEach((f, i) => form.append('image[]', new Blob([new Uint8Array(f.bytes)], { type: f.tipo }), `referencia-${i + 1}.${extension(f.tipo)}`))
   return form
 }

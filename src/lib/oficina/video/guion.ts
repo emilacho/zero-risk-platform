@@ -46,6 +46,8 @@ export interface Plano {
   texto_en_pantalla?: string
   /** id de una foto PROPIA del cliente que sirve de referencia para este plano */
   foto_id?: string
+  /** 18-nov · las OTRAS fotos que nombra el plano («Foto: foto:a, foto:b»): viajan como referencia detrás de la primera */
+  fotos_extra?: string[]
   // ── Sprint 2 · S2-1 · la hoja de planos (todo opcional: el traductor sigue tolerante; lo que falta se avisa, no se rechaza) ──
   /** el rol del plano en la historia (ver `ROLES_DEL_PLANO`; guía, no lista cerrada) */
   rol?: string
@@ -83,6 +85,8 @@ export interface PersonajeDeLaHoja {
   descripcion?: string
   /** fotos propias del cliente que lo muestran */
   fotos_ids: string[]
+  /** 18-nov · la mesa lo marcó «creación nueva»: NO es un personaje real del cliente; sus fotos (si trae) son la BASE de estilo, no «es este» */
+  creacion_nueva?: boolean
 }
 
 export interface TraduccionDeGuion {
@@ -197,7 +201,7 @@ function campos(lineas: string[]): Record<string, string> {
 }
 
 /** «0–3 s», «0-3s», «de 3 a 8 s» en el título del plano */
-/** 18-nov · hallazgo 1 de la ingeniería inversa del reel de Olón: la mesa escribe medios segundos («0–2.5 s», «2,5–5 s»); antes solo se leían enteros y
+/** 18-nov · hallazgo 1 de la ingeniería inversa de un reel (CC7): la mesa escribe medios segundos («0–2.5 s», «2,5–5 s»); antes solo se leían enteros y
  *  «2.5–5 s» se leía 5–5 (descartado) → el guion caía al mínimo con avisos de ritmo falsos. Punto o coma decimal. */
 export function tiempos(titulo: string): { desde: number; hasta: number } | null {
   const m = /(?<![\d.,])(\d+(?:[.,]\d+)?)\s*(?:[–-]|a)\s*(\d+(?:[.,]\d+)?)\s*s\b/i.exec(titulo)
@@ -226,17 +230,23 @@ export const idDelPersonaje = (nombre: string): string => sinTildes(nombre).repl
 /** «foto:abc, foto:def y foto:ghi» → ['abc', 'def', 'ghi'] (sin repetir; «ninguna» → []) */
 function leerFotos(texto: string | undefined): string[] {
   const out: string[] = []
+  // 18-nov · con el formato «foto:<id>» (la mesa agrega «· por qué»): solo cuentan los ids con su rótulo; sin rótulo, la lectura de siempre
+  const rotuladas = [...String(texto ?? '').replace(/`/g, '').matchAll(/\bfoto:\s*([A-Za-z0-9_.-]{4,80})/gi)].map((m) => m[1])
+  if (rotuladas.length) { for (const f of rotuladas) if (!out.includes(f)) out.push(f); return out }
   for (const t of String(texto ?? '').split(/\s*(?:,|;|\by\b|\s·\s)\s*/)) { const f = leerFoto(t); if (f && !out.includes(f)) out.push(f) }
   return out
 }
 
 /** el texto de un personaje sin la parte «Fotos: …» → su descripción y sus fotos */
-function descripcionYFotos(texto: string): { descripcion: string; fotos_ids: string[] } {
+function descripcionYFotos(texto0: string): { descripcion: string; fotos_ids: string[]; creacion_nueva: boolean } {
+  // 18-nov · «creación nueva · basada en foto:<id>» (formato de CC2): la marca se guarda aparte y no queda en la descripción
+  const creacion_nueva = /creaci[oó]n\s+nueva/i.test(texto0)
+  const texto = texto0.replace(/\bcreaci[oó]n\s+nueva\b\s*[:·,-]?\s*/gi, '').replace(/\bbasad[oa]\s+en\s+(?=foto)/gi, '')
   const m = /(?:^|[\s·(,;-])\*{0,2}(?:fotos?(?: propias?)?|referencias?)\*{0,2}\s*:\s*([^)\n]*)\)?/i.exec(texto)
   const fotos_ids = m ? leerFotos(m[1]) : []
   const resto = m ? texto.slice(0, m.index) + texto.slice(m.index + m[0].length) : texto
   const descripcion = limpiarTexto(resto.replace(/\(\s*\)/g, '').replace(/[\s·(,;-]+$/, ''))
-  return { descripcion, fotos_ids }
+  return { descripcion, fotos_ids, creacion_nueva }
 }
 
 /**
@@ -247,13 +257,13 @@ function descripcionYFotos(texto: string): { descripcion: string; fotos_ids: str
  */
 export function leerPersonajes(ss: Array<{ titulo: string; lineas: string[] }>): PersonajeDeLaHoja[] {
   const out: PersonajeDeLaHoja[] = []
-  const agregar = (nombre: string, descripcion: string, fotos_ids: string[]) => {
+  const agregar = (nombre: string, descripcion: string, fotos_ids: string[], creacion_nueva = false) => {
     const n = limpiarTexto(nombre.replace(/[*`_]/g, '')).trim()
     const id = idDelPersonaje(n)
     if (!id) return
     const ya = out.find((x) => x.id === id)
-    if (ya) { if (!ya.descripcion && descripcion) ya.descripcion = descripcion; for (const f of fotos_ids) if (!ya.fotos_ids.includes(f)) ya.fotos_ids.push(f); return }
-    out.push({ id, nombre: n, ...(descripcion ? { descripcion } : {}), fotos_ids })
+    if (ya) { if (!ya.descripcion && descripcion) ya.descripcion = descripcion; for (const f of fotos_ids) if (!ya.fotos_ids.includes(f)) ya.fotos_ids.push(f); if (creacion_nueva) ya.creacion_nueva = true; return }
+    out.push({ id, nombre: n, ...(descripcion ? { descripcion } : {}), fotos_ids, ...(creacion_nueva ? { creacion_nueva: true } : {}) })
   }
   for (const s of ss) {
     if (!esPersonajes(s.titulo)) continue
@@ -261,16 +271,16 @@ export function leerPersonajes(ss: Array<{ titulo: string; lineas: string[] }>):
     if (unico) {
       const texto = s.lineas.map((l) => l.replace(/^\s*[-*•]\s+/, '').trim()).filter(Boolean)
       const desc = texto.map((l) => l.replace(/^\*{0,2}(descripci[oó]n|c[oó]mo es|rasgos|aspecto)\*{0,2}\s*:\s*/i, '')).join(' · ')
-      const { descripcion, fotos_ids } = descripcionYFotos(desc)
-      agregar(unico[1], descripcion, fotos_ids)
+      const { descripcion, fotos_ids, creacion_nueva } = descripcionYFotos(desc)
+      agregar(unico[1], descripcion, fotos_ids, creacion_nueva)
       continue
     }
     for (const raw of s.lineas) {
       const l = raw.replace(/^\s*[-*•]\s+/, '').trim()
       const m = /^\*{0,2}([^:*—–\n]{1,40}?)\*{0,2}\s*(?::|—|–| - )\s*(.*)$/.exec(l)
       if (!m || /^(fotos?|referencias?|descripci[oó]n)$/i.test(m[1].trim())) continue
-      const { descripcion, fotos_ids } = descripcionYFotos(m[2])
-      agregar(m[1], descripcion, fotos_ids)
+      const { descripcion, fotos_ids, creacion_nueva } = descripcionYFotos(m[2])
+      agregar(m[1], descripcion, fotos_ids, creacion_nueva)
     }
   }
   return out
@@ -337,8 +347,10 @@ export function traducirGuion(md: string, o: { preguntasHechas?: number; maxPreg
     if (mov) p.movimiento = mov
     const txt = limpiarTexto(c.texto_en_pantalla ?? '')
     if (txt) p.texto_en_pantalla = txt
-    const foto = leerFoto(c.foto)
-    if (foto) p.foto_id = foto
+    // 18-nov · el plano puede nombrar varias fotos: la primera es la del plano; las demás viajan como referencia
+    const fotosDelPlano = /\bfoto:/i.test(String(c.foto ?? '')) ? leerFotos(c.foto) : [leerFoto(c.foto)].filter((x): x is string => !!x)
+    if (fotosDelPlano[0]) p.foto_id = fotosDelPlano[0]
+    if (fotosDelPlano.length > 1) p.fotos_extra = fotosDelPlano.slice(1)
     // Sprint 2 · S2-1 · los campos de la hoja (lo que no viene, no se inventa)
     for (const k of ['dice', 'intencion', 'tamano', 'lente', 'luz', 'estado_final'] as const) { const v = limpiarTexto(c[k] ?? ''); if (v) p[k] = v }
     const rol = limpiarTexto(c.rol ?? '')
