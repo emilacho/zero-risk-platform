@@ -1,5 +1,5 @@
 /**
- * POST /api/brain/portero/relevancia · el JUICIO DE RELEVANCIA de lo ajeno pedido a mano (encargo 4): la prueba de 40 piezas juzgadas a mano y la primera pasada por cliente.
+ * POST /api/brain/alimentar/juicio-de-lo-ajeno · el JUICIO DE RELEVANCIA de lo ajeno pedido a mano (encargo 4): la prueba de 40 piezas juzgadas a mano y la primera pasada por cliente.
  * La corrida diaria NO pasa por aquí: va al cierre del vigilante (`/api/brain/alimentar/vigilar`).
  * Cuerpo: `client_id` (o `clientes`), `dry_run` (por omisión true: solo cuenta), `workflow_id` + `workflow_execution_id` (obligatorios para llamar al modelo),
  * `tandas` (por omisión 2, máx. 50), `ids` (solo esas piezas) y `escribir` (false = devuelve los juicios sin escribirlos).

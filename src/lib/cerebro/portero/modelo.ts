@@ -55,7 +55,7 @@ export async function llamarAlModeloConImagen(p: PeticionConImagen): Promise<Res
   }, p.timeoutMs)
 }
 
-/** una petición con VARIAS imágenes (cada una con su rótulo de texto antes) y un texto final: la usa el juicio de relevancia de lo ajeno (encargo 4, tandas de 20) */
+/** una petición con VARIAS imágenes (cada una con su rótulo de texto antes) y un texto final: la usa el juicio de lo ajeno del portero que alimenta (encargo 4, tandas de 20) */
 export interface PeticionConImagenes {
   model: string
   max_tokens: number

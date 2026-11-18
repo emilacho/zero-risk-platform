@@ -1,6 +1,6 @@
 /**
  * El juicio de relevancia CABLEADO al entorno real (encargo 4): base, foto reducida del almacén, modelo con varias imágenes y registro en `log-invocation`.
- * Lo comparten el cierre del vigilante (corrida diaria) y la ruta `/api/brain/portero/relevancia` (la prueba de 40 y la primera pasada por cliente).
+ * Lo comparten el cierre del vigilante (corrida diaria) y la ruta `/api/brain/alimentar/juicio-de-lo-ajeno` (la prueba de 40 y la primera pasada por cliente).
  */
 import type { Db } from './alimentar'
 import { crearBajador } from '../cerebro/portero/almacen'

@@ -1,5 +1,5 @@
 /**
- * La ruta `/api/brain/portero/relevancia` (encargo 4): llave interna, pide cliente, ensayo por omisión y pasa el pedido tal cual (con dobles: no llama al modelo).
+ * La ruta `/api/brain/alimentar/juicio-de-lo-ajeno` (encargo 4): llave interna, pide cliente, ensayo por omisión y pasa el pedido tal cual (con dobles: no llama al modelo).
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -9,11 +9,11 @@ vi.mock('@/lib/supabase', () => ({ getSupabaseAdmin: () => ({}) }))
 vi.mock('@/lib/portero-alimenta/relevancia', () => ({ juzgarRelevancia: m.juzgar }))
 vi.mock('@/lib/portero-alimenta/relevancia-entorno', () => ({ depsDeRelevanciaDelEntorno: m.deps }))
 
-import { POST } from '@/app/api/brain/portero/relevancia/route'
+import { POST } from '@/app/api/brain/alimentar/juicio-de-lo-ajeno/route'
 
 const C1 = '0a2ffbd4-957c-4315-a37f-b9e4fbbbb312'
 const pedir = async (cuerpo: unknown) => {
-  const r = await POST(new Request('http://x/api/brain/portero/relevancia', { method: 'POST', body: typeof cuerpo === 'string' ? cuerpo : JSON.stringify(cuerpo) }))
+  const r = await POST(new Request('http://x/api/brain/alimentar/juicio-de-lo-ajeno', { method: 'POST', body: typeof cuerpo === 'string' ? cuerpo : JSON.stringify(cuerpo) }))
   return { status: r.status, body: (await r.json()) as Record<string, unknown> }
 }
 
