@@ -86,7 +86,8 @@ export function tareaDeFichas(p: PedidoDeFichas): string {
       '`vigente_desde` y `vigente_hasta` (`AAAA-MM-DD`): solo si la fuente dice desde o hasta cuándo vale (una promoción, una apertura, un cierre). Si no lo dice, déjalos vacíos.',
       '`red`: solo para lo que cambia según la red (por ejemplo, cómo se compra desde una red u otra). Si vale para todas, vacío.',
       '`no_se_puede_afirmar`: lo que el material dice que NO es cierto o que todavía no existe. `que_nunca_mostrar`: lo que una imagen no puede enseñar de esta oferta.',
-      '`objetivo_por_fecha`: lo que el PLAN quiere de esta oferta en cada tramo de fechas, con su cita.',
+      // 18-nov (GO Lenovo, T7) · «con su cita» se leía como texto literal: el objetivo es un DATO con su `fuente` (como los demás), no una cita del plan
+      '`objetivo_por_fecha`: lo que el PLAN quiere de esta oferta en cada tramo de fechas, con su `fuente` (el id de la referencia, como en los demás datos). El objetivo puede resumir el plan: es un dato, no una cita literal.',
       'Lo que no encuentres queda vacío; no lo rellenes. Lo que falte y haga falta para una pieza va en `pendientes`, en una línea.',
       'Los HECHOS DEL NEGOCIO (del cerebro) mandan: no los contradigas ni los repitas con otras palabras; el sistema los suma a la ficha.',
     ]),

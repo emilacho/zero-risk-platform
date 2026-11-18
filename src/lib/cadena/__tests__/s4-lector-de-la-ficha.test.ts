@@ -133,6 +133,17 @@ describe.each(CLIENTES)('el paso del lector · cliente %s', (_n, hacer) => {
     expect((await fichasPreparar(al, { ...wf(), campana_id: id }, AHORA)).cuerpo).toEqual({ ya_hecha: true, version: 1 })
     expect(al.corridas.filter((x) => x.paso === 'fichas')).toHaveLength(1)
   })
+
+  it('🔴 18-nov (T7): el objetivo por fecha se pide con su FUENTE y como dato (puede resumir el plan), nunca como «cita» literal', async () => {
+    const c = hacer(), al = almacen(c), id = await conEstrategia(al, c)
+    const p = await fichasPreparar(al, { ...wf(), campana_id: id }, AHORA)
+    const task = (p.cuerpo.run_sdk as { task: string }).task
+    const linea = task.split('\n').find((l) => l.includes('`objetivo_por_fecha`'))
+    expect(linea, 'el pedido nombra objetivo_por_fecha').toBeTruthy()
+    expect(linea).toContain('con su `fuente`')
+    expect(linea).toContain('no una cita literal')
+    expect(linea).not.toMatch(/con su cita/)
+  })
   it('🔴 con hechos del cerebro: el pedido los trae y lo guardado los suma (el cerebro manda)', async () => {
     const c = hacer(), al = almacen(c), id = await conEstrategia(al, c)
     const clave = c.sedes[0].clave
