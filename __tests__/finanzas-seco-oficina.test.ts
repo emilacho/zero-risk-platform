@@ -202,7 +202,7 @@ describe('la puerta de la simulación', () => {
     expect((await llamar({ accion: 'abrir', client_id: IDS[0], dry_run: 'true', semilla: SEM })).status).toBe(400)
     expect((await llamar({ accion: 'abrir', client_id: 'cliente-que-no-es-de-practica', dry_run: true, semilla: SEM })).status).toBe(409)
     expect((await llamar({ accion: 'abrir', client_id: IDS[0], dry_run: true })).status).toBe(400)
-    expect((await llamar({ accion: 'abrir', client_id: IDS[0], dry_run: true, semilla: { ficha_resumen: 'x'.repeat(700_000) } })).status).toBe(413)
+    expect((await llamar({ accion: 'abrir', client_id: IDS[0], dry_run: true, semilla: { ficha_resumen: 'x'.repeat(1_600_000) } })).status).toBe(413)
     expect((await llamar({ accion: 'avanzar', encargo_id: 'no-existe' })).status).toBe(404)
     expect((await llamar({ accion: 'otra' })).status).toBe(400)
     expect(fake.t.finanzas_encargos).toHaveLength(0)

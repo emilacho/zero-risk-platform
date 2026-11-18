@@ -22,7 +22,7 @@ import * as claudeAgentSdk from '@anthropic-ai/claude-agent-sdk'
 import { type Options, type SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import { PRECIOS_OFICIALES, type ModeloPorCorrida } from './modelo-por-corrida.js'
 import { falloDeSalidaEstructurada, hashDeEsquema } from './salida-estructurada.js'
-import { opcionDeRazonamiento, type ModoDeRazonamiento, opcionDeTope, cortadoPorTope, cerradaPorTope, mensajeDeCierreConTope, mensajeDeCorte, terminoConResultadoFallido, falloDelResultado, mensajeDeFalloDelSdk } from './tope-por-corrida.js'
+import { opcionDeRazonamiento, TECHO_DE_RESPUESTA_TOKENS, type ModoDeRazonamiento,opcionDeTope, cortadoPorTope, cerradaPorTope, mensajeDeCierreConTope, mensajeDeCorte, terminoConResultadoFallido, falloDelResultado, mensajeDeFalloDelSdk } from './tope-por-corrida.js'
 // EL CABLE PARA MIRAR (CC#1 · 2026-09-25 · §144 Emilio) · imágenes ANTES del texto, sólo si vienen.
 import {
   armarBloquesDeImagen,
@@ -629,13 +629,17 @@ function buildSdkOptions(
       mcpServers as unknown as Record<string, unknown>,
     ),
     permissionMode: 'default',
+    // TECHO DE RESPUESTA al máximo del modelo · 18-nov · firma de Emilio «nada se recorta» (G1 · CC5). Sin esta variable el SDK corta cada respuesta a 32.000 tokens
+    // (corrida 158667: «exceeded the 32000 output token maximum»). 128.000 es el máximo de los modelos de 1 M; el SDK lo BAJA solo al tope de cada modelo (Haiku 4.5: 64.000)
+    // · fuente: code.claude.com/docs/en/env-vars, leída el 18-nov. Se fija aquí y no en Railway para que no dependa de una variable de la plataforma.
+    env: { ...process.env, CLAUDE_CODE_MAX_OUTPUT_TOKENS: TECHO_DE_RESPUESTA_TOKENS },
     // Reanudar sesión previa para encadenar contexto entre pasos del pipeline.
     ...(input.resumeSessionId ? { resume: input.resumeSessionId } : {}),
     mcpServers,
     // TOPE DURO por corrida (opt-in) · vacío sin tope ⇒ las opciones de siempre
     ...opcionDeTope(input.maxBudgetUsd),
     // RAZONAMIENTO limitado (opt-in) · vacío sin modo ⇒ las opciones de siempre
-    ...opcionDeRazonamiento(input.thinkingMode),
+    ...opcionDeRazonamiento(input.thinkingMode, modelId),
     // SALIDA ESTRUCTURADA (opt-in) · vacío sin esquema ⇒ las opciones de siempre
     ...(input.outputSchema ? { outputFormat: { type: 'json_schema' as const, schema: input.outputSchema } } : {}),
   }

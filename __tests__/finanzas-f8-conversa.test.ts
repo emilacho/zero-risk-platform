@@ -120,7 +120,7 @@ describe('F8 · apagada', () => {
   })
   it('una semilla enorme se rechaza con 413', async () => {
     const m = mundo()
-    expect((await abrirConversacion(m.P, { client_id: CLIENTE, dry_run: false, semilla: { ficha_resumen: 'x'.repeat(700_000) } })).status).toBe(413)
+    expect((await abrirConversacion(m.P, { client_id: CLIENTE, dry_run: false, semilla: { ficha_resumen: 'x'.repeat(1_600_000) } })).status).toBe(413)
   })
 })
 
@@ -368,8 +368,8 @@ describe('F8 · el pedido corto y la procedencia', () => {
     expect(t).toMatch(/NO fijes montos de pauta/)
   })
   it('cabe en el contrato de run-sdk y viaja con workflow_id y ejecución propios', () => {
-    const p = armarPedidoRunSdk({ agente: AGENTES.proponente, tarea: 'x'.repeat(700_000), encargo_id: 'enc-1', client_id: CLIENTE, paso: 'planteo', tope_usd: 0.15, dry_run: true }, 'AbC123xyz')
-    expect(p.task.length).toBeLessThanOrEqual(600_000)
+    const p = armarPedidoRunSdk({ agente: AGENTES.proponente, tarea: 'x'.repeat(1_600_000), encargo_id: 'enc-1', client_id: CLIENTE, paso: 'planteo', tope_usd: 0.15, dry_run: true }, 'AbC123xyz')
+    expect(p.task.length).toBeLessThanOrEqual(1_500_000)
     expect(p.workflow_id).toBe('AbC123xyz')
     expect(p.workflow_execution_id).toBe('enc-1:planteo')
     expect(p.dry_run).toBe(true)

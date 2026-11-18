@@ -13,7 +13,7 @@ import { abrirCampana, avanzarCampana, hoyEnZona, reabrirCampana } from '../camp
 import { estrategiaPreparar } from '../pasos'
 import { diaDeFila } from '../expandir-patron'
 import { fechaDeFila } from '../fechas'
-import { ponerNecesitaHumano } from '../nucleo'
+import { abrirEsperaDe, ponerNecesitaHumano } from '../nucleo'
 import { ACCIONES } from '../acciones'
 import { AlmacenMemoria } from '../__fixtures__/almacen-memoria'
 import { clienteA, contextoDe, formatosDeLaMigracion } from '../__fixtures__/clientes'
@@ -81,14 +81,16 @@ describe('F · las fechas del plan se cuentan desde el día 1 DEL PLAN', () => {
   })
 })
 
-/** una campaña como la 28de888e: abierta, detenida, con su espera de fecha propuesta y la de necesita_humano vivas */
+/** una campaña como la 28de888e: abierta, detenida, con dos esperas vivas (18-nov: una de dato en investigación en lugar de la de fecha propuesta, que ya no existe) y la de necesita_humano */
 async function campanaDetenida(o: { intakeApagado?: boolean } = {}) {
   const al = almacen(o)
-  // como la 28de888e: abierta por la REGLA (90 días, sin la ventana del plan), así que deja su espera de fecha propuesta
+  // como la 28de888e: 90 días pedidos (sin la ventana del plan) · 18-nov (día 1 = apertura): el día 1 es el día en que se abrió y ya no deja espera de fecha propuesta
   const r = await abrirCampana(al, { ...wf(), client_id: A.clientId, plan_id: 'plan-1', seco: false, dias_de_campana: 90, sala_ref: { _journey_id: 'journey-1' } }, '2026-11-06T11:21:00Z')
   const c = (r.cuerpo as { campana: import('../almacen').Campana }).campana
-  expect(c).toMatchObject({ fecha_inicio_origen: 'regla', fecha_inicio: '2026-11-09', fecha_fin: '2027-02-06' })
+  expect(c).toMatchObject({ fecha_inicio_origen: 'regla', fecha_inicio: '2026-11-06', fecha_fin: '2027-02-03' })
   await ponerNecesitaHumano(al, c, 'la estrategia sigue con 3 bloqueo(s) tras la única corrección', '2026-11-06T11:23:08Z')
+  // 18-nov: ya no nace con la espera de fecha propuesta; para seguir probando que la reapertura cierra TODAS las vivas, una segunda espera
+  await abrirEsperaDe(al, c, 'dato_en_investigacion', 's1-d2-a', 'un dato se investiga', '2026-11-06T11:23:09Z')
   return { al, id: c.id }
 }
 const vivasDe = async (al: AlmacenMemoria, id: string) => (await al.esperasVivas()).filter((e) => e.campana_id === id)
@@ -96,7 +98,7 @@ const vivasDe = async (al: AlmacenMemoria, id: string) => (await al.esperasVivas
 describe('E · reabrir la campaña en el mismo lugar', () => {
   it('🔴 desde necesita_humano: día 1 = hoy en la zona del cliente, origen emilio, la duración del plan, cierra TODAS las esperas vivas y deja un sobre en la sala', async () => {
     const { al, id } = await campanaDetenida()
-    expect((await vivasDe(al, id)).map((e) => e.objeto_tipo).sort()).toEqual(['fecha_inicio_propuesta', 'necesita_humano'])
+    expect((await vivasDe(al, id)).map((e) => e.objeto_tipo).sort()).toEqual(['dato_en_investigacion', 'necesita_humano']) // 18-nov: la de fecha propuesta ya no nace; la segunda es la que abre el ejemplo
     // 03:00Z del 10-nov es todavía el 09-nov en Guayaquil (UTC−5)
     const r = await reabrirCampana(al, { ...wf(), campana_id: id }, '2026-11-10T03:00:00Z')
     expect(r.status).toBe(200)
@@ -202,7 +204,7 @@ describe('E · reabrir la campaña en el mismo lugar', () => {
     const r = await reabrirCampana(al, { ...wf(), campana_id: id, ensayo: true }, '2026-11-09T15:00:00Z')
     expect(r.status).toBe(200)
     expect(r.cuerpo).toMatchObject({ ensayo: true, escrituras: 0, campana_antes: { estado: 'necesita_humano' }, haria: { fecha_inicio: '2026-11-09', fecha_fin: '2027-01-31', dias: 84, origen: 'emilio' } })
-    expect((r.cuerpo as { haria: { esperas_que_se_cierran: Array<{ tipo: string }> } }).haria.esperas_que_se_cierran.map((e) => e.tipo).sort()).toEqual(['fecha_inicio_propuesta', 'necesita_humano'])
+    expect((r.cuerpo as { haria: { esperas_que_se_cierran: Array<{ tipo: string }> } }).haria.esperas_que_se_cierran.map((e) => e.tipo).sort()).toEqual(['dato_en_investigacion', 'necesita_humano'])
     expect(JSON.stringify({ c: al.campanas, e: al.esperas })).toBe(antes)
     expect(al.sobresEmitidos).toHaveLength(0)
   })

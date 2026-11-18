@@ -12,6 +12,8 @@ import { clienteA, contextoDe, tandaBuena } from '../__fixtures__/clientes'
 
 const A = clienteA()
 const AHORA = '2026-10-09T12:00:00Z'
+// 18-nov (día 1 = apertura): estas pruebas no son del día 1; la campaña se abre el lunes que antes ponía la regla, para que sus fechas sigan siendo las mismas
+const ABRE = '2026-10-12T12:00:00Z'
 const wf = (extra: Record<string, unknown> = {}) => ({ workflow_id: 'wf-cadena', workflow_execution_id: 'ex-1', ...extra })
 const ok = (o: unknown) => ({ success: true, structured_output: o, cost_usd: 0.3 })
 
@@ -28,7 +30,7 @@ function almacen(retiene: boolean | { estrategia?: boolean; calendario?: boolean
   }
   return al
 }
-const abrir = async (al: AlmacenMemoria) => (await abrirCampana(al, { ...wf(), client_id: A.clientId, seco: true }, AHORA)).cuerpo.campana as { id: string }
+const abrir = async (al: AlmacenMemoria) => (await abrirCampana(al, { ...wf(), client_id: A.clientId, seco: true }, ABRE)).cuerpo.campana as { id: string }
 
 async function guardarEstrategia(al: AlmacenMemoria) {
   const { id } = await abrir(al)
