@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   COLUMNAS_QUE_ESCRIBE, COSTO_ESTIMADO_POR_TANDA_USD, INSTRUCCION_DE_RELEVANCIA, MODELO_DE_RELEVANCIA, PIEZAS_POR_TANDA, TANDAS_POR_CLIENTE_Y_DIA, TOPE_DE_GASTO_POR_LLAMADA_USD,
-  aPieza, armarTexto, rotuloDePieza, costoDeRelevancia, costoEstimado, juzgarRelevancia, leerJuicios, leerPerfil, piezasPorJuzgar, relevanciaDeLaCorridaDelVigilante, relevanciaEncendida, urlReducida,
+  MAXIMO_DE_QUE_HACE, aPieza, armarTexto, imagenesDeLosVideos, rotuloDePieza, costoDeRelevancia, costoEstimado, juzgarRelevancia, leerJuicios, leerPerfil, piezasPorJuzgar, relevanciaDeLaCorridaDelVigilante, relevanciaEncendida, urlReducida,
   type DepsDeRelevancia, type PeticionDeRelevancia, type Pieza,
 } from '../relevancia'
 
@@ -131,8 +131,40 @@ describe('el perfil del cliente', () => {
   it('rubro, mercado, país y ofertas de las fichas de precio VIVAS, sin frases de marketing', async () => {
     const b = baseFalsa({ clients: cliente(), cerebro_fichas: fichas() })
     const p = await leerPerfil(b.db as never, C1)
-    expect(p).toEqual({ client_id: C1, nombre: 'Náufrago', rubro: 'restaurante de mariscos costero ecuatoriano', mercado: 'Olón · Guayaquil', pais: 'EC', ofertas: ['encebollado mixto', 'ceviche naufrago'] })
+    expect(p).toEqual({ client_id: C1, nombre: 'Náufrago', rubro: 'restaurante de mariscos costero ecuatoriano', mercado: 'Olón · Guayaquil', pais: 'EC', ofertas: ['encebollado mixto', 'ceviche naufrago'], que_hace: '', sedes: [] })
     expect((await leerPerfil(b.db as never, C2))?.ofertas).toEqual([])
+  })
+  it('el rubro COMPLETO sale del modelo de negocio de la ficha del cliente, y las sedes de los hechos del negocio', async () => {
+    const BM = 'Empresa B2B que vende extintores, recarga, EPP, señalética, alarmas y detectores de humo a fábricas.'
+    const b = baseFalsa({
+      clients: [{ ...cliente()[1], config: { apify: { muchas: 'cosas' }, business_model: { text: `  ${BM}\n `, source: 'x' } } }],
+      cerebro_fichas: [],
+      client_sedes: [{ client_id: C2, clave: 'gye', ciudad: 'Guayaquil' }, { client_id: C2, clave: 'gye2', ciudad: 'Guayaquil' }, { client_id: C2, clave: 'uio', ciudad: '' }, { client_id: C1, clave: 'olon', ciudad: 'Olón' }],
+    })
+    const p = await leerPerfil(b.db as never, C2)
+    expect(p?.que_hace).toBe(BM)
+    expect(p?.sedes).toEqual(['Guayaquil', 'uio'])
+    expect(b.lecturas.find((l) => l.tabla === 'client_sedes')?.filtros).toEqual(['eq:client_id'])
+    const t = armarTexto(p!, [])
+    expect(t).toContain(`QUÉ HACE: ${BM}`)
+    expect(t).toContain('SEDES: Guayaquil, uio')
+  })
+  it('el modelo de negocio también vale como texto suelto, se recorta a 600 y sin él dice «sin dato»', async () => {
+    const b = baseFalsa({ clients: [{ ...cliente()[1], config: { business_model: 'x'.repeat(900) } }], cerebro_fichas: [], client_sedes: [] })
+    expect((await leerPerfil(b.db as never, C2))?.que_hace).toHaveLength(MAXIMO_DE_QUE_HACE)
+    const c = baseFalsa({ clients: [{ ...cliente()[1], config: null }], cerebro_fichas: [], client_sedes: [] })
+    const p = await leerPerfil(c.db as never, C2)
+    expect(p?.que_hace).toBe('')
+    expect(armarTexto(p!, [])).toContain('QUÉ HACE: sin dato')
+  })
+  it('si las sedes no se pueden leer, el perfil sigue (sin sedes)', async () => {
+    const b = baseFalsa({ clients: cliente(), cerebro_fichas: fichas(), client_sedes: [] }, { fallaLectura: 'client_sedes' })
+    const p = await leerPerfil(b.db as never, C1)
+    expect(p?.sedes).toEqual([])
+    expect(p?.ofertas).toEqual(['encebollado mixto', 'ceviche naufrago'])
+  })
+  it('la instrucción dice que el rubro es todo lo de QUÉ HACE', () => {
+    expect(INSTRUCCION_DE_RELEVANCIA).toContain('El rubro es TODO lo que dice «QUÉ HACE»')
   })
   it('lee solo fichas de su cliente, de clase precio y no retiradas', async () => {
     const b = baseFalsa({ clients: cliente(), cerebro_fichas: fichas() })
@@ -417,10 +449,57 @@ describe('juzgar · el costo total y la respuesta cortada (🟡2 y 🟡3 de CC6)
     expect(INSTRUCCION_DE_RELEVANCIA).toContain('máx. 120 caracteres')
   })
   it('una tanda llena (20 fotos, 500 caracteres, 15 ofertas) con el tope de salida nuevo cabe en el tope por llamada', () => {
-    const perfil = { client_id: C1, nombre: 'Náufrago', rubro: 'restaurante de mariscos costero ecuatoriano', mercado: 'Olón · Guayaquil', pais: 'EC', ofertas: Array.from({ length: 15 }, () => 'o'.repeat(60)) }
+    const perfil = { client_id: C1, nombre: 'Náufrago', rubro: 'restaurante de mariscos costero ecuatoriano', mercado: 'Olón · Guayaquil', pais: 'EC', ofertas: Array.from({ length: 15 }, () => 'o'.repeat(60)), que_hace: 'q'.repeat(600), sedes: Array.from({ length: 15 }, () => 's'.repeat(20)) }
     const partes = Array.from({ length: 20 }, (_, k) => ({ rotulo: rotuloDePieza(aPieza('client_social_images', foto(k, { caption: 'x'.repeat(500) })), k + 1, true), imagen: { tipo: 'image/jpeg', base64: 'A' } }))
     const p: PeticionDeRelevancia = { model: 'm', max_tokens: 2000, system: INSTRUCCION_DE_RELEVANCIA, partes, texto: armarTexto(perfil, []), timeoutMs: 1 }
     expect(costoEstimado(p)).toBeLessThanOrEqual(TOPE_DE_GASTO_POR_LLAMADA_USD)
+  })
+})
+
+describe('la imagen de los videos (arreglo a de la ADENDA 2)', () => {
+  const V1 = id(901), V2 = id(902), V3 = id(903)
+  const cap = (video_id: string, posicion: number, o: Fila = {}): Fila => ({ id: id(800 + posicion + (video_id === V1 ? 0 : 50)), client_id: C1, tipo: 'video_captura', video_id, posicion, url: `${BASE}/storage/v1/object/public/c/${video_id.slice(-3)}-${posicion}.jpg`, ...o })
+  const portada = (post_id: string, o: Fila = {}): Fila => ({ id: id(700), client_id: C1, tipo: 'post_video', post_id, url: `${BASE}/storage/v1/object/public/p/${post_id}.jpg`, ...o })
+  it('primero la captura de menor posición; si no tiene, la portada del mismo post; si no, sin imagen', async () => {
+    const b = baseFalsa({ client_social_images: [cap(V1, 3), cap(V1, 1), portada('P1'), portada('P2'), portada('P3', { client_id: C2 }), portada('P2', { tipo: 'post_image', url: 'otra' })] })
+    const vids = [aPieza('client_videos', video(901, { post_id: 'P1' })), aPieza('client_videos', video(902, { post_id: 'P2' })), aPieza('client_videos', video(903, { post_id: 'P3' }))]
+    const r = await imagenesDeLosVideos(b.db as never, C1, vids)
+    expect(r.urls.get(V1)).toContain('/901-1.jpg')
+    expect(r.urls.get(V2)).toContain('/p/P2.jpg')
+    expect(r.urls.has(V3)).toBe(false)
+    expect(r.falla).toBeUndefined()
+    expect(b.lecturas.map((l) => [l.tabla, l.filtros.join(' ')])).toEqual([
+      ['client_social_images', 'eq:client_id eq:tipo in:video_id'],
+      ['client_social_images', 'eq:client_id eq:tipo in:post_id'],
+    ])
+  })
+  it('sin videos no lee; con todos capturados no busca portadas', async () => {
+    const b = baseFalsa({ client_social_images: [cap(V1, 1)] })
+    expect((await imagenesDeLosVideos(b.db as never, C1, [])).urls.size).toBe(0)
+    expect(b.lecturas).toHaveLength(0)
+    await imagenesDeLosVideos(b.db as never, C1, [aPieza('client_videos', video(901, { post_id: 'P1' }))])
+    expect(b.lecturas).toHaveLength(1)
+  })
+  it('una lectura caída se dice y no frena', async () => {
+    const b = baseFalsa({ client_social_images: [] }, { fallaLectura: 'client_social_images' })
+    const r = await imagenesDeLosVideos(b.db as never, C1, [aPieza('client_videos', video(901, { post_id: 'P1' }))])
+    expect(r.falla).toContain('capturas de video')
+    expect(r.urls.size).toBe(0)
+  })
+  it('en el juicio, el video manda su imagen al agente (y deja de ir SIN IMAGEN)', async () => {
+    const b = baseFalsa({ clients: cliente(), cerebro_fichas: fichas(), client_social_images: [portada('P9', { papel: null })], client_videos: [video(1, { post_id: 'P9' }), video(2, { post_id: 'P8' })] })
+    const x = deps(b)
+    const r = await juzgarRelevancia(x.d, { clientes: [C1], ...real }, ON)
+    expect(x.bajadas).toEqual([`${BASE}/storage/v1/object/public/p/P9.jpg`])
+    expect(r.sin_imagen).toBe(1)
+    expect(x.llamadas[0].partes.filter((p) => p.imagen)).toHaveLength(1)
+    expect(x.llamadas[0].partes.find((p) => p.rotulo.includes('video 2'))?.rotulo).toContain('SIN IMAGEN')
+  })
+  it('una falla al buscar imágenes queda en fallas y el juicio sigue', async () => {
+    const b = baseFalsa({ clients: cliente(), cerebro_fichas: fichas(), client_social_images: [], client_videos: [video(1, { post_id: 'P9' })] }, { fallaLectura: 'client_social_images' })
+    const r = await juzgarRelevancia(deps(b).d, { clientes: [C1], ...real }, ON)
+    expect(r.fallas.some((f) => f.startsWith('capturas de video'))).toBe(true)
+    expect(r.juzgadas).toBe(1)
   })
 })
 

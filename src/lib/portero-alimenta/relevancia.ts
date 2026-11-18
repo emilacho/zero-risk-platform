@@ -45,11 +45,14 @@ export const JUICIOS: readonly Juicio[] = ['sirve', 'no_sirve', 'dudoso']
 
 export const COLUMNAS_A_JUZGAR: Record<TablaAJuzgar, string> = {
   client_social_images: 'id, client_id, papel, via, via_detalle, nivel, relevancia_motivo, tipo, caption, url, handle, que_muestra',
-  client_videos: 'id, client_id, papel, via, via_detalle, nivel, relevancia_motivo, tipo, caption, transcripcion, handle',
+  client_videos: 'id, client_id, papel, via, via_detalle, nivel, relevancia_motivo, tipo, caption, transcripcion, handle, post_id',
 }
 
-export interface PerfilDelCliente { client_id: string; nombre: string; rubro: string; mercado: string; pais: string; ofertas: string[] }
-export interface Pieza { tabla: TablaAJuzgar; id: string; client_id: string; papel: string; via: string; nivel: string; motivo: string; texto: string; url: string | null }
+/** `que_hace`: el rubro COMPLETO de la ficha del cliente (su modelo de negocio, no solo las ofertas con precio) · `sedes`: dónde atiende (hechos del negocio) */
+export interface PerfilDelCliente { client_id: string; nombre: string; rubro: string; mercado: string; pais: string; ofertas: string[]; que_hace?: string; sedes?: string[] }
+/** largo máximo del rubro completo que se manda al agente */
+export const MAXIMO_DE_QUE_HACE = 600
+export interface Pieza { tabla: TablaAJuzgar; id: string; client_id: string; papel: string; via: string; nivel: string; motivo: string; texto: string; url: string | null; post_id?: string }
 export interface JuicioDeUnaPieza { tabla: TablaAJuzgar; id: string; juicio: Juicio; motivo: string }
 export interface RespuestaDelModelo { texto: string; stop_reason?: string | null; usage: { input_tokens: number; output_tokens: number } }
 export interface PeticionDeRelevancia { model: string; max_tokens: number; system: string; partes: Array<{ rotulo: string; imagen?: { tipo: string; base64: string } }>; texto: string; timeoutMs: number }
@@ -115,9 +118,10 @@ export function urlReducida(url: string, urlDeLaBase: string): string | null {
 
 /** lo que el empleado necesita saber del cliente: rubro, mercado, país y sus ofertas (de las fichas de precio vivas). Sin cliente legible → null */
 export async function leerPerfil(db: Db, clientId: string): Promise<PerfilDelCliente | null> {
-  const [c, p] = await Promise.all([
-    db.from('clients').select('id, name, industry, market, country').eq('id', clientId).limit(1),
+  const [c, p, s] = await Promise.all([
+    db.from('clients').select('id, name, industry, market, country, config').eq('id', clientId).limit(1),
     db.from('cerebro_fichas').select('titulo').eq('client_id', clientId).eq('clase', 'precio').is('retirada_en', null).limit(200),
+    db.from('client_sedes').select('clave, ciudad').eq('client_id', clientId).limit(30),
   ])
   if (c.error || p.error) return null
   const cli = ((c.data ?? []) as Fila[])[0]
@@ -129,7 +133,13 @@ export async function leerPerfil(db: Db, clientId: string): Promise<PerfilDelCli
     if (o.length >= 3 && o.length <= 60 && !/mejor (precio )?del mercado/i.test(o)) ofertas.add(o)
     if (ofertas.size >= 15) break
   }
-  return { client_id: clientId, nombre: txt(cli.name), rubro: txt(cli.industry), mercado: txt(cli.market), pais: txt(cli.country), ofertas: [...ofertas] }
+  // el rubro completo: el modelo de negocio de la ficha del cliente (Zero Risk = seguridad industrial entera, no solo extintores)
+  const config = (cli.config && typeof cli.config === 'object' ? cli.config : {}) as Fila
+  const bm = config.business_model
+  const queHace = (typeof bm === 'string' ? bm : bm && typeof bm === 'object' ? txt((bm as Fila).text) : '').replace(/\s+/g, ' ').trim().slice(0, MAXIMO_DE_QUE_HACE)
+  // dónde atiende (hechos del negocio por oferta); si no se pudo leer, el perfil sigue sin sedes
+  const sedes = s.error ? [] : [...new Set(((s.data ?? []) as Fila[]).map((x) => txt(x.ciudad) || txt(x.clave)).filter(Boolean))].slice(0, 15)
+  return { client_id: clientId, nombre: txt(cli.name), rubro: txt(cli.industry), mercado: txt(cli.market), pais: txt(cli.country), ofertas: [...ofertas], que_hace: queHace, sedes }
 }
 
 export function aPieza(tabla: TablaAJuzgar, f: Fila): Pieza {
@@ -138,7 +148,37 @@ export function aPieza(tabla: TablaAJuzgar, f: Fila): Pieza {
     tabla, id: txt(f.id), client_id: txt(f.client_id), papel: txt(f.papel), via: txt(f.via), nivel: txt(f.nivel), motivo: txt(f.relevancia_motivo),
     texto: partes.join(' · ').replace(/\s+/g, ' ').slice(0, MAXIMO_DE_TEXTO),
     url: tabla === 'client_social_images' ? txt(f.url) || null : null,
+    ...(tabla === 'client_videos' && txt(f.post_id) ? { post_id: txt(f.post_id) } : {}),
   }
+}
+
+/**
+ * la IMAGEN de cada video para el agente: su primera captura guardada (video_captura, por posición) y, si no tiene (el video no se pudo bajar),
+ * la portada del mismo post guardada como foto (post_video). Solo lectura. Lo que no tiene ninguna sigue SIN IMAGEN (y lo dice el rótulo).
+ */
+export async function imagenesDeLosVideos(db: Db, clientId: string, videos: Pieza[]): Promise<{ urls: Map<string, string>; falla?: string }> {
+  const urls = new Map<string, string>()
+  const ids = videos.map((v) => v.id)
+  if (!ids.length) return { urls }
+  const c = await db.from('client_social_images').select('video_id, url, posicion').eq('client_id', clientId).eq('tipo', 'video_captura').in('video_id', ids).limit(ids.length * 10)
+  if (c.error) return { urls, falla: `capturas de video: ${String(c.error.message ?? c.error).slice(0, 160)}` }
+  const primera = new Map<string, { url: string; pos: number }>()
+  for (const f of (c.data ?? []) as Fila[]) {
+    const v = txt(f.video_id), u = txt(f.url), pos = Number(f.posicion ?? Number.MAX_SAFE_INTEGER)
+    if (!v || !u) continue
+    const a = primera.get(v)
+    if (!a || pos < a.pos) primera.set(v, { url: u, pos })
+  }
+  for (const [v, x] of primera) urls.set(v, x.url)
+  const faltan = videos.filter((v) => !urls.has(v.id) && v.post_id)
+  if (!faltan.length) return { urls }
+  const postIds = [...new Set(faltan.map((v) => v.post_id as string))]
+  const p = await db.from('client_social_images').select('post_id, url').eq('client_id', clientId).eq('tipo', 'post_video').in('post_id', postIds).limit(postIds.length * 3)
+  if (p.error) return { urls, falla: `portadas de video: ${String(p.error.message ?? p.error).slice(0, 160)}` }
+  const portada = new Map<string, string>()
+  for (const f of (p.data ?? []) as Fila[]) if (txt(f.post_id) && txt(f.url) && !portada.has(txt(f.post_id))) portada.set(txt(f.post_id), txt(f.url))
+  for (const v of faltan) { const u = portada.get(v.post_id as string); if (u) urls.set(v.id, u) }
+  return { urls }
 }
 
 /** las piezas por juzgar de un cliente: ajenas (papel no propio), clasificadas por la fase B y sin juicio. Primero las «sin motivo», luego el mercado, luego el resto */
@@ -154,7 +194,7 @@ export async function piezasPorJuzgar(db: Db, clientId: string, tabla: TablaAJuz
 
 export const INSTRUCCION_DE_RELEVANCIA = `Eres el empleado que ORDENA el material ajeno que entra al cerebro de UN cliente (fotos y videos de competidores, del mercado y de referencias).
 Para cada pieza numerada decides si SIRVE a este cliente para entender su rubro, su competencia o a su público, mirando su imagen (si viene) y su texto:
-- "sirve": es del rubro del cliente o de su oferta (mismo tipo de negocio, productos parecidos, su público, su ciudad o país), o es una referencia útil de cómo se comunica su rubro.
+- "sirve": es del rubro del cliente o de su oferta (mismo tipo de negocio, productos parecidos, su público, su ciudad o país), o es una referencia útil de cómo se comunica su rubro. El rubro es TODO lo que dice «QUÉ HACE», no solo las ofertas con precio.
 - "no_sirve": es de otro rubro, otro país sin relación, contenido que no tiene que ver (novelas, memes ajenos, política, otra industria).
 - "dudoso": no alcanza la información para decidir, o tiene partes de las dos.
 No inventes: si la pieza no trae imagen ni texto suficiente, es "dudoso". El motivo es UNA frase corta (máx. 120 caracteres) que dice qué viste.
@@ -165,6 +205,8 @@ export function armarTexto(perfil: PerfilDelCliente, piezas: Pieza[]): string {
     `CLIENTE: ${perfil.nombre}`,
     `RUBRO: ${perfil.rubro || 'sin dato'}`,
     `MERCADO: ${perfil.mercado || 'sin dato'} · PAÍS: ${perfil.pais || 'sin dato'}`,
+    `QUÉ HACE: ${perfil.que_hace || 'sin dato'}`,
+    `SEDES: ${perfil.sedes?.length ? perfil.sedes.join(', ') : 'sin dato'}`,
     `OFERTAS: ${perfil.ofertas.length ? perfil.ofertas.join(', ') : 'sin dato'}`,
   ].join('\n')
   return `${cli}\n\nJuzga las ${piezas.length} piezas de arriba (n = 1..${piezas.length}). Responde solo el arreglo JSON.`
@@ -250,6 +292,10 @@ export async function juzgarRelevancia(deps: DepsDeRelevancia, p: PedidoDeReleva
     const perfil = await leerPerfil(deps.db, clientId)
     if (!perfil) { out.fallas.push(`${clientId.slice(0, 6)}: no se pudo leer el perfil del cliente`); continue }
     const lista = piezas.slice(0, tandas * PIEZAS_POR_TANDA)
+    // los videos llevan la imagen de su captura o de la portada de su post
+    const img = await imagenesDeLosVideos(deps.db, clientId, lista.filter((x) => x.tabla === 'client_videos'))
+    if (img.falla) out.fallas.push(img.falla)
+    for (const pz of lista) if (pz.tabla === 'client_videos' && img.urls.has(pz.id)) pz.url = img.urls.get(pz.id) as string
     for (let i = 0; i < lista.length; i += PIEZAS_POR_TANDA) {
       const queda = p.hasta === undefined ? Infinity : p.hasta - ahora().getTime()
       if (queda < TIEMPO_DE_UNA_TANDA_MS) { out.fallas.push('plazo agotado: no se empezaron más tandas'); return out }
