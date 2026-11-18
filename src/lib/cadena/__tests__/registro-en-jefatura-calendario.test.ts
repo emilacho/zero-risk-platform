@@ -20,6 +20,8 @@ import { TIPO_DE_ESPERA } from '../revision-jefatura'
 import type { Fila, TandaAgente } from '../tipos'
 
 const AHORA = '2026-10-09T12:00:00Z'
+// 18-nov (día 1 = apertura): estas pruebas no son del día 1; la campaña se abre el lunes que antes ponía la regla, para que sus fechas sigan siendo las mismas
+const ABRE = '2026-10-12T12:00:00Z'
 beforeEach(() => { process.env.INTERNAL_API_KEY = 'k-interna' })
 const wf = (extra: Record<string, unknown> = {}) => ({ workflow_id: 'wf-cadena', workflow_execution_id: 'ex-1', ...extra })
 const ok = (o: unknown) => ({ success: true, structured_output: o, cost_usd: 0.3 })
@@ -74,7 +76,7 @@ function tandaDe(k: Caso): TandaAgente {
 
 async function hastaGuardar(k: Caso, o: Opciones = {}, tanda: TandaAgente = tandaDe(k)) {
   const al = almacen(k, o)
-  const ab = await abrirCampana(al, { ...wf(), client_id: k.c.clientId, seco: true }, AHORA)
+  const ab = await abrirCampana(al, { ...wf(), client_id: k.c.clientId, seco: true }, ABRE)
   const campanaId = (ab.cuerpo.campana as { id: string }).id
   const pe = await estrategiaPreparar(al, { ...wf(), campana_id: campanaId }, AHORA)
   await estrategiaGuardar(al, { ...wf(), campana_id: campanaId, corrida_id: pe.cuerpo.corrida_id, resultado: ok(k.c.estrategia) }, AHORA)

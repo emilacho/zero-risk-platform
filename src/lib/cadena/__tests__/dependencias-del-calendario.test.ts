@@ -165,13 +165,15 @@ describe('el validador (V11) y el flujo', () => {
   })
   it('🔴 de punta a punta: la tanda con la réplica a la misma hora NO pide corrección ni deja la campaña en necesita_humano; la fila guardada sale una hora después y anotada', async () => {
     const AHORA = '2026-10-09T12:00:00Z'
+// 18-nov (día 1 = apertura): estas pruebas no son del día 1; la campaña se abre el lunes que antes ponía la regla, para que sus fechas sigan siendo las mismas
+const ABRE = '2026-10-12T12:00:00Z'
     const wf = { workflow_id: 'wf-cadena', workflow_execution_id: 'ex-1' }
     const al = new AlmacenMemoria({
       contextos: { [A.clientId]: contextoDe(A) }, planes: { [A.clientId]: [{ plan_id: 'plan-1', fecha: '2026-10-08' }] },
       config: { flujos: ['wf-cadena', 'wf-vigia'], puerta_workflow_id: 'wf-puerta' }, journeys: [{ journeyId: 'journey-1', clientId: A.clientId }],
     })
     const ok = (o: unknown) => ({ success: true, structured_output: o, cost_usd: 0.3 })
-    const c = await abrirCampana(al, { ...wf, client_id: A.clientId, seco: true }, AHORA)
+    const c = await abrirCampana(al, { ...wf, client_id: A.clientId, seco: true }, ABRE)
     const id = (c.cuerpo.campana as { id: string }).id
     const pe = await estrategiaPreparar(al, { ...wf, campana_id: id }, AHORA)
     await estrategiaGuardar(al, { ...wf, campana_id: id, corrida_id: pe.cuerpo.corrida_id, resultado: ok(A.estrategia) }, AHORA)

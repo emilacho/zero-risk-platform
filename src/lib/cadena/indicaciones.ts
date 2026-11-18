@@ -10,7 +10,7 @@ import { reglaDeIdioma, reglaDeRegistro, type RegistroDelCliente } from './regis
 import type { FechaEspecialVerificada } from './validador-calendario'
 import { contextoDeEstado } from '../sedes/por-abrir'
 import { TOPE_REAL_DEL_PEDIDO } from '../limites-de-tamano'
-import { diaSemanaIso, esFechaIso } from './fechas'
+import { diaSemanaIso, esFechaIso, fechaDeFila } from './fechas'
 
 const REGLAS_BASE = [
   'Respondes SOLO con el objeto que pide el formato de salida. No escribas nada fuera de él.',
@@ -163,6 +163,19 @@ export interface PedidoDeCalendario {
   metodo?: string | null
   /** 17-nov · Sprint 4 · A entrega 2: las ofertas que tienen ficha de hechos (el lector corre antes); sin ellas la tarea queda como antes, byte a byte */
   ofertas?: Array<{ clave: string; nombre?: string | null }>
+  /** 18-nov (DECISIÓN DE EMILIO · día 1 = apertura): el primer y el último día de la campaña. Si una semana de la tanda tiene días fuera de la campaña, la tarea lo dice; ausente = la tarea de antes, byte a byte */
+  fechaInicio?: string | null
+  fechaFin?: string | null
+}
+
+/** 18-nov · el día 1 ya no es lunes (es el día de apertura): la semana 1 y la última pueden tener días fuera de la campaña. La línea los nombra solo si la tanda los toca; si no, vacía */
+export function lineaDeDiasFueraDeLaCampana(semanas: number[], fechaInicio: string | null | undefined, fechaFin: string | null | undefined): string {
+  if (!fechaInicio || !esFechaIso(fechaInicio)) return ''
+  const fin = fechaFin && esFechaIso(fechaFin) ? fechaFin : null
+  const partes: string[] = []
+  if (semanas.some((s) => fechaDeFila(fechaInicio, s, 1) < fechaInicio)) partes.push(`la campaña empieza el ${NOMBRE_DEL_DIA[diaSemanaIso(fechaInicio)]} ${fechaInicio} (día 1): en esa semana no pongas piezas en los días anteriores`)
+  if (fin && semanas.some((s) => fechaDeFila(fechaInicio, s, 7) > fin)) partes.push(`la campaña termina el ${NOMBRE_DEL_DIA[diaSemanaIso(fin)]} ${fin}: en esa semana no pongas piezas en los días posteriores`)
+  return partes.length ? `Días fuera de la campaña: ${partes.join('; ')}. Una pieza fuera de la campaña se bloquea.` : ''
 }
 
 /** las ofertas con ficha: el calendario pone su clave en `sede` (es lo que la hoja usa para traer la ficha de cada pieza) */
@@ -244,6 +257,7 @@ export function tareaDeCalendario(p: PedidoDeCalendario): string {
       'Si el tema cita una reseña, un testimonio o la opinión de una persona, agrega en `datos` un dato `resena` con la `ref` de su ficha. Si no hay ficha, no lo cites. Un eslogan o una frase del manual entre comillas no es una reseña.',
       'Si no tienes referencia para un dato, cambia el tema por uno que no lo necesite, o escríbelo en `pendientes`. Un tema sin datos concretos es mejor que un dato inventado.',
       'Si omites un slot de una semana, dilo en `ajustes_al_patron` con su motivo.',
+      ...[lineaDeDiasFueraDeLaCampana(p.semanas, p.fechaInicio, p.fechaFin)].filter(Boolean),
     ]),
     '',
     `# ESTRATEGIA (vigente)\n${JSON.stringify({ canales: e.canales, pilares: e.pilares, fases: e.fases, hitos: e.hitos, dependencias: e.dependencias, patron_semanal: e.patron_semanal, piezas_fijas: e.piezas_fijas, alertas: e.alertas })}`,

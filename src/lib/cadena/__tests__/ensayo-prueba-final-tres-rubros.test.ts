@@ -15,7 +15,7 @@ import { parsearBrief } from '@/lib/oficina/brief'
 import { fichaDeLaHoja } from '@/lib/oficina/sentido-contra-la-ficha'
 import { chequeosExactos } from '@/lib/oficina/exactos-de-la-ficha'
 import { calendarioGuardar, calendarioPreparar, estrategiaGuardar, estrategiaPreparar, type Estrategia } from '../index'
-import { abrirCampana } from '../campanas'
+import { abrirCampana, hoyEnZona } from '../campanas'
 import { fichasGuardar, fichasPreparar } from '../pasos'
 import { briefAbrir, conceptoAbrir, conceptoDecidir, hojaEscribir, recibirBrief, recibirConcepto, TIPO_DE_ESPERA_DE_CONCEPTO } from '../mesas'
 import { ACCIONES } from '../acciones'
@@ -222,17 +222,17 @@ describe('R5 · ensayo con dobles · el tramo de la cadena en tres rubros', () =
 const COMIDA_O_LOCAL = /\b(comida|platos?|men[uú]|restaurantes?|cocina|desayun\w*|almuerz\w*|cenas?|brunch|caf[eé]|cafeter[ií]a|bebidas?|(?<!feriados )locales?|local físico|sucursal(es)?|en persona|visítanos)\b/gi
 describe('R5 · 1b · el arranque del camino (B): `abrir` con el mismo plan', () => {
   for (const [nombre, hacer] of PRACTICAS) {
-    it(`${nombre} · contesta 201 con una campaña NUEVA del plan, día 1 por el plan (no por hoy), y lo de antes de hoy pierde su fecha`, async () => {
+    it(`${nombre} · contesta 201 con una campaña NUEVA del plan, día 1 = HOY (18-nov · DECISIÓN DE EMILIO: ya no se hereda del plan), y nada queda antes del día 1`, async () => {
       const c = hacer()
       const al = doble(c)
       const t = await recorrer(c, al)
       const camp = al.campanas.find((x) => x.id === t.id)!
       expect(camp).toMatchObject({ plan_id: 'plan-1', estado: expect.any(String) })
       expect([VIEJA, DEL_PLAN]).not.toContain(t.id)
-      expect(camp.fecha_inicio < AHORA.slice(0, 10)).toBe(true)
-      const antesDeHoy = al.filasGuardadas.filter((f) => f.campana_id === t.id && f.fecha < AHORA.slice(0, 10))
-      for (const f of antesDeHoy) expect(['perdio_su_fecha', 'propuesta', 'esquema'], `${f.fecha} ${f.estado}`).toContain(f.estado)
-      expect(al.filasGuardadas.filter((f) => f.campana_id === t.id && f.fecha < AHORA.slice(0, 10) && f.estado === 'validada')).toEqual([])
+      expect(camp.fecha_inicio).toBe(hoyEnZona(AHORA, camp.zona_horaria))
+      expect(camp.fecha_inicio_origen).toBe('regla')
+      // el patrón no pone nada antes del día 1; una pieza del agente que cayera ahí queda bloqueada (V04), nunca validada
+      expect(al.filasGuardadas.filter((f) => f.campana_id === t.id && f.fecha < camp.fecha_inicio && f.estado === 'validada')).toEqual([])
     })
   }
   it('control: si la campaña del mismo plan NO se borró (R2 fallida), `abrir` contesta `ya_abierta` y el tramo no arranca', async () => {

@@ -3,17 +3,18 @@
  *   A · S04 convierte las FECHAS de la cita a día de campaña (con la fecha de inicio); «semana del…» ±6 días.
  *   B · la tarea de estrategia dice cuál es el día 1, qué día de la semana es, cuánto dura y cuándo termina.
  *   D · la campaña hereda la ventana que declara el plan aprobado; sin ventana, la regla de siempre.
+ *   18-nov (DECISIÓN DE EMILIO): D queda reemplazada · el día 1 es el día de apertura; del plan se toma solo su duración.
  * El caso real: Náufrago, plan 4996c6c2 (06-nov → 28-ene-2027, 84 días); la campaña 28de888e quedó en `necesita_humano` por 3 S04 imposibles.
  */
 import { afterEach, describe, expect, it } from 'vitest'
 import { validarEstrategia, type Hallazgo } from '../index'
 import { fechasDeCalendarioEn, hitoCuadraConFechas, ventanaDelPlan, CABECERA_DEL_PLAN_CARACTERES } from '../fechas-en-texto'
-import { lineaDelDiaUno, tareaDeEstrategia } from '../indicaciones'
+import { lineaDeDiasFueraDeLaCampana, lineaDelDiaUno, tareaDeCalendario, tareaDeEstrategia } from '../indicaciones'
 import { abrirCampana, ventanaDeLaCampana } from '../campanas'
-import { estrategiaGuardar, estrategiaPreparar, validarSinEscribir } from '../pasos'
+import { calendarioPreparar, estrategiaGuardar, estrategiaPreparar, validarSinEscribir } from '../pasos'
 import { medidaDeCampana } from '../constantes'
 import { fechaDeFila } from '../fechas'
-import { ponerNecesitaHumano } from '../nucleo'
+import { abrirEsperaDe, ponerNecesitaHumano } from '../nucleo'
 import type { Campana } from '../almacen'
 import { AlmacenMemoria } from '../__fixtures__/almacen-memoria'
 import { clienteA, contextoDe, formatosDeLaMigracion } from '../__fixtures__/clientes'
@@ -158,19 +159,32 @@ describe('D · la campaña hereda la ventana del plan', () => {
     expect(ventanaDelPlan('**28 de enero de 2027 – 6 de noviembre de 2026**')).toBeNull() // al revés
     expect(ventanaDelPlan('**6 de noviembre de 2026 – 8 de noviembre de 2026**')).toBeNull() // 3 días no es una ventana
   })
-  it('la regla elige: plan si declara ventana y nadie pidió otra medida; si no, primer lunes + medida', () => {
-    expect(ventanaDeLaCampana(PLAN, '2026-11-09', 90, false)).toEqual({ fecha_inicio: '2026-11-06', fecha_fin: '2027-01-28', origen: 'plan', dias: 84 })
-    expect(ventanaDeLaCampana(PLAN, '2026-11-09', 90, true)).toEqual({ fecha_inicio: '2026-11-09', fecha_fin: '2027-02-06', origen: 'regla', dias: 90 })
-    expect(ventanaDeLaCampana(A.planTexto, '2026-11-09', 90, false)).toEqual({ fecha_inicio: '2026-11-09', fecha_fin: '2027-02-06', origen: 'regla', dias: 90 })
+  it('🔴 18-nov (DECISIÓN DE EMILIO): el día 1 es SIEMPRE el de apertura; la duración, la del plan (su ventana) o la medida pedida', () => {
+    expect(ventanaDeLaCampana(PLAN, '2026-11-18', 90, false)).toEqual({ fecha_inicio: '2026-11-18', fecha_fin: '2027-02-09', origen: 'regla', dias: 84 })
+    expect(ventanaDeLaCampana(PLAN, '2026-11-18', 90, true)).toEqual({ fecha_inicio: '2026-11-18', fecha_fin: '2027-02-15', origen: 'regla', dias: 90 })
+    expect(ventanaDeLaCampana(A.planTexto, '2026-11-18', 90, false)).toEqual({ fecha_inicio: '2026-11-18', fecha_fin: '2027-02-15', origen: 'regla', dias: 90 })
   })
-  it('🔴 abrir con un plan que declara su ventana: la campaña nace con ella, origen «plan», y sin espera de «fecha propuesta»', async () => {
+  it('🔴 18-nov · el caso de Náufrago: abrir HOY el plan del 06-nov da día 1 = hoy, los 84 días del plan enteros y la semana 1 = esta semana; sin espera de «fecha propuesta»', async () => {
     const al = almacenCon(PLAN)
-    const r = await abrirCampana(al, { workflow_id: 'wf-cadena', workflow_execution_id: '1', client_id: A.clientId, seco: true }, '2026-11-06T11:21:00Z')
+    const r = await abrirCampana(al, { workflow_id: 'wf-cadena', workflow_execution_id: '1', client_id: A.clientId, seco: true }, '2026-11-18T15:00:00Z')
     expect(r.status).toBe(201)
     const c = (r.cuerpo as { campana: { id: string; fecha_inicio: string; fecha_fin: string; fecha_inicio_origen: string } }).campana
-    expect([c.fecha_inicio, c.fecha_fin, c.fecha_inicio_origen]).toEqual(['2026-11-06', '2027-01-28', 'plan'])
-    expect((r.cuerpo as { ventana_origen: string }).ventana_origen).toBe('plan')
-    expect(al.esperas.filter((e) => e.campana_id === c.id && e.objeto_tipo === 'fecha_inicio_propuesta')).toEqual([])
+    expect([c.fecha_inicio, c.fecha_fin, c.fecha_inicio_origen]).toEqual(['2026-11-18', '2027-02-09', 'regla'])
+    expect((r.cuerpo as { ventana_origen: string }).ventana_origen).toBe('regla')
+    expect(medidaDeCampana(c).dias).toBe(84) // no se pierde ninguna semana del plan
+    expect(fechaDeFila(c.fecha_inicio, 1, 1)).toBe('2026-11-16') // la semana 1 es ESTA semana (lunes 16)…
+    expect(fechaDeFila(c.fecha_inicio, 1, 3)).toBe('2026-11-18') // …y el día 1 es su miércoles
+    expect(al.esperas.filter((e) => e.campana_id === c.id)).toEqual([])
+  })
+  it('🔴 18-nov · con el día 1 corrido, la tarea de estrategia cuenta la cronología del plan desde SU día 1 (06-nov) y deja los feriados reales en su fecha', async () => {
+    const al = almacenCon(PLAN)
+    const r = await abrirCampana(al, { workflow_id: 'wf-cadena', workflow_execution_id: '1', client_id: A.clientId, seco: true }, '2026-11-18T15:00:00Z')
+    const id = (r.cuerpo as { campana: { id: string } }).campana.id
+    const p = await estrategiaPreparar(al, { workflow_id: 'wf-cadena', workflow_execution_id: '1', campana_id: id }, '2026-11-18T15:00:10Z')
+    const tarea = String((p.cuerpo as { run_sdk: { task?: string } }).run_sdk.task)
+    expect(tarea).toContain('El día 1 de la campaña es el miércoles 2026-11-18; la campaña dura 84 días y termina el martes 2027-02-09 (día 84).')
+    expect(tarea).toContain('El plan cuenta sus fechas desde SU día 1, el viernes 2026-11-06')
+    expect(tarea).toContain('Las fechas especiales reales (feriados, Navidad, fechas comerciales) no se corren: quedan en su fecha de calendario.')
   })
   it('🔴 corrección 2 de CC7: una ventana que empieza un viernes no pierde su última semana (06-nov → 28-ene = 13 semanas desde el lunes 02-nov)', () => {
     const m = medidaDeCampana({ fecha_inicio: '2026-11-06', fecha_fin: '2027-01-28' })
@@ -189,17 +203,51 @@ describe('D · la campaña hereda la ventana del plan', () => {
     const abrir = (plan: string, ahora: string) => abrirCampana(al, { workflow_id: 'wf-cadena', workflow_execution_id: '1', client_id: A.clientId, plan_id: plan, seco: true }, ahora)
     const vieja = ((await abrir('plan-1', '2026-11-06T11:21:00Z')).cuerpo as { campana: Campana }).campana
     await ponerNecesitaHumano(al, vieja, 'la estrategia sigue con 3 bloqueo(s)', '2026-11-06T11:23:00Z')
+    await abrirEsperaDe(al, vieja, 'dato_en_investigacion', 's1-d2-a', 'un dato se investiga', '2026-11-06T11:23:01Z') // 18-nov: la de fecha propuesta ya no nace; la segunda la pone la prueba
     const vivasDe = (id: string) => al.esperas.filter((e) => e.campana_id === id && e.estado === 'viva').map((e) => e.objeto_tipo).sort()
-    expect(vivasDe(vieja.id)).toEqual(['fecha_inicio_propuesta', 'necesita_humano']) // las dos de Náufrago 28de888e
+    expect(vivasDe(vieja.id)).toEqual(['dato_en_investigacion', 'necesita_humano'])
     const r = await abrir('plan-2', '2026-11-09T15:00:00Z')
     expect((r.cuerpo as { reemplaza_a: string }).reemplaza_a).toBe(vieja.id)
     expect(vivasDe(vieja.id)).toEqual([])
   })
-  it('abrir con un plan sin ventana: la regla de siempre y su espera', async () => {
+  it('18-nov · abrir con un plan sin ventana: día 1 = apertura con la medida de siempre, y tampoco deja espera de «fecha propuesta»', async () => {
     const al = almacenCon(A.planTexto)
     const r = await abrirCampana(al, { workflow_id: 'wf-cadena', workflow_execution_id: '1', client_id: A.clientId, seco: true }, '2026-11-06T11:21:00Z')
-    const c = (r.cuerpo as { campana: { id: string; fecha_inicio_origen: string } }).campana
-    expect(c.fecha_inicio_origen).toBe('regla')
-    expect(al.esperas.filter((e) => e.campana_id === c.id && e.objeto_tipo === 'fecha_inicio_propuesta')).toHaveLength(1)
+    const c = (r.cuerpo as { campana: { id: string; fecha_inicio: string; fecha_inicio_origen: string } }).campana
+    expect([c.fecha_inicio, c.fecha_inicio_origen]).toEqual(['2026-11-06', 'regla'])
+    expect(al.esperas.filter((e) => e.campana_id === c.id && e.objeto_tipo === 'fecha_inicio_propuesta')).toHaveLength(0)
+  })
+})
+
+describe('18-nov · día 1 = apertura · la tarea del calendario nombra los días de la semana que quedan fuera de la campaña', () => {
+  it('🔴 día 1 un miércoles: la semana 1 avisa los días anteriores; una tanda que no toca la semana 1 ni la última no dice nada', () => {
+    const l = lineaDeDiasFueraDeLaCampana([1, 2, 3, 4], '2026-11-18', '2027-02-09')
+    expect(l).toBe('Días fuera de la campaña: la campaña empieza el miércoles 2026-11-18 (día 1): en esa semana no pongas piezas en los días anteriores. Una pieza fuera de la campaña se bloquea.')
+    expect(lineaDeDiasFueraDeLaCampana([5, 6, 7, 8], '2026-11-18', '2027-02-09')).toBe('')
+  })
+  it('🔴 la última semana avisa los días posteriores al último día (09-feb es martes: miércoles a domingo quedan fuera)', () => {
+    const l = lineaDeDiasFueraDeLaCampana([13], '2026-11-18', '2027-02-09')
+    expect(l).toBe('Días fuera de la campaña: la campaña termina el martes 2027-02-09: en esa semana no pongas piezas en los días posteriores. Una pieza fuera de la campaña se bloquea.')
+  })
+  it('un día 1 en lunes y un fin en domingo no dejan días fuera: la línea queda vacía (la tarea, byte a byte como antes)', () => {
+    expect(lineaDeDiasFueraDeLaCampana([1, 13], '2026-11-16', '2027-02-14')).toBe('')
+    expect(lineaDeDiasFueraDeLaCampana([1], null, null)).toBe('')
+    expect(lineaDeDiasFueraDeLaCampana([1], 'no-es-fecha', null)).toBe('')
+  })
+  it('🔴 por el camino real: una campaña abierta un miércoles le pide al agente la tanda 1 avisando los días anteriores al día 1', async () => {
+    const al = almacenCon(A.planTexto)
+    const w = { workflow_id: 'wf-cadena', workflow_execution_id: '1' }
+    const id = ((await abrirCampana(al, { ...w, client_id: A.clientId, seco: true }, '2026-11-18T15:00:00Z')).cuerpo as { campana: { id: string } }).campana.id
+    const pe = await estrategiaPreparar(al, { ...w, campana_id: id }, '2026-11-18T15:00:10Z')
+    await estrategiaGuardar(al, { ...w, campana_id: id, corrida_id: pe.cuerpo.corrida_id, resultado: { success: true, structured_output: A.estrategia, cost_usd: 0.3 } }, '2026-11-18T15:00:20Z')
+    const pc = await calendarioPreparar(al, { ...w, campana_id: id, tanda: 1 }, '2026-11-18T15:00:30Z')
+    expect(pc.status).toBe(200)
+    expect(String((pc.cuerpo as { run_sdk: { task?: string } }).run_sdk.task)).toContain('Días fuera de la campaña: la campaña empieza el miércoles 2026-11-18 (día 1): en esa semana no pongas piezas en los días anteriores.')
+  })
+  it('🔴 la tarea del calendario lleva la línea solo si recibe las fechas; sin ellas, igual que antes', () => {
+    const base = { ctx: { ...contextoDe(A), planTexto: PLAN }, estrategia: A.estrategia, tanda: 1, semanas: [1, 2, 3, 4], filasPrevias: [] }
+    expect(tareaDeCalendario({ ...base, fechaInicio: '2026-11-18', fechaFin: '2027-02-09' })).toContain('la campaña empieza el miércoles 2026-11-18 (día 1)')
+    expect(tareaDeCalendario(base)).not.toContain('Días fuera de la campaña')
+    expect(tareaDeCalendario({ ...base, fechaInicio: null, fechaFin: null })).toBe(tareaDeCalendario(base))
   })
 })
