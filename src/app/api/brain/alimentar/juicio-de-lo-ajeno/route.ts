@@ -19,6 +19,7 @@ export const maxDuration = 300
 const textos = (x: unknown): string[] => (Array.isArray(x) ? x : [x]).filter((v): v is string => typeof v === 'string' && v.trim() !== '').map((v) => v.trim())
 
 export async function POST(request: Request) {
+  const hasta = Date.now() + (maxDuration - 20) * 1000
   const auth = checkInternalKey(request)
   if (!auth.ok) return NextResponse.json({ error: 'unauthorized', code: 'E-AUTH-001', detail: auth.reason }, { status: 401 })
   let c: Record<string, unknown>
@@ -35,7 +36,7 @@ export async function POST(request: Request) {
       tandas_por_cliente: typeof c.tandas === 'number' ? c.tandas : undefined,
       ids: c.ids === undefined ? undefined : textos(c.ids),
       escribir: c.escribir === false ? false : true,
-      plazoMs: 270_000,
+      hasta,
     })
     return NextResponse.json({ ok: r.estado === 'ok', ...r }, { status: r.estado === 'error' ? 500 : 200 })
   } catch (e) {

@@ -31,9 +31,16 @@ describe('la ruta del juicio de relevancia', () => {
   })
   it('por omisión es ENSAYO y escribe; pasa flujo, tandas e ids', async () => {
     await pedir({ client_id: C1 })
-    expect(m.juzgar).toHaveBeenLastCalledWith({ soy: 'deps' }, { clientes: [C1], dry_run: true, workflow_id: undefined, workflow_execution_id: undefined, tandas_por_cliente: undefined, ids: undefined, escribir: true, plazoMs: 270_000 })
+    expect(m.juzgar).toHaveBeenLastCalledWith({ soy: 'deps' }, { clientes: [C1], dry_run: true, workflow_id: undefined, workflow_execution_id: undefined, tandas_por_cliente: undefined, ids: undefined, escribir: true, hasta: expect.any(Number) })
     await pedir({ clientes: [C1, ' '], dry_run: false, workflow_id: 'w', workflow_execution_id: 'e', tandas: 2, ids: ['a', 3], escribir: false })
-    expect(m.juzgar).toHaveBeenLastCalledWith({ soy: 'deps' }, { clientes: [C1], dry_run: false, workflow_id: 'w', workflow_execution_id: 'e', tandas_por_cliente: 2, ids: ['a'], escribir: false, plazoMs: 270_000 })
+    expect(m.juzgar).toHaveBeenLastCalledWith({ soy: 'deps' }, { clientes: [C1], dry_run: false, workflow_id: 'w', workflow_execution_id: 'e', tandas_por_cliente: 2, ids: ['a'], escribir: false, hasta: expect.any(Number) })
+  })
+  it('la hora límite cuenta desde que entra el pedido (300 s de la ruta menos 20 s)', async () => {
+    const antes = Date.now()
+    await pedir({ client_id: C1 })
+    const hasta = m.juzgar.mock.calls[0][1].hasta as number
+    expect(hasta).toBeGreaterThanOrEqual(antes + 280_000)
+    expect(hasta).toBeLessThanOrEqual(Date.now() + 280_000)
   })
   it('dry_run solo se apaga con false exacto', async () => {
     await pedir({ client_id: C1, dry_run: 'false' })

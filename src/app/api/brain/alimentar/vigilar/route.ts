@@ -24,6 +24,8 @@ export const runtime = 'nodejs'
 export const maxDuration = 300
 
 export async function POST(request: Request) {
+  // la hora en que entró el pedido: el juicio de lo ajeno termina antes de que se acabe el tiempo de la ruta (maxDuration 300 s, con 20 s de margen)
+  const hasta = Date.now() + (maxDuration - 20) * 1000
   const auth = checkInternalKey(request)
   if (!auth.ok) return NextResponse.json({ error: 'unauthorized', code: 'E-AUTH-001', detail: auth.reason }, { status: 401 })
   let cuerpo: unknown
@@ -37,7 +39,7 @@ export async function POST(request: Request) {
     // 17-nov (ENCARGO 3 de Cerebro, fase B): de dónde viene cada foto y video ajeno (papel, vía, nivel, motivo). Igual: aparte, nunca cambia al vigilante
     const origen = await origenDeLaCorridaDelVigilante(db, cuerpo, r.body).catch((e) => ({ error: e instanceof Error ? e.message : String(e) }))
     // 18-nov (ENCARGO 4 de Cerebro): el JUICIO DE RELEVANCIA de lo ajeno ya clasificado (Haiku 4.5, tope diario). Apagado salvo PORTERO_RELEVANCIA=on; aparte, nunca cambia al vigilante
-    const relevancia = await relevanciaDeLaCorridaDelVigilante(depsDeRelevanciaDelEntorno({ db, origen: new URL(request.url).origin, llaveInterna: process.env.INTERNAL_API_KEY ?? '' }), cuerpo, r.body).catch((e) => ({ error: e instanceof Error ? e.message : String(e) }))
+    const relevancia = await relevanciaDeLaCorridaDelVigilante(depsDeRelevanciaDelEntorno({ db, origen: new URL(request.url).origin, llaveInterna: process.env.INTERNAL_API_KEY ?? '' }), cuerpo, r.body, process.env, hasta).catch((e) => ({ error: e instanceof Error ? e.message : String(e) }))
     return NextResponse.json({ ...r.body, ...(hechos ? { hechos_del_negocio: hechos } : {}), ...(origen ? { origen_de_lo_ajeno: origen } : {}), ...(relevancia ? { relevancia_de_lo_ajeno: relevancia } : {}) }, { status: r.status })
   } catch (e) {
     return NextResponse.json({ error: 'vigilante_error', detalle: e instanceof Error ? e.message : String(e) }, { status: 500 })
