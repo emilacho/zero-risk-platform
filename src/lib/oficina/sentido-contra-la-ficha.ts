@@ -76,10 +76,12 @@ export function fichaDeLaHoja(seccion: string | null | undefined): FichaDeLaHoja
     resto.push(l)
   }
   const ofertaReal = oferta && !/declarado\s*$/i.test(oferta) ? oferta : null
-  const base = { oferta: ofertaReal, resto: resto.join('\n') }
-  if (!vista) return { ...base, estado: 'sin_ficha', lineas: [], motivo: 'la hoja no trae la ficha de la oferta' }
-  if (!items.length) return { ...base, estado: 'sin_ficha', lineas: [], motivo: declarado ?? 'la ficha llegó vacía' }
-  return { ...base, estado: 'con_ficha', lineas: cierre ? [...items, `${CAMPO_CIERRE_DE_LA_HOJA.toLowerCase()}: ${cierre}`] : items, ...(cierre ? { cierre } : {}) }
+  // 18-nov · #1147 · el cierre viaja también SIN ficha: la hoja lo escribe con los hechos vivos del cerebro aunque no haya foto de la oferta
+  const base = { oferta: ofertaReal, resto: resto.join('\n'), ...(cierre ? { cierre } : {}) }
+  const lineaDelCierre = cierre ? [`${CAMPO_CIERRE_DE_LA_HOJA.toLowerCase()}: ${cierre}`] : []
+  if (!vista) return { ...base, estado: 'sin_ficha', lineas: lineaDelCierre, motivo: 'la hoja no trae la ficha de la oferta' }
+  if (!items.length) return { ...base, estado: 'sin_ficha', lineas: lineaDelCierre, motivo: declarado ?? 'la ficha llegó vacía' }
+  return { ...base, estado: 'con_ficha', lineas: [...items, ...lineaDelCierre] }
 }
 
 /** el documento para el revisor: SOLO con ficha (sin ficha no se agrega nada · el pedido queda como antes) */

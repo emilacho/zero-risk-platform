@@ -11,7 +11,7 @@ import type { ConceptoDeLaFila, DatoDeterminado, Fila, FormatosPorRed } from './
 import { PROPORCION_POR_FORMATO, proporcionDe, proporcionDeLaTabla } from './proporciones'
 import type { BriefCreativoLeido } from './brief-creativo'
 import { comoSeVeSinPartes, decisionDeLaParte, ideaDelBanco, PARTES_DE_COMO_SE_VE, type CapituloDelConcepto, type ConceptoLeido, type IdeaDelBanco } from './conceptos'
-import { comoSeCompraParaLaRed, datosSinFuente, fichaDeLaOferta, fichaEnLineas, type FichaDeOferta } from './ficha-de-oferta'
+import { comoSeCompraParaLaRed, datosSinFuente, fichaDeLaOferta, fichaEnLineas, fichasConHechos, ofertaCerradaOInexistenteEn, type DatoDeFicha, type FichaDeOferta, type HechoDelNegocioPorOferta } from './ficha-de-oferta'
 
 export const FAMILIA_DEL_KIT = 'kit_historias'
 /** el id de un brief del parte (mismo criterio que `autoproducir.ts` RE_BRIEF) */
@@ -53,6 +53,12 @@ export interface InsumosDeLaHoja {
   proporciones?: Readonly<Record<string, string>>
   /** 17-nov · Sprint 4 · A · las fichas de hechos por oferta (la orden de trabajo de cada pieza); sin fichas ⇒ cada pieza lo declara, nada se bloquea */
   fichas?: ReadonlyArray<FichaDeOferta> | null
+  /**
+   * 18-nov · RESPUESTA-LENOVO-a-CC3-CC7 (#1147) · los hechos del negocio leídos EN VIVO del cerebro al armar la hoja: el estado de la oferta en la fecha de la fila
+   * (abierta · cerrada · aún no existe) sale de aquí y, si choca con la foto de la ficha (la del inicio de la campaña), MANDA el cerebro.
+   * `undefined` = el almacén no los sabe leer (vale la ficha, como hoy) · `null` = no se pudieron leer (vale la ficha y se avisa).
+   */
+  hechos?: ReadonlyArray<HechoDelNegocioPorOferta> | null
 }
 export interface BriefDeLaHoja { brief_id: string; fila_id: string | null; fila_ids: string[]; familia: string | null; red: string; formato: string; idea_ref: string | null }
 export interface ProcedenciaDeLaHoja {
@@ -203,16 +209,40 @@ export const CAMPO_FICHA = 'FICHA DE LA OFERTA'
  * Sin fichas cargadas se DECLARA (🟡 2 de CC6 a #1131: nunca en silencio); con fichas pero sin la de esta oferta, se declara y se avisa.
  */
 export const SIN_FICHAS = 'sin fichas de hechos todavía · declarado'
+/**
+ * 17-nov · cambio 4 · D1 (regla dura firmada por Emilio) · PEDIDO-CC4-a-CC3: la oficina lee la hoja tal cual y las líneas de la ficha no traen el tipo del hecho.
+ * Solo cuando la ficha dice, POR CÓDIGO, que la oferta está cerrada o aún no existe en la fecha de la fila. Sin dato no se escribe nada (las hojas de hoy no cambian).
+ * El nombre lo lee la oficina como `CAMPO_CIERRE_DE_LA_HOJA` (`src/lib/oficina/sentido-contra-la-ficha.ts`): cambiarlo en los dos lados.
+ */
+export const CAMPO_OFERTA_CERRADA = 'OFERTA CERRADA EN SU FECHA'
+/**
+ * ¿la oferta de la fila está cerrada o aún no existe en su fecha? Con los hechos VIVOS del cerebro, decide el cerebro (el que sabe el hecho); sin ellos, la foto de la ficha.
+ * Un choque (la foto dice una cosa y el cerebro de hoy otra) se AVISA: nunca en silencio.
+ */
+function cierreDeLaFila(ins: InsumosDeLaHoja, ficha: FichaDeOferta | null, f: FilaDeHoja, id: string, avisos: string[]): DatoDeFicha | null {
+  const deLaFoto = ofertaCerradaOInexistenteEn(ficha, f.fecha)
+  if (ins.hechos === undefined) return deLaFoto
+  if (ins.hechos === null) {
+    if (f.oferta) avisos.push(`${id}: los hechos del negocio no se pudieron leer en vivo · el estado de «${limpio(f.oferta)}» sale de la ficha del inicio de la campaña`)
+    return deLaFoto
+  }
+  if (!f.oferta) return null
+  const vivo = ofertaCerradaOInexistenteEn(fichasConHechos([{ clave: f.oferta }], ins.hechos)[0], f.fecha)
+  if (!!vivo !== !!deLaFoto && ficha) avisos.push(`${id}: el cerebro de hoy dice que «${limpio(f.oferta)}» está ${vivo ? 'CERRADA o aún no existe' : 'ABIERTA'} el ${f.fecha}; la ficha del inicio decía lo contrario · manda el cerebro`)
+  return vivo
+}
+const lineaDelCierre = (d: DatoDeFicha | null): string[] => (d ? [campo(CAMPO_OFERTA_CERRADA, `${limpio(d.valor)} (fuente: ${limpio(d.fuente)})`)] : [])
 function fichaDeLaPieza(ins: InsumosDeLaHoja, f: FilaDeHoja, id: string, avisos: string[]): string[] {
-  if (!ins.fichas?.length) return [campo(CAMPO_FICHA, SIN_FICHAS)]
+  // sin ficha también se mira el cierre vivo: un cierre que el cerebro registró después no se pierde por falta de foto
+  if (!ins.fichas?.length) return [campo(CAMPO_FICHA, SIN_FICHAS), ...lineaDelCierre(cierreDeLaFila(ins, null, f, id, avisos))]
   const ficha = fichaDeLaOferta(ins.fichas, f.oferta)
   if (!ficha) {
     avisos.push(`${id}: ${f.oferta ? `la oferta «${limpio(f.oferta)}» no tiene ficha de hechos` : 'la fila no dice su oferta'} · la mesa trabaja sin ficha`)
-    return [campo(CAMPO_FICHA, f.oferta ? `sin ficha para «${limpio(f.oferta)}» · declarado` : 'sin oferta, sin ficha · declarado')]
+    return [campo(CAMPO_FICHA, f.oferta ? `sin ficha para «${limpio(f.oferta)}» · declarado` : 'sin oferta, sin ficha · declarado'), ...lineaDelCierre(cierreDeLaFila(ins, null, f, id, avisos))]
   }
   const sinFuente = datosSinFuente(ficha)
   if (sinFuente) avisos.push(`${id}: la ficha de «${limpio(ficha.clave)}» trae ${sinFuente} ${sinFuente === 1 ? 'dato' : 'datos'} sin fuente · no ${sinFuente === 1 ? 'entra' : 'entran'} en la hoja`)
-  return listaDe(CAMPO_FICHA, fichaEnLineas(ficha, f.fecha))
+  return [...listaDe(CAMPO_FICHA, fichaEnLineas(ficha, f.fecha)), ...lineaDelCierre(cierreDeLaFila(ins, ficha, f, id, avisos))]
 }
 /**
  * 17-nov · Sprint 4 · el llamado a la acción con su orden de respaldo (DISEÑO CC3 · borde b con CC5 · 🟢 CC6): escribirlo es trabajo creativo (la mesa);

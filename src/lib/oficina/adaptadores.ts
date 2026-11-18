@@ -159,6 +159,8 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
     mesa: puertoDeLaMesa(db, (clave) => almacenDeLaCadena().leerConfig(clave)),
     // GO 11-nov «la mesa confía en la familia»: la tabla de formatos la lee SOLO el almacén de la cadena (las tablas `cadena_*` no se nombran aquí)
     formatosDeLaCadena: () => almacenDeLaCadena().formatos(),
+    // 18-nov · #1147 · D1 en la jefatura con los hechos VIVOS del cerebro: la misma lectura que usa la hoja (null = no se pudo leer ⇒ se declara)
+    hechosPorOferta: async (clientId) => (await almacenDeLaCadena().hechosDelNegocio?.(clientId)) ?? null,
     // 31-oct · las mesas de brief y de concepto entregan su tablero a la cadena por SU almacén (las tablas `cadena_*` solo se tocan allí). Mientras la cadena (T3 de CC1) no conecte su recepción, la entrega dice la verdad: no recibida, y la mesa cierra igual avisando a `alertas`
     cadena: env.puertoDeLaCadena ?? { entregarBrief: async () => ({ ok: false, error: SIN_RECEPCION_DE_LA_CADENA }), entregarConcepto: async () => ({ ok: false, error: SIN_RECEPCION_DE_LA_CADENA }) },
     ahora,

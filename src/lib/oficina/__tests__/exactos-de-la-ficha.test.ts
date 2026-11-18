@@ -139,9 +139,14 @@ describe('D1 · oferta cerrada o que aún no existe en la fecha de la fila (por 
   it('un hecho que no cierra (sede) no dispara D1', () => {
     expect(chequeosExactos(fichaDeLaHoja(hoja('asesoria-tributaria', conCierre('sede', {}), '2026-11-20')), '').hallazgos).toEqual([])
   })
-  it('sin ficha no hay D1 aunque la hoja traiga el campo', () => {
+  it('18-nov · #1147 (Lenovo: el estado de la oferta no depende de la foto) · SIN ficha, el campo de la hoja igual dispara D1; sin el campo, nada', () => {
     const h = `${hoja('x', null, '2026-11-20')}\n- OFERTA CERRADA EN SU FECHA: cerrada (fuente: cerebro:x)`
-    expect(chequeosExactos(fichaDeLaHoja(h), '').hallazgos).toEqual([])
+    const f = fichaDeLaHoja(h)
+    expect(f.estado).toBe('sin_ficha')
+    const r = chequeosExactos(f, '')
+    expect(r.hallazgos).toEqual([expect.objectContaining({ destino: 'calendario', origen: 'codigo', que: expect.stringMatching(/^D1 · /) })])
+    expect(r.declarado.join(' ')).toMatch(/D1 \(el cierre vivo del cerebro\)/)
+    expect(chequeosExactos(fichaDeLaHoja(hoja('x', null, '2026-11-20')), '').hallazgos).toEqual([])
   })
 })
 
@@ -173,12 +178,40 @@ describe('D1 con los hechos VIVOS (CC7 19:44Z): un cierre registrado después de
       expect(v.declarado.join(' ')).toMatch(/sin fecha legible/)
     }
     expect(fichaConCierreVivo(sinCierre(), null, '2026-11-20').declarado.join(' ')).toMatch(/no se pudieron leer/)
-    const sf = fichaDeLaHoja(hoja('x', null, '2026-11-20'))
-    expect(fichaConCierreVivo(sf, [cierre({ oferta: null })], '2026-11-20')).toEqual({ ficha: sf, declarado: [] })
   })
-  it('si la hoja ya trae el cierre, los hechos vivos no lo duplican', () => {
-    const conCierre = fichaDeLaHoja(hoja(ficha.clave, { ...ficha, no_se_puede_afirmar: [{ valor: 'cerrada', fuente: 'cerebro:x', tipo: 'cierre_retiro' }] }, '2026-11-20'))
-    expect(fichaConCierreVivo(conCierre, [cierre()], '2026-11-20').ficha).toBe(conCierre)
+  it('18-nov · #1147 · SIN ficha también: un cierre vivo de la oferta (o de todo el negocio) frena con D1', () => {
+    const sf = fichaDeLaHoja(hoja('x', null, '2026-11-20'))
+    const v = fichaConCierreVivo(sf, [cierre({ oferta: null })], '2026-11-20')
+    expect(v.ficha.cierre).toMatch(/^la oferta se suspende/)
+    expect(chequeosExactos(v.ficha, '').hallazgos).toEqual([expect.objectContaining({ destino: 'calendario', que: expect.stringMatching(/^D1 · /) })])
+    expect(fichaConCierreVivo(sf, [cierre({ oferta: 'otra' })], '2026-11-20')).toEqual({ ficha: sf, declarado: [] })
+  })
+  const conCierreDeLaHoja = () => fichaDeLaHoja(hoja(ficha.clave, { ...ficha, no_se_puede_afirmar: [{ valor: 'cerrada', fuente: 'cerebro:x', tipo: 'cierre_retiro' }] }, '2026-11-20'))
+  it('18-nov · #1147 · hoja y cerebro de hoy con el MISMO cierre: queda igual (no se duplica ni se declara)', () => {
+    const conCierre = conCierreDeLaHoja()
+    const mismo: HechoDelNegocioPorOferta = { oferta: ficha.clave, tipo: 'cierre_retiro', valor: 'cerrada', fuente: 'x' }
+    expect(fichaConCierreVivo(conCierre, [mismo], '2026-11-20')).toEqual({ ficha: conCierre, declarado: [] })
+  })
+  it('🔴 18-nov · #1147 · hoja con otro cierre: manda el del cerebro de hoy, una sola línea de cierre', () => {
+    const v = fichaConCierreVivo(conCierreDeLaHoja(), [cierre()], '2026-11-20')
+    expect(v.ficha.cierre).toMatch(/^la oferta se suspende/)
+    expect(v.ficha.lineas.filter((l) => l.startsWith('oferta cerrada en su fecha: '))).toEqual([`oferta cerrada en su fecha: ${v.ficha.cierre}`])
+    expect(v.declarado.join(' ')).toMatch(/manda el cerebro/)
+  })
+  it('🔴 18-nov · #1147 · hoja CERRADA + cerebro de hoy sin cierre en esa fecha ⇒ abierta (manda el cerebro): sin D1 y declarado', () => {
+    for (const hechos of [[], [cierre({ vigente_desde: '2026-11-25' })], [cierre({ oferta: 'otra' })]]) {
+      const v = fichaConCierreVivo(conCierreDeLaHoja(), hechos, '2026-11-20')
+      expect(v.ficha.cierre).toBeUndefined()
+      expect(v.ficha.lineas.some((l) => l.startsWith('oferta cerrada en su fecha: '))).toBe(false)
+      expect(chequeosExactos(v.ficha, '').hallazgos.filter((h) => h.que.startsWith('D1'))).toEqual([])
+      expect(v.declarado.join(' ')).toMatch(/el cerebro de hoy la da abierta.*manda el cerebro/)
+    }
+  })
+  it('🔴 18-nov · #1147 · el cerebro no contesta: NO se lee como abierta · vale la hoja (cerrada sigue frenando) y se declara «sin verificar»', () => {
+    const v = fichaConCierreVivo(conCierreDeLaHoja(), null, '2026-11-20')
+    expect(v.ficha.cierre).toBe('cerrada (fuente: cerebro:x)')
+    expect(chequeosExactos(v.ficha, '').hallazgos.some((h) => h.que.startsWith('D1'))).toBe(true)
+    expect(v.declarado.join(' ')).toMatch(/sin verificar.*vale lo que trae la hoja: cerrada/)
   })
 })
 

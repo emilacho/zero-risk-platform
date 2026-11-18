@@ -306,10 +306,10 @@ async function sentidoDe(P: Pick<Puertos, 'hechosPorOferta'>, enc: Pick<Encargo,
   const enviadas = datosDeLaJefatura(e)?.sentido?.enviadas ?? []
   const lineas = datos(e, 'mesa')?.respuestas_a_la_jefatura
   const previas = enviadas.length ? { enviadas, lineasDeRespuesta: Array.isArray(lineas) ? lineas.filter((l): l is string => typeof l === 'string') : [] } : null
-  // D1 · un cierre que el cerebro registró DESPUÉS de armar la hoja también frena (solo lectura de los hechos vivos; si no se puede, vale el de la hoja y se declara)
+  // D1 · el estado de la oferta en la fecha de la fila se lee EN VIVO del cerebro y, si choca con la hoja, manda el cerebro (18-nov · #1147 · Lenovo).
+  // Una sola lectura por revisión, sin gasto; si no se puede, vale lo de la hoja y se declara «sin verificar»
   const deLaHoja = fichaDeLaHoja(briefDe(e)?.texto)
-  const conHechos = deLaHoja.estado === 'con_ficha' && deLaHoja.oferta && !deLaHoja.cierre
-  const hechos = conHechos && P.hechosPorOferta ? await P.hechosPorOferta(String(enc.client_id)).catch(() => null) : null
+  const hechos = deLaHoja.oferta && P.hechosPorOferta ? await P.hechosPorOferta(String(enc.client_id)).catch(() => null) : null
   const vivo = fichaConCierreVivo(deLaHoja, hechos, fechaDeLaFila(enc.sala_ref))
   return { ficha: vivo.ficha, declarado: vivo.declarado, textoDeLaPieza, filaId: typeof fila === 'string' && fila ? fila : enc.brief_id || null, encargoId: enc.id, yaDevueltas: llavesYaDevueltas(e), exactos: chequeosExactos, previas }
 }
