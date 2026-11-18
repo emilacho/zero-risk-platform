@@ -2,7 +2,7 @@
  * 18-nov · R5 · ENSAYO EN SECO DE LA PRUEBA FINAL (PLAN-CC7-prueba-final-conjunta-v2 § 4 · GO de Lenovo, punto 3 · dueño CC3) · US$ 0: sin base, sin red, sin modelo.
  * Recorre el tramo de la CADENA de la prueba (§ 3, pasos 2–9) con dobles en el código, para TRES rubros:
  *   R · un restaurante con dos sedes (la forma de Náufrago) · T · una tienda en línea · S · un servicio profesional.
- *   reabrir → estrategia → lector (ficha de la oferta) → brief → gran idea (parada: aprobar) → calendario → hojas → chequeo exacto D1 → corrección al calendario.
+ *   abrir (camino B de Lenovo: campaña NUEVA con el mismo plan) → estrategia → lector (ficha de la oferta) → brief → gran idea (parada: aprobar) → calendario → hojas → chequeo exacto D1 → corrección al calendario.
  * Mide:
  *   1. que cada tramo se recorre y cada parada aparece;
  *   2. que en T y S no queda nada atado a comida ni a locales;
@@ -15,7 +15,7 @@ import { parsearBrief } from '@/lib/oficina/brief'
 import { fichaDeLaHoja } from '@/lib/oficina/sentido-contra-la-ficha'
 import { chequeosExactos } from '@/lib/oficina/exactos-de-la-ficha'
 import { calendarioGuardar, calendarioPreparar, estrategiaGuardar, estrategiaPreparar, type Estrategia } from '../index'
-import { reabrirCampana } from '../campanas'
+import { abrirCampana } from '../campanas'
 import { fichasGuardar, fichasPreparar } from '../pasos'
 import { briefAbrir, conceptoAbrir, conceptoDecidir, hojaEscribir, recibirBrief, recibirConcepto, TIPO_DE_ESPERA_DE_CONCEPTO } from '../mesas'
 import { ACCIONES } from '../acciones'
@@ -129,10 +129,16 @@ const D = (valor: string) => ({ valor, fuente: 'manual:1', vigente_desde: '', vi
 const vacia = (clave: string, nombre: string) => ({ clave, nombre, que_es: [D(`qué es ${nombre}`)], para_quien_y_donde: [], se_puede_afirmar: [D(`se afirma de ${nombre}`)], no_se_puede_afirmar: [], oferta_y_precio: [], como_se_compra: [], que_mostrar: [], que_nunca_mostrar: [], obligatorios_legales: [], objetivo_por_fecha: [] })
 const lectorDe = (c: Practica) => ({ fichas: c.sedes.map((s) => vacia(s.clave, s.nombre ?? s.clave)), pendientes: [] })
 
-// ───────────────────────────────────────── el doble: el cliente con su campaña VIEJA sembrada (todo lo suyo) y la de la prueba, pausada y vacía (como queda tras la limpieza)
-const VIEJA = 'campana-vieja', NUEVA = 'campana-de-la-prueba'
+// ───────────────────────────────────────── el doble: el cliente como queda tras la limpieza del camino (B) de Lenovo
+// La campaña del plan (`plan-1`) ya NO existe (R2 la borró). Para la medida 3 queda sembrada una campaña VIEJA, cerrada y de OTRO plan, con todo lo suyo.
+// `conLaDelPlan`: el control · la campaña del mismo plan todavía está (como si R2 no la hubiera borrado) → `abrir` tiene que contestar `ya_abierta`.
+// `sinVieja`: el cliente sin ninguna campaña anterior.
+const NO_VAN_A_LA_HOJA = new Set(['esquema', 'cancelada', 'espera_video', 'vencida_sin_brazo', 'perdio_su_fecha', 'descartada_sin_fuente']) // = mesas.ts:799
+const VIEJA = 'campana-vieja', DEL_PLAN = 'campana-del-plan-sin-borrar'
 const RESTO = 'RESTO-DE-LA-CAMPANA-VIEJA'
-function doble(c: Practica, hechos?: HechoDelNegocioPorOferta[]) {
+type OpcionesDelDoble = { hechos?: HechoDelNegocioPorOferta[]; conLaDelPlan?: boolean; sinVieja?: boolean }
+function doble(c: Practica, o: OpcionesDelDoble = {}) {
+  const { hechos } = o
   const al = new AlmacenMemoria({
     contextos: { [c.clientId]: { ...contextoDe(c), zonaHoraria: 'America/Guayaquil' } },
     planes: { [c.clientId]: [{ plan_id: 'plan-viejo', fecha: '2026-09-01' }, { plan_id: 'plan-1', fecha: '2026-11-06' }] },
@@ -140,11 +146,13 @@ function doble(c: Practica, hechos?: HechoDelNegocioPorOferta[]) {
     journeys: [{ journeyId: 'journey-1', clientId: c.clientId }],
   })
   const base: Campana = {
-    id: NUEVA, client_id: c.clientId, plan_id: 'plan-1', fecha_inicio: '2026-11-06', fecha_inicio_origen: 'regla', fecha_fin: '2027-02-03', zona_horaria: 'America/Guayaquil', pais: 'EC',
+    id: DEL_PLAN, client_id: c.clientId, plan_id: 'plan-1', fecha_inicio: '2026-11-06', fecha_inicio_origen: 'regla', fecha_fin: '2027-02-03', zona_horaria: 'America/Guayaquil', pais: 'EC',
     sedes: c.sedes.map((s) => s.clave), estado: 'pausada', estado_motivo: 'pausada para la prueba final', presupuesto_planificacion_usd: 6, ventana_parte_dias: 10,
-    sustituir_video_por: 'ninguna', autoproducir: false, sala_ref: {}, reemplaza_a: null, seco: true,
+    sustituir_video_por: 'ninguna', autoproducir: false, sala_ref: {}, reemplaza_a: null, seco: false,
   }
-  al.campanas.push({ ...base, id: VIEJA, plan_id: 'plan-viejo', estado: 'cerrada', estado_motivo: 'campaña vieja', fecha_inicio: '2026-09-01', fecha_fin: '2026-11-29' }, base)
+  if (o.conLaDelPlan) al.campanas.push(base)
+  if (o.sinVieja) { if (hechos) al.hechos = hechos; return al }
+  al.campanas.push({ ...base, id: VIEJA, plan_id: 'plan-viejo', estado: 'cerrada', estado_motivo: 'campaña vieja', fecha_inicio: '2026-09-01', fecha_fin: '2026-11-29' })
   // todo lo de la vieja: si algún «si ya existe» lo tomara, el texto RESTO aparecería en la nueva
   al.estrategias.push({ campana_id: VIEJA, version: 3, estado: 'validada', contenido: { ...c.estrategia, pilares: [{ clave: 'resto', nombre: RESTO, pct: 100 }] }, agente: 'x', modelo: null, costo_usd: 0, workflow_execution_id: 'viejo', seco: true })
   al.fichasDeOferta.push({ campana_id: VIEJA, version: 2, fichas: [{ clave: c.sedes[0].clave, que_es: { valor: RESTO, fuente: 'manual:viejo' } }], pendientes: [] } as never)
@@ -157,10 +165,18 @@ function doble(c: Practica, hechos?: HechoDelNegocioPorOferta[]) {
 }
 
 type Tramo = { paso: string; status: number; cuerpo: Record<string, unknown> }
+/** el paso 1 del camino (B): `abrir` con el mismo plan; contesta 201 con una campaña NUEVA (`ya_abierta` = 200 cuenta aquí como falla del paso) */
+async function abrirLaDelPlan(c: Practica, al: AlmacenMemoria) {
+  const r = await abrirCampana(al, wf({ client_id: c.clientId, plan_id: 'plan-1', seco: false }), AHORA)
+  const id = (r.cuerpo.campana as { id?: string } | undefined)?.id ?? ''
+  return { r, id, nueva: r.status === 201 && !r.cuerpo.ya_abierta && id !== '' && id !== VIEJA && id !== DEL_PLAN }
+}
 async function recorrer(c: Practica, al: AlmacenMemoria) {
   const t: Tramo[] = []
   const anota = (paso: string, r: { status: number; cuerpo: Record<string, unknown> }) => { t.push({ paso, status: r.status, cuerpo: r.cuerpo }); return r }
-  anota('reabrir', await reabrirCampana(al, wf({ campana_id: NUEVA }), AHORA))
+  const ab = await abrirLaDelPlan(c, al)
+  anota('abrir', { status: ab.nueva ? 200 : 409, cuerpo: ab.r.cuerpo })
+  const NUEVA = ab.id
   const pe = anota('estrategia·preparar', await estrategiaPreparar(al, wf({ campana_id: NUEVA }), AHORA))
   anota('estrategia·guardar', await estrategiaGuardar(al, wf({ campana_id: NUEVA, corrida_id: pe.cuerpo.corrida_id, resultado: ok(c.estrategia) }), AHORA))
   const pf = anota('lector·preparar', await fichasPreparar(al, wf({ campana_id: NUEVA }), AHORA))
@@ -178,8 +194,10 @@ async function recorrer(c: Practica, al: AlmacenMemoria) {
   anota('PARADA·se-cierra-al-aprobar', { status: sigueViva === 0 ? 200 : 409, cuerpo: { vivas: sigueViva } })
   const pc = anota('calendario·preparar', await calendarioPreparar(al, wf({ campana_id: NUEVA, tanda: 1 }), AHORA))
   anota('calendario·guardar', await calendarioGuardar(al, wf({ campana_id: NUEVA, tanda: 1, corrida_id: pc.cuerpo.corrida_id, resultado: ok(tandaBuena(c)) }), AHORA))
-  anota('hojas', await hojaEscribir(al, wf({ campana_id: NUEVA, semana: 1 }), AHORA))
-  return t
+  // con (B) el día 1 lo pone el plan (no hoy): lo que cae antes de hoy + el plazo de producción queda `perdio_su_fecha` (pasos.ts:405). La hoja es la de la PRIMERA semana que va a la hoja.
+  const semana = Math.min(...al.filasGuardadas.filter((f) => f.campana_id === NUEVA && !NO_VAN_A_LA_HOJA.has(f.estado)).map((f) => f.semana))
+  anota('hojas', await hojaEscribir(al, wf({ campana_id: NUEVA, semana }), AHORA))
+  return Object.assign(t, { id: NUEVA })
 }
 
 describe('R5 · ensayo con dobles · el tramo de la cadena en tres rubros', () => {
@@ -202,6 +220,35 @@ describe('R5 · ensayo con dobles · el tramo de la cadena en tres rubros', () =
 // Dos excepciones medidas el 18-nov (las 52 coincidencias de la primera corrida eran de estas dos): «mesa» es el nombre interno de cada equipo de agentes
 // (la mesa de la gran idea, la de creativos), y «feriados locales» habla de feriados. Ninguna de las dos habla de comida ni de un local.
 const COMIDA_O_LOCAL = /\b(comida|platos?|men[uú]|restaurantes?|cocina|desayun\w*|almuerz\w*|cenas?|brunch|caf[eé]|cafeter[ií]a|bebidas?|(?<!feriados )locales?|local físico|sucursal(es)?|en persona|visítanos)\b/gi
+describe('R5 · 1b · el arranque del camino (B): `abrir` con el mismo plan', () => {
+  for (const [nombre, hacer] of PRACTICAS) {
+    it(`${nombre} · contesta 201 con una campaña NUEVA del plan, día 1 por el plan (no por hoy), y lo de antes de hoy pierde su fecha`, async () => {
+      const c = hacer()
+      const al = doble(c)
+      const t = await recorrer(c, al)
+      const camp = al.campanas.find((x) => x.id === t.id)!
+      expect(camp).toMatchObject({ plan_id: 'plan-1', estado: expect.any(String) })
+      expect([VIEJA, DEL_PLAN]).not.toContain(t.id)
+      expect(camp.fecha_inicio < AHORA.slice(0, 10)).toBe(true)
+      const antesDeHoy = al.filasGuardadas.filter((f) => f.campana_id === t.id && f.fecha < AHORA.slice(0, 10))
+      for (const f of antesDeHoy) expect(['perdio_su_fecha', 'propuesta', 'esquema'], `${f.fecha} ${f.estado}`).toContain(f.estado)
+      expect(al.filasGuardadas.filter((f) => f.campana_id === t.id && f.fecha < AHORA.slice(0, 10) && f.estado === 'validada')).toEqual([])
+    })
+  }
+  it('control: si la campaña del mismo plan NO se borró (R2 fallida), `abrir` contesta `ya_abierta` y el tramo no arranca', async () => {
+    const c = restaurante()
+    const ab = await abrirLaDelPlan(c, doble(c, { conLaDelPlan: true }))
+    expect(ab.r.status).toBe(200)
+    expect(ab.r.cuerpo.ya_abierta).toBe(true)
+    expect(ab.nueva).toBe(false)
+  })
+  it('el cliente SIN ninguna campaña anterior (el real tras la limpieza): `abrir` crea y el tramo se recorre igual', async () => {
+    const c = tienda()
+    const t = await recorrer(c, doble(c, { sinVieja: true }))
+    expect(t.map((x) => `${x.paso}:${x.status}`)).toEqual(t.map((x) => `${x.paso}:200`))
+  })
+})
+
 describe('R5 · 2 · sin comida ni locales en otros rubros', () => {
   for (const [nombre, hacer] of PRACTICAS.filter(([n]) => n !== 'R')) {
     it(`${nombre} · lo que reciben los agentes y la oficina no habla de comida ni de locales`, async () => {
@@ -222,12 +269,12 @@ describe('R5 · 3 · nada de la campaña vieja entra en la nueva', () => {
       const t = await recorrer(c, al)
       expect(t.filter((x) => JSON.stringify(x.cuerpo).includes(RESTO)).map((x) => x.paso)).toEqual([])
       expect(t.filter((x) => x.cuerpo.ya_hecha || x.cuerpo.ya_abierta).map((x) => x.paso)).toEqual([])
-      expect((await al.ultimaEstrategia(NUEVA))!.version).toBe(1)
-      expect((await al.ultimasFichas(NUEVA))!.version).toBe(1)
-      expect(JSON.stringify(await al.ultimasFichas(NUEVA))).not.toContain(RESTO)
-      expect((await al.ultimoBriefCreativo(NUEVA))!.version).toBe(1)
-      expect((await al.conceptosDe(NUEVA)).map((k) => k.version)).toEqual([1])
-      expect(al.filasGuardadas.filter((f) => f.campana_id === NUEVA).some((f) => f.tema === RESTO || f.id === 'fila-vieja')).toBe(false)
+      expect((await al.ultimaEstrategia(t.id))!.version).toBe(1)
+      expect((await al.ultimasFichas(t.id))!.version).toBe(1)
+      expect(JSON.stringify(await al.ultimasFichas(t.id))).not.toContain(RESTO)
+      expect((await al.ultimoBriefCreativo(t.id))!.version).toBe(1)
+      expect((await al.conceptosDe(t.id)).map((k) => k.version)).toEqual([1])
+      expect(al.filasGuardadas.filter((f) => f.campana_id === t.id).some((f) => f.tema === RESTO || f.id === 'fila-vieja')).toBe(false)
       // y la vieja quedó como estaba
       expect(al.campanas.find((x) => x.id === VIEJA)!.estado).toBe('cerrada')
       expect(al.filasGuardadas.filter((f) => f.campana_id === VIEJA)).toHaveLength(1)
@@ -240,11 +287,11 @@ describe('R5 · 4 · D1 en el doble (sede cerrada SOLO en los hechos de práctic
   const CIERRE: HechoDelNegocioPorOferta = { oferta: 'playa', sede_id: null, tipo: 'cierre_retiro', valor: 'la sede de la playa cerró por temporada', vigente_desde: '2026-11-01', vigente_hasta: null, fuente: 'dueno · ficha:practica', fecha_de_la_fuente: '2026-11-17', confianza: 'alta' }
   it('🔴 R · las piezas de la sede cerrada llevan la línea; D1 las manda al calendario como regla dura; las de la sede abierta no', async () => {
     const c = restaurante()
-    const al = doble(c, [CIERRE])
+    const al = doble(c, { hechos: [CIERRE] })
     const t = await recorrer(c, al)
     const hoja = t.find((x) => x.paso === 'hojas')!.cuerpo
     expect(hoja.filas, JSON.stringify(hoja)).toBeDefined()
-    const filas = al.filasGuardadas.filter((f) => f.campana_id === NUEVA && (hoja.filas as string[]).includes(f.id))
+    const filas = al.filasGuardadas.filter((f) => f.campana_id === t.id && (hoja.filas as string[]).includes(f.id))
     const playa = filas.filter((f) => f.sede === 'playa'), centro = filas.filter((f) => f.sede === 'centro')
     expect(playa.length).toBeGreaterThan(0)
     expect(centro.length).toBeGreaterThan(0)
@@ -255,18 +302,18 @@ describe('R5 · 4 · D1 en el doble (sede cerrada SOLO en los hechos de práctic
       if (f.sede === 'playa') {
         expect(s).toContain(`- ${CAMPO_OFERTA_CERRADA}: la sede de la playa cerró por temporada`)
         expect(d1).toEqual([expect.objectContaining({ destino: 'calendario', origen: 'codigo' })])
-        const r = await ACCIONES.correcciones.recibir(al, wf({ campana_id: NUEVA, fila_id: f.id, destino: 'calendario', motivo: d1[0].que, linea_de_la_ficha: d1[0].linea_de_la_ficha, encargo_id: `enc-${f.id}`, dura: true, regla: 'D1', origen: 'codigo' }), AHORA)
+        const r = await ACCIONES.correcciones.recibir(al, wf({ campana_id: t.id, fila_id: f.id, destino: 'calendario', motivo: d1[0].que, linea_de_la_ficha: d1[0].linea_de_la_ficha, encargo_id: `enc-${f.id}`, dura: true, regla: 'D1', origen: 'codigo' }), AHORA)
         expect(r.status, JSON.stringify(r.cuerpo)).toBe(201)
       } else {
         expect(s).not.toContain(CAMPO_OFERTA_CERRADA)
         expect(d1).toEqual([])
       }
     }
-    expect(al.correcciones.filter((k) => k.campana_id === NUEVA && k.destino === 'calendario')).toHaveLength(playa.length)
+    expect(al.correcciones.filter((k) => k.campana_id === t.id && k.destino === 'calendario')).toHaveLength(playa.length)
   })
   it('sin el hecho de cierre, la misma corrida no escribe la línea ni dispara D1 (las sedes reales nunca se tocan: todo es del doble)', async () => {
     const c = restaurante()
-    const t = await recorrer(c, doble(c, []))
+    const t = await recorrer(c, doble(c, { hechos: [] }))
     expect(String(t.find((x) => x.paso === 'hojas')!.cuerpo.hoja)).not.toContain(CAMPO_OFERTA_CERRADA)
   })
 })
