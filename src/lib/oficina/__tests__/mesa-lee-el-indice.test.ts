@@ -133,6 +133,8 @@ describe('al abrir una mesa de pieza: UNA lectura del índice y sin el pedido me
     expect(indices).toHaveLength(1)
     expect(indices[0]).toMatchObject({ cliente: CLIENTE, agente: 'oficina-creativa', pieza: { encargo_id: id } })
     expect(indices[0].pieza.hoja).toContain('BRF-0100')
+    // o17 (CC6): la apertura le pasa el plan del encargo a la hoja (no solo la función que la arma)
+    expect(indices[0].pieza.hoja).toContain('## El plan de trabajo\nPLAN DE TRABAJO DE PRUEBA: serie de posts de producto antes de la pauta.')
     for (const c of CASILLAS) { expect(indices[0]).not.toHaveProperty(c); expect(indices[0].pieza).not.toHaveProperty(c) }
     expect(est().indice).toMatchObject({ huella: 'h-olon-1' })
     expect(est().indice!.base).toContain('Olón · martes a domingo')
@@ -239,8 +241,8 @@ describe('leer la entrega (puro)', () => {
     const body = {
       estado: 'ok',
       material: [
-        { numero: 1, ref: 'cerebro_fichas:30557c31', estado_de_lectura: 'ok', texto: 'Horario de Olón: 12:00 a 22:00', estado: 'vigente', sede: 'olon', fecha_fuente: '2026-11-10', fuente: 'dueño' },
-        { numero: 3, ref: 'cerebro_fichas:b51fa4e4', estado_de_lectura: 'error_de_lectura', texto: null, sede: 'guayaquil' },
+        { numero: 1, ref: 'ficha:30557c31', estado_de_lectura: 'ok', texto: 'Horario de Olón: 12:00 a 22:00', estado: 'vigente', sede: 'olon', fecha_fuente: '2026-11-10', fuente: 'dueño' },
+        { numero: 3, ref: 'ficha:b51fa4e4', estado_de_lectura: 'error_de_lectura', texto: null, sede: 'guayaquil' },
       ],
       no_consta: [{ numero: 9999, estado: 'no_consta', motivo: 'ese número no está en la lista' }],
       huella: 'h1',
@@ -248,8 +250,8 @@ describe('leer la entrega (puro)', () => {
     const f = leerEntrega(body, [1, 3, 9999])
     expect(f.map((x) => [x.numero, x.estado, x.motivo ?? null])).toEqual([[1, 'ok', null], [3, 'error_de_lectura', null], [9999, 'no_consta', 'ese número no está en la lista']])
     const t = fichasEnTexto(f)
-    expect(t).toContain('### Número 1 · cerebro_fichas:30557c31 · sede olon · fecha 2026-11-10 · fuente dueño\nHorario de Olón: 12:00 a 22:00')
-    expect(t).toContain('### Número 3 · cerebro_fichas:b51fa4e4 · sede guayaquil\nNo consta. No lo des por sabido.')
+    expect(t).toContain('### Número 1 · ficha:30557c31 · sede olon · fecha 2026-11-10 · fuente dueño\nHorario de Olón: 12:00 a 22:00')
+    expect(t).toContain('### Número 3 · ficha:b51fa4e4 · sede guayaquil\nNo consta. No lo des por sabido.')
     expect(t).toContain('### Número 9999 · sin sede\nNo consta: ese número no está en la lista.')
     expect(t).not.toContain('el cerebro no devolvió este número')
   })

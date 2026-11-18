@@ -16,6 +16,7 @@
 const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js')
 const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js')
 const z = require('zod')
+const { respuestaDeFichas } = require('./mesa-fichas.js')
 
 const PLATFORM_URL = (process.env.ZR_PLATFORM_URL || '').replace(/\/+$/, '')
 const INTERNAL_KEY = process.env.INTERNAL_API_KEY || ''
@@ -90,7 +91,7 @@ servidor.tool(
   { numeros: z.array(z.number().int().positive()).min(1).describe('los números del índice que quieres leer completos') },
   async ({ numeros }) => {
     const r = await llamar('pedir_fichas', { numeros })
-    return r.ok ? bien(typeof r.cuerpo?.fichas === 'string' ? r.cuerpo.fichas : r.cuerpo) : fallo(r.error)
+    return respuestaDeFichas(r)
   },
 )
 
