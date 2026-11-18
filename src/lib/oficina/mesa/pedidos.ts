@@ -309,9 +309,10 @@ const REGLAS_DURAS = (c: ContextoDeTurno): string => [
 ].join('\n')
 
 /** 18-nov · T7d (encargo de Lenovo, arreglos 2 y 3): la forma de trato la fija el manual y la juzga el agente (no hay lista de código); el texto entregado no narra el trabajo */
+export const LA_FORMA_DE_TRATO = '- **La forma de trato es la del manual.** Si el manual tutea, tutea siempre, también en mensajes, ganchos y llamados: nunca voseo. Se escribe «pídelo», «pagas», «sabes», «ven», «mira»; nunca «pedilo», «pagás», «sabés», «vení», «mirá».'
 export const FORMA_DE_TRATO_Y_SIN_CHARLA = [
   '## Cómo escribes',
-  '- **La forma de trato es la del manual.** Si el manual tutea, tutea siempre, también en mensajes, ganchos y llamados: nunca voseo. Se escribe «pídelo», «pagas», «sabes», «ven», «mira»; nunca «pedilo», «pagás», «sabés», «vení», «mirá».',
+  LA_FORMA_DE_TRATO,
   '- **Tu respuesta es el texto que se entrega, no el relato de tu trabajo.** No narres lo que vas a hacer o lo que te dijo el sistema («voy a leer el tablero…», «el sistema indica…»): empieza directamente con el contenido.',
 ].join('\n')
 
@@ -494,6 +495,8 @@ function tareaDelBanco(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarjeta 
     '3. **Una regla dura se toma sí o sí.** Si el marco dice que la corrección cita una regla dura, «no la tomo» no vale: corrígela o retírala.',
     '4. **No inventes datos.** La línea de la ficha que cita la jefatura es el dato; no agregues ofertas, precios ni fechas que no estén en el marco.',
     '5. **El código verifica después** que la idea siga como estaba, que solo cambies esos campos y que expliques lo que no tomas. Lo que no cumpla no se escribe.',
+    // 18-nov · observación de CC6 en #1173: esta mesa REESCRIBE líneas del banco, así que también lleva la forma de trato del manual (solo eso: su formato de respuesta es otro)
+    `6. ${LA_FORMA_DE_TRATO.replace(/^- /, '')}`,
     '',
     o.tarjeta ? seccionDeIndicacion(o.tarjeta, agente) : '',
     '## El marco (la idea, la corrección y las otras ideas de su capítulo)',

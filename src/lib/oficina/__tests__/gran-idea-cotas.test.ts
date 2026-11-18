@@ -105,4 +105,32 @@ describe('la herramienta de pedidos en la mesa real', () => {
     expect(r.anotados).toBe(6)
     expect(r.ultimo).toMatchObject({ ok: false, motivo: expect.stringContaining('ya anotaste 6 pedidos') })
   })
+
+  /** 🟡 CC6 (c4): quien contesta un pedido de profundidad `p` y pide otro: la HERRAMIENTA decide si cabe (`registrarHerramienta`, no solo el planificador) */
+  async function respondiendoA(comoGranIdea: boolean, profundidad: number) {
+    const { M, MS, id } = await preparado(comoGranIdea)
+    const pedido = await MS.aportar({ encargo_id: id, de: 'creative-director-mesa', para: 'content-creator', tipo: 'pide', texto: 'pedido de partida', refs: [], responde_a: null, profundidad, costo_usd: 0, workflow_execution_id: null })
+    if (!pedido.ok) throw new Error('no se pudo sembrar')
+    const mesa = M.encargos.get(id)!.estado_del_motor.artefactos.mesa.datos as unknown as EstadoMesa
+    mesa.turno_abierto = { n: 1, agente: 'content-creator', tipo: 'responder', responde_a: pedido.aporte.id }
+    const antes = MS.filas.length
+    const r = await registrarHerramienta(M.P, { herramienta: 'mesa_pedir', encargo_id: id, de: 'content-creator', a: 'carousel-designer', que: 'dime cuántas láminas necesita el gancho' })
+    return { r: r.cuerpo, nuevas: MS.filas.slice(antes) }
+  }
+  it('🔴 c4 · gran idea: contestando un pedido de profundidad 2, el nuevo pedido SE ANOTA con profundidad 3', async () => {
+    const { r, nuevas } = await respondiendoA(true, 2)
+    expect(r).toMatchObject({ ok: true })
+    expect(nuevas).toHaveLength(1)
+    expect(nuevas[0]).toMatchObject({ tipo: 'pide', de: 'content-creator', para: 'carousel-designer', profundidad: 3 })
+  })
+  it('🔴 c4 · gran idea: contestando uno de profundidad 4, el nuevo recibe «tope (4)» y no se anota', async () => {
+    const { r, nuevas } = await respondiendoA(true, 4)
+    expect(r).toMatchObject({ ok: false, motivo: expect.stringContaining('llegaron a su tope (4)') })
+    expect(nuevas).toHaveLength(0)
+  })
+  it('c4 · carrusel: contestando uno de profundidad 2, el nuevo recibe «tope (2)», como siempre', async () => {
+    const { r, nuevas } = await respondiendoA(false, 2)
+    expect(r).toMatchObject({ ok: false, motivo: expect.stringContaining('llegaron a su tope (2)') })
+    expect(nuevas).toHaveLength(0)
+  })
 })

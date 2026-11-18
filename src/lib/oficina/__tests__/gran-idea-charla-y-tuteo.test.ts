@@ -10,11 +10,12 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { sinCharlaAntesDeLaPrimeraSeccion, textoDeLaMesaParaLaCadena, textoParaLaCadena, TITULO_IDEAS_DE_LOS_APORTES } from '../mesa/de-la-cadena'
-import { armarTarea, FORMA_DE_TRATO_Y_SIN_CHARLA, type TipoDeTurno } from '../mesa/pedidos'
+import { armarTarea, FORMA_DE_TRATO_Y_SIN_CHARLA, LA_FORMA_DE_TRATO, type TipoDeTurno } from '../mesa/pedidos'
 import type { EstadoMesa } from '../mesa/tipos'
 
 /** la integración REAL A31 de la mesa de la gran idea de T7d (`oficina_mesa_aportes`, encargo 0aa14d17, leída con SELECT el 18-nov) */
-const A31 = fs.readFileSync(path.join(__dirname, '..', '..', 'cadena', '__fixtures__', 'integracion-a31-0aa14d17-real.md'), 'utf8')
+/** 🟡 CC6: en Windows el fixture baja con CRLF (`core.autocrlf`); se normaliza para que la prueba mida lo mismo que en CI */
+const A31 = fs.readFileSync(path.join(__dirname, '..', '..', 'cadena', '__fixtures__', 'integracion-a31-0aa14d17-real.md'), 'utf8').replace(/\r\n/g, '\n')
 const CHARLA = ['Voy a leer el tablero completo antes de integrar las citas que faltan.', 'Integro con las citas completas de cada aporte del tablero.', 'El sistema indica que ya se alcanzó el límite de pedidos encadenados. Entrego la pieza completa directamente como texto.']
 const IDEA = '- C1-I01 · instagram · historia · revelación del bowl · mensaje: el encebollado ya llega a tu barrio · gancho: brecha de curiosidad · protagonista: bowl · serie: S1 · foto:8a05ea9d'
 const libroCon = (integracion: string) => [
@@ -42,6 +43,9 @@ describe('arreglo 2 · la charla del director no se entrega en la gran idea', ()
     // un «###» o un «##» pegado a la palabra NO son la primera sección: la regla es exacta (`## ` con espacio, al inicio de la línea)
     expect(sinCharlaAntesDeLaPrimeraSeccion('Charla\n##Gran idea\ntexto')).toBe('Charla\n##Gran idea\ntexto')
     expect(sinCharlaAntesDeLaPrimeraSeccion('Charla con ## dentro de la línea\ntexto')).toBe('Charla con ## dentro de la línea\ntexto')
+  })
+  it('🟡 CC6 (h1): un título «###» de la charla no cuenta como la primera sección; se corta en «## Gran idea»', () => {
+    expect(sinCharlaAntesDeLaPrimeraSeccion('Voy a leer el tablero.\n### Notas de trabajo\nreviso A20\n\n## Gran idea\nNombre · frase')).toBe('## Gran idea\nNombre · frase')
   })
   it('lo que la mesa de CONCEPTO entrega a la cadena empieza en «## Gran idea» y conserva el banco de los aportes', () => {
     const t = textoDeLaMesaParaLaCadena({ familia: 'concepto_mesa' }, libroCon(A31), null)
@@ -74,5 +78,12 @@ describe('arreglos 2 y 3 · la instrucción de la mesa: forma de trato del manua
   })
   it.each(['brief', 'carrusel', 'kit', 'video'] as const)('la mesa de %s también la lleva (el mismo encabezado para todas)', (tipo) => {
     expect(armarTarea({ tipo: 'aportar', agente: 'content-creator', tarjeta: undefined, est: est(tipo), libro: [], c: ctx(tipo) })).toContain(FORMA_DE_TRATO_Y_SIN_CHARLA)
+  })
+  it('🟡 CC6 · la mesa del banco (corrige UNA idea y reescribe su línea) lleva la forma de trato; no el «no narres» (su formato de respuesta es otro)', () => {
+    const c = { ...ctx('concepto'), tipo: 'banco' } as unknown as ReturnType<typeof ctx>
+    const t = armarTarea({ tipo: 'dirigir', agente: 'creative-director-mesa', tarjeta: undefined, est: est('banco' as EstadoMesa['tipo']), libro: [], c })
+    expect(t).toContain('# Corrección de una idea del banco')
+    expect(t).toContain(`6. ${LA_FORMA_DE_TRATO.replace(/^- /, '')}`)
+    expect(t).not.toContain('No narres lo que vas a hacer')
   })
 })
