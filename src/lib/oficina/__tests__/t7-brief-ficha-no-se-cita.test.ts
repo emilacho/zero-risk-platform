@@ -33,6 +33,26 @@ describe('las reglas llegan a la dirección creativa (camino real)', () => {
     expect(REGLA_DE_LOS_HECHOS_DE_LA_FICHA).toMatch(/va solo en «Hechos de las ofertas», en su línea con «\(fuente: …\)»/)
     expect(REGLA_DE_LA_CITA_DE_LISTA).toMatch(/cita UN punto por `> «…»`/)
   })
+  // 🟡 de CC6 (m1–m4): se fija lo que DICE cada regla, entera; una regla invertida o sin la frase que resuelve el caso de la v2 tiene que ponerse roja
+  it('🟡 m1–m4 (CC6): el texto entero de la regla de la ficha', () => {
+    expect(REGLA_DE_LOS_HECHOS_DE_LA_FICHA).toBe('Un `> «…»` (o «el plan dice: «…»» / «el manual dice: «…»») cita SOLO frases literales del plan o del manual. Lo que sale de «# FICHAS DE LAS OFERTAS» NUNCA va dentro de una cita, aunque su fuente sea el plan (la ficha puede resumirlo): va solo en «Hechos de las ofertas», en su línea con «(fuente: …)». Si una ruta o una meta solo está en la ficha, nómbrala fuera de la cita y remite a «Hechos de las ofertas».')
+  })
+  it('🟡 m3 (CC6): el texto entero de la regla de la lista', () => {
+    expect(REGLA_DE_LA_CITA_DE_LISTA).toBe('Si lo que citas es una LISTA del documento (viñetas o números), cita UN punto por `> «…»`, tal cual; nunca juntes varios puntos en una sola cita ni los unas con un punto o una coma: así ya no está literal en el documento.')
+  })
+  it('🟡 s1 (CC6): las dos reglas vienen DESPUÉS de «Toda cita … va LITERAL», que es la regla general que precisan', () => {
+    const lineas = REFERENCIA_DEL_BRIEF_CREATIVO.split('\n')
+    const general = lineas.findIndex((l) => l.startsWith('Toda cita (un bloque'))
+    expect(general).toBeGreaterThanOrEqual(0)
+    expect(lineas.indexOf(REGLA_DE_LA_CITA_DE_LISTA)).toBeGreaterThan(general)
+    expect(lineas.indexOf(REGLA_DE_LOS_HECHOS_DE_LA_FICHA)).toBeGreaterThan(general)
+  })
+  it('🟡 punto 4 (CC6 · CC7): la línea de «Rutas vivas del plan» dice AHÍ MISMO qué hacer con una ruta que solo está en la ficha', () => {
+    const linea = REFERENCIA_DEL_BRIEF_CREATIVO.split('\n').find((l) => l.startsWith('## Rutas vivas del plan'))!
+    expect(linea).toContain('Una ruta que solo está en la ficha de la oferta (no en el plan) NO se cita: nómbrala fuera de la cita y remite a «Hechos de las ofertas».')
+    // y la orden de siempre sigue: las rutas del PLAN, citadas literal
+    expect(linea).toMatch(/cada una como cita LITERAL del plan en un bloque `> «…»`/)
+  })
   it('la sección «Hechos de las ofertas» dice que sus líneas nunca van dentro de una cita', () => {
     const linea = REFERENCIA_DEL_BRIEF_CREATIVO.split('\n').find((l) => l.startsWith('## Hechos de las ofertas'))!
     expect(linea).toContain('nunca dentro de una cita `> «…»` (la ficha no es el plan)')
