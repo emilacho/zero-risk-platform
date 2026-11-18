@@ -110,6 +110,12 @@ describe('D1 en vivo · un cierre registrado en el cerebro DESPUÉS de la ficha 
     expect(seccion(h, 'p-18')).not.toContain(CAMPO)
     expect(seccion(h, 'p-19')).toContain(CAMPO)
   })
+  it('🔴 un cierre vivo que YA TERMINÓ antes de la fila (con fin) ⇒ abierta otra vez; el día del fin todavía cerrada', () => {
+    const TEMPORAL = hecho({ tipo: 'cierre_retiro', valor: 'cerrado por remodelación', vigente_desde: '2026-11-10', vigente_hasta: '2026-11-15' })
+    const h = hoja(BASE, [fila({ id: 'p-15', oferta: 'brunch', fecha: '2026-11-15' }), fila({ id: 'p-16', oferta: 'brunch', fecha: '2026-11-16' })], [TEMPORAL]).texto_md
+    expect(seccion(h, 'p-15')).toContain(`${CAMPO} cerrado por remodelación`)
+    expect(seccion(h, 'p-16')).not.toContain(CAMPO)
+  })
   it('🔴 cierre vivo de OTRA oferta ⇒ nada para esta', () => {
     expect(hoja(BASE, [fila({ id: 'p-1', oferta: 'brunch' })], [{ ...CIERRE_TARDE, oferta: 'cena' }]).texto_md).not.toContain(CAMPO)
   })
