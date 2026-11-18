@@ -61,10 +61,13 @@ describe('un workflow_id que no es uuid es «no existe», no un 500 (HALLAZGO CC
   it('la forma del uuid', () => {
     expect(UUID_DEL_VIAJE.test(VIAJE)).toBe(true)
     expect(UUID_DEL_VIAJE.test(VIAJE.toUpperCase())).toBe(true)
-    for (const x of [LECTOR, '', 'tablero', `${VIAJE} `, `${VIAJE}x`, VIAJE.replace(/-/g, '')]) expect(UUID_DEL_VIAJE.test(x)).toBe(false)
+    for (const x of [LECTOR, '', 'tablero', `${VIAJE} `, `${VIAJE}x`, VIAJE.slice(0, -1), VIAJE.replace(/-/g, '')]) expect(UUID_DEL_VIAJE.test(x)).toBe(false)
   })
   it('🔴 el adaptador real: el id del lector → false SIN preguntar a la sala (antes: 22P02 → lanzaba)', async () => {
     await expect(almacenDeSupabase().journeyExiste(LECTOR, CLIENTE)).resolves.toBe(false)
+    // 🟡 de CC7 (m1 y m3): los bordes, por el ADAPTADOR y no solo por el regex suelto · un uuid con espacio al final (un `trim()` en la guarda lo dejaría pasar
+    // con el texto sin recortar → 22P02) y uno con un caracter de MENOS en el último grupo
+    for (const malo of [`${VIAJE} `, ` ${VIAJE}`, VIAJE.slice(0, -1)]) await expect(almacenDeSupabase().journeyExiste(malo, CLIENTE)).resolves.toBe(false)
     expect(deLaSala()).toHaveLength(0)
   })
   it('un uuid sigue preguntando a la sala: el viaje que existe → true; otro uuid → false', async () => {
