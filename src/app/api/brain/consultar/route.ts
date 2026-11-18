@@ -1,6 +1,6 @@
 /**
  * GET /api/brain/consultar · lectura instantánea del cerebro (sin modelo, US$ 0). Llave interna (`x-api-key`).
- * ?client_id=&oficina=&agente=&que=&atributo=&clase=&sede_clave=&limite= · devuelve fichas vigentes con procedencia, fecha y `vencida`; sin nada: `sin_dato: true`. Registra quién consultó.
+ * ?client_id=&oficina=&agente=&que=&atributo=&clase=&sede_clave=&limite=&publico= (consumo|profesional: la voz de ese público, sin datos de personas privadas) · devuelve fichas vigentes con procedencia, fecha y `vencida`; sin nada: `sin_dato: true`. Registra quién consultó.
  */
 import { NextResponse } from 'next/server'
 import { checkInternalKey } from '@/lib/internal-auth'
@@ -25,7 +25,7 @@ export async function GET(request: Request) {
       const a = await consultarAprendizajeDelEntorno({ client_id: u.get('client_id'), oficina: u.get('oficina'), agente: u.get('agente'), destinatario: u.get('destinatario'), formato: u.get('formato'), tarea: u.get('tarea'), limite: u.get('limite'), marcar_uso: u.get('marcar_uso') !== '0' })
       return NextResponse.json(a.body, { status: a.status })
     }
-    const r = await rutaConsultar({ db: getSupabaseAdmin() as unknown as Db }, { client_id: u.get('client_id'), oficina: u.get('oficina'), agente: u.get('agente'), que: u.get('que'), atributo: u.get('atributo'), clase: u.get('clase'), sede_clave: u.get('sede_clave'), limite: u.get('limite'), todo: u.get('todo'), desde: u.get('desde'), contenido_completo: u.get('contenido_completo') })
+    const r = await rutaConsultar({ db: getSupabaseAdmin() as unknown as Db }, { client_id: u.get('client_id'), oficina: u.get('oficina'), agente: u.get('agente'), que: u.get('que'), atributo: u.get('atributo'), clase: u.get('clase'), sede_clave: u.get('sede_clave'), limite: u.get('limite'), todo: u.get('todo'), desde: u.get('desde'), contenido_completo: u.get('contenido_completo'), publico: u.get('publico') })
     // el estado del manual vigente (validado por el dueño / propuesta sin validar, versión, fecha) viaja con toda consulta del cliente
     const manual = r.status === 200 ? await leerEstadoDelManual(getSupabaseAdmin() as unknown as Db, String(u.get('client_id'))) : null
     return NextResponse.json(manual ? { ...r.body, manual } : r.body, { status: r.status })
