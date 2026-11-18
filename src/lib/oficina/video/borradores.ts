@@ -58,6 +58,17 @@ export function avisoDeBorradorIncompleto(briefId: string, b: Pick<BorradoresDeV
   return `🎞️ Borrador de video incompleto · ${briefId}: ${cuales}. Las propuestas siguen a «Propuestas» como están. Si el motivo es saldo del proveedor, hay que recargar ANTES de aprobar: el video final fallaría igual y cobraría los planos que alcance.`
 }
 
+/**
+ * 18-nov · R3 de la prueba final (GO Lenovo, decisión de Emilio: «el video llega solo hasta las PROPUESTAS en imágenes, sin Higgsfield»).
+ * El INTERRUPTOR del borrador en video es DATO de la plantilla: `limites.video.borrador.activo`. Solo `false` (booleano) lo apaga;
+ * ausente o cualquier otra cosa → encendido, igual que antes de este cambio (no cambia nada para quien no escribe la clave).
+ * Apagado, el paso pasa de largo ANTES de armar pedidos: 0 llamadas al brazo, US$ 0 y sin aviso de «borrador incompleto».
+ */
+export const OMITIDO_APAGADO = 'apagado'
+export function borradorActivo(limites: Record<string, unknown> | null | undefined): boolean {
+  return ((limites?.video as { borrador?: { activo?: unknown } } | undefined)?.borrador?.activo) !== false
+}
+
 /** la calidad del borrador (DATO de la plantilla); mal escrita o ausente → 480p (nunca frena) */
 export function resolucionDelBorrador(limites: Record<string, unknown> | null | undefined): string {
   const r = ((limites?.video as { borrador?: { resolucion?: unknown } } | undefined)?.borrador?.resolucion)

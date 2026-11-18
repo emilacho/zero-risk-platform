@@ -33,7 +33,7 @@ import { CONTRATOS_EN_TEXTO } from './pedidos'
 import { fotosDeReferencia, type FotoDeReferencia } from './foto-de-referencia'
 import { avisoDeLaRevisionALaMesa, calidadDeLaFase, faseDeProduccion, imagenesClaveVigentes, leerRevisionDeImagenesClave, pedidosDeImagenClave, PASO_IMAGENES_CLAVE, PASO_REVISAR_IMAGENES_CLAVE, SEGUNDOS_PARA_DOS_CUADROS, tareaDeLaRevisionDeImagenesClave, type ImagenClaveDelPlano, type ImagenesClave, type PlanoDeLaHoja } from './video/imagen-clave'
 import { propuestasDe } from './video/aprobacion'
-import { ARTEFACTO_PEDIDO_BORRADOR, avisoDeBorradorIncompleto, borradoresOmitidos, FUNCION_BORRADOR_VIDEO, pedidosDeLosBorradores, RESOLUCION_DEL_BORRADOR_POR_OMISION, resolucionDelBorrador, type BorradorDeLaPropuesta, type BorradoresDeVideo } from './video/borradores'
+import { ARTEFACTO_PEDIDO_BORRADOR, avisoDeBorradorIncompleto, borradorActivo, borradoresOmitidos, OMITIDO_APAGADO, FUNCION_BORRADOR_VIDEO, pedidosDeLosBorradores, RESOLUCION_DEL_BORRADOR_POR_OMISION, resolucionDelBorrador, type BorradorDeLaPropuesta, type BorradoresDeVideo } from './video/borradores'
 import { pedidosPorPlano, type PedidoDePlano } from './video/planos'
 import { cotizarYEnviar, encuadrarFotos, leerPlanos, separarPagados, textoDeLoCobrado, unirClips, type ClipCobrado, type PlanoEnviado } from './video/motor-planos'
 import { empezarComposicion, pasoDeComposicion, type ComposicionGuardada, type ContextoDeComposicion, type InfoDelCompuesto, type VideoUnido } from './video/motor-composicion'
@@ -648,6 +648,8 @@ async function enviarBorradores(P: Puertos, enc: Encargo, pl: Plantilla, paso: P
   const e = enc.estado_del_motor
   const resolucion = resolucionDelBorrador(pl.limites)
   const pasa = (motivo: string) => ({ res: { costo_usd: 0, artefacto: borradoresOmitidos(resolucion, motivo) as unknown as Record<string, unknown> } })
+  // 18-nov · R3 · el interruptor va PRIMERO: apagado no arma pedidos ni toca el brazo (`borradorActivo`)
+  if (!borradorActivo(pl.limites)) return pasa(OMITIDO_APAGADO)
   if (!propuestasDe(e)?.propuestas?.length) return pasa('sin_propuestas')
   if (faseDeProduccion(e) !== 'borrador') return pasa('propuesta_aprobada')
   const b = baseV(e)
