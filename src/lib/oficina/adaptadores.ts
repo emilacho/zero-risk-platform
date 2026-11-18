@@ -120,6 +120,34 @@ export async function componerConServicio(s: ServicioDeRender, p: import('../../
   } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) } }
 }
 
+/**
+ * 18-nov · T5 tramo 3 · el video compuesto con el servicio de render: análisis del sonido y render del documento `htmlDeVideo` (S2-5 · CC2),
+ * con las mismas fuentes de marca empaquetadas que el anuncio fijo. Nunca lanza: un fallo vuelve en palabras.
+ */
+export function puertoDeComposicionDeVideo(s: ServicioDeRender, f: Fetch = fetch): NonNullable<Puertos['componerVideo']> {
+  const fallo = (e: unknown) => ({ ok: false as const, error: (e instanceof Error ? e.message : String(e)).slice(0, 400), reintentar: false })
+  return {
+    async analizar(p) {
+      const { iniciarAnalisis } = await import('../render-html/cliente')
+      return iniciarAnalisis(s, { ...(p.voz ? { voz: p.voz } : {}), ...(p.musica ? { musica: p.musica } : {}), idioma: p.idioma }, f)
+    },
+    async analisis(id) { const { estadoDeAnalisis } = await import('../render-html/cliente'); return estadoDeAnalisis(s, id, f) },
+    async rendir(p) {
+      try {
+        const { htmlDeVideo } = await import('../../../packages/carousel-engine/src/video-html')
+        const { cargarFuentesDeMarca, informeDeFuentes } = await import('../../../packages/carousel-engine/src/fonts')
+        const { iniciarVideo } = await import('../render-html/cliente')
+        const familias = [p.pedido.diseno.tipografia.cuerpo || 'Inter', p.pedido.diseno.tipografia.titular || p.pedido.diseno.tipografia.cuerpo || 'Inter']
+        const fonts = (await cargarFuentesDeMarca(familias)).fonts
+        const r = await iniciarVideo(s, { html: htmlDeVideo(p.pedido, fonts), ancho: p.pedido.ancho, alto: p.pedido.alto, segundos: p.pedido.segundos, archivos: p.archivos }, f)
+        return r.ok ? { ok: true, id: r.id, fonts_faltantes: informeDeFuentes(familias, fonts).faltantes } : r
+      } catch (e) { return fallo(e) }
+    },
+    async render(id) { const { estadoDeVideo } = await import('../render-html/cliente'); return estadoDeVideo(s, id, f) },
+    async bajar(id) { const { bajarVideo } = await import('../render-html/cliente'); return bajarVideo(s, id, f) },
+  }
+}
+
 export function puertoDeAprendizaje(db: Db, env: Pick<Entorno, 'baseUrl' | 'internalKey'>, f: Fetch = fetch): NonNullable<Puertos['aprendizaje']> {
   return {
     async consultar(p) {
@@ -156,6 +184,8 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
   return {
     carpetaParaRevisar: (clientId) => carpetaParaRevisar(db, clientId),
     almacen,
+    // 18-nov · T5 tramo 3 · el video compuesto: solo con el servicio de render configurado (sin él, el video unido sale como hoy)
+    ...(env.renderHtml ? { componerVideo: puertoDeComposicionDeVideo(env.renderHtml, f) } : {}),
     mesa: puertoDeLaMesa(db, (clave) => almacenDeLaCadena().leerConfig(clave)),
     // GO 11-nov «la mesa confía en la familia»: la tabla de formatos la lee SOLO el almacén de la cadena (las tablas `cadena_*` no se nombran aquí)
     formatosDeLaCadena: () => almacenDeLaCadena().formatos(),

@@ -167,6 +167,8 @@ export interface ParametrosDelVideo {
   segundos_max: number
   /** cuántas propuestas completas presenta la mesa para la aprobación del dueño (1 = un solo guion, como hasta hoy) */
   propuestas: number
+  /** 18-nov · T5 tramo 3 · la plantilla compone el video (`limites.video.componer: true`): solo entonces la hoja ofrece «## Subtítulos» */
+  componer?: boolean
 }
 export const VIDEO_POR_OMISION: ParametrosDelVideo = { segundos_min: fichaPorOmision().segundos_min, segundos_max: fichaPorOmision().segundos_max, propuestas: 1 }
 
@@ -195,6 +197,9 @@ const PERSONAJES_DE_LA_PIEZA = [
 ]
 
 const CIERRE_DE_LA_PIEZA = ['## Audio', '<lo que suena: música, ambiente, voz, diálogo o locución, lo que pida la pieza>', '## Pie', '<el pie de foto de la publicación>', '## Etiquetas', '#una #otra']
+/** 18-nov · T5 tramo 3 · la sección de subtítulos se ofrece SOLO si la plantilla compone el video (`limites.video.componer`): apagado, la hoja es la de siempre, letra por letra */
+const SUBTITULOS_DE_LA_PIEZA = ['## Subtítulos   (opcional: solo si la pieza tiene voz y los quieres; si no, no escribas esta sección)', 'sí · Energía: alta | conversacion | calma · Idioma: <el de la voz, en dos letras: es, en, pt…>']
+const cierreDeLaPieza = (v: ParametrosDelVideo) => [...CIERRE_DE_LA_PIEZA.slice(0, 2), ...(v.componer ? SUBTITULOS_DE_LA_PIEZA : []), ...CIERRE_DE_LA_PIEZA.slice(2)]
 
 /** T8 · 31-oct · el GUION del video corto (la mesa lo escribe; el brazo lo filma tal cual) · Sprint 2 · S2-1: la HOJA DE PLANOS y, si la plantilla lo pide, N propuestas */
 export function convencionDelGuion(v: ParametrosDelVideo = VIDEO_POR_OMISION): string {
@@ -209,13 +214,13 @@ export function convencionDelGuion(v: ParametrosDelVideo = VIDEO_POR_OMISION): s
         ...PERSONAJES_DE_LA_PIEZA,
         PLANO_DE_LA_HOJA(1, '0–3 s'),
         '## Plano 2 · 3–8 s   (…una sección por plano)',
-        ...CIERRE_DE_LA_PIEZA,
+        ...cierreDeLaPieza(v),
         `# Propuesta 2 · <nombre corto>   (…lo mismo, hasta la Propuesta ${v.propuestas})`,
         '# Citas',
         'A3 usé: <qué tomaste de ese aporte>',
         'A5 descarté: <por qué no lo usaste>',
       ]
-    : [...PERSONAJES_DE_LA_PIEZA, PLANO_DE_LA_HOJA(1, '0–3 s'), `## Plano 2 · 3–8 s   (…una sección por plano; el video dura ${dura} en total)`, ...CIERRE_DE_LA_PIEZA, '## Citas', 'A3 usé: <qué tomaste de ese aporte>', 'A5 descarté: <por qué no lo usaste>']
+    : [...PERSONAJES_DE_LA_PIEZA, PLANO_DE_LA_HOJA(1, '0–3 s'), `## Plano 2 · 3–8 s   (…una sección por plano; el video dura ${dura} en total)`, ...cierreDeLaPieza(v), '## Citas', 'A3 usé: <qué tomaste de ese aporte>', 'A5 descarté: <por qué no lo usaste>']
   return [
     variasPropuestas
       ? `Escribe ${v.propuestas} PROPUESTAS COMPLETAS y DISTINTAS del video (concepto, duración, red, objetivo y su hoja de planos cada una). El dueño elige UNA antes de producir: no son variantes de lo mismo, son caminos distintos que valga la pena comparar. Usa esta convención ligera (no es un formulario):`

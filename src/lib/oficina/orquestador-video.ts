@@ -36,6 +36,8 @@ import { propuestasDe } from './video/aprobacion'
 import { ARTEFACTO_PEDIDO_BORRADOR, avisoDeBorradorIncompleto, borradoresOmitidos, FUNCION_BORRADOR_VIDEO, pedidosDeLosBorradores, RESOLUCION_DEL_BORRADOR_POR_OMISION, resolucionDelBorrador, type BorradorDeLaPropuesta, type BorradoresDeVideo } from './video/borradores'
 import { pedidosPorPlano, type PedidoDePlano } from './video/planos'
 import { cotizarYEnviar, encuadrarFotos, leerPlanos, separarPagados, textoDeLoCobrado, unirClips, type ClipCobrado, type PlanoEnviado } from './video/motor-planos'
+import { empezarComposicion, pasoDeComposicion, type ComposicionGuardada, type ContextoDeComposicion, type InfoDelCompuesto, type VideoUnido } from './video/motor-composicion'
+import { comoDataUri, disenoDeAnuncio } from './composicion'
 
 /** 17-nov · DECISIÓN de Emilio: el rótulo de la entrega dice que el video y su audio son GENERADOS; ya no afirma «sin voces» (la voz la decide la mesa) */
 /** revisión 2 · pregunta 4 · el rótulo de la ficha del gasto sobre el tope por video: no bloquea; el cierre lo convierte en UNA alarma de gasto */
@@ -84,8 +86,13 @@ export interface VideoDelEncargo {
   error?: string | null
   /** 11-nov · camino B · los clips de cada plano que se unieron (en orden) */
   planos?: Array<{ n: number; request_id: string; costo_usd: number; video_url: string }>
+  /** 18-nov · T5 tramo 3 · si se compuso con la marca (y si no, por qué); solo con `limites.video.componer` */
+  compuesto?: InfoDelCompuesto
 }
-interface EnvioGuardado { request_id: string; status: string; costo_estimado_usd: number; costo_lista_usd?: number; descuento_pct?: number; enviado_en: string; n: number; /** 11-nov · camino B · un envío por plano */ planos?: PlanoEnviado[]; /** 17-nov · §2 de CC7 · el envío falló a mitad: el motivo; se espera a los enviados para anotar lo cobrado y el lote no se une */ lote_incompleto?: string }
+interface EnvioGuardado { request_id: string; status: string; costo_estimado_usd: number; costo_lista_usd?: number; descuento_pct?: number; enviado_en: string; n: number; /** 11-nov · camino B · un envío por plano */ planos?: PlanoEnviado[]; /** 17-nov · §2 de CC7 · el envío falló a mitad: el motivo; se espera a los enviados para anotar lo cobrado y el lote no se une */ lote_incompleto?: string; /** 18-nov · T5 tramo 3 · el video unido se está componiendo (las fases se retoman entre vueltas) */ composicion?: ComposicionGuardada }
+
+/** 18-nov · T5 tramo 3 · se enciende por la plantilla (`limites.video.componer: true`); apagado => el video unido sale como hoy */
+export const componerEncendido = (pl: Plantilla): boolean => ((pl.limites.video ?? {}) as { componer?: unknown }).componer === true
 
 /** 11-nov · camino B (GO Lenovo 16:43) · se enciende por la plantilla (`limites.video.plano_por_plano: true`); apagado => camino A (una toma), como hoy */
 export const planoPorPlanoEncendido = (pl: Plantilla): boolean => ((pl.limites.video ?? {}) as { plano_por_plano?: unknown }).plano_por_plano === true
@@ -711,7 +718,7 @@ export function gastosDelVideo(res: Extract<ResultadoDelBrazo, { ok: true }>, re
 
 /** lo que el brazo entregó (o no): lo trae el vigía tras sondear, o una prueba */
 export type ResultadoDelBrazo =
-  | { ok: true; status: 'completed'; video_url: string; url_proveedor: string | null; costo_usd: number; expires_at: string | null; copia: 'bucket' | 'solo_proveedor'; aviso: string | null; /** camino B · los clips unidos (cada uno es un gasto en el libro) */ planos?: Array<{ n: number; request_id: string; costo_usd: number; video_url: string }> }
+  | { ok: true; status: 'completed'; video_url: string; url_proveedor: string | null; costo_usd: number; expires_at: string | null; copia: 'bucket' | 'solo_proveedor'; aviso: string | null; /** camino B · los clips unidos (cada uno es un gasto en el libro) */ planos?: Array<{ n: number; request_id: string; costo_usd: number; video_url: string }>; /** 18-nov · T5 tramo 3 */ compuesto?: InfoDelCompuesto }
   | { ok: false; status: string; error: string; /** 17-nov · §2 de CC7 · camino B: lo que el proveedor YA cobró aunque el video falle */ cobrado?: ClipCobrado[] }
 
 /** 17-nov · S2-4 tramo 4 · lo que vuelve del lote de borradores: uno por propuesta + los clips que se cobraron (un gasto por clip) */
@@ -746,7 +753,7 @@ export async function recibirVideo(P: Puertos, encargoId: string, n: number, res
     return fallar(P, { ...enc, estado_del_motor: e2, gasto_usd: e2.gasto_usd }, `el brazo de video no entregó (${res.status}): ${res.error}${textoDeLoCobrado(cobrado)}`)
   }
   const costo = Math.max(0, Number(res.costo_usd) || 0)
-  const v: VideoDelEncargo = { request_id, status: 'completed', simulado: false, video_url: res.video_url, url_proveedor: res.url_proveedor, copia: res.copia, costo_usd: costo, costo_estimado_usd: envio?.costo_estimado_usd ?? 0, expires_at: res.expires_at, enviado_en: envio?.enviado_en ?? ahora, terminado_en: ahora, aviso: res.aviso, ...(res.planos ? { planos: res.planos } : {}) }
+  const v: VideoDelEncargo = { request_id, status: 'completed', simulado: false, video_url: res.video_url, url_proveedor: res.url_proveedor, copia: res.copia, costo_usd: costo, costo_estimado_usd: envio?.costo_estimado_usd ?? 0, expires_at: res.expires_at, enviado_en: envio?.enviado_en ?? ahora, terminado_en: ahora, aviso: res.aviso, ...(res.planos ? { planos: res.planos } : {}), ...(res.compuesto ? { compuesto: res.compuesto } : {}) }
   const nuevo = registrarPaso(e, pl, sig.indice, { costo_usd: costo, artefacto: v as unknown as Record<string, unknown>, ...(sig.vuelta ? { vuelta: sig.vuelta } : {}) })
   const gastos = gastosDelVideo(res, request_id)
   await P.almacen.guardar({
@@ -794,6 +801,9 @@ export async function sondearVideos(P: Puertos, turnos: Array<{ encargo_id: stri
 /** 11-nov · camino B · lee el estado de cada plano; cuando volvieron TODOS, los une (Railway) y devuelve el video unido; null = todavía no */
 export async function sondearPlanos(P: Puertos, enc: Encargo, enviados: PlanoEnviado[], inicio: string, ahora: Date): Promise<ResultadoDelBrazo | ResultadoDeLosBorradores | null> {
   if (enviados.some((p) => p.propuesta)) return sondearBorradores(P, enc, enviados, inicio, ahora)
+  // 18-nov · T5 tramo 3 · ya unido y componiéndose: se retoma la fase guardada (los clips no se vuelven a preguntar ni a unir)
+  const enCurso = envioDe(enc.estado_del_motor)?.composicion
+  if (enCurso) return seguirComponiendo(P, enc, enCurso, ahora)
   const estados: EstadoDelBrazo[] = []
   // el reutilizado no se pregunta al proveedor (ya está en nuestro almacén y ya se pagó en su día)
   for (const p of enviados) estados.push(p.reutilizado ? ({ ok: true, terminal: true, status: 'reutilizado' } as EstadoDelBrazo) : await P.video!.estado(p.request_id))
@@ -810,7 +820,52 @@ export async function sondearPlanos(P: Puertos, enc: Encargo, enviados: PlanoEnv
   if (!u.ok) return { ok: false, status: 'no_se_unio', error: u.error, cobrado: cobradosDe(l.clips) }
   const costo = +l.clips.reduce((s, c) => s + c.costo_usd, 0).toFixed(4)
   const vence = l.clips.map((c) => c.expires_at).filter((x): x is string => !!x).sort()[0] ?? null
-  return { ok: true, status: 'completed', video_url: u.video_url, url_proveedor: null, costo_usd: costo, expires_at: vence, copia: 'bucket', aviso: null, planos: l.clips.map((c) => ({ n: c.n, request_id: c.request_id, costo_usd: c.costo_usd, video_url: c.video_url })) }
+  const unido: VideoUnido = { ok: true, status: 'completed', video_url: u.video_url, url_proveedor: null, costo_usd: costo, expires_at: vence, copia: 'bucket', aviso: null, planos: l.clips.map((c) => ({ n: c.n, request_id: c.request_id, costo_usd: c.costo_usd, video_url: c.video_url })) }
+  // 18-nov · T5 tramo 3 · con `componer` encendido el unido pasa por el servicio de render (en seco, nunca: no hay video real)
+  if (unido.video_url.startsWith(PREFIJO_DRY)) return unido
+  // la plantilla ya se leyó al abrir; si ahora no se puede leer, el unido sale como hoy (nunca se pierde el video por esto)
+  const pl = await plantillaDe(P, enc).catch(() => null)
+  if (!pl || !componerEncendido(pl)) return unido
+  if (!P.componerVideo) return { ...unido, aviso: 'el video sale sin textos ni cierre de marca: el servicio de render no está configurado', compuesto: { compuesto: false, motivo: 'el servicio de render no está configurado', pedidos_de_render: 0, avisos: [] } }
+  const g = datos(enc.estado_del_motor, 'guion') as unknown as GuionDeLaMesa | undefined
+  return seguirComponiendo(P, enc, empezarComposicion(unido, l.clips, !!g?.subtitulos, ahora), ahora)
+}
+
+/** 18-nov · T5 tramo 3 · UNA vuelta de la composición: si sigue, se guarda en el envío (el turno del brazo sigue `corriendo`) y null; si terminó, el video (compuesto o el unido con su aviso) */
+async function seguirComponiendo(P: Puertos, enc: Encargo, c: ComposicionGuardada, ahora: Date): Promise<ResultadoDelBrazo | null> {
+  const e = enc.estado_del_motor
+  const g = datos(e, 'guion') as unknown as GuionDeLaMesa | undefined
+  const ped = datos(e, 'pedido_video')?.pedido as PedidoDeVideoDeLaOficina | undefined
+  const b = baseV(e)
+  const ctx: ContextoDeComposicion = {
+    planos: (g?.planos ?? []).map((p) => ({ n: p.n, texto_en_pantalla: p.texto_en_pantalla, rol: p.rol })),
+    relacion: ped?.relacion ?? '9:16', resolucion: ped?.resolucion ?? '720p',
+    subtitulos: g?.subtitulos?.energia ?? null,
+    // la plataforma es agnóstica: el idioma de la voz lo escribe la mesa en «## Subtítulos»; si no lo dijo, español y se avisa
+    idioma: g?.subtitulos?.idioma ?? 'es',
+    ...(g?.subtitulos && !g.subtitulos.idioma ? { aviso_idioma: 'el guion no dijo el idioma de la voz: la transcripción se hizo en español' } : {}),
+    async marca() {
+      const marca = b?.F?.marca ?? null
+      if (!marca) return { logo: null, firma: null, diseno: null, avisos: [] }
+      const avisos: string[] = []
+      let logo: string | null = null
+      if (marca.logo_url) {
+        logo = comoDataUri(await P.descargar(marca.logo_url).catch(() => null))
+        if (!logo) avisos.push('no se pudo leer el logo del manual: en el cierre va el nombre de la marca')
+      }
+      return { logo, firma: marca.brand_handle || b.F.cliente_nombre || null, diseno: disenoDeAnuncio(marca, b.brief?.id || enc.id), avisos }
+    },
+  }
+  const p = await pasoDeComposicion(P, enc, c, ctx, ahora)
+  if ('fin' in p) {
+    if (p.alarma) await P.avisar({ canal: 'alertas', encargo_id: enc.id, texto: `⚠️ Video sin componer · ${enc.brief_id}: ${p.alarma}`, dry_run: enc.dry_run })
+    return p.fin
+  }
+  const envio = envioDe(e)
+  if (!envio) return { ...c.unido, aviso: 'el video sale sin textos ni cierre de marca: se perdió el envío del encargo' }
+  const e2 = conEnvio(e, { ...envio, composicion: p.sigue })
+  await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: e2, gasto_usd: e2.gasto_usd })
+  return null
 }
 
 /**
