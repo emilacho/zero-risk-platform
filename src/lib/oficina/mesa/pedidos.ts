@@ -4,7 +4,7 @@
  */
 import { seccionDelDirectorio } from './directorio'
 import { refDe } from './libro'
-import { COTAS, type Aporte, type EstadoMesa, type Tarjeta, type TipoDePieza } from './tipos'
+import { COTAS, profundidadMaximaDe, type Aporte, type EstadoMesa, type Tarjeta, type TipoDePieza } from './tipos'
 import { NOMBRE_DE_LA_PIEZA } from './aprendizaje'
 import type { FotoEtiquetada } from '../fotos'
 import { CABECERA_SALTAR_EDITOR } from '../../cadena/constantes'
@@ -313,13 +313,21 @@ const REGLAS_DURAS = (c: ContextoDeTurno): string => [
     : '3. **La pieza debe poder dibujarse**: cada lámina es un título, un texto corto, un llamado (si lo lleva) y una imagen. Lo demás es tu criterio; sin límites de caracteres: si algo es largo, el dibujo se ajusta o el equipo lo parte.',
 ].join('\n')
 
-const HERRAMIENTAS = [
+/** 18-nov · T7d (encargo de Lenovo, arreglos 2 y 3): la forma de trato la fija el manual y la juzga el agente (no hay lista de código); el texto entregado no narra el trabajo */
+export const LA_FORMA_DE_TRATO = '- **La forma de trato es la del manual.** Si el manual tutea, tutea siempre, también en mensajes, ganchos y llamados: nunca voseo. Se escribe «pídelo», «pagas», «sabes», «ven», «mira»; nunca «pedilo», «pagás», «sabés», «vení», «mirá».'
+export const FORMA_DE_TRATO_Y_SIN_CHARLA = [
+  '## Cómo escribes',
+  LA_FORMA_DE_TRATO,
+  '- **Tu respuesta es el texto que se entrega, no el relato de tu trabajo.** No narres lo que vas a hacer o lo que te dijo el sistema («voy a leer el tablero…», «el sistema indica…»): empieza directamente con el contenido.',
+].join('\n')
+
+const HERRAMIENTAS = (tipo: TipoDePieza): string => [
   '## Cómo trabajas con el equipo',
   'Trabajamos en EQUIPO sobre este tablero. Tu respuesta final de este turno ES tu aporte (texto libre, escrito como lo haría un profesional de tu especialidad). Si necesitas algo de un compañero:',
   '- `mesa_pedir(a, que, para_que)`: le anotas un pedido en el tablero; responde en SU turno (no esperas).',
   '- `mesa_devolver(a, comentarios)`: le devuelves su aporte con comentarios.',
   '- `pedir_material(que, para_que)`: si te falta material del cerebro del cliente (datos, fotos, hechos), se lo pides al portero; lo que trae vuelve al tablero. Úsalo solo si de verdad lo necesitas; si no, sigue.',
-  `Máximo ${COTAS.MAX_PROFUNDIDAD} niveles de pedidos encadenados y ${COTAS.MAX_IDAS_VUELTAS_POR_PAREJA} idas y vueltas con un mismo compañero: después decide la dirección creativa con lo que haya.`,
+  `Máximo ${profundidadMaximaDe(tipo)} niveles de pedidos encadenados y ${COTAS.MAX_IDAS_VUELTAS_POR_PAREJA} idas y vueltas con un mismo compañero: después decide la dirección creativa con lo que haya.`,
 ].join('\n')
 
 export function armarTarea(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarjeta | undefined; est: EstadoMesa; libro: Aporte[]; c: ContextoDeTurno; pedido?: Aporte; faltanCitas?: string; extra?: string; metodo?: string; /** Sprint 1 · mejora 4 · las imágenes a generar de la pieza integrada (turno del ingeniero de prompts) */ imagenesARedactar?: ImagenARedactar[] }): string {
@@ -336,7 +344,9 @@ export function armarTarea(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarj
     '',
     REGLAS_DURAS(c),
     '',
-    HERRAMIENTAS,
+    FORMA_DE_TRATO_Y_SIN_CHARLA,
+    '',
+    HERRAMIENTAS(c.tipo),
     '',
     seccionDelDirectorio(est.directorio_congelado, agente),
     '',
@@ -491,6 +501,8 @@ function tareaDelBanco(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarjeta 
     '3. **Una regla dura se toma sí o sí.** Si el marco dice que la corrección cita una regla dura, «no la tomo» no vale: corrígela o retírala.',
     '4. **No inventes datos.** La línea de la ficha que cita la jefatura es el dato; no agregues ofertas, precios ni fechas que no estén en el marco.',
     '5. **El código verifica después** que la idea siga como estaba, que solo cambies esos campos y que expliques lo que no tomas. Lo que no cumpla no se escribe.',
+    // 18-nov · observación de CC6 en #1173: esta mesa REESCRIBE líneas del banco, así que también lleva la forma de trato del manual (solo eso: su formato de respuesta es otro)
+    `6. ${LA_FORMA_DE_TRATO.replace(/^- /, '')}`,
     '',
     o.tarjeta ? seccionDeIndicacion(o.tarjeta, agente) : '',
     '## El marco (la idea, la corrección y las otras ideas de su capítulo)',
