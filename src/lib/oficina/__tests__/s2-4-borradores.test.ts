@@ -15,7 +15,7 @@ import { validarPlantilla } from '../plantilla'
 import { VIDEO_MESA } from '../plantillas/video-mesa'
 import { TARGET_STEP_PRODUCIR } from '../sobre'
 import type { Paso, Plantilla } from '../tipos'
-import { ARTEFACTO_BORRADOR_VIDEO, ARTEFACTO_PEDIDO_BORRADOR, pasoDelBorradorDeVideo, resolucionDelBorrador, type BorradoresDeVideo } from '../video/borradores'
+import { ARTEFACTO_BORRADOR_VIDEO, ARTEFACTO_PEDIDO_BORRADOR, borradorActivo, OMITIDO_APAGADO, pasoDelBorradorDeVideo, resolucionDelBorrador, type BorradoresDeVideo } from '../video/borradores'
 import { PASO_IMAGENES_CLAVE, PASO_IMAGENES_CLAVE_FINAL, PASO_REVISAR_IMAGENES_CLAVE, type ImagenesClave } from '../video/imagen-clave'
 import { encuadrarFotos } from '../video/motor-planos'
 import type { PedidoDePlano } from '../video/planos'
@@ -48,9 +48,11 @@ const conBorradores = (propuestas: number, borrador?: Record<string, unknown>): 
   }
 }
 
-async function montar(b: ReturnType<typeof brazo>, o: { dry_run?: boolean; propuestas?: number; borrador?: Record<string, unknown> } = {}) {
+async function montar(b: ReturnType<typeof brazo>, o: { dry_run?: boolean; propuestas?: number; borrador?: Record<string, unknown>; sinPasoBorrador?: boolean } = {}) {
   const propuestas = o.propuestas ?? 3
-  const pl = conBorradores(propuestas, o.borrador)
+  const pl0 = conBorradores(propuestas, o.borrador)
+  // 18-nov · R3 (🟡 2 de CC7): la misma plantilla SIN el paso del borrador, para comparar el gasto con el interruptor apagado
+  const pl = o.sinPasoBorrador ? { ...pl0, pasos: pl0.pasos.filter((p) => p.clave !== PASO_BORRADOR.clave) } : pl0
   const M = crearMemoria({ parte: escribirHoja(INSUMOS).texto_md, plantilla: pl })
   M.P.mesa = crearMesaEnMemoria(TRAS_2012)
   M.P.video = b.v
@@ -282,5 +284,64 @@ describe('17-nov · Sprint 3 · T1 · los borradores usan el catálogo que el en
     const b2 = brazo({ estados: () => hecho(1) })
     const out2 = await enviarVideo({ video: b2.v, ahora: () => new Date('2026-11-17T03:00:00Z') } as never, enc(undefined) as never, conBorradores(2), PASO_BORRADOR)
     expect((out2.res!.artefacto as unknown as BorradoresDeVideo).propuestas.every((p) => p.url !== null)).toBe(true)
+  })
+})
+
+// 18-nov · R3 de la prueba final (GO Lenovo · decisión de Emilio): el video llega solo hasta las PROPUESTAS en imágenes, sin Higgsfield
+describe('R3 · el interruptor del borrador en video (limites.video.borrador.activo)', () => {
+  it('solo false (booleano) lo apaga; ausente o cualquier otra cosa → encendido como antes', () => {
+    expect(borradorActivo(VIDEO_MESA.limites)).toBe(true)
+    expect(borradorActivo(null)).toBe(true)
+    expect(borradorActivo({ video: { borrador: { resolucion: '480p' } } })).toBe(true)
+    expect(borradorActivo({ video: { borrador: { activo: true } } })).toBe(true)
+    expect(borradorActivo({ video: { borrador: { activo: false } } })).toBe(false)
+    // 🟡 1 de CC7 · el contrato es el BOOLEANO: el texto "false", 0 o null no apagan (si el dato vivo se escribe como texto, el borrador sigue encendido y se nota)
+    expect(borradorActivo({ video: { borrador: { activo: 'false' } } })).toBe(true)
+    expect(borradorActivo({ video: { borrador: { activo: 0 } } })).toBe(true)
+    expect(borradorActivo({ video: { borrador: { activo: null } } })).toBe(true)
+    expect(OMITIDO_APAGADO).toBe('apagado')
+  })
+  it('🔴 apagado: el camino entero llega a «Propuestas» con las imágenes clave de borrador, 0 llamadas al brazo, US$ 0 de video y sin alarma', async () => {
+    const b = brazo({ estados: (id) => hecho(Number(id.slice(4))) })
+    const T = await montar(b, { borrador: { activo: false } })
+    expect(b.reg.enviados).toHaveLength(0)
+    // lo único que habla con el brazo es la cotización AL ABRIR (estimación gratis en `dry_run`, de siempre, no es un clip): nada del borrador se cotiza
+    expect(b.reg.cotizados.length).toBeGreaterThan(0)
+    expect(b.reg.cotizados.every((c) => c.includes(':cotizar') && !c.includes(':borrador'))).toBe(true)
+    expect(b.reg.uniones).toBe(0)
+    expect(T.M.gastos.filter((g) => g.concepto === 'video')).toHaveLength(0)
+    expect(borradores(T.M, T.id)).toMatchObject({ omitido: OMITIDO_APAGADO, costo_usd: 0, propuestas: [] })
+    expect(T.M.encargos.get(T.id)!.estado_del_motor.artefactos[ARTEFACTO_PEDIDO_BORRADOR]).toBeUndefined()
+    // se para en la parada del dueño, con las 3 propuestas y sus imágenes clave de borrador
+    expect(T.ultima.cuerpo).toMatchObject({ accion: 'esperar_dueno' })
+    expect(await T.M.P.almacen.turnoAbierto(T.id)).toMatchObject({ tipo: 'dueno', paso: 'aprobar_propuestas' })
+    const ik = T.M.encargos.get(T.id)!.estado_del_motor.artefactos.imagenes_clave.datos as unknown as ImagenesClave
+    expect(ik.propuestas!.map((p) => [p.id, p.planos.length, p.planos.every((x) => !!x.url)])).toEqual([['P1', 2, true], ['P2', 2, true], ['P3', 2, true]])
+    const t = propuestasDeLaDecision({ id: T.id, brief_id: 'F1-S1-ig-r1' }, T.M.encargos.get(T.id)!.estado_del_motor as never, T.pl.pasos as never)!
+    expect(t.lista.map((p) => p.id)).toEqual(['P1', 'P2', 'P3'])
+    expect(t.lista.every((p) => !p.video_url)).toBe(true)
+    expect(T.M.llamadas.avisos.filter((x) => String(x.texto).includes('Borrador de video incompleto'))).toHaveLength(0)
+    expect(T.M.encargos.get(T.id)!.estado).not.toBe('fallido')
+    // 🟡 2 de CC7 · US$ 0 de verdad: el encargo gasta EXACTAMENTE lo mismo que la misma plantilla sin el paso del borrador
+    const S = await montar(brazo({ estados: (id) => hecho(Number(id.slice(4))) }), { sinPasoBorrador: true })
+    expect(await S.M.P.almacen.turnoAbierto(S.id)).toMatchObject({ tipo: 'dueno', paso: 'aprobar_propuestas' })
+    expect(T.M.encargos.get(T.id)!.gasto_usd).toBe(S.M.encargos.get(S.id)!.gasto_usd)
+  })
+  it('🔴 apagado pasa de largo aunque haya propuestas en fase de borrador (el interruptor va antes que todo)', async () => {
+    const b = brazo({ estados: () => hecho(1) })
+    const prop = { version: 1, version_consumida: 0, datos: { ronda: 1, propuestas: [{ id: 'P1', guion: { planos: [{ n: 1, desde: 0, hasta: 4, se_ve: 'a' }, { n: 2, desde: 4, hasta: 8, se_ve: 'b' }] } }] } }
+    const enc = { id: 'e1', client_id: 'c1', brief_id: 'F1', familia: 'video_mesa', dry_run: false, estado_del_motor: { artefactos: { propuestas_video: prop }, gasto_usd: 0, pasos_ejecutados: 3, fichas: [], vueltas: {}, ultimo: 2 } }
+    const out = await enviarVideo({ video: b.v } as never, enc as never, conBorradores(3, { activo: false }), PASO_BORRADOR)
+    expect(out.res?.artefacto).toMatchObject({ omitido: 'apagado', costo_usd: 0, propuestas: [] })
+    expect(out.res?.costo_usd).toBe(0)
+    expect(out.esperar).toBeUndefined()
+    expect(b.reg.enviados).toHaveLength(0)
+    expect(b.reg.cotizados).toHaveLength(0)
+  })
+  it('🔴 encendido explícito (activo: true) hace lo mismo que hoy: el lote de 6 clips sale', async () => {
+    const b = brazo({ estados: (id) => hecho(Number(id.slice(4))) })
+    const T = await montar(b, { borrador: { activo: true } })
+    expect(T.ultima.cuerpo).toMatchObject({ accion: 'esperar_brazo', video: { planos: 6 } })
+    expect(b.reg.enviados).toHaveLength(6)
   })
 })
