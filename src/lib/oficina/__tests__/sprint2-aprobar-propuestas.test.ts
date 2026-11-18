@@ -150,11 +150,11 @@ describe('el dueño PIDE CAMBIOS', () => {
     expect(r.cuerpo.error).toBe('sin_vueltas')
     expect((await recibirDecisionDelDueno(T.M.P, T.id, { decision: 'aprobar', ronda: 3, propuesta_id: 'P3' })).status).toBe(200)
   })
-  it('observaciones vacías o de más de 2000 caracteres: 400, el encargo sigue esperando', async () => {
+  it('observaciones vacías o de más del tope del texto del dueño (G2b 18-nov: antes 2000): 400, el encargo sigue esperando', async () => {
     const T = await montar()
     await T.seguir(T.a)
     expect((await recibirDecisionDelDueno(T.M.P, T.id, { decision: 'cambios', ronda: 1, observaciones: '   ' })).status).toBe(400)
-    expect((await recibirDecisionDelDueno(T.M.P, T.id, { decision: 'cambios', ronda: 1, observaciones: 'x'.repeat(2001) })).status).toBe(400)
+    expect((await recibirDecisionDelDueno(T.M.P, T.id, { decision: 'cambios', ronda: 1, observaciones: 'x'.repeat(100_001) })).status).toBe(400)
     expect((await avanzar(T.M.P, T.id)).cuerpo.accion).toBe('esperar_dueno')
   })
 })
@@ -263,7 +263,7 @@ describe('las acciones del tablero (tarjeta «Propuestas» de CC5 · contrato AD
       expect(s.status, JSON.stringify(cuerpo)).toBe(400)
       expect(s.cuerpo.error).toBe('entrada_invalida')
     }
-    for (const observaciones of ['', '   ', 'x'.repeat(2001), 7]) {
+    for (const observaciones of ['', '   ', 'x'.repeat(100_001), 7]) {
       const s = await propuestasCambios(c, { cuerpo: { encargo_id: T.id, ronda: 1, observaciones }, reviewer: yo })
       expect(s.status).toBe(400)
       expect(s.cuerpo.error).toBe('entrada_invalida')

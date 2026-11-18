@@ -204,7 +204,7 @@ describe('(e) reabrir una pieza que ya gastó, con la causa corregida declarada'
   it('el sobre valida la causa y la limpia', () => {
     const base = { parte_id: PARTE, brief_id: 'BRF-0003', dry_run: false }
     expect(validarSobre({ ...base, reabrir_causa_corregida: '   ' })).toMatchObject({ ok: false, codigo: 'entrada_invalida' })
-    expect(validarSobre({ ...base, reabrir_causa_corregida: 'x'.repeat(301) })).toMatchObject({ ok: false, codigo: 'entrada_invalida' })
+    expect(validarSobre({ ...base, reabrir_causa_corregida: 'x'.repeat(100_001) /* G2b 18-nov: antes 300 */ })).toMatchObject({ ok: false, codigo: 'entrada_invalida' })
     expect(validarSobre({ ...base, reabrir_causa_corregida: 'más luz' })).toMatchObject({ ok: true })
     const ok = validarSobre({ ...base, reabrir_causa_corregida: `  ${CAUSA}  ` })
     expect(ok.ok && ok.sobre.reabrir_causa_corregida).toBe(CAUSA)

@@ -16,3 +16,5 @@ export const TOPE_REAL_DEL_PEDIDO = 1_500_000
 
 /** 01-nov · lo que escribe el dueño (unas 25.000 palabras): es un techo de cordura para un texto humano, no un recorte. La base lo exige igual en plan_cambios y notas_del_dueno (migración 202611012100), y n8n usa el mismo número en «⓪ Llave» */
 export const TOPE_DEL_TEXTO_DEL_DUENO = 100_000
+/** 18-nov · G2b (CC5): el mismo tope con otro nombre, para el código de la cadena, que no puede nombrar al cliente (prueba `cadena/__tests__/generalidad`). Igual al del tablero */
+export const TOPE_DE_LO_ESCRITO = TOPE_DEL_TEXTO_DEL_DUENO
