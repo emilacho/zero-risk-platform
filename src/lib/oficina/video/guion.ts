@@ -101,6 +101,8 @@ export interface TraduccionDeGuion {
   avisos: string[]
   /** 17-nov · Sprint 3 · T2 · los personajes de la pieza (solo si la mesa escribió la sección «## Personajes») */
   personajes?: PersonajeDeLaHoja[]
+  /** 18-nov · Sprint 3 · T5 tramo 3 · la mesa pidió subtítulos (sección «## Subtítulos»: sí, con su energía). Sin la sección, o con «no», no van: nunca se ponen por defecto */
+  subtitulos?: { energia: import('./subtitulos').EnergiaDeSubtitulos }
 }
 
 const sinTildes = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
@@ -122,6 +124,14 @@ const esPie = (t: string) => /^(pie( de foto)?|caption|texto de publicaci[oó]n|
 const esEtiquetas = (t: string) => /^(etiquetas|hashtags)\b/i.test(t.trim())
 /** 17-nov · Sprint 3 · T2 · «## Personajes» (la lista) o «## Personaje · Ana» (uno por sección) */
 const esPersonajes = (t: string) => /^(personajes?|reparto|elenco)\b/.test(sinTildes(t).trim())
+const esSubtitulos = (t: string) => /^(subtitulos?|captions?)\b/.test(sinTildes(t).trim())
+/** 18-nov · T5 tramo 3 · «## Subtítulos» → «sí · Energía: alta|conversacion|calma» o «no». Solo un «sí» explícito los pide */
+export function leerSubtitulos(lineas: string[]): TraduccionDeGuion['subtitulos'] {
+  const texto = sinTildes(lineas.join(' ')).replace(/[*_`]/g, ' ').trim()
+  if (!/^(si|yes)\b/.test(texto)) return undefined
+  const e = /\benergia\s*:?\s*(alta|conversacion|calma)\b/.exec(texto)
+  return { energia: e ? (e[1] as 'alta' | 'conversacion' | 'calma') : 'conversacion' }
+}
 
 type CampoDelPlano = 'se_ve' | 'movimiento' | 'texto_en_pantalla' | 'foto' | 'rol' | 'dice' | 'intencion' | 'tamano' | 'lente' | 'luz' | 'producto' | 'estado_final' | 'prompt_imagen' | 'prompt_video' | 'personajes'
 const CAMPOS: Array<[RegExp, CampoDelPlano]> = [
@@ -285,6 +295,7 @@ export function traducirGuion(md: string, o: { preguntasHechas?: number; maxPreg
   const todas = secciones(md)
   const avisos: string[] = []
   let pie = '', audio = ''
+  let subtitulos: TraduccionDeGuion['subtitulos']
   let tags: string[] = []
   const bloques: Seccion[] = []
   for (const s of todas) {
@@ -292,6 +303,7 @@ export function traducirGuion(md: string, o: { preguntasHechas?: number; maxPreg
     else if (esPie(s.titulo)) pie = s.lineas.join('\n').trim()
     else if (esEtiquetas(s.titulo)) tags = hashtagsDe(s.lineas)
     else if (esPersonajes(s.titulo)) continue // Sprint 3 · T2 · se leen aparte (`leerPersonajes`)
+    else if (esSubtitulos(s.titulo)) subtitulos = leerSubtitulos(s.lineas)
     else if (esPlano(s.titulo)) bloques.push(s)
   }
   if (!pie || !tags.length) {
@@ -369,7 +381,7 @@ export function traducirGuion(md: string, o: { preguntasHechas?: number; maxPreg
   if (!audio) avisos.push('el guion no dice nada del audio: el modelo pone música o ambiente a su criterio')
   // Sprint 3 · T2 · un nombre que un plano cita y no está en «## Personajes» sale sin ficha (se avisa; no se adivina)
   if (nombradosSinFicha.size) avisos.push(`${[...nombradosSinFicha].map((x) => `«${x}»`).join(', ')} sale${nombradosSinFicha.size === 1 ? '' : 'n'} en un plano pero no está${nombradosSinFicha.size === 1 ? '' : 'n'} en «## Personajes»: sin ficha`)
-  return { ok: true, planos, segundos: total, audio, pie_de_foto: pie, hashtags: tags, fotos_ids: fotos, avisos, ...(personajes.length ? { personajes } : {}) }
+  return { ok: true, planos, segundos: total, audio, pie_de_foto: pie, hashtags: tags, fotos_ids: fotos, avisos, ...(personajes.length ? { personajes } : {}), ...(subtitulos ? { subtitulos } : {}) }
 }
 
 /**

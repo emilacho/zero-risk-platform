@@ -6,6 +6,8 @@
 import { describe, expect, it } from 'vitest'
 import { armarVideoCompuesto, medidasDelVideo, type EntradaDelVideoCompuesto } from '../video/composicion-del-video'
 import { disenoDeAnuncio } from '../composicion'
+import { traducirGuion, leerSubtitulos } from '../video/guion'
+import { convencionDelGuion } from '../mesa/pedidos'
 import { htmlDeVideo, capasDeTexto, SEGUNDOS_DE_CIERRE } from '../../../../packages/carousel-engine/src/video-html'
 
 const diseno = disenoDeAnuncio({ colors: { primary: '#1d4ed8' }, fonts: { family: 'Inter' } }, 'semilla')
@@ -87,5 +89,23 @@ describe('armarVideoCompuesto', () => {
     expect(html).not.toContain('<b>2x1</b>')
     expect(html).toContain('Reserva hoy')
     expect(capasDeTexto(a.pedido).every((c) => c.hasta <= a.pedido.segundos)).toBe(true)
+  })
+})
+
+describe('los subtítulos los pide la mesa en el guion (sección «## Subtítulos»)', () => {
+  const hoja = (extra: string[]) => ['## Plano 1 · 0–4 s', 'Se ve: la puerta del local', '## Plano 2 · 4–8 s', 'Se ve: el mostrador', '## Audio', 'voz en off', ...extra].join('\n')
+  it('🔴 sin la sección no van (nunca por defecto) · con «no» tampoco', () => {
+    expect(traducirGuion(hoja([]), {}).subtitulos).toBeUndefined()
+    expect(traducirGuion(hoja(['## Subtítulos', 'no']), {}).subtitulos).toBeUndefined()
+    expect('subtitulos' in traducirGuion(hoja([]), {})).toBe(false)
+  })
+  it('🔴 «sí» los pide con la energía escrita; sin energía, conversación; con tilde y negritas también', () => {
+    expect(traducirGuion(hoja(['## Subtítulos', 'sí · Energía: alta']), {}).subtitulos).toEqual({ energia: 'alta' })
+    expect(traducirGuion(hoja(['## Subtitulos', 'si']), {}).subtitulos).toEqual({ energia: 'conversacion' })
+    expect(leerSubtitulos(['**Sí** · energía: calma'])).toEqual({ energia: 'calma' })
+    expect(leerSubtitulos(['tal vez · energía: alta'])).toBeUndefined()
+  })
+  it('la hoja que recibe la mesa trae la sección opcional', () => {
+    expect(convencionDelGuion()).toMatch(/## Subtítulos {3}\(opcional/)
   })
 })

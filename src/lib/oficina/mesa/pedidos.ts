@@ -194,7 +194,7 @@ const PERSONAJES_DE_LA_PIEZA = [
   '- <Nombre>: <cómo es: edad, rasgos, pelo, ropa> · Fotos: foto:<id> (solo fotos propias que lo muestren; una persona real, solo con su permiso registrado)',
 ]
 
-const CIERRE_DE_LA_PIEZA = ['## Audio', '<lo que suena: música, ambiente, voz, diálogo o locución, lo que pida la pieza>', '## Pie', '<el pie de foto de la publicación>', '## Etiquetas', '#una #otra']
+const CIERRE_DE_LA_PIEZA = ['## Audio', '<lo que suena: música, ambiente, voz, diálogo o locución, lo que pida la pieza>', '## Subtítulos   (opcional: solo si la pieza tiene voz y los quieres; si no, no escribas esta sección)', 'sí · Energía: alta | conversacion | calma','## Pie', '<el pie de foto de la publicación>', '## Etiquetas', '#una #otra']
 
 /** T8 · 31-oct · el GUION del video corto (la mesa lo escribe; el brazo lo filma tal cual) · Sprint 2 · S2-1: la HOJA DE PLANOS y, si la plantilla lo pide, N propuestas */
 export function convencionDelGuion(v: ParametrosDelVideo = VIDEO_POR_OMISION): string {
