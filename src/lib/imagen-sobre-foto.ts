@@ -82,6 +82,22 @@ export function promptDeEdicionConVarias(prompt: string, n: number): string {
   ].join('\n')
 }
 
+/**
+ * 18-nov · las OTRAS fotos de un pedido (detrás de la base): sin repetir ni repetir la base, hasta MAX_FOTOS_POR_IMAGEN con ella, solo del almacén del proyecto.
+ * Sin base usable no se baja ninguna (la base manda la composición). Cada una que no sirve se omite con su motivo: nunca frena la imagen.
+ */
+export async function bajarOtrasFotos(f: Fetch, urls: string[], o: { base: string | null; baseUsable: boolean; almacen: string | undefined | null }): Promise<{ otras: Array<{ bytes: Buffer; tipo: string }>; usadas: string[]; omitidas: Array<{ url: string; motivo: string }> }> {
+  const pedidas = urls.filter((u, i) => !!u && u !== o.base && urls.indexOf(u) === i).slice(0, MAX_FOTOS_POR_IMAGEN - 1)
+  const otras: Array<{ bytes: Buffer; tipo: string }> = [], usadas: string[] = [], omitidas: Array<{ url: string; motivo: string }> = []
+  if (!o.baseUsable) return { otras, usadas, omitidas: pedidas.map((url) => ({ url, motivo: 'la foto base no se pudo usar' })) }
+  for (const u of pedidas) {
+    if (!referenciaPermitida(u, o.almacen)) { omitidas.push({ url: u, motivo: 'no está en el almacén del proyecto' }); continue }
+    const b = await bajarFoto(f, u)
+    if (b.ok) { otras.push({ bytes: b.bytes, tipo: b.tipo }); usadas.push(u) } else omitidas.push({ url: u, motivo: b.motivo })
+  }
+  return { otras, usadas, omitidas }
+}
+
 export interface PedidoDeEdicion { prompt: string; model: string; size: string; quality: string | null; foto: { bytes: Buffer; tipo: string }; /** las fotos que siguen a la base (18-nov) */ otras?: Array<{ bytes: Buffer; tipo: string }> }
 
 const extension = (tipo: string): string => (tipo === 'image/jpeg' ? 'jpg' : tipo === 'image/webp' ? 'webp' : 'png')

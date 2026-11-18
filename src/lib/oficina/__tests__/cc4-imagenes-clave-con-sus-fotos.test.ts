@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { traducirGuion } from '../video/guion'
-import { MAX_FOTOS_POR_IMAGEN as MAX_IMG, cuerpoDeEdicion, promptDeEdicionConVarias } from '../../imagen-sobre-foto'
+import { MAX_FOTOS_POR_IMAGEN as MAX_IMG, bajarOtrasFotos, cuerpoDeEdicion, promptDeEdicionConVarias } from '../../imagen-sobre-foto'
 import { fotosDelPlano, pedidosDeImagenClave, type PlanoDeLaHoja } from '../video/imagen-clave'
 
 const URL = (id: string) => `https://x.supabase.co/storage/v1/object/public/fotos/${id}.jpg`
@@ -128,6 +128,22 @@ describe('4 · el envío a la edición: una foto como siempre; varias, todas en 
     expect(f.getAll('image')).toHaveLength(0)
     expect(String(f.get('prompt'))).toBe(promptDeEdicionConVarias('p', 3))
     expect(promptDeEdicionConVarias('p', 3)).toContain('must look exactly as it does in its photo')
+  })
+  it('la ruta baja las otras: sin repetir la base ni repetirse, solo del almacén, cada omitida con su motivo; sin base usable, ninguna', async () => {
+    const ALM = 'https://x.supabase.co'
+    const jpg = Buffer.from([0xff, 0xd8, 0xff, 0x00])
+    const pedidas: string[] = []
+    const f = (async (u: string | URL | Request) => { pedidas.push(String(u)); return String(u).includes('vacia') ? new Response(new Uint8Array(0)) : new Response(new Uint8Array(jpg)) }) as typeof fetch
+    const base = URL('base'), a = URL('a'), vacia = URL('vacia')
+    const r = await bajarOtrasFotos(f, [a, base, a, 'https://otro.sitio/x.jpg', vacia], { base, baseUsable: true, almacen: ALM })
+    expect(r.usadas).toEqual([a])
+    expect(r.otras).toHaveLength(1)
+    expect(r.omitidas).toEqual([{ url: 'https://otro.sitio/x.jpg', motivo: 'no está en el almacén del proyecto' }, { url: vacia, motivo: 'la foto vino vacía' }])
+    expect(pedidas).toEqual([a, vacia]) // ni la base ni la de afuera se bajan; la repetida, una vez
+    const sin = await bajarOtrasFotos(f, [a], { base: null, baseUsable: false, almacen: ALM })
+    expect(sin).toEqual({ otras: [], usadas: [], omitidas: [{ url: a, motivo: 'la foto base no se pudo usar' }] })
+    const muchas = await bajarOtrasFotos(f, Array.from({ length: 30 }, (_, i) => URL(`m${i}`)), { base, baseUsable: true, almacen: ALM })
+    expect(muchas.usadas).toHaveLength(MAX_IMG - 1)
   })
   it(`nunca más de ${MAX_IMG} imágenes`, () => {
     const f = cuerpoDeEdicion({ prompt: 'p', model: 'm', size: 's', quality: null, foto: foto(0), otras: Array.from({ length: 40 }, (_, i) => foto(i)) })

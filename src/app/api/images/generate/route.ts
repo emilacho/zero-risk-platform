@@ -9,7 +9,7 @@ import { imageBytesFromItem, sniffImageFormat, type ImagesApiItem } from '@/lib/
 import { randomUUID } from 'node:crypto'
 import { checkInternalKey } from '@/lib/internal-auth'
 import { registrarImagenEnElLibro } from '@/lib/image-ledger'
-import { bajarFoto, cuerpoDeEdicion, MAX_FOTOS_POR_IMAGEN, referenciaPermitida } from '@/lib/imagen-sobre-foto'
+import { bajarFoto, bajarOtrasFotos, cuerpoDeEdicion, referenciaPermitida } from '@/lib/imagen-sobre-foto'
 
 // Sprint #6 Brazo 1 · GPT Image generation wrapper
 //
@@ -112,17 +112,8 @@ export async function POST(request: Request) {
   // 18-nov · GO «los creativos ven las fotos» · las OTRAS fotos reales del pedido (personajes, productos, lugares): solo si la base se pudo usar (la base manda
   //   la composición); cada una que no sirve se omite y se dice por qué, sin frenar la imagen
   const otrasUrls = (Array.isArray(body.reference_image_urls) ? (body.reference_image_urls as unknown[]) : [])
-    .map((u) => sanitizeString(typeof u === 'string' ? u : undefined, 2000)).filter((u): u is string => !!u && u !== refUrl)
-    .filter((u, i, a) => a.indexOf(u) === i).slice(0, MAX_FOTOS_POR_IMAGEN - 1)
-  const otras: Array<{ bytes: Buffer; tipo: string }> = []
-  const otrasUsadas: string[] = [], otrasOmitidas: Array<{ url: string; motivo: string }> = []
-  if (foto) {
-    for (const u of otrasUrls) {
-      if (!referenciaPermitida(u, almacen)) { otrasOmitidas.push({ url: u, motivo: 'no está en el almacén del proyecto' }); continue }
-      const b = await bajarFoto(fetch, u)
-      if (b.ok) { otras.push({ bytes: b.bytes, tipo: b.tipo }); otrasUsadas.push(u) } else otrasOmitidas.push({ url: u, motivo: b.motivo })
-    }
-  } else for (const u of otrasUrls) otrasOmitidas.push({ url: u, motivo: 'la foto base no se pudo usar' })
+    .map((u) => sanitizeString(typeof u === 'string' ? u : undefined, 2000)).filter((u): u is string => !!u)
+  const { otras, usadas: otrasUsadas, omitidas: otrasOmitidas } = await bajarOtrasFotos(fetch, otrasUrls, { base: refUrl, baseUsable: !!foto, almacen })
   if (!foto && otrasOmitidas.length) referencia = { ...(referencia ?? { usada: false, motivo: 'el pedido trajo otras fotos sin foto base: se generó sin ellas' }), otras_omitidas: otrasOmitidas }
   const conOtras = () => ({ ...(otrasUsadas.length ? { otras_usadas: otrasUsadas } : {}), ...(otrasOmitidas.length ? { otras_omitidas: otrasOmitidas } : {}) })
   const generar = () => fetch('https://api.openai.com/v1/images/generations', {
