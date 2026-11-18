@@ -103,12 +103,13 @@ export interface DatosDeLaJefatura {
   avisos?: string[]
   /** la jefatura mandó un costo que no es un número finito ≥ 0: se contó 0 y queda dicho aquí */
   costo_invalido?: true
-  /** cambio 4 · el sentido contra la ficha (solo si la hoja trae ficha; sin ficha no aparece y nada cambia) */
+  /** cambio 4 · el sentido contra la ficha (solo si la hoja trae ficha o, desde #1147, un cierre vivo de la oferta: D1 no depende de la foto; sin ninguno no aparece y nada cambia) */
   sentido?: DatosDelSentido
 }
 /** cambio 4 · lo que se guarda del sentido (firma de Emilio 17-nov 20:34: el regreso es automático y responde el creador de cada paso; sin persona en el medio) */
 export interface DatosDelSentido {
-  ficha: 'con_ficha'
+  /** 18-nov · #1147 · `sin_ficha` solo cuando la hoja (o el cerebro de hoy) trae el cierre: entonces lo único que se mide es D1 */
+  ficha: 'con_ficha' | 'sin_ficha'
   declarado: string[]
   /** hallazgos del código (exactos) y del jefe (sentido, con su cita verificada) */
   hallazgos: Hallazgo[]
@@ -163,8 +164,9 @@ export function aplicarSalidaDeJefatura(pl: Pick<Plantilla, 'familia' | 'clase'>
   // revisión 2 = A · la jefatura ya separa lo de criterio en `observaciones`: la oficina recibe las dos listas y las pasa por SU misma regla (`fichasAlCierre`)
   const deLaJefatura = [...(Array.isArray(salida.desacuerdos) ? salida.desacuerdos : []), ...(Array.isArray(salida.observaciones) ? salida.observaciones : [])]
   const crudas = deLaJefatura.map((d) => String(d).trim()).filter(Boolean)
-  // cambio 4 · con ficha: lo exacto (código) + el sentido del jefe (cita y destino verificados) se reparten por destino. Sin ficha, `sen` es null y todo sigue como antes
-  const sen = o.sentido && o.sentido.ficha.estado === 'con_ficha' && !incompleta ? sentidoDeLaRevision(crudas, o.sentido) : null
+  // cambio 4 · con ficha: lo exacto (código) + el sentido del jefe (cita y destino verificados) se reparten por destino. Sin ficha, `sen` es null y todo sigue como antes,
+  // salvo (18-nov · #1147) que la oferta esté cerrada en la fecha de la fila: D1 se mide igual (lo del jefe pasa tal cual: sin ficha no hay cita que verificar)
+  const sen = o.sentido && (o.sentido.ficha.estado === 'con_ficha' || !!o.sentido.ficha.cierre) && !incompleta ? sentidoDeLaRevision(crudas, o.sentido) : null
   const lineas = sen ? sen.lineas : crudas
   // lo que vuelve a un paso de la cadena NO se arregla rehaciendo la pieza: no hay vuelta a la mesa. Tras una vuelta con correcciones de sentido, la jefatura no reabre
   const haciaAtras = !!sen && (sen.datos.devoluciones.length > 0 || (sen.datos.duras_pendientes?.length ?? 0) > 0 || sen.tras_la_vuelta)
@@ -243,7 +245,7 @@ function sentidoDeLaRevision(crudas: string[], s: NonNullable<OpcionesDeAplicaci
   const noReabrePieza = tras ? hallazgos.filter((h) => aPieza(h) && !esDura(h)) : []
   const r = repartir(sigue, s.filaId, s.encargoId, s.yaDevueltas)
   const respuestas = tras ? leerRespuestas(s.previas!.enviadas, s.previas!.lineasDeRespuesta) : null
-  const datos: DatosDelSentido = { ficha: 'con_ficha', declarado: [...(s.declarado ?? []), ...ex.declarado], hallazgos, devoluciones: r.devoluciones, enviadas: tras ? [] : r.enviadas, no_reabre: [...noReabrePieza, ...r.no_reabre], ...(r.duras_pendientes.length ? { duras_pendientes: r.duras_pendientes } : {}), ...(tras && (durasPiezaQueSiguen.length || r.duras_pendientes.length) ? { duras_no_tomadas: [...durasPiezaQueSiguen, ...r.duras_pendientes] } : {}), ...(respuestas ? { respuestas_del_creador: respuestas } : {}), vuelve_a: r.vuelve_a, cita_no_verificada: r.cita_no_verificada }
+  const datos: DatosDelSentido = { ficha: s.ficha.estado, declarado: [...(s.declarado ?? []), ...ex.declarado], hallazgos, devoluciones: r.devoluciones, enviadas: tras ? [] : r.enviadas, no_reabre: [...noReabrePieza, ...r.no_reabre], ...(r.duras_pendientes.length ? { duras_pendientes: r.duras_pendientes } : {}), ...(tras && (durasPiezaQueSiguen.length || r.duras_pendientes.length) ? { duras_no_tomadas: [...durasPiezaQueSiguen, ...r.duras_pendientes] } : {}), ...(respuestas ? { respuestas_del_creador: respuestas } : {}), vuelve_a: r.vuelve_a, cita_no_verificada: r.cita_no_verificada }
   return { lineas: [...jefe.resto, ...r.a_la_mesa], datos, tras_la_vuelta: tras }
 }
 

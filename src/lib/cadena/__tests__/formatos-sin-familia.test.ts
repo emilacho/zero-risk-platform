@@ -15,6 +15,7 @@ import { AlmacenMemoria } from '../__fixtures__/almacen-memoria'
 import { clienteA, contextoDe, formatosDeLaMigracion } from '../__fixtures__/clientes'
 import type { Almacen, Campana, EstrategiaGuardada } from '../almacen'
 import { briefAbrir, conceptoAbrir, conceptoDecidir, hojaEscribir, recibirBrief, recibirConcepto } from '../mesas'
+import { CAMPO_OFERTA_CERRADA } from '../hoja'
 import type { Fila, FormatosPorRed } from '../tipos'
 
 /** la tabla de producción: la siembra + los UPDATE de familia de las dos migraciones (mismas reglas) */
@@ -371,6 +372,27 @@ describe('17-nov · Sprint 4 · A entrega 2 · la hoja trae las fichas que escri
     expect(r.status).toBe(200)
     expect(r.cuerpo.hoja).not.toContain('un dato de otra campaña')
     expect(r.cuerpo.hoja).toContain('sin fichas de hechos todavía · declarado')
+  })
+  it('🔴 18-nov · #1147 · camino real: un cierre que el cerebro registra DESPUÉS de la ficha llega a la hoja (la lectura en vivo pasa por el almacén)', async () => {
+    const al = almacenHoja(formatosReales())
+    await conGranIdea(al)
+    await al.guardarFilas(CAMP, 1, 1, [filaH('f-foto', 'instagram', 'foto')])
+    al.fichasDeOferta.push(ficha(CAMP, 'la oferta del centro, abierta en la foto'))
+    al.hechos = [{ oferta: 'centro', tipo: 'cierre_retiro', valor: 'el centro cerró el 10-oct', vigente_desde: '2026-10-10', fuente: 'dueno · ficha:f9', fecha_de_la_fuente: '2026-10-11' }]
+    const r = await hojaEscribir(al, wfh({ semana: 1 }), AHORA)
+    expect(r.status, JSON.stringify(r.cuerpo)).toBe(200)
+    expect(r.cuerpo.hoja).toContain(`- ${CAMPO_OFERTA_CERRADA}: el centro cerró el 10-oct (fuente: cerebro:dueno · ficha:f9 · dicho el 2026-10-11)`)
+    expect((r.cuerpo.avisos as string[]).some((a) => a.includes('manda el cerebro'))).toBe(true)
+  })
+  it('🔴 sabotaje · el cierre del cerebro empieza DESPUÉS de la fila ⇒ la hoja no lo lleva', async () => {
+    const al = almacenHoja(formatosReales())
+    await conGranIdea(al)
+    await al.guardarFilas(CAMP, 1, 1, [filaH('f-foto', 'instagram', 'foto')])
+    al.fichasDeOferta.push(ficha(CAMP, 'la oferta del centro, abierta en la foto'))
+    al.hechos = [{ oferta: 'centro', tipo: 'cierre_retiro', valor: 'el centro cierra el 13-oct', vigente_desde: '2026-10-13', fuente: 'dueno · ficha:f9' }]
+    const r = await hojaEscribir(al, wfh({ semana: 1 }), AHORA)
+    expect(r.status).toBe(200)
+    expect(r.cuerpo.hoja).not.toContain(CAMPO_OFERTA_CERRADA)
   })
 })
 

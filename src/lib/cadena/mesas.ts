@@ -826,12 +826,14 @@ export async function hojaEscribir(al: Almacen, cuerpo: Record<string, unknown>,
   const manual = ctx.referencias.find((r) => r.origen === 'manual')
   // 17-nov · Sprint 4 · A entrega 2: las fichas que escribió el lector de ESTA campaña; sin ellas (o sin almacén que las guarde) la hoja lo declara
   const fichas = await fichasDeLaCampana(al, campana.id)
+  // 18-nov · Lenovo (#1147): el estado de la oferta se lee EN VIVO del cerebro (consulta de «Hechos del negocio»); un fallo = null (vale la ficha y se avisa) · nunca frena
+  const hechos = al.hechosDelNegocio ? await al.hechosDelNegocio(campana.client_id).catch(() => null) : undefined
   const hoja = escribirHoja({
     client_name: ctx.nombreDelNegocio, plan_id: campana.plan_id, manual_id: manual?.id.replace(/^manual:/, '') ?? 'sin-manual', manual_version: cadena(cuerpo.manual_version) ?? 'vigente',
     hoy: ahora.slice(0, 10), lote_key: cadena(cuerpo.lote_key) ?? (ids ? `${campana.id.slice(0, 8)}:v${version}:ids` : `${campana.id.slice(0, 8)}:v${version}:s${semana}`),
     brief: brief.leido as unknown as BriefCreativoLeido, brief_id: idDeBrief(campana.id, brief.version), concepto: mesa.concepto, concepto_id: idDeConcepto(campana.id, mesa.version ?? 1),
     filas: filas.map((f) => ({ id: f.id, fecha: f.fecha, hora: f.hora, red: f.red, formato: f.formato, pilar: f.pilar, tema: f.tema, datos: f.datos, fase: f.fase ?? null, idea_ref: f.idea_ref ?? null, concepto: f.concepto ?? null, oferta: f.sede ?? null })),
-    formatos, seco: campana.seco, fichas,
+    formatos, seco: campana.seco, fichas, hechos,
   })
   return { status: 200, cuerpo: { hoja: hoja.texto_md, briefs: hoja.briefs, provenance: hoja.provenance, avisos: hoja.avisos, filas: filas.map((f) => f.id), ...(excluidas.length ? { excluidas } : {}), brief_version: brief.version, concepto_version: mesa.version } }
 }

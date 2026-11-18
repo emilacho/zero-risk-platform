@@ -41,15 +41,16 @@ const salida = (desacuerdos: string[]): SalidaDeRevision => ({ revision_id: 'rev
 
 const HALLAZGO = `texto: sentido · pieza: da a entender que ya atiende en persona — ficha: «${LINEA_NO}»`
 
-async function correr(desacuerdos: string[][], piezas: string[], o: { hechos?: HechoDelNegocioPorOferta[]; fecha?: string; real?: boolean } = {}) {
+async function correr(desacuerdos: string[][], piezas: string[], o: { hechos?: HechoDelNegocioPorOferta[]; fecha?: string; real?: boolean; brief?: string; cerebroCaido?: boolean } = {}) {
   const pl: Plantilla = JSON.parse(JSON.stringify(KIT_MESA))
-  const M = crearMemoria({ parte: parteCon(BRIEF), plantilla: pl, config: { familias_activas: ['kit_historias'] } })
+  const M = crearMemoria({ parte: parteCon(o.brief ?? BRIEF), plantilla: pl, config: { familias_activas: ['kit_historias'] } })
   const plantillas: Record<string, { plantilla: Plantilla; activo: boolean }> = { kit_historias: { plantilla: KIT_HISTORIAS_CON_JEFATURA, activo: true }, kit_mesa: { plantilla: pl, activo: true } }
   M.P.almacen.leerPlantilla = async (f) => plantillas[f] ?? null
   const MS = crearMesaEnMemoria(DIRECTORIO)
   M.P.mesa = { ...MS, configDeLaCadena: async (k: string) => (k === CLAVE_DE_LA_PALANCA ? { clientes: [CLIENTE] } : undefined) }
   const revisiones: string[] = []
-  if (o.hechos) M.P.hechosPorOferta = async () => o.hechos!
+  let lecturasDelCerebro = 0
+  if (o.hechos || o.cerebroCaido) M.P.hechosPorOferta = async () => { lecturasDelCerebro++; if (o.cerebroCaido) throw new Error('el cerebro no contesta'); return o.hechos! }
   M.P.jefatura = async (sobre) => { revisiones.push(sobre.payload.texto); return { estado: 'cerrada', salida: salida(desacuerdos[Math.min(revisiones.length - 1, desacuerdos.length - 1)]) } }
   let r = await abrirEncargo(M.P, { cuerpo: { parte_id: PARTE, brief_id: 'BRF-0300', dry_run: !o.real, familia: 'kit_historias' }, client_id: CLIENTE, target_step_id: TARGET_STEP_PRODUCIR })
   const id = String(r.cuerpo.encargo_id)
@@ -68,7 +69,7 @@ async function correr(desacuerdos: string[][], piezas: string[], o: { hechos?: H
     r = await recibirResultado(M.P, id, t.n, { texto, costo_usd: 0, workflow_execution_id: `t-${t.n}` })
   }
   const enc = M.encargos.get(id)!
-  return { r, revisiones, avisos: MS.filas.filter((f) => f.encargo_id === id && f.tipo === 'devuelve' && f.de === 'oficina-creativa').map((f) => f.texto), e: enc.estado_del_motor, llamadas: M.llamadas }
+  return { r, revisiones, avisos: MS.filas.filter((f) => f.encargo_id === id && f.tipo === 'devuelve' && f.de === 'oficina-creativa').map((f) => f.texto), e: enc.estado_del_motor, llamadas: M.llamadas, lecturasDelCerebro }
 }
 
 describe('firma de Emilio · la vuelta con respuesta del creador, de punta a punta', () => {
@@ -154,5 +155,40 @@ describe('firma de Emilio · la vuelta con respuesta del creador, de punta a pun
     const m = await correr([[]], [PIEZA], { hechos, fecha: '2026-11-20' })
     expect(datosDeLaJefatura(m.e)!.sentido!.devoluciones).toEqual([])
     expect(m.r.cuerpo).toMatchObject({ con_desacuerdo: false })
+  })
+})
+
+/**
+ * 18-nov · RESPUESTA-LENOVO-a-CC3-CC7 (#1147) · en la revisión de la jefatura el estado de la oferta se lee EN VIVO del cerebro; si choca con la hoja, MANDA el cerebro.
+ * Por la puerta real (abrirEncargo → mesa → jefatura → aplicación), en seco y a US$ 0.
+ */
+describe('#1147 · D1 en la jefatura: manda el cerebro de hoy, en los dos sentidos', () => {
+  const CERRADA = BRIEF.replace('- PROTAGONISTA:', '- OFERTA CERRADA EN SU FECHA: la oferta se retiró (fuente: cerebro:dueno · ficha:f1)\n- PROTAGONISTA:')
+  const SIN_FICHA = BRIEF.replace(/- FICHA DE LA OFERTA:\n(?:  - .*\n)+/, '- FICHA DE LA OFERTA: sin fichas de hechos todavía · declarado\n')
+  const CIERRE = (d: Partial<HechoDelNegocioPorOferta> = {}): HechoDelNegocioPorOferta => ({ oferta: 'oferta-a', tipo: 'cierre_retiro', valor: 'la oferta se suspende', vigente_desde: '2026-11-18', fuente: 'dueno:chat-17nov', ...d })
+  it('🔴 la hoja trae la oferta CERRADA, pero el cerebro de hoy la da abierta ⇒ la pieza sale limpia y queda declarado que mandó el cerebro', async () => {
+    const m = await correr([[]], [PIEZA], { brief: CERRADA, hechos: [], fecha: '2026-11-20' })
+    const j = datosDeLaJefatura(m.e)!
+    expect(j.sentido!.devoluciones).toEqual([])
+    expect(j.sentido!.declarado.join(' ')).toMatch(/el cerebro de hoy la da abierta.*manda el cerebro/)
+    expect(m.r.cuerpo).toMatchObject({ con_desacuerdo: false })
+  })
+  it('🔴 sabotaje del anterior · la misma hoja CERRADA con el cerebro diciendo cerrada ⇒ D1 frena (vuelve al calendario como regla dura)', async () => {
+    const m = await correr([[]], [PIEZA], { brief: CERRADA, hechos: [CIERRE()], fecha: '2026-11-20' })
+    expect(datosDeLaJefatura(m.e)!.sentido!.devoluciones).toEqual([expect.objectContaining({ llave: 'F-0300:calendario', destino: 'calendario', dura: true, origen: 'codigo' })])
+  })
+  it('🔴 el cerebro no contesta ⇒ NO se lee como abierta: la hoja CERRADA sigue frenando y se declara «sin verificar»', async () => {
+    const m = await correr([[]], [PIEZA], { brief: CERRADA, cerebroCaido: true, fecha: '2026-11-20' })
+    const j = datosDeLaJefatura(m.e)!
+    expect(j.sentido!.devoluciones).toEqual([expect.objectContaining({ destino: 'calendario', dura: true })])
+    expect(j.sentido!.declarado.join(' ')).toMatch(/sin verificar/)
+  })
+  it('🔴 SIN ficha en la hoja, un cierre vivo del cerebro igual frena con D1', async () => {
+    const m = await correr([[]], [PIEZA], { brief: SIN_FICHA, hechos: [CIERRE()], fecha: '2026-11-20' })
+    expect(datosDeLaJefatura(m.e)!.sentido!.devoluciones).toEqual([expect.objectContaining({ llave: 'F-0300:calendario', destino: 'calendario', dura: true, origen: 'codigo' })])
+  })
+  it('una sola lectura del cerebro por revisión, aunque la hoja ya traiga el cierre', async () => {
+    const m = await correr([[]], [PIEZA], { brief: CERRADA, hechos: [CIERRE()], fecha: '2026-11-20' })
+    expect(m.lecturasDelCerebro).toBe(1)
   })
 })

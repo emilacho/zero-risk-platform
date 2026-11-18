@@ -89,11 +89,12 @@ const contieneNormal = (texto: string, valor: string): boolean => {
  *  2. dato VENCIDO o AÚN NO VIGENTE en la fecha de la fila cuyo valor aparece tal cual (limpio) en la hoja fuera de la ficha ⇒ `hoja`; si no, en la pieza ⇒ `pieza`.
  */
 export function chequeosExactos(f: FichaDeLaHoja, textoDeLaPieza: string): ResultadoExacto {
-  if (f.estado !== 'con_ficha') return { hallazgos: [], declarado: [`sin ficha para esta oferta (${f.motivo ?? 'sin motivo'}): solo se revisa la forma`] }
-  const datos = f.lineas.map(leerDato).filter((d): d is DatoLeido => !!d)
   const hallazgos: Hallazgo[] = []
-  // D1 · la cadena ya decidió EXACTO (por el tipo del hecho del cerebro y la fecha de la fila) que la oferta está cerrada o aún no existe: la fila no va en esa fecha
+  // D1 · la cadena ya decidió EXACTO (por el tipo del hecho del cerebro y la fecha de la fila) que la oferta está cerrada o aún no existe: la fila no va en esa fecha.
+  // 18-nov · #1147 · D1 no depende de la foto de la ficha: el cierre llega con los hechos vivos aunque la oferta no tenga ficha
   if (f.cierre) hallazgos.push({ destino: 'calendario', origen: 'codigo', que: `D1 · la oferta está cerrada o aún no existe en la fecha de la pieza: «${f.cierre}»`, linea_de_la_ficha: `${CAMPO_CIERRE_DE_LA_HOJA.toLowerCase()}: ${f.cierre}` })
+  if (f.estado !== 'con_ficha') return { hallazgos, declarado: [`sin ficha para esta oferta (${f.motivo ?? 'sin motivo'}): solo se revisa la forma${f.cierre ? ' y D1 (el cierre vivo del cerebro)' : ''}`] }
+  const datos = f.lineas.map(leerDato).filter((d): d is DatoLeido => !!d)
   const declarado: string[] = []
   const deprecio = datos.filter((d) => normal(d.campo) === 'oferta y precio')
   const vigentes = new Set(deprecio.filter((d) => !d.marca).flatMap((d) => preciosDelDato(d.valor)))
@@ -121,15 +122,27 @@ export function chequeosExactos(f: FichaDeLaHoja, textoDeLaPieza: string): Resul
 
 // ───────────────────────── D1 con los HECHOS VIVOS (CC7 19:44Z · CC6 sobre #1145): un cierre que el cerebro registra DESPUÉS de armar la hoja también frena
 /**
- * suma a la ficha de la hoja el cierre que dicen los hechos vivos del cerebro en la fecha de la fila (mismas funciones de la cadena: `fichasConHechos` + `ofertaCerradaOInexistenteEn`).
- * Solo lectura y puro: la lectura la hace el orquestador. Sin ficha, sin oferta, si la hoja ya trae el cierre, sin fecha legible o sin hechos ⇒ la ficha queda igual (y se declara por qué no se midió).
+ * el estado de la oferta en la fecha de la fila según los hechos VIVOS del cerebro (mismas funciones de la cadena: `fichasConHechos` + `ofertaCerradaOInexistenteEn`).
+ * 18-nov · RESPUESTA-LENOVO-a-CC3-CC7 (#1147) · el cerebro es el dueño del hecho: si choca con la hoja, MANDA el cerebro, en los dos sentidos
+ * (hoja abierta + cerebro cerrada ⇒ cerrada · hoja cerrada + cerebro abierta ⇒ abierta). Vale con o sin ficha.
+ * Solo lectura y puro: la lectura la hace el orquestador. Sin oferta ⇒ igual. Sin fecha legible o sin hechos ⇒ vale lo que trae la hoja y se DECLARA (nunca se lee como «abierta» en silencio).
  */
 export function fichaConCierreVivo(f: FichaDeLaHoja, hechos: ReadonlyArray<HechoDelNegocioPorOferta> | null, fecha: string | null | 'ilegible'): { ficha: FichaDeLaHoja; declarado: string[] } {
-  if (f.estado !== 'con_ficha' || !f.oferta || f.cierre) return { ficha: f, declarado: [] }
+  if (!f.oferta) return { ficha: f, declarado: [] }
   if (!fecha || fecha === 'ilegible') return { ficha: f, declarado: ['D1 con los hechos vivos: sin fecha legible de la fila, no se mide'] }
-  if (!hechos) return { ficha: f, declarado: ['D1 con los hechos vivos: los hechos del cerebro no se pudieron leer, vale el cierre que trae la hoja'] }
+  if (!hechos) return { ficha: f, declarado: [`D1 con los hechos vivos: estado de la oferta sin verificar (los hechos del cerebro no se pudieron leer) · vale lo que trae la hoja: ${f.cierre ? 'cerrada' : 'sin cierre'}`] }
   const d = ofertaCerradaOInexistenteEn(fichasConHechos([{ clave: f.oferta }], hechos)[0], fecha)
-  if (!d) return { ficha: f, declarado: [] }
+  const PREFIJO = `${CAMPO_CIERRE_DE_LA_HOJA.toLowerCase()}: `
+  const sinElCierre = f.lineas.filter((l) => !l.startsWith(PREFIJO))
+  if (!d) {
+    if (!f.cierre) return { ficha: f, declarado: [] }
+    const { cierre: _quitado, ...abierta } = f
+    return { ficha: { ...abierta, lineas: sinElCierre }, declarado: [`D1: la hoja traía la oferta cerrada («${f.cierre}»), pero el cerebro de hoy la da abierta en la fecha de la fila · manda el cerebro`] }
+  }
   const cierre = `${d.valor} (fuente: ${d.fuente})`
-  return { ficha: { ...f, cierre, lineas: [...f.lineas, `${CAMPO_CIERRE_DE_LA_HOJA.toLowerCase()}: ${cierre}`] }, declarado: ['D1: el cierre viene de los hechos vivos del cerebro (registrado después de armar la hoja)'] }
+  if (f.cierre === cierre) return { ficha: f, declarado: [] }
+  return {
+    ficha: { ...f, cierre, lineas: [...sinElCierre, `${PREFIJO}${cierre}`] },
+    declarado: [f.cierre ? `D1: el cerebro de hoy dice otro cierre que la hoja («${f.cierre}») · manda el cerebro` : 'D1: el cierre viene de los hechos vivos del cerebro (registrado después de armar la hoja)'],
+  }
 }
