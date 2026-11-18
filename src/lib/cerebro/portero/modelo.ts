@@ -21,7 +21,7 @@ export interface PeticionConImagen {
   timeoutMs: number
 }
 
-interface CuerpoDeLaPeticion { model: string; max_tokens: number; thinking: { type: 'between_tools' }; system: string; messages: Array<{ role: 'user'; content: unknown }> }
+interface CuerpoDeLaPeticion { model: string; max_tokens: number; thinking?: { type: 'between_tools' }; system: string; messages: Array<{ role: 'user'; content: unknown }> }
 
 async function enviar(cuerpo: CuerpoDeLaPeticion, timeoutMs: number): Promise<RespuestaDelModelo> {
   const llave = process.env.CLAUDE_API_KEY
@@ -53,6 +53,28 @@ export async function llamarAlModeloConImagen(p: PeticionConImagen): Promise<Res
     model: p.model, max_tokens: p.max_tokens, thinking: p.thinking, system: p.system,
     messages: [{ role: 'user', content: [{ type: 'image', source: { type: 'base64', media_type: p.imagen.tipo, data: p.imagen.base64 } }, { type: 'text', text: p.texto }] }],
   }, p.timeoutMs)
+}
+
+/** una petición con VARIAS imágenes (cada una con su rótulo de texto antes) y un texto final: la usa el juicio de relevancia de lo ajeno (encargo 4, tandas de 20) */
+export interface PeticionConImagenes {
+  model: string
+  max_tokens: number
+  /** sin razonamiento extendido (Haiku 4.5): se omite del cuerpo */
+  thinking?: { type: 'between_tools' }
+  system: string
+  partes: Array<{ rotulo: string; imagen?: { tipo: string; base64: string } }>
+  texto: string
+  timeoutMs: number
+}
+
+export async function llamarAlModeloConImagenes(p: PeticionConImagenes): Promise<RespuestaDelModelo> {
+  const content: unknown[] = []
+  for (const x of p.partes) {
+    content.push({ type: 'text', text: x.rotulo })
+    if (x.imagen) content.push({ type: 'image', source: { type: 'base64', media_type: x.imagen.tipo, data: x.imagen.base64 } })
+  }
+  content.push({ type: 'text', text: p.texto })
+  return enviar({ model: p.model, max_tokens: p.max_tokens, thinking: p.thinking, system: p.system, messages: [{ role: 'user', content }] }, p.timeoutMs)
 }
 
 /** una petición con UN documento PDF (en base64) y un texto: la usa la lectura de PDF escaneados (OCR) del portero */

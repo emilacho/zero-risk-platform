@@ -4,7 +4,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const m = vi.hoisted(() => ({ vigilante: { status: 200, body: {} as Record<string, unknown> }, hechos: vi.fn(), origen: vi.fn() }))
+const m = vi.hoisted(() => ({ vigilante: { status: 200, body: {} as Record<string, unknown> }, hechos: vi.fn(), origen: vi.fn(), relevancia: vi.fn(), deps: vi.fn(() => ({ soy: 'deps' })) }))
 vi.mock('@/lib/internal-auth', () => ({ checkInternalKey: () => ({ ok: true }) }))
 vi.mock('@/lib/supabase', () => ({ getSupabaseAdmin: () => ({}) }))
 vi.mock('@/lib/portero-alimenta/datos', () => ({ interruptoresDelEntorno: () => ({}), umbralesDeGastoDelEntorno: () => ({}) }))
@@ -15,6 +15,8 @@ vi.mock('@/lib/portero-alimenta/vigilante', () => ({ rutaVigilar: async () => m.
 vi.mock('@/lib/portero-alimenta/hechos-preguntas', () => ({ hechosDeLaCorridaDelVigilante: m.hechos, preguntarPorHttp: () => async () => ({ status: 200, body: {} }) }))
 vi.mock('@/lib/finanzas/conversa/modelo-run-sdk', () => ({ baseDeRunSdk: () => 'http://x' }))
 vi.mock('@/lib/portero-alimenta/origen-de-lo-ajeno', () => ({ origenDeLaCorridaDelVigilante: m.origen }))
+vi.mock('@/lib/portero-alimenta/relevancia', () => ({ relevanciaDeLaCorridaDelVigilante: m.relevancia }))
+vi.mock('@/lib/portero-alimenta/relevancia-entorno', () => ({ depsDeRelevanciaDelEntorno: m.deps }))
 
 import { POST } from '@/app/api/brain/alimentar/vigilar/route'
 
@@ -25,7 +27,7 @@ const llamar = async () => {
 const DEL_VIGILANTE = { ok: true, apagado: false, clientes: [{ client_id: 'c1', salud: 'bien' }], motivo: null }
 
 describe('🔴 la ruta del vigilante: los hechos no cambian ni su código ni su cuerpo', () => {
-  beforeEach(() => { m.hechos.mockReset(); m.origen.mockReset(); m.origen.mockResolvedValue(null) })
+  beforeEach(() => { m.hechos.mockReset(); m.origen.mockReset(); m.origen.mockResolvedValue(null); m.relevancia.mockReset(); m.relevancia.mockResolvedValue(null) })
   it.each([200, 207, 409, 500])('código %s del vigilante: igual con hechos, sin hechos y con hechos que fallan', async (status) => {
     m.vigilante = { status, body: { ...DEL_VIGILANTE } }
     m.hechos.mockResolvedValueOnce([{ client_id: 'c1', estado: 'ok', hechos: 3, sin_dato: 4 }])
@@ -69,5 +71,28 @@ describe('🔴 la ruta del vigilante: los hechos no cambian ni su código ni su 
     const r = await llamar()
     expect(r).toEqual({ status: 207, body: { ...DEL_VIGILANTE, hechos_del_negocio: [{ client_id: 'c1' }], origen_de_lo_ajeno: [{ client_id: 'c1' }] } })
     expect(m.origen).toHaveBeenCalledWith(expect.anything(), { dry_run: false, workflow_id: 'wf', workflow_execution_id: 'ex' }, DEL_VIGILANTE)
+  })
+
+  // ENCARGO 4 de Cerebro: el juicio de relevancia va igual de aparte (apagado → null → el cuerpo no cambia)
+  it.each([200, 207, 409, 500])('código %s: la relevancia tampoco cambia ni el código ni el cuerpo del vigilante', async (status) => {
+    m.vigilante = { status, body: { ...DEL_VIGILANTE } }
+    m.hechos.mockResolvedValue(null)
+    const REL = { estado: 'ok', juzgadas: 3 }
+    m.relevancia.mockResolvedValueOnce(REL)
+    const con = await llamar()
+    m.relevancia.mockRejectedValueOnce(new Error('se cayó el juicio'))
+    const falla = await llamar()
+    m.relevancia.mockResolvedValueOnce(null)
+    const sin = await llamar()
+    expect([con.status, falla.status, sin.status]).toEqual([status, status, status])
+    expect(con.body).toEqual({ ...DEL_VIGILANTE, relevancia_de_lo_ajeno: REL })
+    expect(falla.body).toEqual({ ...DEL_VIGILANTE, relevancia_de_lo_ajeno: { error: 'se cayó el juicio' } })
+    expect(sin.body).toEqual(DEL_VIGILANTE)
+  })
+  it('la relevancia recibe las dependencias del entorno, el pedido original y lo que revisó el vigilante', async () => {
+    m.vigilante = { status: 200, body: { ...DEL_VIGILANTE } }
+    m.hechos.mockResolvedValue(null)
+    await llamar()
+    expect(m.relevancia).toHaveBeenCalledWith({ soy: 'deps' }, { dry_run: false, workflow_id: 'wf', workflow_execution_id: 'ex' }, DEL_VIGILANTE)
   })
 })

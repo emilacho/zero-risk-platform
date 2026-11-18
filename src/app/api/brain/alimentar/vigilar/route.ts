@@ -15,6 +15,8 @@ import { modoDelEntorno } from '@/lib/portero-alimenta/modo'
 import { umbralesDeAnomaliaDelEntorno } from '@/lib/portero-alimenta/anomalia'
 import { hechosDeLaCorridaDelVigilante, preguntarPorHttp } from '@/lib/portero-alimenta/hechos-preguntas'
 import { origenDeLaCorridaDelVigilante } from '@/lib/portero-alimenta/origen-de-lo-ajeno'
+import { relevanciaDeLaCorridaDelVigilante } from '@/lib/portero-alimenta/relevancia'
+import { depsDeRelevanciaDelEntorno } from '@/lib/portero-alimenta/relevancia-entorno'
 import { baseDeRunSdk } from '@/lib/finanzas/conversa/modelo-run-sdk'
 
 export const dynamic = 'force-dynamic'
@@ -34,7 +36,9 @@ export async function POST(request: Request) {
     const hechos = await hechosDeLaCorridaDelVigilante({ db, preguntar: preguntarPorHttp({ base: baseDeRunSdk(process.env), llave: process.env.INTERNAL_API_KEY ?? '' }) }, cuerpo, r.body).catch((e) => ({ error: e instanceof Error ? e.message : String(e) }))
     // 17-nov (ENCARGO 3 de Cerebro, fase B): de dónde viene cada foto y video ajeno (papel, vía, nivel, motivo). Igual: aparte, nunca cambia al vigilante
     const origen = await origenDeLaCorridaDelVigilante(db, cuerpo, r.body).catch((e) => ({ error: e instanceof Error ? e.message : String(e) }))
-    return NextResponse.json({ ...r.body, ...(hechos ? { hechos_del_negocio: hechos } : {}), ...(origen ? { origen_de_lo_ajeno: origen } : {}) }, { status: r.status })
+    // 18-nov (ENCARGO 4 de Cerebro): el JUICIO DE RELEVANCIA de lo ajeno ya clasificado (Haiku 4.5, tope diario). Apagado salvo PORTERO_RELEVANCIA=on; aparte, nunca cambia al vigilante
+    const relevancia = await relevanciaDeLaCorridaDelVigilante(depsDeRelevanciaDelEntorno({ db, origen: new URL(request.url).origin, llaveInterna: process.env.INTERNAL_API_KEY ?? '' }), cuerpo, r.body).catch((e) => ({ error: e instanceof Error ? e.message : String(e) }))
+    return NextResponse.json({ ...r.body, ...(hechos ? { hechos_del_negocio: hechos } : {}), ...(origen ? { origen_de_lo_ajeno: origen } : {}), ...(relevancia ? { relevancia_de_lo_ajeno: relevancia } : {}) }, { status: r.status })
   } catch (e) {
     return NextResponse.json({ error: 'vigilante_error', detalle: e instanceof Error ? e.message : String(e) }, { status: 500 })
   }
