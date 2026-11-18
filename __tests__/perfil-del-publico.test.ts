@@ -9,7 +9,7 @@ import path from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import {
   crearPresupuesto, filtrarPerfil, fuentesFaltantes, MUESTRA_MINIMA, pareceUnaOrden, publicosDe, suficiencia, tareaDelPerfil,
-  MAX_VOCES_AL_REDACTOR, TOPE_DEL_REDACTOR_USD, TOPE_POR_CORRIDA_USD, vocesDelTipo, vozDelCerebro, VOZ_POR_TIPO, type VozConId,
+  MAX_VOCES_AL_REDACTOR, TOPE_DEL_REDACTOR_USD, TOPE_POR_CORRIDA_USD, sinColaDeUsuario, vozDelCerebro, VOZ_POR_TIPO, type TipoDePublico, type VozConId,
 } from '../src/lib/perfil-del-publico/perfil'
 import { correrPerfil, notaDeFuenteFaltante, type DepsDeLaCorrida } from '../src/lib/perfil-del-publico/corrida'
 
@@ -33,7 +33,8 @@ function doble(o: Partial<DepsDeLaCorrida> & { publicos?: Record<string, unknown
     empleadoListo: vi.fn(async () => ({ ok: true as const })),
     leerFicha: vi.fn(async () => ({ rubro: 'cafetería', plaza: 'Madrid', pais: 'España', idioma: 'español de España', trato: 'tú' })),
     leerPublicos: vi.fn(async () => o.publicos ?? [PUBLICO_CAFE]),
-    leerVoces: vi.fn(async () => ({ voces: [...(o.delCerebro ?? [])], corte: null as string | null })),
+    // como el cerebro con `publico=<tipo>` (#1167): solo las voces de las clases de ese tipo
+    leerVoces: vi.fn(async (tipo: TipoDePublico) => ({ voces: (o.delCerebro ?? []).filter((v) => VOZ_POR_TIPO[tipo].some((c) => v.fuente === `cerebro:${c}`)), corte: null as string | null })),
     filtroDeSeguridad: vi.fn(async () => true),
     redactar: vi.fn(async (tarea: string) => ({ ok: true as const, salida: o.salida ? o.salida(tarea) : '## Cómo habla\n- «sin dato»', costo_usd: 0.2 })),
     archivar: vi.fn(async () => ({ ok: true, detalle: 'archivado' })),
@@ -372,8 +373,6 @@ describe('agnóstico: cafetería en Madrid y proveedor industrial B2B en Monterr
   })
   it('las voces de las clases de un público no sirven a otro: los comentarios en la competencia no cuentan para el público profesional', async () => {
     const delCerebro = [...voces(VALVULAS, 'cerebro:resenas', 45), ...voces(VALVULAS, 'cerebro:competidor_comentarios', 30, 100)]
-    expect(vocesDelTipo(delCerebro, 'profesional')).toHaveLength(45)
-    expect(vocesDelTipo(delCerebro, 'consumo')).toHaveLength(75)
     const b2b = doble({ delCerebro, publicos: [PUBLICO_B2B] })
     const r = await correrPerfil(b2b.d, { ...ENTRADA, client_id: VALVULAS })
     expect(r.publicos[0]).toMatchObject({ tipo: 'profesional', estado: 'muestra_insuficiente', voces_usadas: 45 })
@@ -402,5 +401,43 @@ describe('agnóstico: cafetería en Madrid y proveedor industrial B2B en Monterr
     expect(d.leerPalanca).not.toHaveBeenCalled()
     nadaGasto(d)
     expect(r.publicos[0]).toMatchObject({ estado: 'ensayo', voces_usadas: 75, muestra: 'muestra suficiente', fuentes_faltantes: ['cerebro:mencion', 'cerebro:competidor_comentarios'] })
+  })
+})
+
+// 18-nov · #1167: el cerebro elige las clases por TIPO de público y las declara; el perfil pide una vez por tipo
+describe('la voz se pide por tipo de público (#1167)', () => {
+  it('🔴 una lectura por TIPO presente: con un público de consumo y uno profesional, dos lecturas, cada una con su tipo', async () => {
+    const { d } = doble({ publicos: [PUBLICO_CAFE, PUBLICO_B2B], delCerebro: MUESTRA_CAFE() })
+    await correrPerfil(d, { ...ENTRADA, dry_run: true })
+    expect(vi.mocked(d.leerVoces).mock.calls.map((c) => c[0])).toEqual(['consumo', 'profesional'])
+  })
+  it('🔴 dos públicos del mismo tipo: una sola lectura', async () => {
+    const { d } = doble({ publicos: [PUBLICO_CAFE, { ...PUBLICO_CAFE, id: 'p-cafe-2', audience_segment: 'Turistas' }], delCerebro: MUESTRA_CAFE() })
+    await correrPerfil(d, { ...ENTRADA, dry_run: true })
+    expect(vi.mocked(d.leerVoces).mock.calls.map((c) => c[0])).toEqual(['consumo'])
+  })
+  it('🔴 las fuentes faltantes salen de lo que DECLARÓ el cerebro (sus clases y lo que no junta), no de la tabla propia', async () => {
+    const leerVoces = vi.fn(async () => ({ voces: voces(VALVULAS, 'cerebro:resenas', 1), corte: null, declara: { clases: ['resenas', 'foro'], no_junta: ['linkedin', 'directorios'] } }))
+    const { d } = doble({ publicos: [PUBLICO_B2B], leerVoces })
+    const r = await correrPerfil(d, { ...ENTRADA, client_id: VALVULAS, dry_run: true })
+    expect(r.publicos[0].fuentes_faltantes).toEqual(['cerebro:foro', 'linkedin', 'directorios'])
+  })
+  it('sin declaración (respuesta vieja) se usa la tabla de respaldo', () => {
+    expect(fuentesFaltantes('profesional', [], null)).toEqual(['cerebro:resenas', 'cerebro:comentarios', 'cerebro:mencion', 'cerebro:foro', 'linkedin'])
+  })
+})
+
+// 18-nov · pedido de CC3 al FORMATO de CC-CEREBRO: en las menciones no queda ningún pedazo del nombre de usuario
+describe('menciones sin ningún pedazo de usuario', () => {
+  it('🔴 «@viteri rivera» no deja «rivera»', () => {
+    const v = vozDelCerebro({ ficha_id: 'f1', clase: 'mencion', contenido: 'me encantó el desayuno @viteri rivera Gracias por todo', fecha: '2026-10-01' })!
+    expect(v.texto).not.toMatch(/rivera|viteri/i)
+    expect(v.texto).toBe('me encantó el desayuno [usuario omitido] Gracias por todo')
+  })
+  it('lo que sigue en mayúscula o con signo se queda (es la frase, no el usuario); en otras clases no se toca', () => {
+    expect(sinColaDeUsuario('[usuario omitido] Qué buen café')).toBe('[usuario omitido] Qué buen café')
+    expect(sinColaDeUsuario('[usuario omitido], qué buen café')).toBe('[usuario omitido], qué buen café')
+    expect(sinColaDeUsuario('[usuario omitido] maría_josé y algo')).toBe('[usuario omitido] y algo')
+    expect(vozDelCerebro({ ficha_id: 'f2', clase: 'resenas', contenido: 'gracias @ana por la atención' })!.texto).toBe('gracias [usuario omitido] por la atención')
   })
 })
