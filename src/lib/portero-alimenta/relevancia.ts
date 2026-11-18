@@ -22,8 +22,13 @@ export const MODELO_DE_RELEVANCIA = 'claude-haiku-4-5'
 export const PRECIO_DE_RELEVANCIA = { entrada: 1, salida: 5 } as const
 export const PIEZAS_POR_TANDA = 20
 export const MAXIMO_DE_TEXTO = 500
-export const MAX_TOKENS_DE_RESPUESTA = 1500
+/** 20 juicios con motivo ≤120 caracteres ≈ 1.100 tokens; 2.000 deja margen sin pasar el tope por llamada (🟡3 de CC6) */
+export const MAX_TOKENS_DE_RESPUESTA = 2000
 export const TIEMPO_MAXIMO_DE_LLAMADA_MS = 60_000
+/** lo que puede tardar UNA tanda entera: bajar las 20 fotos en paralelo (≤10 s), la llamada (≤60 s) y escribir y registrar (margen 20 s). Con menos tiempo restante no se empieza (🟡1 de CC6) */
+export const TIEMPO_DE_UNA_TANDA_MS = 90_000
+/** las únicas columnas que escribe este empleado (lo verifica la guarda de aislamiento del cerebro) */
+export const COLUMNAS_QUE_ESCRIBE = ['relevancia_juicio', 'relevancia_juicio_motivo', 'relevancia_juzgada_en', 'relevancia_juicio_modelo'] as const
 /** la cotización: ≈ US$ 0,016 por tanda; la firma de Emilio pide parar si el real pasa en más de 50 % lo estimado → US$ 0,024 por llamada */
 export const COSTO_ESTIMADO_POR_TANDA_USD = 0.016
 export const TOPE_DE_GASTO_POR_LLAMADA_USD = 0.024
@@ -70,8 +75,8 @@ export interface PedidoDeRelevancia {
   ids?: string[]
   /** false = llama al modelo pero NO escribe (la prueba de 40 contra lo juzgado a mano) */
   escribir?: boolean
-  /** plazo total (ms): pasado, no se empieza otra tanda */
-  plazoMs?: number
+  /** hora límite (ms desde 1970) para TERMINAR: se cuenta desde que entró el pedido a la ruta. Sin tiempo para una tanda entera, no se empieza otra */
+  hasta?: number
 }
 
 export interface ResultadoDeRelevancia {
@@ -152,7 +157,7 @@ Para cada pieza numerada decides si SIRVE a este cliente para entender su rubro,
 - "sirve": es del rubro del cliente o de su oferta (mismo tipo de negocio, productos parecidos, su público, su ciudad o país), o es una referencia útil de cómo se comunica su rubro.
 - "no_sirve": es de otro rubro, otro país sin relación, contenido que no tiene que ver (novelas, memes ajenos, política, otra industria).
 - "dudoso": no alcanza la información para decidir, o tiene partes de las dos.
-No inventes: si la pieza no trae imagen ni texto suficiente, es "dudoso". El motivo es UNA frase corta (máx. 200 caracteres) que dice qué viste.
+No inventes: si la pieza no trae imagen ni texto suficiente, es "dudoso". El motivo es UNA frase corta (máx. 120 caracteres) que dice qué viste.
 Responde SOLO un arreglo JSON, una entrada por pieza: [{"n":1,"juicio":"sirve","motivo":"..."}, ...]`
 
 export function armarTexto(perfil: PerfilDelCliente, piezas: Pieza[]): string {
@@ -205,8 +210,10 @@ async function escribirJuicios(db: Db, juicios: JuicioDeUnaPieza[], clientId: st
   let escritos = 0
   for (const j of juicios) {
     // solo si sigue sin juicio y es del cliente (idempotente: otra corrida que llegó antes gana)
-    const w = await db.from(j.tabla).update({ relevancia_juicio: j.juicio, relevancia_juicio_motivo: j.motivo, relevancia_juzgada_en: cuando, relevancia_juicio_modelo: MODELO_DE_RELEVANCIA })
-      .eq('id', j.id).eq('client_id', clientId).is('relevancia_juicio', null)
+    const valores = { relevancia_juicio: j.juicio, relevancia_juicio_motivo: j.motivo, relevancia_juzgada_en: cuando, relevancia_juicio_modelo: MODELO_DE_RELEVANCIA }
+    // la tabla se nombra en texto para que la guarda de aislamiento vea a este escritor
+    const q = j.tabla === 'client_videos' ? db.from('client_videos').update(valores) : db.from('client_social_images').update(valores)
+    const w = await q.eq('id', j.id).eq('client_id', clientId).is('relevancia_juicio', null)
     if (w.error) return { escritos, falla: `${j.tabla}: ${String(w.error.message ?? w.error).slice(0, 160)}` }
     escritos++
   }
@@ -219,7 +226,6 @@ async function escribirJuicios(db: Db, juicios: JuicioDeUnaPieza[], clientId: st
  */
 export async function juzgarRelevancia(deps: DepsDeRelevancia, p: PedidoDeRelevancia, env: Record<string, string | undefined> = process.env): Promise<ResultadoDeRelevancia> {
   const ahora = deps.ahora ?? (() => new Date())
-  const inicio = ahora().getTime()
   const escribir = p.escribir !== false
   const out: ResultadoDeRelevancia = { estado: 'ok', dry_run: true, escribio: false, por_juzgar: {}, juzgadas: 0, por_juicio: { sirve: 0, no_sirve: 0, dudoso: 0 }, sin_respuesta: 0, sin_imagen: 0, llamadas: 0, costo_usd: 0, fallas: [], ...(escribir ? {} : { juicios: [] }) }
   const wf = txt(p.workflow_id), ex = txt(p.workflow_execution_id)
@@ -245,16 +251,21 @@ export async function juzgarRelevancia(deps: DepsDeRelevancia, p: PedidoDeReleva
     if (!perfil) { out.fallas.push(`${clientId.slice(0, 6)}: no se pudo leer el perfil del cliente`); continue }
     const lista = piezas.slice(0, tandas * PIEZAS_POR_TANDA)
     for (let i = 0; i < lista.length; i += PIEZAS_POR_TANDA) {
-      if (p.plazoMs && ahora().getTime() - inicio > p.plazoMs) { out.fallas.push('plazo agotado: no se empezaron más tandas'); return out }
+      const queda = p.hasta === undefined ? Infinity : p.hasta - ahora().getTime()
+      if (queda < TIEMPO_DE_UNA_TANDA_MS) { out.fallas.push('plazo agotado: no se empezaron más tandas'); return out }
       const tanda = lista.slice(i, i + PIEZAS_POR_TANDA)
-      const partes: PeticionDeRelevancia['partes'] = []
-      for (const [k, pz] of tanda.entries()) {
-        const b = pz.url ? await deps.bajarFoto(pz.url) : null
+      // las fotos se bajan en paralelo (cada bajada tiene su propio límite de tiempo)
+      const bajadas = await Promise.all(tanda.map((pz) => (pz.url ? deps.bajarFoto(pz.url) : Promise.resolve(null))))
+      const partes: PeticionDeRelevancia['partes'] = tanda.map((pz, k) => {
+        const b = bajadas[k]
         const imagen = b && b.ok ? { tipo: b.tipo, base64: b.base64 } : undefined
         if (!imagen) out.sin_imagen++
-        partes.push({ rotulo: rotuloDePieza(pz, k + 1, !!imagen), ...(imagen ? { imagen } : {}) })
-      }
-      const peticion: PeticionDeRelevancia = { model: MODELO_DE_RELEVANCIA, max_tokens: MAX_TOKENS_DE_RESPUESTA, system: INSTRUCCION_DE_RELEVANCIA, partes, texto: armarTexto(perfil, tanda), timeoutMs: TIEMPO_MAXIMO_DE_LLAMADA_MS }
+        return { rotulo: rotuloDePieza(pz, k + 1, !!imagen), ...(imagen ? { imagen } : {}) }
+      })
+      // la llamada nunca espera más de lo que le queda a la ruta DESPUÉS de bajar las fotos (menos el margen para escribir y registrar)
+      const quedaAlLlamar = p.hasta === undefined ? Infinity : p.hasta - ahora().getTime()
+      const timeoutMs = Math.max(1_000, Math.min(TIEMPO_MAXIMO_DE_LLAMADA_MS, quedaAlLlamar - 20_000))
+      const peticion: PeticionDeRelevancia = { model: MODELO_DE_RELEVANCIA, max_tokens: MAX_TOKENS_DE_RESPUESTA, system: INSTRUCCION_DE_RELEVANCIA, partes, texto: armarTexto(perfil, tanda), timeoutMs }
       const estimado = costoEstimado(peticion)
       if (estimado > TOPE_DE_GASTO_POR_LLAMADA_USD) { out.estado = 'detenido_por_costo'; out.detalle = `la tanda costaría ≈ US$ ${estimado} (> ${TOPE_DE_GASTO_POR_LLAMADA_USD}): no se llamó`; return out }
       const t0 = ahora().getTime()
@@ -265,6 +276,8 @@ export async function juzgarRelevancia(deps: DepsDeRelevancia, p: PedidoDeReleva
       out.costo_usd = Math.round((out.costo_usd + costo) * 1e6) / 1e6
       const juicios = resp ? leerJuicios(resp.texto, tanda) : []
       out.sin_respuesta += tanda.length - juicios.length
+      // respuesta cortada por el tope de salida: lo que no llegó queda sin juicio y se dice (🟡3 de CC6)
+      if (resp?.stop_reason === 'max_tokens') out.fallas.push(`respuesta cortada (max_tokens): ${tanda.length - juicios.length} pieza(s) sin juicio`)
       let escritos = 0
       if (escribir && juicios.length) {
         const w = await escribirJuicios(deps.db, juicios, clientId, ahora().toISOString())
@@ -293,11 +306,11 @@ export async function juzgarRelevancia(deps: DepsDeRelevancia, p: PedidoDeReleva
 }
 
 /** el paso de cada corrida (al cierre del vigilante): los clientes que revisó, con el tope diario. Real solo con dry_run:false + flujo + ejecución + interruptor */
-export async function relevanciaDeLaCorridaDelVigilante(deps: DepsDeRelevancia, cuerpo: unknown, body: Fila, env: Record<string, string | undefined> = process.env): Promise<ResultadoDeRelevancia | null> {
+export async function relevanciaDeLaCorridaDelVigilante(deps: DepsDeRelevancia, cuerpo: unknown, body: Fila, env: Record<string, string | undefined> = process.env, hasta?: number): Promise<ResultadoDeRelevancia | null> {
   if (!relevanciaDiariaEncendida(env)) return null
   const c = (cuerpo && typeof cuerpo === 'object' ? cuerpo : {}) as Fila
   const revisados = Array.isArray(body.clientes) ? (body.clientes as Fila[]) : []
   const clientes = [...new Set(revisados.map((x) => String(x?.client_id ?? '')).filter((x) => UUID.test(x)))]
   if (!clientes.length) return null
-  return juzgarRelevancia(deps, { clientes, dry_run: c.dry_run !== false, workflow_id: txt(c.workflow_id), workflow_execution_id: txt(c.workflow_execution_id), tandas_por_cliente: TANDAS_POR_CLIENTE_Y_DIA, plazoMs: 120_000 }, env)
+  return juzgarRelevancia(deps, { clientes, dry_run: c.dry_run !== false, workflow_id: txt(c.workflow_id), workflow_execution_id: txt(c.workflow_execution_id), tandas_por_cliente: TANDAS_POR_CLIENTE_Y_DIA, hasta }, env)
 }

@@ -3,8 +3,8 @@
  */
 import { describe, expect, it } from 'vitest'
 import {
-  COSTO_ESTIMADO_POR_TANDA_USD, INSTRUCCION_DE_RELEVANCIA, MODELO_DE_RELEVANCIA, PIEZAS_POR_TANDA, TANDAS_POR_CLIENTE_Y_DIA, TOPE_DE_GASTO_POR_LLAMADA_USD,
-  aPieza, armarTexto, costoDeRelevancia, costoEstimado, juzgarRelevancia, leerJuicios, leerPerfil, piezasPorJuzgar, relevanciaDeLaCorridaDelVigilante, relevanciaEncendida, urlReducida,
+  COLUMNAS_QUE_ESCRIBE, COSTO_ESTIMADO_POR_TANDA_USD, INSTRUCCION_DE_RELEVANCIA, MODELO_DE_RELEVANCIA, PIEZAS_POR_TANDA, TANDAS_POR_CLIENTE_Y_DIA, TOPE_DE_GASTO_POR_LLAMADA_USD,
+  aPieza, armarTexto, rotuloDePieza, costoDeRelevancia, costoEstimado, juzgarRelevancia, leerJuicios, leerPerfil, piezasPorJuzgar, relevanciaDeLaCorridaDelVigilante, relevanciaEncendida, urlReducida,
   type DepsDeRelevancia, type PeticionDeRelevancia, type Pieza,
 } from '../relevancia'
 
@@ -77,7 +77,7 @@ const video = (n: number, o: Fila = {}): Fila => ({ id: id(n), client_id: C1, pa
 function respuestaPara(p: PeticionDeRelevancia, juicio: (n: number) => string = () => 'sirve'): string {
   return JSON.stringify(p.partes.map((_, k) => ({ n: k + 1, juicio: juicio(k + 1), motivo: `motivo ${k + 1}` })))
 }
-function deps(b: ReturnType<typeof baseFalsa>, o: { respuesta?: (p: PeticionDeRelevancia) => string; usage?: { input_tokens: number; output_tokens: number }; lanza?: boolean; bajada?: boolean; registroFalla?: boolean } = {}) {
+function deps(b: ReturnType<typeof baseFalsa>, o: { respuesta?: (p: PeticionDeRelevancia) => string; usage?: { input_tokens: number; output_tokens: number }; lanza?: boolean; bajada?: boolean; registroFalla?: boolean; stop?: string } = {}) {
   const llamadas: PeticionDeRelevancia[] = []
   const registros: Fila[] = []
   const bajadas: string[] = []
@@ -86,7 +86,7 @@ function deps(b: ReturnType<typeof baseFalsa>, o: { respuesta?: (p: PeticionDeRe
     llamarModelo: async (p) => {
       llamadas.push(p)
       if (o.lanza) throw new Error('el modelo respondió 529')
-      return { texto: (o.respuesta ?? ((x) => respuestaPara(x)))(p), stop_reason: 'end_turn', usage: o.usage ?? { input_tokens: 11_500, output_tokens: 800 } }
+      return { texto: (o.respuesta ?? ((x) => respuestaPara(x)))(p), stop_reason: o.stop ?? 'end_turn', usage: o.usage ?? { input_tokens: 11_500, output_tokens: 800 } }
     },
     bajarFoto: async (u) => { bajadas.push(u); return o.bajada === false ? { ok: false, motivo: 'no_se_pudo_bajar' } : { ok: true, base64: 'QUJD', tipo: 'image/jpeg', bytes: 3 } },
     registrar: async (f) => { registros.push(f); return o.registroFalla ? { ok: false, detalle: 'log caído' } : { ok: true } },
@@ -253,13 +253,15 @@ describe('juzgar · de verdad (con dobles)', () => {
     expect(x.llamadas).toHaveLength(1)
     const p = x.llamadas[0]
     expect(p.model).toBe('claude-haiku-4-5')
-    expect(p.max_tokens).toBe(1500)
+    expect(p.max_tokens).toBe(2000)
+    expect(p.timeoutMs).toBe(60_000)
     expect(p.partes.map((q) => !!q.imagen)).toEqual([true, true, false])
     expect(p.partes[2].rotulo).toContain('SIN IMAGEN')
     expect(x.bajadas).toEqual([foto(1).url, foto(2).url])
     // solo SUS columnas; nunca papel, vía, nivel ni motivo
     for (const w of b.escrituras) {
       expect(Object.keys(w.valores).sort()).toEqual(['relevancia_juicio', 'relevancia_juicio_modelo', 'relevancia_juicio_motivo', 'relevancia_juzgada_en'])
+      expect(Object.keys(w.valores).sort()).toEqual([...COLUMNAS_QUE_ESCRIBE].sort())
       expect(w.filtros).toEqual(['eq:id', 'eq:client_id', 'is:relevancia_juicio'])
     }
     const f1 = b.tablas.client_social_images[0]
@@ -344,14 +346,81 @@ describe('juzgar · de verdad (con dobles)', () => {
     expect(r.juzgadas).toBe(1)
     expect(r.fallas).toContain('client_videos: caída')
   })
-  it('pasado el plazo no empieza otra tanda', async () => {
+  it('sin tiempo para una tanda ENTERA (90 s) antes de la hora límite, no la empieza', async () => {
     const b = baseFalsa({ clients: cliente(), cerebro_fichas: fichas(), client_social_images: Array.from({ length: 40 }, (_, k) => foto(k + 1)), client_videos: [] })
     const x = deps(b)
+    const T0 = Date.parse('2026-11-18T12:00:00Z')
+    // cada mirada al reloj avanza 30 s: la 1.ª tanda arranca con 150 s y la 2.ª encontraría menos de 90 s
     let t = 0
-    x.d.ahora = () => new Date(Date.parse('2026-11-18T12:00:00Z') + (t += 50_000))
-    const r = await juzgarRelevancia(x.d, { clientes: [C1], ...real, plazoMs: 120_000 }, ON)
+    x.d.ahora = () => new Date(T0 + (t += 30_000))
+    const r = await juzgarRelevancia(x.d, { clientes: [C1], ...real, hasta: T0 + 180_000 }, ON)
     expect(x.llamadas).toHaveLength(1)
     expect(r.fallas).toContain('plazo agotado: no se empezaron más tandas')
+  })
+  it('justo con 90 s empieza; con 89,999 s no', async () => {
+    const T0 = Date.parse('2026-11-18T12:00:00Z')
+    for (const [queda, llama] of [[90_000, 1], [89_999, 0]] as const) {
+      const x = deps(baseFalsa({ clients: cliente(), cerebro_fichas: fichas(), client_social_images: [foto(1)], client_videos: [] }))
+      await juzgarRelevancia(x.d, { clientes: [C1], ...real, hasta: T0 + queda }, ON)
+      expect(x.llamadas).toHaveLength(llama)
+    }
+  })
+  it('la llamada nunca espera más de lo que le queda a la ruta, medido DESPUÉS de bajar las fotos, menos 20 s', async () => {
+    const T0 = Date.parse('2026-11-18T12:00:00Z')
+    // con tiempo de sobra: 60 s
+    const x = deps(baseFalsa({ clients: cliente(), cerebro_fichas: fichas(), client_social_images: [foto(1)], client_videos: [] }))
+    x.d.ahora = () => new Date(T0)
+    await juzgarRelevancia(x.d, { clientes: [C1], ...real, hasta: T0 + 95_000 }, ON)
+    expect(x.llamadas[0].timeoutMs).toBe(60_000)
+    // bajar las fotos tardó 40 s: al llamar quedan 55 s → la llamada espera 35 s
+    const y = deps(baseFalsa({ clients: cliente(), cerebro_fichas: fichas(), client_social_images: [foto(1)], client_videos: [] }))
+    let ahoraMs = T0
+    y.d.ahora = () => new Date(ahoraMs)
+    y.d.bajarFoto = async () => { ahoraMs += 40_000; return { ok: true, base64: 'QUJD', tipo: 'image/jpeg', bytes: 3 } }
+    await juzgarRelevancia(y.d, { clientes: [C1], ...real, hasta: T0 + 95_000 }, ON)
+    expect(y.llamadas[0].timeoutMs).toBe(35_000)
+    // sin hora límite: 60 s
+    const z = deps(baseFalsa({ clients: cliente(), cerebro_fichas: fichas(), client_social_images: [foto(1)], client_videos: [] }))
+    await juzgarRelevancia(z.d, { clientes: [C1], ...real }, ON)
+    expect(z.llamadas[0].timeoutMs).toBe(60_000)
+  })
+  it('las fotos de una tanda se bajan en paralelo', async () => {
+    const b = baseFalsa({ clients: cliente(), cerebro_fichas: fichas(), client_social_images: [foto(1), foto(2), foto(3)], client_videos: [] })
+    const x = deps(b)
+    let enVuelo = 0, maximo = 0
+    x.d.bajarFoto = async () => { enVuelo++; maximo = Math.max(maximo, enVuelo); await new Promise((r) => setTimeout(r, 5)); enVuelo--; return { ok: true, base64: 'QUJD', tipo: 'image/jpeg', bytes: 3 } }
+    await juzgarRelevancia(x.d, { clientes: [C1], ...real }, ON)
+    expect(maximo).toBe(3)
+  })
+})
+
+describe('juzgar · el costo total y la respuesta cortada (🟡2 y 🟡3 de CC6)', () => {
+  it('el costo total suma todas las llamadas', async () => {
+    const b = baseFalsa({ clients: cliente(), cerebro_fichas: fichas(), client_social_images: Array.from({ length: 40 }, (_, k) => foto(k + 1)), client_videos: [] })
+    const r = await juzgarRelevancia(deps(b).d, { clientes: [C1], ...real }, ON)
+    expect(r.llamadas).toBe(2)
+    expect(r.costo_usd).toBe(0.031)
+  })
+  it('una respuesta cortada por el tope de salida se dice, con cuántas quedaron sin juicio', async () => {
+    const b = baseFalsa({ clients: cliente(), cerebro_fichas: fichas(), client_social_images: [foto(1), foto(2)], client_videos: [] })
+    const cortada = '[{"n":1,"juicio":"sirve","motivo":"m"},{"n":2,"juic'
+    const r = await juzgarRelevancia(deps(b, { stop: 'max_tokens', respuesta: () => cortada }).d, { clientes: [C1], ...real }, ON)
+    expect(r.fallas).toContain('respuesta cortada (max_tokens): 2 pieza(s) sin juicio')
+    expect(r.juzgadas).toBe(0)
+  })
+  it('una respuesta completa no se marca cortada', async () => {
+    const b = baseFalsa({ clients: cliente(), cerebro_fichas: fichas(), client_social_images: [foto(1)], client_videos: [] })
+    const r = await juzgarRelevancia(deps(b).d, { clientes: [C1], ...real }, ON)
+    expect(r.fallas.filter((f) => f.includes('cortada'))).toEqual([])
+  })
+  it('la instrucción pide motivo de 120 caracteres como mucho', () => {
+    expect(INSTRUCCION_DE_RELEVANCIA).toContain('máx. 120 caracteres')
+  })
+  it('una tanda llena (20 fotos, 500 caracteres, 15 ofertas) con el tope de salida nuevo cabe en el tope por llamada', () => {
+    const perfil = { client_id: C1, nombre: 'Náufrago', rubro: 'restaurante de mariscos costero ecuatoriano', mercado: 'Olón · Guayaquil', pais: 'EC', ofertas: Array.from({ length: 15 }, () => 'o'.repeat(60)) }
+    const partes = Array.from({ length: 20 }, (_, k) => ({ rotulo: rotuloDePieza(aPieza('client_social_images', foto(k, { caption: 'x'.repeat(500) })), k + 1, true), imagen: { tipo: 'image/jpeg', base64: 'A' } }))
+    const p: PeticionDeRelevancia = { model: 'm', max_tokens: 2000, system: INSTRUCCION_DE_RELEVANCIA, partes, texto: armarTexto(perfil, []), timeoutMs: 1 }
+    expect(costoEstimado(p)).toBeLessThanOrEqual(TOPE_DE_GASTO_POR_LLAMADA_USD)
   })
 })
 

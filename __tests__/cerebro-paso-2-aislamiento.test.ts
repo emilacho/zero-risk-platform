@@ -268,6 +268,10 @@ export const ESCRITORES_DE_COPIA_EN_SRC: Record<string, string> = {
   'src/lib/portero-alimenta/fotos-de-mapas-propia.ts': 'copia las fotos de la ficha de Mapas que `fichaPropiaDeMapas` confirma como del cliente (nombre exacto o cuenta propia; ambigua u homónimo = ninguna) como propio/maps_foto',
   'src/lib/portero-alimenta/videos-del-cerebro.ts': 'guarda las capturas de momentos clave de los videos (tipo video_captura, enlazadas por video_id) que el portero baja; solo inserta, jamás toca columnas de etiqueta',
 }
+/** quién, DENTRO de src/, escribe su JUICIO sobre lo ajeno (18-nov · encargo 4): solo UPDATE de sus propias columnas, nunca etiqueta, papel ni copia */
+export const ESCRITORES_DE_JUICIO_EN_SRC: Record<string, string> = {
+  'src/lib/portero-alimenta/relevancia.ts': 'encargo 4 · el juicio de lo ajeno (Haiku 4.5): UPDATE de sus 4 columnas `relevancia_juicio*` de una foto o video, filtrado por id, cliente y «sin juicio» (no pisa)',
+}
 export function escribeEnLaTabla(texto: string): boolean {
   for (const m of texto.matchAll(/rest\/v1\/client_social_images/g)) {
     // el PRIMER `method:` después de la dirección es el de ESA llamada (el que sigue puede ser de otra)
@@ -283,7 +287,7 @@ describe('C · nadie escribe en client_social_images salvo quienes ya lo hacían
   const candidatos = TODOS.filter((rel) => !/(^|\/)__tests__\//.test(rel) && !/\.test\.ts$/.test(rel) && !/^supabase\/(migrations|reversas)\//.test(rel))
   it('el código del producto (src/ y services/) solo la escribe un escritor DECLARADO, y ese solo actualiza las 4 columnas de etiqueta', () => {
     const escriben = candidatos.filter((rel) => /^(src|services)\//.test(rel)).filter((rel) => escribeEnLaTabla(leer(rel)))
-    expect(escriben.sort(), `escriben en client_social_images sin estar declarados: ${escriben.join(', ')}`).toEqual([...Object.keys(ESCRITORES_DE_ETIQUETAS_EN_SRC), ...Object.keys(ESCRITORES_DE_COPIA_EN_SRC)].sort())
+    expect(escriben.sort(), `escriben en client_social_images sin estar declarados: ${escriben.join(', ')}`).toEqual([...Object.keys(ESCRITORES_DE_ETIQUETAS_EN_SRC), ...Object.keys(ESCRITORES_DE_COPIA_EN_SRC), ...Object.keys(ESCRITORES_DE_JUICIO_EN_SRC)].sort())
     for (const rel of Object.keys(ESCRITORES_DE_ETIQUETAS_EN_SRC)) {
       const t = leer(rel).split('\n').filter((l) => !l.trim().startsWith('//') && !l.trim().startsWith('*')).join('\n')
       expect(/\bmethod:\s*['"`](POST|PUT|DELETE)['"`]/.test(t), `${rel}: solo se permite PATCH (actualizar), nunca insertar ni borrar`).toBe(false)
@@ -294,6 +298,14 @@ describe('C · nadie escribe en client_social_images salvo quienes ya lo hacían
     for (const rel of Object.keys(ESCRITORES_DE_ETIQUETAS_EN_SRC)) {
       const mod = await import(/* @vite-ignore */ pathToFileURL(path.join(RAIZ, rel)).href.replace(/\.ts$/, ''))
       expect([...mod.COLUMNAS_QUE_ESCRIBE].sort(), rel).toEqual(['con_personas', 'etiqueta_confianza', 'etiqueta_modelo', 'etiquetada_en', 'formato', 'producto_visto', 'que_muestra', 'texto_visible', 'tipo_de_toma'])
+    }
+  })
+  it('el escritor de JUICIO solo actualiza sus 4 columnas: no inserta, no borra, y exporta exactamente esas', async () => {
+    for (const rel of Object.keys(ESCRITORES_DE_JUICIO_EN_SRC)) {
+      const t = leer(rel).split(/\r?\n/).filter((l) => !l.trim().startsWith('//') && !l.trim().startsWith('*')).join('\n')
+      expect(/\.(insert|upsert|delete)\(/.test(t), `${rel}: no puede insertar ni borrar filas`).toBe(false)
+      const mod = await import(/* @vite-ignore */ pathToFileURL(path.join(RAIZ, rel)).href.replace(/\.ts$/, ''))
+      expect([...mod.COLUMNAS_QUE_ESCRIBE].sort(), rel).toEqual(['relevancia_juicio', 'relevancia_juicio_modelo', 'relevancia_juicio_motivo', 'relevancia_juzgada_en'])
     }
   })
   it('el escritor de COPIA en src/ no toca jamás las columnas de etiqueta ni borra', () => {

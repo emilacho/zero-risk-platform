@@ -93,6 +93,17 @@ describe('🔴 la ruta del vigilante: los hechos no cambian ni su código ni su 
     m.vigilante = { status: 200, body: { ...DEL_VIGILANTE } }
     m.hechos.mockResolvedValue(null)
     await llamar()
-    expect(m.relevancia).toHaveBeenCalledWith({ soy: 'deps' }, { dry_run: false, workflow_id: 'wf', workflow_execution_id: 'ex' }, DEL_VIGILANTE)
+    expect(m.relevancia).toHaveBeenCalledWith({ soy: 'deps' }, { dry_run: false, workflow_id: 'wf', workflow_execution_id: 'ex' }, DEL_VIGILANTE, process.env, expect.any(Number))
+  })
+  it('la hora límite de la relevancia cuenta desde que ENTRÓ el pedido (antes del vigilante, los hechos y el origen): 300 s menos 20 s', async () => {
+    m.vigilante = { status: 200, body: { ...DEL_VIGILANTE } }
+    m.hechos.mockResolvedValue(null)
+    const antes = Date.now()
+    // el vigilante tarda 50 ms: la hora límite NO se corre por eso
+    m.hechos.mockImplementationOnce(async () => { await new Promise((r) => setTimeout(r, 50)); return null })
+    await llamar()
+    const hasta = m.relevancia.mock.calls[0][4] as number
+    expect(hasta).toBeGreaterThanOrEqual(antes + 280_000)
+    expect(hasta).toBeLessThan(antes + 280_000 + 40)
   })
 })
