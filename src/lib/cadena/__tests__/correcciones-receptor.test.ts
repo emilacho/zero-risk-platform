@@ -104,6 +104,18 @@ async function conUna(extra: Record<string, unknown> = {}) {
 const abre: CreadorDeCorreccion = async () => ({ estado: 'entregada' })
 
 describe('2 · el reparto de la vigía', () => {
+  it('🔴 18-nov · botón del flujo: con la campaña PAUSADA no se entrega al creador ni se gastan intentos; al reanudar, sí', async () => {
+    const al = await conUna()
+    al.campanas[0] = { ...al.campanas[0], estado: 'pausada' } as Campana
+    let llamadas = 0
+    const contar: CreadorDeCorreccion = async () => { llamadas++; return { estado: 'entregada' } }
+    const r = await repartirCorrecciones(al, AHORA, { calendario: contar })
+    expect(llamadas).toBe(0); expect(r.aplicado).toEqual([])
+    expect(al.correcciones[0]).toMatchObject({ estado: 'recibida', intentos: 0 })
+    al.campanas[0] = { ...al.campanas[0], estado: 'activa' } as Campana
+    await repartirCorrecciones(al, mas(1), { calendario: contar })
+    expect(llamadas).toBe(1)
+  })
   it('🔴 sin creador para el destino (banco sin el puerto de CC1): queda recibida y visible, SIN gastar intentos', async () => {
     const al = await conUna({ destino: 'banco' })
     const r = await repartirCorrecciones(al, AHORA, { calendario: abre })

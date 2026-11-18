@@ -249,6 +249,8 @@ export async function perfilParaLaMesa(al: Pick<Almacen, 'perfilDelPublico'>, cl
   try { return await al.perfilDelPublico(clientId, mesa) } catch (e) { return { estado: 'no_se_pudo_leer', detalle: e instanceof Error ? e.message : String(e) } }
 }
 
+/** el código con que la cadena contesta «no arranco nada: la campaña está pausada» (mesas · correcciones · fichas · jefatura de registro) */
+export const CODIGO_CAMPANA_PAUSADA = 'E-CAMPANA-PAUSADA'
 interface Cargado { campana: Campana; ctx: ContextoDelCliente; estrategia: Estrategia }
 async function cargar(al: Almacen, cuerpo: Record<string, unknown>, autorizar: boolean): Promise<{ ok: true; c: Cargado } | { ok: false; r: Respuesta }> {
   const id = cadena(cuerpo.campana_id)
@@ -256,6 +258,8 @@ async function cargar(al: Almacen, cuerpo: Record<string, unknown>, autorizar: b
   const campana = await al.campana(id)
   if (!campana) return { ok: false, r: err(404, 'E-CAMPANA', 'campaña inexistente') }
   if (autorizar) { const noAut = await autorizarLlamada(al, cuerpo, campana.client_id); if (noAut) return { ok: false, r: noAut } }
+  // 18-nov · botón «Flujo de la campaña»: con la campaña `pausada` no se abre ninguna mesa nueva (brief · gran idea · hoja) · lo que ya corría termina por su entrega, que no pasa por aquí
+  if (campana.estado === 'pausada') return { ok: false, r: err(409, CODIGO_CAMPANA_PAUSADA, 'la campaña está pausada: no se abre nada nuevo hasta reanudarla') }
   if (!(await nuevoOrdenEncendido(al, campana.client_id))) return { ok: false, r: err(409, 'E-NUEVO-ORDEN-APAGADO', 'la palanca nuevo_orden está apagada para este cliente: la cadena de hoy no tiene mesas de brief ni de concepto') }
   const estr = await al.ultimaEstrategia(campana.id)
   if (!estr || estr.estado !== 'validada') return { ok: false, r: err(409, 'E-SIN-ESTRATEGIA', 'no hay una estrategia validada: el brief creativo sale de la estrategia') }

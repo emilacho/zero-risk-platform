@@ -3,6 +3,7 @@
  * (así lo que se prueba contra los flujos es EXACTAMENTE lo que la ruta ejecuta).
  */
 import { abrirCampana, avanzarCampana, reabrirCampana, campanasActivas, cierreDeCampana, estadoDeLaCadena, verificarViaje } from './campanas'
+import { flujoCampana } from './flujo-de-campana'
 import { filasProducir } from './elegidas'
 import { fechasCobertura, fechasGuardar, fechasPreparar, filasListar, filasLotes, filasMarcar } from './datos'
 import { calendarioGuardar, calendarioPreparar, calendarioSiguiente, estrategiaGuardar, estrategiaPreparar, fichasGuardar, fichasPreparar, validarSinEscribir } from './pasos'
@@ -34,6 +35,8 @@ export const ACCIONES: Record<'campanas' | 'estrategia' | 'calendario' | 'valida
     estado: (al, c) => estadoDeLaCadena(al, c),
     verificar_viaje: (al, c) => verificarViaje(al, c),
     activas: (al, c) => campanasActivas(al, c),
+    // 18-nov · el botón «Flujo de la campaña» del tablero: parar · reanudar (acción humana; solo aquí se acepta `workflow_id: 'tablero'`)
+    flujo: flujoCampana,
   },
   // 17-nov · Sprint 4 · A entrega 2: el lector de las fichas de hechos por oferta (una vez por campaña, antes del calendario · no es reja)
   fichas: { preparar: fichasPreparar, guardar: (al, c) => fichasGuardar(al, c) },

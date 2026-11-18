@@ -11,10 +11,11 @@ import { bajarFaltantesDeCantidad, leerV08, sinFaltantesSiCorrige } from './cant
 import { planDeCorreccion, resolverTrasCorreccion, slotDe } from './ciclo'
 import { ESQUEMA_CALENDARIO_TANDA, ESQUEMA_CALENDARIO_TANDA_V5, ESQUEMA_ESTRATEGIA, ESQUEMA_FICHAS_DE_OFERTA } from './esquemas'
 import { fichasConHechos, hechoEnTexto, leerFichasDelLector, type HechoDelNegocioPorOferta } from './ficha-de-oferta'
-import { conceptoParaElCalendario, empujarDesdeElTablero, EN_REVISION_DE_REGISTRO, etapaDeReentrada, nuevoOrdenEncendido, origenesDelCliente, recibirVueltaDeRegistro, siguienteDespuesDe, tramoDeReemision } from './mesas'
+import { CODIGO_CAMPANA_PAUSADA, conceptoParaElCalendario, empujarDesdeElTablero, EN_REVISION_DE_REGISTRO, etapaDeReentrada, nuevoOrdenEncendido, origenesDelCliente, recibirVueltaDeRegistro, siguienteDespuesDe, tramoDeReemision } from './mesas'
 import { abrirRegistro, avisoDePistas, avisosDeLaSalida, esperaDeRegistroViva, filasConTema, leerArtifactIdDeRegistro, leerObjetoDeRegistro, objetoDeRegistro, pistasDeRegistro, registroFijado, seRevisaElRegistro, temasDeLaVuelta, textoDelCalendario, textoDeLaVuelta, type RegistroFijado } from './registro-en-jefatura'
 import { esNotaDeIdea, expandirPatron, fusionarTanda } from './expandir-patron'
 import { hoyEnZona } from './campanas'
+import { anotarSiPausadaPorElTablero, leerPausaDelTablero } from './flujo-de-campana'
 import { fueraDePlazoDeProduccion } from './lotes'
 import { esNotaDeDependencias, resolverDependencias } from './resolver-dependencias'
 import { tareaDeCalendario, tareaDeEstrategia, tareaDeFichas } from './indicaciones'
@@ -168,6 +169,8 @@ export async function estrategiaGuardar(al: Almacen, cuerpo: Record<string, unkn
     const espera = await retenerParaRevision(al, campana, 'estrategia', version, ahora)
     return { status: 200, cuerpo: { ok: true, version, retenida_para_revision: { tipo: 'estrategia', version, objeto_id: espera.objeto_id, vence_en: espera.vence_en }, avisos: hs.filter((h) => h.severidad === 'aviso').map((h) => h.ficha.que), ...conTemporadas } }
   }
+  // 18-nov · botón «Flujo de la campaña»: si el tablero la pausó mientras este paso corría, el paso termina pero la campaña NO se despausa (al reanudar vuelve a `calendario`)
+  if (await anotarSiPausadaPorElTablero(al, campana, 'calendario', ahora)) return { status: 200, cuerpo: { ok: true, version, pausada_por_el_tablero: true, avisos: hs.filter((h) => h.severidad === 'aviso').map((h) => h.ficha.que), ...conTemporadas } }
   await al.actualizarCampana(campana.id, { estado: 'calendario' })
   // los tipos de fechas que ESTE cliente declaró (puede ser ninguno: lo normal) y los años de la campaña: el flujo investiga solo eso
   const fechasPedidas = fechasPedidasDe(campana, ctx.pais, objeto as Estrategia)
@@ -196,6 +199,8 @@ export async function fichasPreparar(al: Almacen, cuerpo: Record<string, unknown
   const ultima = await al.ultimasFichas(campana.id)
   if (ultima) return { status: 200, cuerpo: { ya_hecha: true, version: ultima.version } }
   if (CAMPANA_TERMINADA.has(campana.estado)) return err(409, 'E-ESTADO', `la campaña está ${campana.estado}: el lector no corre`)
+  // 18-nov · botón «Flujo de la campaña»: pausada, el lector tampoco arranca (es un paso nuevo y gasta de su bolsa)
+  if (campana.estado === 'pausada') return err(409, CODIGO_CAMPANA_PAUSADA, 'la campaña está pausada: el lector no corre hasta reanudarla')
   const version = 1
   const esquema = validarEsquemaDeSalida(ESQUEMA_FICHAS_DE_OFERTA)
   if (!esquema.ok || !esquema.valor || !esquema.hash) return err(500, 'E-ESQUEMA', 'el esquema de las fichas no es válido')
@@ -423,9 +428,14 @@ export async function cerrarTanda(al: Almacen, p: { campana: Campana; formatos: 
   // J7 · lo mismo para el calendario: la PRIMERA tanda es la que mueve la campaña a `activa`; con la jefatura abriendo, se retiene hasta que cierre su revisión
   let retenida: { tipo: 'calendario'; tanda: number; objeto_id: string; vence_en: string } | null = null
   let arranque: ResultadoDelArranque | null = null
-  if (campana.estado === 'calendario') {
+  // 18-nov · botón «Flujo de la campaña»: pausada por el tablero mientras se armaba la primera tanda → la tanda se guarda y la campaña NO se activa.
+  // 🔴 de CC7: la pausa RESPETA la revisión de la jefatura. Si retiene, la espera se abre igual y la pausa sigue «vuelve a: calendario» (la `transicion` de la jefatura,
+  // al cerrar, la pasa a «vuelve a: activa»); si no retiene, «vuelve a: activa» ya, y el arranque corre al reanudar
+  const pausadaArmando = campana.estado === 'pausada' && leerPausaDelTablero(campana.estado_motivo)?.vuelve_a === 'calendario'
+  if (pausadaArmando || campana.estado === 'calendario') {
     const retencion = await retencionDe(al, 'calendario', campana.client_id)
-    if (retencion.retener) {
+    if (pausadaArmando && !retencion.retener) await anotarSiPausadaPorElTablero(al, campana, 'activa', ahora)
+    else if (retencion.retener) {
       const espera = await retenerParaRevision(al, campana, 'calendario', tanda, ahora)
       retenida = { tipo: 'calendario', tanda, objeto_id: espera.objeto_id, vence_en: espera.vence_en }
     } else arranque = (await activarYArrancar(al, campana, ahora)).arranque // 20-oct · parte 3: la campaña pasa a `activa` AQUÍ en el camino real; el arranque por evento tiene que salir de aquí también
