@@ -234,6 +234,25 @@ describe('leer la entrega (puro)', () => {
     expect(fichasEnTexto(f)).toContain('### Número 2 · deb890b0 · sin sede\nla leyenda completa')
     expect(fichasEnTexto(f)).toContain('### Número 5\nNo consta: el cerebro no devolvió este número. No lo des por sabido.')
   })
+  it('la forma real de #1185: `material` (con `estado` de la ficha) y `no_consta` con su motivo, que llega al empleado', () => {
+    // forma de `src/lib/cerebro/portero/indice.ts` de #1185 (`8753afc8`): material[] lleva el estado de la FICHA; no_consta[] lleva el motivo
+    const body = {
+      estado: 'ok',
+      material: [
+        { numero: 1, ref: 'cerebro_fichas:30557c31', estado_de_lectura: 'ok', texto: 'Horario de Olón: 12:00 a 22:00', estado: 'vigente', sede: 'olon', fecha_fuente: '2026-11-10', fuente: 'dueño' },
+        { numero: 3, ref: 'cerebro_fichas:b51fa4e4', estado_de_lectura: 'error_de_lectura', texto: null, sede: 'guayaquil' },
+      ],
+      no_consta: [{ numero: 9999, estado: 'no_consta', motivo: 'ese número no está en la lista' }],
+      huella: 'h1',
+    }
+    const f = leerEntrega(body, [1, 3, 9999])
+    expect(f.map((x) => [x.numero, x.estado, x.motivo ?? null])).toEqual([[1, 'ok', null], [3, 'error_de_lectura', null], [9999, 'no_consta', 'ese número no está en la lista']])
+    const t = fichasEnTexto(f)
+    expect(t).toContain('### Número 1 · cerebro_fichas:30557c31 · sede olon · fecha 2026-11-10 · fuente dueño\nHorario de Olón: 12:00 a 22:00')
+    expect(t).toContain('### Número 3 · cerebro_fichas:b51fa4e4 · sede guayaquil\nNo consta. No lo des por sabido.')
+    expect(t).toContain('### Número 9999 · sin sede\nNo consta: ese número no está en la lista.')
+    expect(t).not.toContain('el cerebro no devolvió este número')
+  })
   it('el contenido va completo, sin recorte', () => {
     const largo = 'x'.repeat(200000)
     expect(fichasEnTexto(leerEntrega({ entregas: [{ numero: 1, contenido: largo, estado: 'vigente' }] }, [1]))).toContain(largo)

@@ -104,13 +104,14 @@ export interface FichaEntregada { numero: number | null; estado: string; conteni
 export function leerEntrega(body: unknown, pedidos: number[]): FichaEntregada[] {
   const b = (body && typeof body === 'object' ? body : {}) as Record<string, unknown>
   if (limpio(b.huella_actual)) return pedidos.map((n) => ({ numero: n, estado: 'no_consta', encabezado: `### Número ${n}`, motivo: 'la lista del cerebro cambió desde que abrió la mesa: no se entregó nada por número' }))
-  const filas = ([] as unknown[]).concat(Array.isArray(b.fichas) ? b.fichas : [], Array.isArray(b.material) ? b.material : [], Array.isArray(b.entregas) ? b.entregas : [])
+  const filas = ([] as unknown[]).concat(Array.isArray(b.fichas) ? b.fichas : [], Array.isArray(b.material) ? b.material : [], Array.isArray(b.entregas) ? b.entregas : [], Array.isArray(b.no_consta) ? b.no_consta : [])
   const out: FichaEntregada[] = []
   for (const f of filas) {
     const r = (f && typeof f === 'object' ? f : {}) as Record<string, unknown>
     const numero = typeof r.numero === 'number' ? r.numero : null
     const contenido = texto(r.contenido ?? r.texto)
-    const estado = limpio(r.estado) ?? limpio(r.estado_de_lectura) ?? (contenido ? 'ok' : 'no_consta')
+    // el estado de LECTURA manda: en `material` del cerebro, `estado` es el de la ficha (vigente, vencida…), no si se pudo leer
+    const estado = limpio(r.estado_de_lectura) ?? (limpio(r.estado) === 'no_consta' ? 'no_consta' : undefined) ?? (contenido ? 'ok' : 'no_consta')
     out.push({ numero, estado, encabezado: encabezado(r, 'Número'), ...(contenido ? { contenido } : {}), ...(limpio(r.aviso) ? { aviso: limpio(r.aviso) } : {}), ...(limpio(r.motivo) ? { motivo: limpio(r.motivo) } : {}) })
   }
   for (const n of numerosPedidos(b.numeros_invalidos)) if (!out.some((f) => f.numero === n)) out.push({ numero: n, estado: 'no_consta', encabezado: `### Número ${n}`, motivo: 'el número no está en el índice' })
