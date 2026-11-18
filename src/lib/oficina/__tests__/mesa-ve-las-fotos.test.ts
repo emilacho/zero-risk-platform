@@ -77,6 +77,28 @@ describe('el caso real: el reel de Olón (57101e2a)', () => {
     expect(ims.map((i) => i.label)).toContain(rotuloDeLaFoto(FIX.fotos.find((f) => f.id.startsWith('5d6eb7fb'))!.id))
   })
 
+  it('solo https: una dirección http (sin cifrar) no va como imagen', () => {
+    const http = FIX.fotos.map((f) => (f.id === PERSONAJE.id ? { ...f, url: f.url!.replace(/^https:/, 'http:') } : f))
+    expect(imagenesDelTurno('integrar', http).map((i) => i.label)).not.toContain(rotuloDeLaFoto(PERSONAJE.id))
+    expect(imagenesDelTurno('integrar', FIX.fotos).map((i) => i.label)).toContain(rotuloDeLaFoto(PERSONAJE.id))
+  })
+
+  it('frontera: una dirección de la carpeta de la WEB del cliente (`client-websites`) nunca se manda a mirar', () => {
+    const web = FIX.fotos.map((f) => (f.id === PERSONAJE.id ? { ...f, url: f.url!.replace('/client-social-images/', '/client-websites/') } : f))
+    const ims = imagenesDelTurno('integrar', web)
+    expect(ims.map((i) => i.label)).not.toContain(rotuloDeLaFoto(PERSONAJE.id))
+    expect(ims.some((i) => i.url.includes('client-websites'))).toBe(false)
+    // también con mayúsculas en la dirección
+    const webMay = FIX.fotos.map((f) => (f.id === PERSONAJE.id ? { ...f, url: f.url!.replace('/client-social-images/', '/Client-Websites/') } : f))
+    expect(imagenesDelTurno('integrar', webMay).map((i) => i.label)).not.toContain(rotuloDeLaFoto(PERSONAJE.id))
+  })
+
+  it('a igual confianza manda el orden de la lista (estable)', () => {
+    const dos = [FIX.fotos[0], FIX.fotos[1]].map((f) => ({ ...f, origen: 'propia' as const, etiqueta_confianza: 'media' as const }))
+    expect(fotosALaVista(dos).map((f) => f.id)).toEqual([dos[0].id, dos[1].id])
+    expect(fotosALaVista([dos[1], dos[0]]).map((f) => f.id)).toEqual([dos[1].id, dos[0].id])
+  })
+
   it('la lista de texto dice cuáles van a la vista y cuáles solo como descripción', () => {
     const vista = new Set(fotosALaVista(FIX.fotos).map((f) => f.id))
     const lista = LISTA_DE_FOTOS(FIX.fotos, vista)

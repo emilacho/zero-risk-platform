@@ -11,7 +11,8 @@
  *  · ESTABLE: las mismas 20 en todos los turnos de la mesa (por confianza de la etiqueta y, a igual confianza, en el orden de la lista). No depende del
  *    tablero: probado con el caso real, poner primero «las que el tablero ya nombró» sacaba de la vista a la foto del personaje a mitad de la mesa
  *    (el tablero nombra también las fotos que DESCARTA). Lo que queda fuera es lo de menor confianza, y la lista lo dice.
- *  · Una foto sin dirección http(s) no se puede mirar: queda solo como texto.
+ *  · Solo va como imagen una dirección https (el modelo la descarga). Una http, una sin dirección o una de la carpeta de la WEB del cliente
+ *    (`client-websites`) queda solo como texto.
  */
 import type { FotoEtiquetada } from '../fotos'
 import { MAX_IMAGENES, type ImagenDelPedido } from '../../imagenes-del-pedido'
@@ -30,7 +31,10 @@ export const rotuloDeLaFoto = (id: string): string => `foto:${id}`
 
 export const fotosDeLaLista = (fotos: FotoEtiquetada[]): FotoEtiquetada[] => fotos.filter((f) => (f.origen ?? 'propia') === 'propia').slice(0, MAX_FOTOS_DE_LA_LISTA)
 
-const sePuedeMirar = (f: FotoEtiquetada): boolean => typeof f.url === 'string' && /^https?:\/\/\S+$/i.test(f.url.trim())
+/** la carpeta de la WEB del cliente: su dirección nunca se manda a mirar (frontera: la web del cliente no se toca ni para mirar) */
+export const CARPETA_DE_LA_WEB = 'client-websites'
+const sePuedeMirar = (f: FotoEtiquetada): boolean =>
+  typeof f.url === 'string' && /^https:\/\/\S+$/i.test(f.url.trim()) && !f.url.toLowerCase().includes(`/${CARPETA_DE_LA_WEB}/`)
 const PESO_DE_LA_CONFIANZA: Record<string, number> = { alta: 0, media: 1, baja: 2 }
 
 /** las fotos que van A LA VISTA: las de la lista que se pueden mirar, por confianza (alta, media, baja, sin dato) y, a igual confianza, en el orden de la lista; hasta el tope del cable */
