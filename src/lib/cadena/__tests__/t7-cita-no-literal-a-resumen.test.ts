@@ -96,6 +96,31 @@ describe('el tope · lo que NO cambia', () => {
     expect(r.texto).toContain('## De qué parte del plan sale\n«una frase que el plan no tiene»')
     expect(leerBriefCreativo(r.texto, ins).bloqueos.some((b) => /no se encuentra literal en el plan/.test(b))).toBe(true)
   })
+  it('t1 (CC6): el tope cuenta citas DISTINTAS, como el chequeo · 3 distintas con una repetida (4 apariciones) se bajan todas', () => {
+    const md = brief(['', `> «${FICHA}»`])
+    expect(citasQueNoAparecen(md, FUENTES)).toHaveLength(3)
+    const r = bajarCitasNoLiterales(md, FUENTES)
+    expect(r.bajadas).toHaveLength(3)
+    expect(r.texto.split('\n').filter((l) => l === `${FICHA} ${MARCA}`)).toHaveLength(2)
+    expect(citasQueNoAparecen(r.texto, FUENTES)).toEqual([])
+  })
+  it('k3 (CC6): un bloque `> «…»` LITERAL del manual (que no está en el plan) no se toca, aunque se bajen otras', () => {
+    const MANUAL = 'Nuestra voz es cercana y clara con cada cliente que nos escribe.'
+    const md = brief(['', '> «Nuestra voz es cercana y clara con cada cliente»'])
+    const r = bajarCitasNoLiterales(md, { plan: PLAN, manual: MANUAL })
+    expect(r.bajadas).toHaveLength(3)
+    expect(r.texto.split('\n')).toContain('> «Nuestra voz es cercana y clara con cada cliente»')
+  })
+  it('k4 (CC6): con el plan guardado como JSON, se lee con el lector común (`textoDelDocumento`): una cita literal de un valor con comillas no se toca', () => {
+    const LEMA = 'El lema "llega mañana" es del dueño y se respeta siempre'
+    const planJson = JSON.stringify({ content: `${PLAN}\n${LEMA}.` })
+    expect(planJson).not.toContain(LEMA) // en el JSON crudo las comillas van escapadas
+    const md = brief(['', `> «${LEMA}»`])
+    expect(citasQueNoAparecen(md, { plan: planJson })).toHaveLength(3)
+    const r = bajarCitasNoLiterales(md, { plan: planJson })
+    expect(r.bajadas).toHaveLength(3)
+    expect(r.texto.split('\n')).toContain(`> «${LEMA}»`)
+  })
   it('🟡 t6 (CC7): en un bloque `>` con una cita literal y otra no, SOLO la no literal pierde sus «» y lleva la marca', () => {
     const md = SIN_FALTAS.replace('## Objetivo', `> «${LITERAL}»\n> «${FICHA}»\n## Objetivo`)
     const r = bajarCitasNoLiterales(md, FUENTES)
