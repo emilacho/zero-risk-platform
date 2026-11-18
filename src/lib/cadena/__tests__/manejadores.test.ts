@@ -14,6 +14,8 @@ import { clienteA, clienteB, contextoDe, piezaBuena, tandaBuena } from '../__fix
 
 const A = clienteA()
 const AHORA = '2026-10-09T12:00:00Z'
+// 18-nov (día 1 = apertura): estas pruebas no son del día 1; la campaña se abre el lunes que antes ponía la regla, para que sus fechas sigan siendo las mismas
+const ABRE = '2026-10-12T12:00:00Z'
 const wf = (extra: Record<string, unknown> = {}) => ({ workflow_id: 'wf-cadena', workflow_execution_id: 'ex-1', ...extra })
 
 function almacen(extra: Partial<ConstructorParameters<typeof AlmacenMemoria>[0]> = {}) {
@@ -25,7 +27,7 @@ function almacen(extra: Partial<ConstructorParameters<typeof AlmacenMemoria>[0]>
     ...extra,
   })
 }
-const abrir = async (al: AlmacenMemoria, extra: Record<string, unknown> = {}) => abrirCampana(al, { ...wf(), client_id: A.clientId, seco: true, ...extra }, AHORA)
+const abrir = async (al: AlmacenMemoria, extra: Record<string, unknown> = {}) => abrirCampana(al, { ...wf(), client_id: A.clientId, seco: true, ...extra }, ABRE)
 const idCampana = (r: { cuerpo: Record<string, unknown> }) => (r.cuerpo.campana as { id: string }).id
 const ok = (estrategia: unknown, costo = 0.3) => ({ success: true, structured_output: estrategia, cost_usd: costo })
 
@@ -116,29 +118,29 @@ describe('los pilares que no suman 100 se corrigen por código (01-nov · firma 
 describe('autorización y compuerta', () => {
   it('🔴 sin workflow_id o sin workflow_execution_id: 400 (la causa del 403 conocido de la revisión de agentes)', async () => {
     const al = almacen()
-    expect((await abrirCampana(al, { client_id: A.clientId, seco: true }, AHORA)).status).toBe(400)
-    expect((await abrirCampana(al, { client_id: A.clientId, seco: true, workflow_id: 'wf-cadena' }, AHORA)).cuerpo.code).toBe('E-WORKFLOW-CTX')
-    expect((await abrirCampana(al, { client_id: A.clientId, seco: true, workflow_execution_id: 'x' }, AHORA)).status).toBe(400)
+    expect((await abrirCampana(al, { client_id: A.clientId, seco: true }, ABRE)).status).toBe(400)
+    expect((await abrirCampana(al, { client_id: A.clientId, seco: true, workflow_id: 'wf-cadena' }, ABRE)).cuerpo.code).toBe('E-WORKFLOW-CTX')
+    expect((await abrirCampana(al, { client_id: A.clientId, seco: true, workflow_execution_id: 'x' }, ABRE)).status).toBe(400)
   })
   it('un workflow_id que no es flujo de la cadena ni viaje de la sala de ESE cliente: 403; un viaje real vale', async () => {
     const al = almacen()
-    expect((await abrirCampana(al, { client_id: A.clientId, seco: true, workflow_id: 'wf-ajeno', workflow_execution_id: '1' }, AHORA)).status).toBe(403)
-    expect((await abrirCampana(al, { client_id: A.clientId, seco: true, workflow_id: 'journey-1', workflow_execution_id: '1' }, AHORA)).status).toBe(201)
+    expect((await abrirCampana(al, { client_id: A.clientId, seco: true, workflow_id: 'wf-ajeno', workflow_execution_id: '1' }, ABRE)).status).toBe(403)
+    expect((await abrirCampana(al, { client_id: A.clientId, seco: true, workflow_id: 'journey-1', workflow_execution_id: '1' }, ABRE)).status).toBe(201)
     const otro = almacen({ journeys: [{ journeyId: 'journey-1', clientId: 'otro-cliente' }] })
-    expect((await abrirCampana(otro, { client_id: A.clientId, seco: true, workflow_id: 'journey-1', workflow_execution_id: '1' }, AHORA)).status).toBe(403)
+    expect((await abrirCampana(otro, { client_id: A.clientId, seco: true, workflow_id: 'journey-1', workflow_execution_id: '1' }, ABRE)).status).toBe(403)
   })
   it('apagada: solo corre en seco; ensayo: solo clientes de ensayo; encendida: todo', async () => {
     const al = almacen()
-    expect((await abrirCampana(al, { ...wf(), client_id: A.clientId }, AHORA)).cuerpo.code).toBe('E-CADENA-APAGADA')
+    expect((await abrirCampana(al, { ...wf(), client_id: A.clientId }, ABRE)).cuerpo.code).toBe('E-CADENA-APAGADA')
     expect(al.campanas).toHaveLength(0)
     al.config.set('estado_cadena', 'ensayo')
-    expect((await abrirCampana(al, { ...wf(), client_id: A.clientId }, AHORA)).cuerpo.code).toBe('E-CADENA-NO-ADMITIDO')
+    expect((await abrirCampana(al, { ...wf(), client_id: A.clientId }, ABRE)).cuerpo.code).toBe('E-CADENA-NO-ADMITIDO')
     al.config.set('clientes_ensayo', [A.clientId])
-    expect((await abrirCampana(al, { ...wf(), client_id: A.clientId }, AHORA)).status).toBe(201)
+    expect((await abrirCampana(al, { ...wf(), client_id: A.clientId }, ABRE)).status).toBe(201)
   })
   it('🔴 seco mal escrito se detiene antes de escribir (ni «true» como texto ni null)', async () => {
     const al = almacen()
-    for (const seco of ['true', null, 1]) expect((await abrirCampana(al, { ...wf(), client_id: A.clientId, seco }, AHORA)).cuerpo.code).toBe('E-SECO-INVALIDO')
+    for (const seco of ['true', null, 1]) expect((await abrirCampana(al, { ...wf(), client_id: A.clientId, seco }, ABRE)).cuerpo.code).toBe('E-SECO-INVALIDO')
     expect(al.campanas).toHaveLength(0)
   })
 })
@@ -152,18 +154,23 @@ describe('abrir la campaña', () => {
     expect(al.campanas).toHaveLength(0)
     expect(al.esperas).toHaveLength(0)
   })
-  it('abre con la fecha de inicio por regla (primer lunes), fin a 90 días, zona del cliente y su espera con reloj', async () => {
+  it('🔴 18-nov (DECISIÓN DE EMILIO): abre con el día 1 = el día de apertura, fin a 90 días (el plan no declara ventana), sin aviso ni espera de «fecha propuesta»', async () => {
     const al = almacen()
     const r = await abrir(al)
     expect(r.status).toBe(201)
     const c = r.cuerpo.campana as Record<string, unknown>
-    expect(c.fecha_inicio).toBe('2026-10-12')
+    expect(c.fecha_inicio).toBe(ABRE.slice(0, 10))
     expect(c.fecha_fin).toBe('2027-01-09')
+    expect(c.fecha_inicio_origen).toBe('regla')
     expect(c.estado).toBe('abierta')
-    expect(r.cuerpo.aviso_fecha_inicio).toMatch(/sin descontar feriados/)
-    expect(al.esperas).toHaveLength(1)
-    expect(al.esperas[0]).toMatchObject({ objeto_tipo: 'fecha_inicio_propuesta', estado: 'viva' })
-    expect(al.esperas[0].vence_en).toBe('2026-10-11T00:00:00.000Z')
+    expect(r.cuerpo.aviso_fecha_inicio).toBeNull()
+    expect(al.esperas).toEqual([])
+  })
+  it('🔴 18-nov: el día 1 es el de la ZONA del cliente, no el de UTC (las 03:00 UTC del 12 son todavía el 11 en Guayaquil)', async () => {
+    const ctx = { ...contextoDe(A), zonaHoraria: 'America/Guayaquil' }
+    const al = new AlmacenMemoria({ contextos: { [A.clientId]: ctx }, planes: { [A.clientId]: [{ plan_id: 'plan-1', fecha: '2026-10-08' }] }, config: { flujos: ['wf-cadena'] } })
+    const r = await abrirCampana(al, { ...wf(), client_id: A.clientId, seco: true }, '2026-10-12T03:00:00Z')
+    expect((r.cuerpo.campana as { fecha_inicio: string }).fecha_inicio).toBe('2026-10-11')
   })
   it('el mismo sobre dos veces no abre dos campañas', async () => {
     const al = almacen()
@@ -184,10 +191,10 @@ describe('abrir la campaña', () => {
     // y la espera de la campaña vieja se resolvió: nada espera sobre algo reemplazado
     expect(al.esperas.filter((e) => e.campana_id === idCampana(r1) && e.estado === 'viva')).toHaveLength(0)
   })
-  it('con feriados nacionales verificados la fecha de inicio cuenta días hábiles y no avisa', async () => {
+  it('🔴 18-nov: un feriado nacional verificado ya no corre el día 1: la campaña empieza el día en que se abre', async () => {
     const al = almacen({ fechasEspeciales: [{ id: 'f', fecha: '2026-10-12', nombre: 'x', tipo: 'feriados', ambito: 'nacional', alcance: 'nacional', estado: 'verificada' }] })
     const r = await abrir(al)
-    expect((r.cuerpo.campana as { fecha_inicio: string }).fecha_inicio).toBe('2026-10-19')
+    expect((r.cuerpo.campana as { fecha_inicio: string }).fecha_inicio).toBe('2026-10-12')
     expect(r.cuerpo.aviso_fecha_inicio).toBeNull()
   })
 })
@@ -702,7 +709,7 @@ describe('r74 · F3 · una llamada de corrección vencida no deja la campaña at
     for (const [nombre, cli] of [['negocio local sin sede declarada', A], ['servicio a empresas', clienteB()]] as const) {
       it(`${nombre}: sin sedes las filas «requiere_abierto» NO se frenan (ninguna queda en investigación por falta de horario) y la campaña lo declara`, async () => {
         const al = almacen({ contextos: { [cli.clientId]: sinSedes(cli) }, planes: { [cli.clientId]: [{ plan_id: 'plan-1', fecha: '2026-10-08' }] }, journeys: [{ journeyId: 'journey-1', clientId: cli.clientId }] })
-        const c = await abrirCampana(al, { ...wf(), client_id: cli.clientId, seco: true }, AHORA)
+        const c = await abrirCampana(al, { ...wf(), client_id: cli.clientId, seco: true }, ABRE)
         const id = idCampana(c)
         expect(al.recolectadas).toEqual([]) // r75 · en SECO no se recolecta: un ensayo no escribe sedes reales (nota A.4-1 de CC#3)
         expect(String(al.campanas.find((x) => x.id === id)!.estado_motivo)).toContain('sin sede declarada')
@@ -717,10 +724,10 @@ describe('r74 · F3 · una llamada de corrección vencida no deja la campaña at
     }
     it('la recolección de sedes ESCRIBE datos del cliente: se hace en lo REAL y NO en seco', async () => {
       const real = almacen({ config: { flujos: ['wf-cadena', 'wf-vigia'], puerta_workflow_id: 'wf-puerta', estado_cadena: 'encendida' } })
-      const c = await abrirCampana(real, { ...wf(), client_id: A.clientId, seco: false }, AHORA)
+      const c = await abrirCampana(real, { ...wf(), client_id: A.clientId, seco: false }, ABRE)
       expect(c.status).toBe(201); expect(real.recolectadas).toEqual([A.clientId])
       const seco = almacen()
-      await abrirCampana(seco, { ...wf(), client_id: A.clientId, seco: true }, AHORA)
+      await abrirCampana(seco, { ...wf(), client_id: A.clientId, seco: true }, ABRE)
       expect(seco.recolectadas).toEqual([])
     })
     it('con sede y horario la regla sigue igual: una hora fuera del horario BLOQUEA; sin horario de la sede, aviso y la fila queda en investigación', async () => {

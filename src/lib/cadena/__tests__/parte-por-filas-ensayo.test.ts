@@ -17,6 +17,8 @@ import { clienteA, contextoDe, tandaBuena, type ClienteFixture } from '../__fixt
 
 const RAIZ = resolve(__dirname, '..', '..', '..', '..')
 const AHORA = '2026-10-09T12:00:00Z'
+// 18-nov (día 1 = apertura): estas pruebas no son del día 1; la campaña se abre el lunes que antes ponía la regla, para que sus fechas sigan siendo las mismas
+const ABRE = '2026-10-12T12:00:00Z'
 const UUID = '11111111-1111-4111-8111-111111111111'
 const IDS = { estrategia: 'F-EST', calendario: 'F-CAL', fechas: 'F-FEC', puerta: 'F-PUE' }
 const ID_VIGIA = 'F-VIG', ID_PARTE = 'F-PAR', ID_COPIA_VIVA = 'F-COPIA-VIVA'
@@ -59,7 +61,7 @@ function mundo(cliente = clienteUuid()) {
       if (accion === 'autoproducir') reg.autoproducir.push(p.cuerpo)
       const m = ACCIONES[ruta]?.[accion]
       if (!m) return { statusCode: 400, body: { error: 'accion_desconocida', accion } }
-      const r = await m(al, p.cuerpo as Record<string, unknown>, AHORA)
+      const r = await m(al, p.cuerpo as Record<string, unknown>, ruta === 'campanas' && accion === 'abrir' ? ABRE : AHORA)
       return { statusCode: r.status, body: r.cuerpo }
     }
     if (u.pathname === '/api/agents/run-sdk') { reg.agente.push(p); return { statusCode: 200, body: { success: true, response: '' } } }

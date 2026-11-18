@@ -5,7 +5,7 @@ import type { Almacen, Campana, EstadoCampana } from './almacen'
 import { autorizarLlamada, cadena, compuerta, err, leerSeco, type Respuesta } from './autorizar'
 import { arrancarAlActivar, type ResultadoDelArranque } from './arranque'
 import { bolsaDePlanificacion, DIAS_DE_CAMPANA, DIAS_MAXIMOS_DE_CAMPANA, medidaDeCampana, SEMANAS_DE_TANDA } from './constantes'
-import { esFechaIso, fechaInicioPorRegla, sumarDias } from './fechas'
+import { esFechaIso, sumarDias } from './fechas'
 import { ventanaDelPlan } from './fechas-en-texto'
 import { nuevoOrdenEncendido } from './mesas'
 import { topeDeLaCampana } from './tope-de-campana'
@@ -77,18 +77,16 @@ export async function abrirCampana(al: Almacen, cuerpo: Record<string, unknown>,
   //    por un error nuestro); si falló porque OTRO sobre igual ganó la carrera (único del plan), se contesta «ya abierta», no un 500.
   const devolverLaViva = async () => { if (viva) await al.actualizarCampana(viva.id, { estado: viva.estado, estado_motivo: viva.estado_motivo }) }
 
-  // fecha de inicio por regla: días hábiles solo si hay feriados nacionales VERIFICADOS (porque algún cliente los declaró); si no, corridos con aviso
-  const nacionales = ctx.pais ? (await al.fechasEspeciales(ctx.pais, [], plan.fecha, sumarDias(plan.fecha, 30))).filter((f) => f.estado === 'verificada' && f.alcance === 'nacional') : []
-  const ini = fechaInicioPorRegla(plan.fecha, nacionales.length ? new Set(nacionales.map((f) => f.fecha)) : null)
-  // 09-nov · D (firma de Emilio, regla de sistema): la campaña HEREDA la ventana que declara el plan aprobado (día 1 y duración). Sin ventana legible en el plan,
-  // o si quien abre pide su propia medida (`dias_de_campana`), la regla de siempre (primer lunes + la medida).
-  const ventana = ventanaDeLaCampana(ctx.planTexto, ini.fecha, dias as number, cuerpo.dias_de_campana !== undefined)
+  // 18-nov · DECISIÓN DE EMILIO (13:56 Zúrich, regla de sistema): el día 1 de una campaña es el día en que SE ABRE, en la zona del cliente; nunca se hereda la fecha del plan
+  //    (Náufrago perdió 2½ semanas con el día 1 heredado). Dura lo que dura el plan (su ventana), o la medida que se pida; las semanas se cuentan desde la semana de ese día 1.
+  //    La cronología del plan se corre en bloque desde su propio día 1 (F · `lineaDelDiaUno`); las fechas especiales reales quedan en su fecha.
+  const ventana = ventanaDeLaCampana(ctx.planTexto, hoyEnZona(ahora, ctx.zonaHoraria), dias as number, cuerpo.dias_de_campana !== undefined)
   // 10-nov · el tope de gasto nace del valor por omisión de la cadena; sin él, la campaña nace SIN tope y no produce piezas reales hasta que una persona lo decida
   const topeInicial = topeDeLaCampana(await al.leerConfig('tope_gasto_campana_por_omision'))
   let nueva: Campana
   try { nueva = await al.insertarCampana({
     client_id: clientId, plan_id: plan.plan_id, fecha_inicio: ventana.fecha_inicio, fecha_inicio_origen: ventana.origen, fecha_fin: ventana.fecha_fin, ...(semanasDeTanda === SEMANAS_DE_TANDA ? {} : { semanas_de_tanda: semanasDeTanda as number }),
-    zona_horaria: ctx.zonaHoraria, pais: ctx.pais, sedes: ctx.sedes.map((x) => x.clave), estado: 'abierta', estado_motivo: [ventana.origen === 'plan' ? null : ini.aviso,ctx.sedes.length === 0 ? 'sin sede declarada: no se comprueba si el local está abierto' : null, ctx.zonaHorariaOrigen === 'sin_dato' ? 'zona horaria sin dato: hay que preguntarla' : null, sedesRec.ok ? null : 'no se pudieron leer las sedes: ' + String(sedesRec.error ?? 'sin detalle').slice(0, 80)].filter((x): x is string => !!x).join(' · ') || null,
+    zona_horaria: ctx.zonaHoraria, pais: ctx.pais, sedes: ctx.sedes.map((x) => x.clave), estado: 'abierta', estado_motivo: [ctx.sedes.length === 0 ? 'sin sede declarada: no se comprueba si el local está abierto' : null, ctx.zonaHorariaOrigen === 'sin_dato' ? 'zona horaria sin dato: hay que preguntarla' : null, sedesRec.ok ? null : 'no se pudieron leer las sedes: ' + String(sedesRec.error ?? 'sin detalle').slice(0, 80)].filter((x): x is string => !!x).join(' · ') || null,
     // 18-nov · la bolsa nace de lo medido (× semanas × 3), no de los US$ 6 fijos (DECISION-EMILIO-topes-con-margen-triple)
     presupuesto_planificacion_usd: bolsaDePlanificacion(medidaDeCampana({ fecha_inicio: ventana.fecha_inicio, fecha_fin: ventana.fecha_fin, semanas_de_tanda: semanasDeTanda as number }).totalSemanas), ventana_parte_dias: 10, sustituir_video_por: 'ninguna', autoproducir: (await al.leerConfig('autoproducir_por_omision')) === true,
     ...(topeInicial !== null ? { tope_gasto_usd: topeInicial } : {}),
@@ -103,18 +101,17 @@ export async function abrirCampana(al: Almacen, cuerpo: Record<string, unknown>,
   }
   // la campaña reemplazada ya no existe para el vigía: sus esperas (la fecha de inicio, la bandeja, lo que investigaba…) se cancelan TODAS
   if (viva) await cancelarEsperasDeCampana(al, viva.id)
-  // la fecha del PLAN ya la aprobó Emilio con el plan: no es una propuesta que tenga que quedar firme (solo la de la regla lo es)
-  if (ventana.origen === 'regla') await abrirEsperaDe(al, nueva, 'fecha_inicio_propuesta', nueva.id, 'la fecha de inicio calculada por regla queda firme el día anterior', ahora, { fechaInicio: nueva.fecha_inicio })
-  return { status: 201, cuerpo: { campana: nueva, aviso_fecha_inicio: ventana.origen === 'regla' ? ini.aviso : null, ventana_origen: ventana.origen, reemplaza_a: reemplaza } }
+  // 18-nov · sin «fecha propuesta»: el día 1 es hoy, no hay un día anterior en que tenga que quedar firme
+  return { status: 201, cuerpo: { campana: nueva, aviso_fecha_inicio: null, ventana_origen: ventana.origen, reemplaza_a: reemplaza } }
 }
 
 /**
- * D · la ventana de una campaña: la del plan si la declara (y nadie pidió otra medida), si no la de la regla. Pura: la usan abrir y reabrir.
+ * 18-nov · la ventana de una campaña (DECISIÓN DE EMILIO): día 1 = el día de apertura; la duración es la del plan (su ventana) salvo que quien abre pida su propia medida
+ * (`dias_de_campana`); sin ventana legible en el plan, la medida de siempre. El origen es `regla` (la regla de sistema): el día 1 ya no viene nunca del plan. Pura.
  */
-export function ventanaDeLaCampana(planTexto: string, inicioPorRegla: string, diasPorRegla: number, medidaPedida: boolean): { fecha_inicio: string; fecha_fin: string; origen: 'plan' | 'regla'; dias: number } {
-  const delPlan = medidaPedida ? null : ventanaDelPlan(planTexto)
-  if (delPlan) return { fecha_inicio: delPlan.desde, fecha_fin: delPlan.hasta, origen: 'plan', dias: delPlan.dias }
-  return { fecha_inicio: inicioPorRegla, fecha_fin: sumarDias(inicioPorRegla, diasPorRegla - 1), origen: 'regla', dias: diasPorRegla }
+export function ventanaDeLaCampana(planTexto: string, apertura: string, diasPorRegla: number, medidaPedida: boolean): { fecha_inicio: string; fecha_fin: string; origen: 'regla'; dias: number } {
+  const dias = (medidaPedida ? null : ventanaDelPlan(planTexto)?.dias) ?? diasPorRegla
+  return { fecha_inicio: apertura, fecha_fin: sumarDias(apertura, dias - 1), origen: 'regla', dias }
 }
 
 /** el día de hoy en la zona de la campaña (`YYYY-MM-DD`): «el día en que se reabre» es el del cliente, no el de UTC */

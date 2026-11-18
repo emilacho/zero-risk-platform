@@ -17,6 +17,8 @@ import { crearPdf, textoPagina } from '@/lib/cerebro/archivos/__tests__/muestras
 
 const RAIZ = resolve(__dirname, '..', '..', '..', '..')
 const AHORA = '2026-10-09T12:00:00Z'
+// 18-nov (día 1 = apertura): estas pruebas no son del día 1; la campaña se abre el lunes que antes ponía la regla, para que sus fechas sigan siendo las mismas
+const ABRE = '2026-10-12T12:00:00Z'
 const UUID = '11111111-1111-4111-8111-111111111111'
 const IDS = { estrategia: 'F-EST', calendario: 'F-CAL', fechas: 'F-FEC', puerta: 'F-PUE', fichas: 'F-FIC' }
 const ID_VIGIA = 'F-VIG', ID_PARTE = 'F-PAR'
@@ -165,7 +167,7 @@ function mundo(opts: { estado?: string; clientesEnsayo?: string[]; cliente?: Cli
       const accion = String((p.cuerpo as any)?.accion)
       const m = ACCIONES[ruta]?.[accion]
       if (!m) return { statusCode: 400, body: { error: 'accion_desconocida', accion } }
-      const r = await m(al, p.cuerpo as Record<string, unknown>, AHORA)
+      const r = await m(al, p.cuerpo as Record<string, unknown>, ruta === 'campanas' && accion === 'abrir' ? ABRE : AHORA)
       return { statusCode: r.status, body: r.cuerpo }
     }
     if (u.pathname === '/api/agents/run-sdk') { reg.agente.push(p); return (opts.agente ?? (() => ({ statusCode: 500, body: { error: 'sin agente simulado' } })))(p.cuerpo) }
@@ -508,7 +510,7 @@ describe('COMPORTAMIENTO · el vigía', () => {
 describe('afinando lo que las mutaciones dejaron vivo (flujos)', () => {
   const sub = (m: Mundo, id: string, json: Record<string, unknown>) => m.sim.ejecutar(id, [{ json }])
   const abrirYa = async (m: Mundo) => {
-    const res = await ACCIONES.campanas.abrir(m.al, { workflow_id: IDS.puerta, workflow_execution_id: 'x', client_id: UUID, seco: true, sala_ref: { _journey_id: 'viaje-1', _sala_correlation_id: 'c' } }, AHORA)
+    const res = await ACCIONES.campanas.abrir(m.al, { workflow_id: IDS.puerta, workflow_execution_id: 'x', client_id: UUID, seco: true, sala_ref: { _journey_id: 'viaje-1', _sala_correlation_id: 'c' } }, ABRE)
     return (res.cuerpo.campana as { id: string }).id
   }
 
@@ -568,7 +570,7 @@ describe('afinando lo que las mutaciones dejaron vivo (flujos)', () => {
   it('el simulacro de un sub-flujo se ignora con seco:false (el agente se llama de verdad)', async () => {
     const cl = clienteUuid()
     const m = mundo({ estado: 'encendida', agente: agenteQueDevuelve({ estrategia: cl.estrategia }) })
-    const res = await ACCIONES.campanas.abrir(m.al, { workflow_id: IDS.puerta, workflow_execution_id: 'x', client_id: UUID, seco: false, sala_ref: {} }, AHORA)
+    const res = await ACCIONES.campanas.abrir(m.al, { workflow_id: IDS.puerta, workflow_execution_id: 'x', client_id: UUID, seco: false, sala_ref: {} }, ABRE)
     const id = (res.cuerpo.campana as { id: string }).id
     const e = await sub(m, IDS.estrategia, { campana_id: id, seco: false, simulacro: [{ ...cl.estrategia, pilares: [] }] })
     expect(e[0].json.resultado).toBe('ok')
