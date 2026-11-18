@@ -62,6 +62,24 @@ export const PASOS_SIN_REVISION: readonly Paso[] = ['estrategia', 'calendario', 
 export const PASOS_CON_PRESUPUESTO_PROPIO: ReadonlySet<Paso> = new Set<Paso>(['fichas'])
 /** el presupuesto del lector cuando la campaña no trae el suyo (US$ 2: hasta 3 intentos de ~0,5, o 2 si fallan sin costo registrado) */
 export const PRESUPUESTO_LECTOR_POR_OMISION = 2
+/** el presupuesto de planificación con el que nace una campaña (`campanas.ts` · abrir, y el DEFAULT de la columna) */
+export const PRESUPUESTO_PLANIFICACION_POR_OMISION = 6
+/** 18-nov · firma de Emilio (DECISION-EMILIO-topes-con-margen-triple): todo tope de gasto = el triple de lo medido */
+export const MULTIPLO_DE_LA_BOLSA = 3
+/**
+ * 18-nov · lo MEDIDO (SELECT de `cadena_corridas`, 18-nov ~14:50Z, solo lectura): la campaña de Náufrago `36e66179` gastó US$ 5,14 en planificar la estrategia
+ * (0,77 + su corrección 0,65) y 3 tandas de calendario con su corrección cada una (0,73 + 0,63 · 0,55 + 0,59 · 0,54 + 0,68), que cubren 12 semanas (3 × 4):
+ * 5,14 / 12 = 0,43 por semana de campaña (la corrección de cada paso va adentro).
+ */
+export const COSTO_DE_PLANIFICACION_POR_SEMANA_USD = 0.43
+/**
+ * La bolsa de planificación de una campaña: lo medido por semana × sus semanas × 3, nunca menos que la de siempre. 12 semanas → US$ 15,48; 13 → 16,77.
+ * (Una campaña corta no baja de 6: la estrategia es un costo fijo que la cuenta por semana no ve.)
+ */
+export function bolsaDePlanificacion(totalSemanas: number): number {
+  const n = Number.isFinite(totalSemanas) && totalSemanas > 0 ? totalSemanas : 0
+  return Math.max(PRESUPUESTO_PLANIFICACION_POR_OMISION, Math.round(COSTO_DE_PLANIFICACION_POR_SEMANA_USD * n * MULTIPLO_DE_LA_BOLSA * 100) / 100)
+}
 
 export async function modeloDeLaCadena(al: Almacen): Promise<string> {
   const v = await al.leerConfig('modelo_cadena')

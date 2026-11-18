@@ -295,6 +295,7 @@ describe('🟡 1 de CC6 · RESPUESTA-LENOVO (b) · el lector gasta de su PROPIA 
     const c = clienteC(), al = almacen(c)
     const ab = await abrirCampana(al, { ...wf(), client_id: c.clientId, seco: true }, AHORA)
     const id = (ab.cuerpo.campana as { id: string }).id
+    campanaDe(al, id).presupuesto_planificacion_usd = 6 // 18-nov · hoy la bolsa nace de lo medido (× semanas × 3); el caso real nació con los US$ 6 fijos de entonces
     const pe = await estrategiaPreparar(al, { ...wf(), campana_id: id }, AHORA)
     await estrategiaGuardar(al, { ...wf(), campana_id: id, corrida_id: pe.cuerpo.corrida_id, resultado: ok(c.estrategia, 2.02) }, AHORA)
     const campana = campanaDe(al, id)

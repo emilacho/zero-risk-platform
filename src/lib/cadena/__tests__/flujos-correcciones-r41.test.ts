@@ -242,7 +242,7 @@ describe('C4 · una llamada al agente que se corta no mata el flujo ni deja la c
     expect(al2.corridas[0].error).toContain('socket hang up')
     void m
   })
-  it('un corte que se repite 3 veces termina en necesita_humano (nunca un bucle)', async () => {
+  it('un corte que se repite 3 veces termina el flujo (nunca un bucle) · 18-nov grupo A: la campaña NO se detiene, queda para el reintento del tramo siguiente', async () => {
     const m = await mundo({ soloArmado: true })
     void m
     const cliente = clienteUuid()
@@ -255,9 +255,12 @@ describe('C4 · una llamada al agente que se corta no mata el flujo ni deja la c
       throw new Error('ECONNRESET')
     }
     const salida = await new SimuladorN8n({ flujos: POR_ID, env: ENV, http }).ejecutar(IDS.estrategia, entradaSub(id))
+    // la etiqueta del fin en la puerta sigue llamándose así (es n8n); lo que cuenta es que la campaña no cambió de estado
     expect(salida[0].json.resultado).toBe('necesita_humano')
     expect(al2.corridas).toHaveLength(3)
-    expect(al2.campanas[0].estado).toBe('necesita_humano')
+    expect(al2.campanas[0].estado).not.toBe('necesita_humano')
+    expect(al2.campanas[0].estado_motivo).toMatch(/^reintento automático · estrategia · /)
+    expect(al2.esperas.filter((e) => e.objeto_tipo === 'necesita_humano')).toHaveLength(0)
   })
 })
 

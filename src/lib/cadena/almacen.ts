@@ -152,6 +152,8 @@ export interface Corrida {
   salida_estructurada: boolean
   esquema_hash: string | null
   seco: boolean
+  /** cuándo se abrió (la base la pone; la plataforma la manda con su `ahora`) · grupo A: el reintento no insiste en el mismo tramo en que se agotó la llave */
+  creada_en?: string | null
 }
 
 /** 10-nov · tramo 2 del revisor de registro · el sobre que la cadena manda a la jefatura (la forma de su contrato; la cadena no importa `jefatura/`) */
