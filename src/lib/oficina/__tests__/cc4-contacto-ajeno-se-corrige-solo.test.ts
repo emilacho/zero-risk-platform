@@ -28,6 +28,9 @@ describe('el teléfono ajeno', () => {
     // un teléfono con su signo y separadores sigue siendo teléfono, y uno seguido de coma o punto también
     expect(corregirContactoAjeno('al +57-300-123-4567, o al (02) 2999 888.', F).cambios).toHaveLength(2)
   })
+  it('🔴 (CC6 g4) un número de menos de 7 cifras no es un teléfono: un pedido, una mesa o un código no se tocan', () => {
+    for (const t of ['tu pedido 123456 está listo', 'mesa 12', 'turno 123 - 456', 'lote (12) 3456']) expect(corregirContactoAjeno(t, F)).toEqual({ texto: t, cambios: [] })
+  })
   it('un @ después de una barra (una dirección) no es un usuario', () => {
     const t = 'https://red.social/@otra_marca'
     expect(corregirContactoAjeno(t, F)).toEqual({ texto: t, cambios: [] })
