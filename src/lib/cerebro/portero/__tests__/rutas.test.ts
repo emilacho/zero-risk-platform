@@ -13,7 +13,7 @@ import { numerarLista } from '../lista-numerada'
 const base = (fallan: string[] = [], tablas = tablasDeLaBase()) => crearBaseFalsa(tablas, fallan)
 type Cuerpo = Record<string, any>
 const indice = async (cuerpo: unknown, b = base()) => ({ ...(await armarIndice(b.consulta, cuerpo, { ahora: AHORA })), llamadas: b.llamadas })
-const entregar = async (cuerpo: unknown, b = base(), opciones: { topeDeEntrega?: number } = {}) => ({ ...(await entregarContenido(b.consulta, cuerpo, { ahora: AHORA, ...opciones })), llamadas: b.llamadas })
+const entregar = async (cuerpo: unknown, b = base(), opciones: Record<string, never> = {}) => ({ ...(await entregarContenido(b.consulta, cuerpo, { ahora: AHORA, ...opciones })), llamadas: b.llamadas })
 
 describe('indice · lo fijo + la lista + el estado de las lecturas, sin modelo', () => {
   it('trae lo fijo con su texto completo, la lista numerada, su huella y el estado de cada lectura', async () => {
@@ -116,13 +116,13 @@ describe('entregar · el contenido completo por referencia o por número, con av
     expect((await entregar({ cliente: A })).status).toBe(400)
     expect((await entregar({ cliente: A, refs: [] })).status).toBe(400)
   })
-  it('el tope de lo entregado: lo que no cabe NO se entrega a medias, pasa a lo_demas con «no_cabe», en el orden pedido', async () => {
-    // plan-1 ≈ 570 unidades, part-1 ≈ 860: con tope 600 entra el primero y el segundo no
-    const r = await entregar({ cliente: A, refs: ['client_historical_outputs:plan-1', 'client_historical_outputs:part-1'] }, base(), { topeDeEntrega: 600 })
+  it('SIN TOPE (encargo 9 · «nada se recorta»): todo lo pedido se entrega entero y `lo_demas` queda vacío', async () => {
+    const r = await entregar({ cliente: A, refs: ['client_historical_outputs:plan-1', 'client_historical_outputs:part-1'] })
     const c = r.cuerpo as Cuerpo
-    expect(c.material.map((m: Cuerpo) => m.ref)).toEqual(['client_historical_outputs:plan-1'])
-    expect(c.lo_demas).toEqual([{ ref: 'client_historical_outputs:part-1', motivo: 'no_cabe', peso_estimado: expect.any(Number) }])
-    expect(c.total_entregado).toBeLessThanOrEqual(600)
+    expect(c.material.map((m: Cuerpo) => m.ref)).toEqual(['client_historical_outputs:plan-1', 'client_historical_outputs:part-1'])
+    expect(c.material.every((m: Cuerpo) => m.cortado === false)).toBe(true)
+    expect(c.lo_demas).toEqual([])
+    expect(c.tope_de_entrega).toBeNull()
   })
   it('un texto muy grande se declara cortado, con cuánto se entregó de cuánto', async () => {
     const r = await entregar({ cliente: A, refs: ['client_historical_outputs:plan-1'], maximo_caracteres: 100 })

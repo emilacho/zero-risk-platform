@@ -2,18 +2,18 @@
  * ENTREGAR · el contenido completo de lo pedido por referencia o por número. SIN modelo: el sistema COPIA el texto.
  *
  * Cada cosa trae su etiqueta (estado, fecha, vencido y su aviso), su tamaño declarado y, si se cortó, el corte declarado.
- * Lo que no cabe en el tope NO se entrega a medias: pasa a `lo_demas` con «no_cabe», en el orden pedido.
+ * SIN TOPE (encargo 9 · firma de Emilio 18-nov «nada se recorta»): todo lo pedido se entrega; `lo_demas` queda vacío por compatibilidad.
+ * Pedido de una PIEZA (trae `pieza`): el original completo, sin corte, «no consta» por número y rastro en `cerebro_consultas`.
  * `sin_material` ≠ `error_de_lectura`: una referencia que la PROPIA lista emitió y no se puede leer es un error, no «no hay».
  */
 import type { Consulta } from '../consulta'
 import { leerContenidos } from '../contenido'
 import { construirListaCorta } from '../lista-corta'
-import { MOTIVO_NO_CABE } from '../conversacion'
 import type { Ficha } from '../tipos'
 import { numerarLista } from './lista-numerada'
+import { SIN_CORTE } from './indice'
+import { dejarRastro, deLaPieza, filaDeRastro, leerPieza, type Registrar, vieneConPieza } from './segun-la-pieza'
 
-/** lo que se entrega por llamada: 70.000 «tokens» (decisión 4 del diseño) */
-export const TOPE_DE_ENTREGA_EN_UNIDADES = 70_000
 
 const esObjeto = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 const invalida = (errores: string[], status = 400, error = 'entrada_invalida') => ({ status, cuerpo: { error, code: 'E-INPUT-INVALID', errores } as Record<string, unknown> })
@@ -48,8 +48,9 @@ function versionYDecision(f: Ficha, porRef: Map<string, Ficha>): Record<string, 
   return salida
 }
 
-export async function entregarContenido(consulta: Consulta, cuerpo: unknown, opciones: { ahora?: Date; topeDeEntrega?: number } = {}): Promise<{ status: number; cuerpo: Record<string, unknown> }> {
+export async function entregarContenido(consulta: Consulta, cuerpo: unknown, opciones: { ahora?: Date; registrar?: Registrar; reloj?: () => number } = {}): Promise<{ status: number; cuerpo: Record<string, unknown> }> {
   if (!esObjeto(cuerpo)) return invalida(['el cuerpo debe ser un objeto'])
+  if (vieneConPieza(cuerpo)) return entregarALaPieza(consulta, cuerpo, opciones)
   const errores: string[] = []
   const cliente = typeof cuerpo.cliente === 'string' ? cuerpo.cliente.trim() : ''
   if (!cliente) errores.push('falta `cliente`')
@@ -83,11 +84,8 @@ export async function entregarContenido(consulta: Consulta, cuerpo: unknown, opc
 
   const porRef = new Map(lista.lineas.map((f) => [f.ref, f]))
   const lecturas = await leerContenidos(consulta, cliente, unicas, maximo ? { maximoCaracteres: maximo } : {})
-  const tope = opciones.topeDeEntrega ?? TOPE_DE_ENTREGA_EN_UNIDADES
   let entregado = 0
-  let lleno = false
   const material: Array<Record<string, unknown>> = []
-  const loDemas: Array<{ ref: string; motivo: string; peso_estimado: number }> = []
   const estados: string[] = []
   for (const c of lecturas) {
     const f = porRef.get(c.ref)
@@ -95,10 +93,7 @@ export async function entregarContenido(consulta: Consulta, cuerpo: unknown, opc
     const ilegible = c.estado === 'sin_material' && !!f
     const estadoDeLectura = ilegible ? 'error_de_lectura' : c.estado
     estados.push(estadoDeLectura)
-    if (estadoDeLectura === 'ok') {
-      if (lleno || entregado + c.peso_estimado > tope) { lleno = true; loDemas.push({ ref: c.ref, motivo: MOTIVO_NO_CABE, peso_estimado: c.peso_estimado }); continue }
-      entregado += c.peso_estimado
-    }
+    if (estadoDeLectura === 'ok') entregado += c.peso_estimado
     material.push({
       ref: c.ref, numero: numerada.lineas.find((l) => l.ficha.ref === c.ref)?.numero ?? null, estado_de_lectura: estadoDeLectura, texto: c.texto,
       caracteres_totales: c.caracteres_totales, caracteres_entregados: c.caracteres_entregados, cortado: c.cortado, ...(c.aviso_de_corte ? { aviso_de_corte: c.aviso_de_corte } : {}),
@@ -109,5 +104,63 @@ export async function entregarContenido(consulta: Consulta, cuerpo: unknown, opc
   }
   const hayOk = estados.includes('ok'), hayError = estados.includes('error_de_lectura')
   const estado = hayOk ? (hayError ? 'parcial' : 'ok') : hayError ? 'error_de_lectura' : 'sin_material'
-  return { status: 200, cuerpo: { estado, material, lo_demas: loDemas, numeros_invalidos: invalidos, total_entregado: entregado, tope_de_entrega: tope, huella: numerada.huella } }
+  return { status: 200, cuerpo: { estado, material, lo_demas: [], numeros_invalidos: invalidos, total_entregado: entregado, tope_de_entrega: null, huella: numerada.huella } }
+}
+
+const MOTIVO_NO_EXISTE = 'ese número no está en la lista del índice (no existe o fue retirado)'
+const MOTIVO_LISTA_VIEJA = 'la lista cambió desde que se vio: pide de nuevo el índice'
+const MOTIVO_SIN_TEXTO = 'la ficha no existe o no tiene texto'
+
+/** encargo 9 · la entrega a una pieza: por número con la huella, el original COMPLETO (sin corte), «no consta» por número, y el rastro */
+async function entregarALaPieza(consulta: Consulta, cuerpo: Record<string, unknown>, opciones: { ahora?: Date; registrar?: Registrar; reloj?: () => number }): Promise<{ status: number; cuerpo: Record<string, unknown> }> {
+  const reloj = opciones.reloj ?? Date.now
+  const t0 = reloj()
+  const errores: string[] = []
+  const cliente = typeof cuerpo.cliente === 'string' ? cuerpo.cliente.trim() : ''
+  if (!cliente) errores.push('falta `cliente`')
+  const numeros = cuerpo.numeros
+  if (!Array.isArray(numeros) || numeros.length === 0) errores.push('falta `numeros` (lista de los números del índice)')
+  if (typeof cuerpo.huella !== 'string' || !cuerpo.huella) errores.push('falta `huella` (la que devolvió el índice)')
+  const p = leerPieza(cuerpo)
+  if (!p.ok) errores.push(...p.errores)
+  if (errores.length || !p.ok) return invalida(errores)
+  const pieza = p.pieza
+
+  const lista = await construirListaCorta(consulta, cliente, { ahora: opciones.ahora })
+  if (lista.estado === 'cliente_inexistente' || lista.estado === 'error_de_lectura') return { status: 200, cuerpo: { estado: lista.estado, material: [], no_consta: [], consulta_id: null } }
+  const numerada = numerarLista(lista)
+  const noConsta: Array<{ numero: unknown; estado: 'no_consta'; motivo: string }> = []
+  const material: Array<Record<string, unknown>> = []
+  const fin = async (extra: Record<string, unknown> = {}) => {
+    const rastro = await dejarRastro(opciones.registrar, filaDeRastro({ cliente, pieza, ruta: 'entregar', entregadas: material.filter((m) => m.estado_de_lectura === 'ok').map((m) => String(m.ref)), noConstan: noConsta.map((n) => n.numero), ms: reloj() - t0 }))
+    const hayOk = material.some((m) => m.estado_de_lectura === 'ok'), hayError = material.some((m) => m.estado_de_lectura === 'error_de_lectura')
+    const estado = hayOk ? (noConsta.length || hayError ? 'parcial' : 'ok') : hayError ? 'error_de_lectura' : 'no_consta'
+    return { status: 200, cuerpo: { estado, material, no_consta: noConsta, huella: numerada.huella, ...extra, consulta_id: rastro.consulta_id, rastro } }
+  }
+  // la huella no coincide: el número puede apuntar a otra cosa, así que NADA se entrega por número
+  if (cuerpo.huella !== numerada.huella) {
+    for (const n of numeros as unknown[]) noConsta.push({ numero: n, estado: 'no_consta', motivo: MOTIVO_LISTA_VIEJA })
+    return fin({ huella_actual: numerada.huella })
+  }
+  const porNumero = new Map(numerada.lineas.map((l) => [l.numero, l.ficha]))
+  const pedidas: Array<{ numero: number; ficha: Ficha }> = []
+  for (const n of [...new Set(numeros as unknown[])]) {
+    const f = typeof n === 'number' && Number.isInteger(n) ? porNumero.get(n) : undefined
+    if (f) pedidas.push({ numero: n as number, ficha: f }); else noConsta.push({ numero: n, estado: 'no_consta', motivo: MOTIVO_NO_EXISTE })
+  }
+  const porRef = new Map(lista.lineas.map((f) => [f.ref, f]))
+  const lecturas = await leerContenidos(consulta, cliente, pedidas.map((x) => x.ficha.ref), { maximoCaracteres: SIN_CORTE })
+  lecturas.forEach((c, i) => {
+    const { numero, ficha: f } = pedidas[i]
+    if (c.estado === 'error_de_lectura') { material.push({ numero, ref: f.ref, estado_de_lectura: 'error_de_lectura', texto: null, detalle: c.detalle ?? null, sede: f.sede ?? null }); return }
+    if (c.estado !== 'ok') { noConsta.push({ numero, estado: 'no_consta', motivo: `${MOTIVO_SIN_TEXTO} (${c.detalle ?? 'sin detalle'})` }); return }
+    const d = deLaPieza(f, pieza.sede)
+    material.push({
+      numero, ref: f.ref, estado_de_lectura: 'ok', texto: c.texto, caracteres: c.caracteres_totales,
+      titulo: f.titulo, estante: f.estante, clase: f.clase, estado: f.estado, fecha_fuente: f.fecha_fuente, vigente_hasta: f.vigente_hasta, vencido: f.vencido,
+      ...(f.aviso ? { aviso: f.aviso } : {}), enlace: f.enlace ?? null, producto: f.producto ?? null,
+      sede: f.sede ?? null, de_la_pieza: d.de_la_pieza, ...(d.marca ? { marca: d.marca } : {}), ...versionYDecision(f, porRef),
+    })
+  })
+  return fin()
 }

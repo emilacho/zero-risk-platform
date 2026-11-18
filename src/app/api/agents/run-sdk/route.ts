@@ -235,6 +235,8 @@ function resolveWorkflowAttribution(body: RunSdkInput): {
  * Surfaced on outbound response so observability writers persist it.
  */
 interface BrainEnrichmentProxyMeta {
+  /** encargo 9 · el pedido apagó el empuje (`extra.sin_empuje`) */
+  brain_push?: 'apagado_por_el_pedido'
   brain_hit: boolean
   brain_chunks_count: number
   brain_query_ms: number
@@ -1373,6 +1375,7 @@ async function atender(request: Request) {
             typeof rawBrain.brain_query_ms === 'number' ? rawBrain.brain_query_ms : 0,
           brain_cost_usd:
             typeof rawBrain.brain_cost_usd === 'number' ? rawBrain.brain_cost_usd : 0,
+          ...(rawBrain.brain_push === 'apagado_por_el_pedido' ? { brain_push: 'apagado_por_el_pedido' as const } : {}),
           ...(typeof rawBrain.brain_error === 'string'
             ? { brain_error: rawBrain.brain_error }
             : {}),
