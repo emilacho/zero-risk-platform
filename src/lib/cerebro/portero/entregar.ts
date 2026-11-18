@@ -3,7 +3,7 @@
  *
  * Cada cosa trae su etiqueta (estado, fecha, vencido y su aviso), su tamaño declarado y, si se cortó, el corte declarado.
  * SIN TOPE (encargo 9 · firma de Emilio 18-nov «nada se recorta»): todo lo pedido se entrega; `lo_demas` queda vacío por compatibilidad.
- * Pedido de una PIEZA (trae `pieza`): el original completo, sin corte, «no consta» por número y rastro en `cerebro_consultas`.
+ * Pedido de una PIEZA (trae `pieza` con su hoja, sin casillas): el original completo, sin corte, con sede/fecha/fuente como dato, «no consta» por número y rastro en `cerebro_consultas`.
  * `sin_material` ≠ `error_de_lectura`: una referencia que la PROPIA lista emitió y no se puede leer es un error, no «no hay».
  */
 import type { Consulta } from '../consulta'
@@ -12,7 +12,7 @@ import { construirListaCorta } from '../lista-corta'
 import type { Ficha } from '../tipos'
 import { numerarLista } from './lista-numerada'
 import { SIN_CORTE } from './indice'
-import { dejarRastro, deLaPieza, filaDeRastro, leerPieza, type Registrar, vieneConPieza } from './segun-la-pieza'
+import { datosDeLaFicha, dejarRastro, filaDeRastro, leerPieza, type Registrar, vieneConPieza } from './segun-la-pieza'
 
 
 const esObjeto = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -154,12 +154,11 @@ async function entregarALaPieza(consulta: Consulta, cuerpo: Record<string, unkno
     const { numero, ficha: f } = pedidas[i]
     if (c.estado === 'error_de_lectura') { material.push({ numero, ref: f.ref, estado_de_lectura: 'error_de_lectura', texto: null, detalle: c.detalle ?? null, sede: f.sede ?? null }); return }
     if (c.estado !== 'ok') { noConsta.push({ numero, estado: 'no_consta', motivo: `${MOTIVO_SIN_TEXTO} (${c.detalle ?? 'sin detalle'})` }); return }
-    const d = deLaPieza(f, pieza.sede)
     material.push({
       numero, ref: f.ref, estado_de_lectura: 'ok', texto: c.texto, caracteres: c.caracteres_totales,
-      titulo: f.titulo, estante: f.estante, clase: f.clase, estado: f.estado, fecha_fuente: f.fecha_fuente, vigente_hasta: f.vigente_hasta, vencido: f.vencido,
+      titulo: f.titulo, estante: f.estante, clase: f.clase, estado: f.estado, ...datosDeLaFicha(f), vigente_hasta: f.vigente_hasta, vencido: f.vencido,
       ...(f.aviso ? { aviso: f.aviso } : {}), enlace: f.enlace ?? null, producto: f.producto ?? null,
-      sede: f.sede ?? null, de_la_pieza: d.de_la_pieza, ...(d.marca ? { marca: d.marca } : {}), ...versionYDecision(f, porRef),
+      ...versionYDecision(f, porRef),
     })
   })
   return fin()

@@ -10,13 +10,13 @@ import { NOMBRES_DE_FUENTE } from '../tipos'
 import { leerContenidos } from '../contenido'
 import type { Ficha } from '../tipos'
 import { numerarLista } from './lista-numerada'
-import { AVISO_SIN_SEDE, dejarRastro, filaDeRastro, leerPieza, lineaDeLaPieza, ordenarParaLaPieza, type Registrar, vieneConPieza } from './segun-la-pieza'
+import { datosDeLaFicha, dejarRastro, filaDeRastro, leerPieza, lineaConDatos, type Registrar, vaEnLaBase, vieneConPieza } from './segun-la-pieza'
 
 const esObjeto = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 
 export async function armarIndice(consulta: Consulta, cuerpo: unknown, opciones: { ahora?: Date; registrar?: Registrar; reloj?: () => number } = {}): Promise<{ status: number; cuerpo: Record<string, unknown> }> {
   if (!esObjeto(cuerpo)) return { status: 400, cuerpo: { error: 'entrada_invalida', code: 'E-INPUT-INVALID', errores: ['el cuerpo debe ser un objeto'] } }
-  // encargo 9 · pedido de una pieza: su base, la lista con «de la pieza» primero y lo de otra sede marcado, y el rastro
+  // encargo 9 + adenda 1 · pedido de una pieza: el índice completo, la base completa y el rastro (sin casillas, nada se filtra por sede)
   if (vieneConPieza(cuerpo)) return indiceDeLaPieza(consulta, cuerpo, opciones)
   const errores: string[] = []
   const cliente = typeof cuerpo.cliente === 'string' ? cuerpo.cliente.trim() : ''
@@ -69,36 +69,37 @@ async function indiceDeLaPieza(consulta: Consulta, cuerpo: Record<string, unknow
   const lecturas = Object.fromEntries(NOMBRES_DE_FUENTE.map((k) => [k, lista.fuentes[k].estado]))
   const detalles = Object.fromEntries(NOMBRES_DE_FUENTE.filter((k) => lista.fuentes[k].detalle).map((k) => [k, lista.fuentes[k].detalle]))
   const numerada = numerarLista(lista, { ya_trae: yaTrae as string[] })
-  const ordenadas = ordenarParaLaPieza(numerada.lineas, pieza.sede)
   const respaldo = respuestaDeRespaldo(lista, { ronda: 1 })
 
-  // la base de la pieza: lo fijo + TODO lo de su sede, con el original completo (sin corte)
-  const deSuSede = pieza.sede ? ordenadas.filter((l) => l.de_la_pieza) : []
-  const enLaBase: Array<{ numero: number | null; ficha: Ficha }> = [...numerada.fijo.map((ficha) => ({ numero: null, ficha })), ...deSuSede.map((l) => ({ numero: l.numero, ficha: l.ficha }))]
+  // la base COMPLETA: lo fijo + los hechos del negocio + lo que escribió el dueño + el resumen vivo de TODAS las sedes, cada texto entero (sin corte)
+  const enLaBase: Array<{ numero: number | null; ficha: Ficha }> = [
+    ...numerada.fijo.map((ficha) => ({ numero: null, ficha })),
+    ...numerada.lineas.filter((l) => vaEnLaBase(l.ficha)).map((l) => ({ numero: l.numero, ficha: l.ficha })),
+  ]
   const contenidos = await leerContenidos(consulta, cliente, enLaBase.map((x) => x.ficha.ref), { maximoCaracteres: SIN_CORTE })
   const base = enLaBase.map((x, i) => {
     const c = contenidos[i]
     return {
-      numero: x.numero, ref: x.ficha.ref, estante: x.ficha.estante, clase: x.ficha.clase, titulo: x.ficha.titulo, sede: x.ficha.sede ?? null,
-      fijo: x.numero === null, estado: x.ficha.estado, fecha_fuente: x.ficha.fecha_fuente, vigente_hasta: x.ficha.vigente_hasta, vencido: x.ficha.vencido,
+      numero: x.numero, ref: x.ficha.ref, estante: x.ficha.estante, clase: x.ficha.clase, titulo: x.ficha.titulo, ...datosDeLaFicha(x.ficha),
+      fijo: x.numero === null, estado: x.ficha.estado, vigente_hasta: x.ficha.vigente_hasta, vencido: x.ficha.vencido,
       ...(x.ficha.aviso ? { aviso: x.ficha.aviso } : {}),
       estado_de_lectura: c.estado, texto: c.texto ?? x.ficha.contenido ?? x.ficha.resumen ?? x.ficha.que_es, caracteres: c.caracteres_totales,
       ...(c.detalle ? { detalle_de_lectura: c.detalle } : {}),
     }
   })
-  const avisos = pieza.sede ? [] : [AVISO_SIN_SEDE]
 
   const rastro = await dejarRastro(opciones.registrar, filaDeRastro({ cliente, pieza, ruta: 'indice', entregadas: base.map((b) => b.ref), noConstan: [], ms: reloj() - t0 }))
   return {
     status: 200,
     cuerpo: {
       estado: lista.estado, lecturas, detalles_de_lectura: detalles, generada_en: lista.generada_en,
-      pieza: { encargo_id: pieza.encargo_id, fila: pieza.fila, sede: pieza.sede, oferta: pieza.oferta, canal: pieza.canal, tema: pieza.tema },
-      base_de_la_pieza: base,
+      pieza: { encargo_id: pieza.encargo_id, fila: pieza.fila, turno: pieza.turno },
+      base_completa: base,
       fijo: respaldo.material,
-      lista: ordenadas.map((l) => ({ ...lineaDeLista(l.numero, l.ficha), sede: l.ficha.sede ?? null, de_la_pieza: l.de_la_pieza, ...(l.marca ? { marca: l.marca } : {}) })),
-      lista_texto: ordenadas.map(lineaDeLaPieza).join('\n'), huella: numerada.huella, ya_trae_desconocido: numerada.ya_trae_desconocido,
-      avisos, consulta_id: rastro.consulta_id, rastro,
+      // el índice COMPLETO, en su orden y con sus números de siempre: nada se filtra, ordena ni marca; la sede, la fecha y la fuente van como dato
+      lista: numerada.lineas.map((l) => ({ ...lineaDeLista(l.numero, l.ficha), ...datosDeLaFicha(l.ficha) })),
+      lista_texto: numerada.lineas.map(lineaConDatos).join('\n'), huella: numerada.huella, ya_trae_desconocido: numerada.ya_trae_desconocido,
+      consulta_id: rastro.consulta_id, rastro,
     },
   }
 }

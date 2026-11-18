@@ -1,4 +1,4 @@
--- Encargo 9 · 18-nov · el cerebro entrega según la pieza: el RASTRO de cada índice y cada entrega a una pieza de la mesa.
+-- Encargo 9 + adenda 1 (sin casillas) · 18-nov · el RASTRO de cada índice y cada entrega a una pieza de la mesa.
 -- Aditiva: las consultas de hoy (`/api/brain/consultar`) siguen igual y quedan con estas columnas vacías.
 -- Reversa: supabase/reversas/202611181800_cerebro_consultas_rastro_de_la_pieza_REVERSA.sql
 
@@ -7,8 +7,7 @@ alter table public.cerebro_consultas
   add column if not exists encargo_id text,
   add column if not exists fila text,
   add column if not exists turno text,
-  add column if not exists oferta text,
-  add column if not exists canal text,
+  add column if not exists hoja text,
   add column if not exists fichas_entregadas jsonb,
   add column if not exists numeros_no_consta jsonb;
 
