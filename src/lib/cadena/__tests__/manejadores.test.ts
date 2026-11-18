@@ -243,7 +243,7 @@ describe('la estrategia: preparar y guardar', () => {
     expect(run.output_schema.type).toBe('object')
     expect(run.output_schema.additionalProperties).toBe(false)
     expect(run.max_budget_usd).toBeGreaterThanOrEqual(1)
-    expect(run.thinking_mode).toBe('low')
+    expect(run.thinking_mode).toBe('maximo')
     expect(run.model_override).toBe('claude-opus-5-5')
     expect(run.task).toContain(A.planTexto)
     expect(r.cuerpo.headers).toEqual({ 'x-skip-editor-middleware': '1' })
