@@ -14,7 +14,7 @@ import { TITULOS_DEL_BRIEF, TITULOS_OBLIGATORIOS_DEL_BRIEF } from '../../cadena/
 import { fichaPorOmision } from '../../video/parametros'
 import { tareaDelIngeniero, type ImagenARedactar } from './prompts'
 import { seccionDeLaCriticaParaLaDireccion, tareaDeLaCritica } from './critica'
-import { fotosALaVista, fotosDeLaLista, REGLA_DE_LOS_ELEMENTOS_REALES } from './fotos-a-la-vista'
+import { fotosALaVista, fotosDeLaLista, REGLA_DE_LOS_ELEMENTOS_REALES, rotuloDeLaFoto } from './fotos-a-la-vista'
 import type { ImagenDelPedido } from '../../imagenes-del-pedido'
 
 export type TipoDeTurno = 'dirigir' | 'aportar' | 'responder' | 'integrar' | 'devolver_citas' | 'redactar_prompts' | 'criticar'
@@ -78,7 +78,8 @@ export function tableroEnTexto(libro: Aporte[], max = 12000): string {
 export const LISTA_DE_FOTOS = (fotos: FotoEtiquetada[], aLaVista?: ReadonlySet<string>): string => {
   const propias = fotosDeLaLista(fotos)
   if (!propias.length) return '(el cliente no tiene fotos propias disponibles)'
-  return propias.map((f) => `- ${f.id} · ${f.que_muestra ?? 'sin descripción'}${f.oferta?.trim() ? ` · oferta: ${f.oferta.trim()}` : ''}${f.con_personas ? ' · con personas' : ''}${f.etiqueta_confianza ? ` · confianza ${f.etiqueta_confianza}` : ''}${aLaVista ? (aLaVista.has(f.id) ? ' · a la vista' : ' · solo descripción (no llega como imagen; si la necesitas, pídela con `pedir_material`)') : ''}`).join('\n')
+  // en la mesa (con `aLaVista`) cada foto se nombra con el MISMO rótulo con que viaja su imagen (`foto:<id>`): el modelo ve un solo nombre por foto
+  return propias.map((f) => `- ${aLaVista ? rotuloDeLaFoto(f.id) : f.id} · ${f.que_muestra ?? 'sin descripción'}${f.oferta?.trim() ? ` · oferta: ${f.oferta.trim()}` : ''}${f.con_personas ? ' · con personas' : ''}${f.etiqueta_confianza ? ` · confianza ${f.etiqueta_confianza}` : ''}${aLaVista ? (aLaVista.has(f.id) ? ' · a la vista' : ' · solo descripción (no llega como imagen; si la necesitas, pídela con `pedir_material`)') : ''}`).join('\n')
 }
 
 /**

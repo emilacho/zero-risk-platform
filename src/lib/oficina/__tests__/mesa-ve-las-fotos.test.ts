@@ -112,6 +112,18 @@ describe('el caso real: el reel de Olón (57101e2a)', () => {
     expect(fotosALaVista([dos[1], dos[0]]).map((f) => f.id)).toEqual([dos[1].id, dos[0].id])
   })
 
+  it('un solo nombre por foto: el rótulo de cada imagen es, letra por letra, la mención con que la lista nombra esa misma foto', () => {
+    const ims = imagenesDelTurno('integrar', FIX.fotos)
+    const vista = new Set(fotosALaVista(FIX.fotos).map((f) => f.id))
+    const menciones = LISTA_DE_FOTOS(FIX.fotos, vista).split('\n').map((l) => /^- (\S+) · /.exec(l)?.[1]).filter(Boolean) as string[]
+    expect(ims.length).toBe(MAX_IMAGENES)
+    for (const im of ims) expect(menciones, im.label).toContain(im.label)
+    // y la mención es la que el plano escribe en «Foto:» (la lee el traductor)
+    expect(menciones).toContain(`foto:${PERSONAJE.id}`)
+    // fuera de la mesa (sin `aLaVista`, el aviso del video) la lista queda como siempre
+    expect(LISTA_DE_FOTOS(FIX.fotos)).toMatch(new RegExp(`^- ${PERSONAJE.id} · `, 'm'))
+  })
+
   it('la lista de texto dice cuáles van a la vista y cuáles solo como descripción', () => {
     const vista = new Set(fotosALaVista(FIX.fotos).map((f) => f.id))
     const lista = LISTA_DE_FOTOS(FIX.fotos, vista)
