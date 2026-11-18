@@ -102,7 +102,7 @@ export interface TraduccionDeGuion {
   /** 17-nov · Sprint 3 · T2 · los personajes de la pieza (solo si la mesa escribió la sección «## Personajes») */
   personajes?: PersonajeDeLaHoja[]
   /** 18-nov · Sprint 3 · T5 tramo 3 · la mesa pidió subtítulos (sección «## Subtítulos»: sí, con su energía). Sin la sección, o con «no», no van: nunca se ponen por defecto */
-  subtitulos?: { energia: import('./subtitulos').EnergiaDeSubtitulos }
+  subtitulos?: { energia: import('./subtitulos').EnergiaDeSubtitulos; /** el idioma de la voz (ISO de dos letras) si la mesa lo escribió; si no, la transcripción va en español y se avisa */ idioma?: string }
 }
 
 const sinTildes = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
@@ -130,7 +130,8 @@ export function leerSubtitulos(lineas: string[]): TraduccionDeGuion['subtitulos'
   const texto = sinTildes(lineas.join(' ')).replace(/[*_`]/g, ' ').trim()
   if (!/^(si|yes)\b/.test(texto)) return undefined
   const e = /\benergia\s*:?\s*(alta|conversacion|calma)\b/.exec(texto)
-  return { energia: e ? (e[1] as 'alta' | 'conversacion' | 'calma') : 'conversacion' }
+  const i = /\bidioma\s*:?\s*([a-z]{2})\b/.exec(texto)
+  return { energia: e ? (e[1] as 'alta' | 'conversacion' | 'calma') : 'conversacion', ...(i ? { idioma: i[1] } : {}) }
 }
 
 type CampoDelPlano = 'se_ve' | 'movimiento' | 'texto_en_pantalla' | 'foto' | 'rol' | 'dice' | 'intencion' | 'tamano' | 'lente' | 'luz' | 'producto' | 'estado_final' | 'prompt_imagen' | 'prompt_video' | 'personajes'

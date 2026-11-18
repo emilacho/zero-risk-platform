@@ -43,7 +43,7 @@ export function parametrosDelVideo(pl: Pick<Plantilla, 'limites'>): ParametrosDe
   const ent = (x: unknown) => (typeof x === 'number' && Number.isFinite(x) && x > 0 ? Math.round(x) : null)
   const min = ent(v.segundos_min) ?? VIDEO_POR_OMISION.segundos_min
   const max = Math.max(min, ent(v.segundos_max) ?? VIDEO_POR_OMISION.segundos_max)
-  return { segundos_min: min, segundos_max: max, propuestas: ent(v.propuestas) ?? VIDEO_POR_OMISION.propuestas }
+  return { segundos_min: min, segundos_max: max, propuestas: ent(v.propuestas) ?? VIDEO_POR_OMISION.propuestas, ...(v.componer === true ? { componer: true } : {}) }
 }
 
 const esTituloDePropuesta = (l: string) => /^\s{0,3}#{1,3}\s*(propuesta|opci[oó]n|camino)\s*\d*\b/i.test(l)

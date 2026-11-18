@@ -62,6 +62,8 @@ export interface ContextoDeComposicion {
   /** la energía de los subtítulos si la mesa los pidió; null = no van */
   subtitulos: EnergiaDeSubtitulos | null
   idioma: string
+  /** el idioma no vino del guion (se transcribe en el de por omisión): queda en los avisos de la pieza */
+  aviso_idioma?: string
   /** la marca se lee solo al pedir el render (baja el logo) */
   marca(): Promise<MarcaDelVideo>
 }
@@ -114,7 +116,7 @@ async function paso(P: PuertosDeComposicion, enc: { id: string; client_id: strin
     const sinSubtitulos = (motivo: string) => paso(P, enc, { ...c, fase: 'rindiendo', desde: iso, subtitulos: null, avisos: [...c.avisos, `el video sale sin subtítulos: ${motivo}`] }, ctx, ahora)
     if (!c.analisis_id) {
       const a = await S.analizar({ voz: { nombre: NOMBRE_DEL_UNIDO, url: c.unido.video_url }, musica: null, idioma: ctx.idioma })
-      if (a.ok) return { sigue: { ...c, analisis_id: a.id, desde: iso } }
+      if (a.ok) return { sigue: { ...c, analisis_id: a.id, desde: iso, avisos: ctx.aviso_idioma ? [...c.avisos, ctx.aviso_idioma] : c.avisos } }
       if (a.reintentar && !vencida(MINUTOS_PARA_ANALIZAR)) return { sigue: c }
       return sinSubtitulos(`no se pudo pedir la transcripción (${a.error})`)
     }

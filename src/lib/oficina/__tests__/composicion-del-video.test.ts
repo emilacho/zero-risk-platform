@@ -8,6 +8,7 @@ import { armarVideoCompuesto, medidasDelVideo, type EntradaDelVideoCompuesto } f
 import { disenoDeAnuncio } from '../composicion'
 import { traducirGuion, leerSubtitulos } from '../video/guion'
 import { convencionDelGuion } from '../mesa/pedidos'
+import { parametrosDelVideo } from '../video/propuestas'
 import { htmlDeVideo, capasDeTexto, SEGUNDOS_DE_CIERRE } from '../../../../packages/carousel-engine/src/video-html'
 
 const diseno = disenoDeAnuncio({ colors: { primary: '#1d4ed8' }, fonts: { family: 'Inter' } }, 'semilla')
@@ -105,7 +106,29 @@ describe('los subtítulos los pide la mesa en el guion (sección «## Subtítulo
     expect(leerSubtitulos(['**Sí** · energía: calma'])).toEqual({ energia: 'calma' })
     expect(leerSubtitulos(['tal vez · energía: alta'])).toBeUndefined()
   })
-  it('la hoja que recibe la mesa trae la sección opcional', () => {
-    expect(convencionDelGuion()).toMatch(/## Subtítulos {3}\(opcional/)
+  it('🔴 (ajuste 5 de CC7) apagado, la hoja que recibe la mesa es la de hoy LETRA POR LETRA; con `componer`, solo se suman las 2 líneas de subtítulos', () => {
+    const v = { segundos_min: 6, segundos_max: 15, propuestas: 1 }
+    const apagada = convencionDelGuion(v)
+    expect(apagada).not.toMatch(/Subt[ií]tulos/)
+    expect(apagada).toContain(['## Audio', '<lo que suena: música, ambiente, voz, diálogo o locución, lo que pida la pieza>', '## Pie'].join('\n'))
+    expect(convencionDelGuion({ ...v, componer: false })).toBe(apagada)
+    const encendida = convencionDelGuion({ ...v, componer: true })
+    const lineas = ['## Subtítulos   (opcional: solo si la pieza tiene voz y los quieres; si no, no escribas esta sección)', 'sí · Energía: alta | conversacion | calma · Idioma: <el de la voz, en dos letras: es, en, pt…>']
+    expect(encendida).toContain(['<lo que suena: música, ambiente, voz, diálogo o locución, lo que pida la pieza>', ...lineas, '## Pie'].join('\n'))
+    expect(encendida.replace(lineas.join('\n') + '\n', '')).toBe(apagada)
+    // con varias propuestas, igual
+    expect(convencionDelGuion({ ...v, propuestas: 2 })).not.toMatch(/Subt[ií]tulos/)
+    expect(convencionDelGuion({ ...v, propuestas: 2, componer: true })).toMatch(/## Subtítulos/)
+  })
+  it('🔴 la plantilla dice si compone: solo `componer: true` (booleano) lo enciende', () => {
+    const pl = (componer: unknown) => ({ limites: { video: { componer } } }) as never
+    expect(parametrosDelVideo(pl(true))).toMatchObject({ componer: true })
+    for (const x of [false, 'true', 1, undefined]) expect('componer' in parametrosDelVideo(pl(x))).toBe(false)
+  })
+  it('🔴 (ajuste 6 de CC7) el idioma de la voz lo escribe la mesa · sin él, no se inventa uno (queda vacío y el motor avisa)', () => {
+    expect(leerSubtitulos(['sí · Energía: calma · Idioma: en'])).toEqual({ energia: 'calma', idioma: 'en' })
+    expect(leerSubtitulos(['si · idioma: PT'])).toEqual({ energia: 'conversacion', idioma: 'pt' })
+    expect(leerSubtitulos(['sí · Energía: alta'])).toEqual({ energia: 'alta' })
+    expect(leerSubtitulos(['sí · Idioma: <el de la voz, en dos letras: es, en, pt…>'])).toEqual({ energia: 'conversacion' })
   })
 })

@@ -841,7 +841,9 @@ async function seguirComponiendo(P: Puertos, enc: Encargo, c: ComposicionGuardad
     planos: (g?.planos ?? []).map((p) => ({ n: p.n, texto_en_pantalla: p.texto_en_pantalla, rol: p.rol })),
     relacion: ped?.relacion ?? '9:16', resolucion: ped?.resolucion ?? '720p',
     subtitulos: g?.subtitulos?.energia ?? null,
-    idioma: 'es',
+    // la plataforma es agnóstica: el idioma de la voz lo escribe la mesa en «## Subtítulos»; si no lo dijo, español y se avisa
+    idioma: g?.subtitulos?.idioma ?? 'es',
+    ...(g?.subtitulos && !g.subtitulos.idioma ? { aviso_idioma: 'el guion no dijo el idioma de la voz: la transcripción se hizo en español' } : {}),
     async marca() {
       const marca = b?.F?.marca ?? null
       if (!marca) return { logo: null, firma: null, diseno: null, avisos: [] }

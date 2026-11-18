@@ -82,7 +82,12 @@ async function hastaElBrazo(o: { plantilla?: Plantilla; guion?: string; servicio
   const enc = () => M.encargos.get(id)!
   const video = () => datos(enc().estado_del_motor, 'video') as unknown as { video_url: string; aviso: string | null; costo_usd: number; compuesto?: InfoDelCompuesto } | undefined
   const turno = () => M.turnos.get(id)!.get(n)!
-  const alarmas = () => M.llamadas.avisos.filter((x) => x.canal === 'alertas' && /sin componer/.test(x.texto))
+  // (a07 de CC7) TODAS las alertas del encargo mientras el video se compone, digan lo que digan (sin filtrar por texto): las que salen
+  // ANTES de registrarse el paso `video`. Las de los pasos de después (la jefatura sin conectar en este banco, la medida del mp4 falso) no son de la composición
+  const deLaComposicion: string[] = []
+  const avisar = M.P.avisar
+  M.P.avisar = async (p) => { if (p.canal === 'alertas' && !datos(M.encargos.get(id)!.estado_del_motor, 'video')) deLaComposicion.push(p.texto); return avisar(p) }
+  const alarmas = () => deLaComposicion
   return { M, id, b, vuelta, enc, video, turno, alarmas }
 }
 
@@ -95,6 +100,27 @@ describe('1 · apagado no cambia nada · sin servicio, el unido con UN aviso', (
     expect(x.video()?.compuesto).toBeUndefined()
     expect(x.video()?.aviso).toBeNull()
     expect(s.reg).toMatchObject({ analizar: [], rendir: [], render: 0, bajar: 0 })
+  })
+  it.each([['false', false], ['«true» como texto', 'true'], ['1', 1]])('🔴 (a01) `componer: %s` no enciende nada: el unido como hoy y 0 llamadas al servicio', async (_n, valor) => {
+    const s = servicio()
+    const pl: Plantilla = { ...PLANTILLA_B, limites: { ...PLANTILLA_B.limites, video: { ...(PLANTILLA_B.limites.video as Record<string, unknown>), componer: valor } } }
+    const x = await hastaElBrazo({ plantilla: pl, servicio: s.S })
+    await x.vuelta(1)
+    expect(x.video()?.video_url).toMatch(/video-unido-/)
+    expect(x.video()?.compuesto).toBeUndefined()
+    expect(s.reg).toMatchObject({ analizar: [], rendir: [], render: 0, bajar: 0 })
+  })
+  it('🔴 (a15) en seco, con `componer` y el servicio puestos: los clips simulados se unen en simulado y el servicio NO se llama · 0 alarmas', async () => {
+    const s = servicio()
+    const b = brazo({ estados: () => ({ ok: true, simulado: true }) })
+    const avisos: string[] = []
+    const enc = { id: 'enc1', client_id: 'cli1', brief_id: 'b', familia: 'video_mesa', tope_usd: 10, dry_run: true, estado_del_motor: { artefactos: { pedido_video: { version: 2, datos: { pedido: { relacion: '9:16', resolucion: '720p' }, envio: { planos: enviados3 } } } }, gasto_usd: 0 } }
+    const P = { video: b.v, componerVideo: s.S, ahora: () => new Date('2026-11-18T03:00:00Z'), almacen: { async leerPlantilla() { return { plantilla: PLANTILLA_C } } }, async avisar(p: { texto: string }) { avisos.push(p.texto) }, async guardarArchivos() { return { ok: false as const, error: 'en seco no se guarda' } } }
+    const r = await sondearPlanos(P as never, enc as never, enviados3, '2026-11-18T02:58:00Z', new Date('2026-11-18T03:00:00Z'))
+    expect(r).toMatchObject({ ok: true, video_url: 'https://dry.invalid/video-unido.mp4' })
+    expect(r && r.ok && 'compuesto' in r).toBe(false)
+    expect(s.reg).toMatchObject({ analizar: [], rendir: [], render: 0, bajar: 0 })
+    expect(avisos).toEqual([])
   })
   it('🔴 con `componer` y SIN servicio: el unido en la misma vuelta, un aviso y ninguna alarma', async () => {
     const x = await hastaElBrazo({ servicio: null })
@@ -133,6 +159,7 @@ describe('2 · las fases se retoman entre vueltas, sin repetir pedidos · plazo 
     expect(x.video()?.video_url).toMatch(/video-unido-/)
     expect(x.video()?.aviso).toMatch(/sin textos ni cierre de marca: el render falló \(otra vez\)/)
     expect(x.video()?.compuesto).toMatchObject({ compuesto: false, pedidos_de_render: 2 })
+    expect(x.alarmas()).toHaveLength(1)
   })
   it('🔴 el plazo cuenta desde la hora GUARDADA del pedido: a los 19 min espera; a los 20 min, el unido', async () => {
     const s = servicio({ renders: [{ estado: 'rindiendo' }] })
@@ -143,6 +170,7 @@ describe('2 · las fases se retoman entre vueltas, sin repetir pedidos · plazo 
     await x.vuelta(1 + MINUTOS_PARA_RENDIR)
     expect(x.video()?.aviso).toMatch(/el render no terminó en 20 min/)
     expect(s.reg.rendir).toHaveLength(1)
+    expect(x.alarmas()).toHaveLength(1)
   })
   it('🔴 (sabotaje M06) con transcripción antes: el plazo del render cuenta desde SU pedido, no desde el inicio de la composición', async () => {
     const s = servicio({ analisis: [{ estado: 'listo', palabras: [] }], renders: [{ estado: 'rindiendo' }] })
@@ -163,6 +191,7 @@ describe('2 · las fases se retoman entre vueltas, sin repetir pedidos · plazo 
     await x.vuelta(3); await x.vuelta(4)
     expect(s.reg.rendir).toHaveLength(PEDIDOS_DE_RENDER_MAX)
     expect(x.video()?.aviso).toMatch(/el render falló \(servicio de render 404/)
+    expect(x.alarmas()).toHaveLength(1)
   })
   it('la consulta del render falla por algo pasajero: se espera, NO se pide otro render', async () => {
     const s = servicio({ renders: [{ falla: 'servicio de render 503', reintentar: true }, { falla: 'servicio de render 503', reintentar: true }, { estado: 'listo' }] })
@@ -191,6 +220,7 @@ describe('2 · las fases se retoman entre vueltas, sin repetir pedidos · plazo 
     await x.vuelta(1)
     expect(s.reg.rendir).toHaveLength(1)
     expect(x.video()?.aviso).toMatch(/no aceptó el video \(servicio de render 400/)
+    expect(x.alarmas()).toHaveLength(1)
   })
 })
 
@@ -262,6 +292,18 @@ describe('4 · los segundos del texto salen de los cortes reales · 5 · nada se
     await x.vuelta(3)
     expect(x.video()?.aviso).toMatch(/sin subtítulos: la transcripción no trae una lista de palabras/)
   })
+  it('🔴 (ajuste 6 de CC7) el idioma de la voz es el que escribió la mesa; sin él, español y el aviso lo dice', async () => {
+    const en = servicio({ analisis: [{ estado: 'listo', palabras: [] }] })
+    const x = await hastaElBrazo({ servicio: en.S, guion: guion(['## Subtítulos', 'sí · Energía: alta · Idioma: en']) })
+    await x.vuelta(1); await x.vuelta(2); await x.vuelta(3)
+    expect(en.reg.analizar[0]).toMatchObject({ idioma: 'en' })
+    expect(x.video()?.aviso ?? '').not.toMatch(/no dijo el idioma/)
+    const sin = servicio({ analisis: [{ estado: 'listo', palabras: [] }] })
+    const y = await hastaElBrazo({ servicio: sin.S, guion: guion(['## Subtítulos', 'sí']) })
+    await y.vuelta(1); await y.vuelta(2); await y.vuelta(3)
+    expect(sin.reg.analizar[0]).toMatchObject({ idioma: 'es' })
+    expect(y.video()?.aviso).toMatch(/el guion no dijo el idioma de la voz: la transcripción se hizo en español/)
+  })
   it('con subtítulos pedidos y la transcripción que nunca termina: a los 10 min sigue sin subtítulos', async () => {
     const s = servicio({ analisis: [{ estado: 'en_fila' }] })
     const x = await hastaElBrazo({ servicio: s.S, guion: guion(['## Subtítulos', 'sí']) })
@@ -302,6 +344,7 @@ describe('6 · el compuesto, solo tras bajarlo y guardarlo · 9 · el artefacto 
     await x.vuelta(2)
     expect(x.video()?.video_url).toMatch(/video-unido-/)
     expect(x.video()?.aviso).toMatch(/no se pudo guardar el video compuesto \(bucket lleno\)/)
+    expect(x.alarmas()).toHaveLength(1)
   })
 })
 
