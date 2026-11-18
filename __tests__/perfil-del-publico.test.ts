@@ -9,7 +9,7 @@ import path from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import {
   crearPresupuesto, filtrarPerfil, fuentesFaltantes, MUESTRA_MINIMA, pareceUnaOrden, publicosDe, suficiencia, tareaDelPerfil,
-  TOPE_DEL_REDACTOR_USD, TOPE_POR_CORRIDA_USD, vocesDelTipo, vozDelCerebro, VOZ_POR_TIPO, type VozConId,
+  MAX_VOCES_AL_REDACTOR, TOPE_DEL_REDACTOR_USD, TOPE_POR_CORRIDA_USD, vocesDelTipo, vozDelCerebro, VOZ_POR_TIPO, type VozConId,
 } from '../src/lib/perfil-del-publico/perfil'
 import { correrPerfil, notaDeFuenteFaltante, type DepsDeLaCorrida } from '../src/lib/perfil-del-publico/corrida'
 
@@ -328,6 +328,23 @@ describe('muestra mínima: sin ella no se redacta, y se declara qué falta', () 
     const r = await correrPerfil(d, ENTRADA)
     expect(r.cortes).toContain('se leyeron 75 voces en 20 páginas y el cerebro tiene más: el perfil usa solo esas')
     expect(r.estado).toBe('hecho')
+  })
+  it('🔴 CC7 · el tope de voces al redactor NO es mudo: con más de 220 se declara «llegaron N; al redactor van 220», y una voz que no se le entregó no se puede citar', async () => {
+    expect(MAX_VOCES_AL_REDACTOR).toBe(220)
+    const delCerebro = [...voces(CAFE, 'cerebro:resenas', 150), ...voces(CAFE, 'cerebro:comentarios', 100, 200)]
+    const sobrante = delCerebro[240]
+    const { d } = doble({ delCerebro, salida: () => `## Cómo habla
+- «currar» [voz:${delCerebro[160].id}]
+- «currar» [voz:${sobrante.id}]` })
+    const r = await correrPerfil(d, ENTRADA)
+    expect(r.cortes).toContain('Vecinos de Malasaña que desayunan fuera: llegaron 250 voces; al redactor van 220')
+    expect(vi.mocked(d.redactar).mock.calls[0][0]).not.toContain(`[voz:${sobrante.id}]`)
+    expect(r.publicos[0]).toMatchObject({ estado: 'redactado', lineas_validas: 1, descartadas: 1 })
+  })
+  it('con 220 o menos no hay nada que declarar', async () => {
+    const { d } = doble({ delCerebro: [...voces(CAFE, 'cerebro:resenas', 120), ...voces(CAFE, 'cerebro:comentarios', 100, 200)] })
+    const r = await correrPerfil(d, ENTRADA)
+    expect(r.cortes.join(' ')).not.toMatch(/al redactor van/)
   })
   it('con el cerebro vacío: nada que redactar, todo declarado faltante', async () => {
     const { d } = doble()

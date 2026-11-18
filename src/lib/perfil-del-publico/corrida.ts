@@ -17,7 +17,7 @@
  *      ni se archiva nada: se devuelve qué hay y qué falta.
  */
 import {
-  AGENTE, crearPresupuesto, filtrarPerfil, fuentesFaltantes, OFICINA, vocesDelTipo, pareceUnaOrden, publicosDe, suficiencia, tareaDelPerfil, TIPO_DEL_INFORME,
+  AGENTE, crearPresupuesto, filtrarPerfil, MAX_VOCES_AL_REDACTOR, fuentesFaltantes, OFICINA, vocesDelTipo, pareceUnaOrden, publicosDe, suficiencia, tareaDelPerfil, TIPO_DEL_INFORME,
   TOPE_DEL_REDACTOR_USD, TOPE_POR_CORRIDA_USD, type PublicoObjetivo, type VozConId,
 } from './perfil'
 
@@ -117,12 +117,15 @@ export async function correrPerfil(deps: DepsDeLaCorrida, e: EntradaDeLaCorrida)
     const reserva = presupuesto.reservar(TOPE_DEL_REDACTOR_USD)
     if (!reserva.ok) { r.cortes.push(`${p.nombre}: ${reserva.motivo}`); r.publicos.push({ ...base, estado: 'cortado_por_tope', detalle: reserva.motivo }); continue }
     r.llamadas_al_redactor++
-    const red = await deps.redactar(tareaDelPerfil({ publico: p, rubro: ficha.rubro, plaza: ficha.plaza, pais: ficha.pais, voces: suyas, idioma: ficha.idioma, trato: ficha.trato }), TOPE_DEL_REDACTOR_USD, p)
+    // al redactor le llega un máximo de voces: el resto se DECLARA (el corte nunca es mudo) y no se puede citar (no se le entregó)
+    const entregadas = suyas.slice(0, MAX_VOCES_AL_REDACTOR)
+    if (suyas.length > entregadas.length) r.cortes.push(`${p.nombre}: llegaron ${suyas.length} voces; al redactor van ${entregadas.length}`)
+    const red = await deps.redactar(tareaDelPerfil({ publico: p, rubro: ficha.rubro, plaza: ficha.plaza, pais: ficha.pais, voces: entregadas, idioma: ficha.idioma, trato: ficha.trato }), TOPE_DEL_REDACTOR_USD, p)
       .catch((x): ResultadoDelRedactor => ({ ok: false, error: String(x).slice(0, 200), costo_usd: null }))
     presupuesto.liquidar(TOPE_DEL_REDACTOR_USD, red.costo_usd)
     if (!red.ok) { r.publicos.push({ ...base, estado: 'redactor_fallo', detalle: red.error }); continue }
     // 5 · ninguna frase sin fuente de este cliente
-    const f = filtrarPerfil(red.salida, suyas, p.nombre)
+    const f = filtrarPerfil(red.salida, entregadas, p.nombre)
     f.citas.forEach((c) => citas.add(c))
     textos.push(`# Público: ${p.nombre}\n${f.texto}${faltantes.length ? `\n\n${notaDeFuenteFaltante(faltantes)}` : ''}`)
     r.publicos.push({ ...base, estado: 'redactado', lineas_validas: f.lineas_validas, descartadas: f.descartadas.length, secciones_sin_dato: f.secciones_sin_dato })
