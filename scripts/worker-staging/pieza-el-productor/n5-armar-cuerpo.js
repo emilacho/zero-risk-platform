@@ -143,7 +143,7 @@ const cuerpo = {
   dry_run: prev.dry_run === true,
   // TOPE DURO por llamada · SIEMPRE presente (el sobre lo valida o pone el de fábrica) · el corredor lo hace cumplir
   max_budget_usd: prev.tope_usd,
-  thinking_mode: 'disabled',
+  thinking_mode: 'maximo',
   // 🔴 «máximo 4 pedidos» y «sin anuncios de pago» los hace cumplir el SISTEMA (el corredor monta la herramienta con ESTAS opciones y este cupo), no el texto del pedido · certificación CC#3 · cierra el punto 3
   // Exige que el corredor tenga el cambio de `mirar_afuera_limites` (PR aparte): sin él, Vercel descarta el campo y la herramienta queda como hoy (el texto sigue pidiéndolo, pero no se hace cumplir).
   mirar_afuera_limites: { max_pedidos: maxPedidos, permitidos: ofrecidas },

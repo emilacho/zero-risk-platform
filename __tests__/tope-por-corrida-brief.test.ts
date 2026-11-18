@@ -165,11 +165,11 @@ describe('④ un fallo del redactor (p. ej. el corte por tope) es un parte INVÁ
 describe('⑤ `razonamiento` del sobre llega al corredor como `thinking_mode` · opt-in puro', () => {
   const cuerpo = async (prev: Record<string, unknown>) => (await correrNodo('n3-armar-cuerpo.js', { input: [{ name: 'Náufrago' }], refs: { '② ¿Ya hay parte de este plan? · guarda': { client_id: CID, dry_run: false, manual_texto: 'm', plan_id: 'p', plan_texto: 'x', manual_version: 1, manual_id: 'm', ...prev } } }))[0].json.cuerpo
   it('el sobre: ausente ⇒ disabled · completo ⇒ null · válido ⇒ el valor', async () => {
-    expect((await sobre({}))[0].json.razonamiento).toBe('disabled') // POR DEFECTO apagado (GO de Emilio 2026-10-01)
+    expect((await sobre({}))[0].json.razonamiento).toBe('maximo') // 18-nov · G1: POR DEFECTO al máximo (antes apagado por el GO del 01-oct)
     expect((await sobre({ razonamiento: 'completo' }))[0].json.razonamiento).toBeNull() // el razonamiento completo hay que pedirlo
-    for (const v of ['disabled', 'low', 'medium']) expect((await sobre({ razonamiento: v }))[0].json.razonamiento).toBe(v)
+    for (const v of ['disabled', 'low', 'medium', 'high', 'xhigh', 'max', 'maximo']) expect((await sobre({ razonamiento: v }))[0].json.razonamiento).toBe(v)
   })
-  it.each([['high'], [''], [null], [true], [0], ['DISABLED']])('🔴 razonamiento mal escrito (%j) ⇒ BRIEF_RAZONAMIENTO_INVALIDO · se DETIENE antes de gastar', async (v) => {
+  it.each([['alto'], ['MAX'], [''], [null], [true], [0], ['DISABLED']])('🔴 razonamiento mal escrito (%j) ⇒ BRIEF_RAZONAMIENTO_INVALIDO · se DETIENE antes de gastar', async (v) => {
     await expect(sobre({ razonamiento: v })).rejects.toThrow(/BRIEF_RAZONAMIENTO_INVALIDO/)
   })
   it('el nodo que paga: con razonamiento ⇒ thinking_mode en el cuerpo · sin él ⇒ ni la clave', async () => {
