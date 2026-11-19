@@ -13,7 +13,7 @@ import type { FormatosPorRed } from '../tipos'
 const INS_C: InsumosDelConcepto = { fases: [{ clave: 'F1', semanas: 1 }], redes: [{ red: 'ig', huecos_por_semana: 2 }], prohibidas: [], fotos: [] }
 const LINEAS = [
   '- C1-I01 · ig · reel · la historia del local en tres momentos · mensaje: ya llegó · gancho: ya llegó. · protagonista: el local · serie: ninguna · foto:ninguna',
-  '- C1-I02 · ig · carrusel · el menú · mensaje: ya llegó · gancho: el menú. · protagonista: el plato · serie: ninguna · foto:ninguna',
+  '- C1-I02 · ig · carrusel · el menú · mensaje: todo el menú a domicilio · gancho: el menú. · protagonista: el plato · serie: ninguna · foto:ninguna',
 ]
 const concepto = (duracion?: string) => {
   const c = leerConcepto([
@@ -49,7 +49,11 @@ describe('G5b · la hoja y la duración de la pieza de video', () => {
     expect(parsearBrief(t, 'F1-reel')?.duracion).toBe('45 s · tres momentos de la historia')
   })
   it('🔴 una pieza que no es de video no lleva duración, aunque la idea la traiga', () => {
-    expect(parsearBrief(hoja('45 s · lo que sea'), 'F1-carrusel')?.duracion).toBeUndefined()
+    const t = hoja('45 s · lo que sea')
+    const carrusel = parsearBrief(t, 'F1-carrusel')
+    expect(carrusel, t.split('\n').filter((l) => l.startsWith('### ')).join(' | ')).not.toBeNull()
+    expect(carrusel!.duracion).toBeUndefined()
+    expect(parsearBrief(t, 'F1-reel')?.duracion).toBe('45 s · lo que sea')
   })
   it('🔴 sin el campo (hoy: ninguna idea lo trae) la hoja no cambia: ni una línea de duración', () => {
     expect(hoja()).not.toMatch(/DURACIÓN/)
