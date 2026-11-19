@@ -13,10 +13,12 @@ import type { Almacen, ConceptoGuardado } from './almacen'
 import { autorizarLlamada, cadena, err, WORKFLOW_DEL_TABLERO, type Respuesta } from './autorizar'
 import { leerIdea, type IdeaDelBanco } from './conceptos'
 import type { Fila } from './tipos'
+import { TOPE_DE_LO_ESCRITO } from '../limites-de-tamano'
 
 export const CAMPOS_EDITABLES = ['idea', 'mensaje', 'gancho', 'protagonista'] as const
 export type CampoEditable = (typeof CAMPOS_EDITABLES)[number]
-export const LARGO_MAXIMO_DE_CAMPO = 2000
+// 18-nov · G2b «nada se recorta» (CC5): lo que escribe Emilio en el banco llega entero, hasta el tope único de lo escrito (antes 2000)
+export const LARGO_MAXIMO_DE_CAMPO = TOPE_DE_LO_ESCRITO
 export const MAXIMO_DE_CAMBIOS_POR_TANDA = 200
 export const INTENTOS_DE_ESCRITURA = 3
 /** las filas que todavía no tienen brief: se reasignan al retirar; las de brief en adelante conservan su idea (cuidado 3 de CC6 · propuesta CC1, decisión final de Lenovo/Emilio) */
