@@ -17,6 +17,7 @@ import { esNotaDeIdea, expandirPatron, fusionarTanda } from './expandir-patron'
 import { hoyEnZona } from './campanas'
 import { anotarSiPausadaPorElTablero, leerPausaDelTablero } from './flujo-de-campana'
 import { fueraDePlazoDeProduccion } from './lotes'
+import { moverAlSlotLibre, type Cambio } from './reubicacion'
 import { esNotaDeDependencias, resolverDependencias } from './resolver-dependencias'
 import { tareaDeCalendario, tareaDeEstrategia, tareaDeFichas } from './indicaciones'
 import { metodoDeCalendario } from './metodos'
@@ -471,12 +472,24 @@ export async function cerrarTanda(al: Almacen, p: { campana: Campana; formatos: 
   const enInvestigacion = new Set(hs.filter((h) => h.severidad === 'aviso' && (h.chequeo === 'V14' || h.chequeo === 'V06') && h.fila_id).map((h) => h.fila_id as string))
   // GO de Lenovo 10-nov 14:59Z: lo que cae antes de hoy (zona del cliente) + el plazo de producción de su formato no se programa; queda `perdio_su_fecha` con la razón escrita
   const hoy = hoyEnZona(ahora, campana.zona_horaria)
-  const finales: Fila[] = filas.map((f) => {
-    if (SALIERON_EN_LA_CADENA.has(f.estado)) return f
-    const fuera = fueraDePlazoDeProduccion(f, hoy, formatos)
-    if (fuera) return { ...f, estado: 'perdio_su_fecha', avisos: [...f.avisos.filter((a) => esNotaDeDependencias(a) || esNotaDeIdea(a)), fuera] }
-    if (f.estado === 'espera_video') return f
-    return { ...f, estado: enInvestigacion.has(f.id) ? 'en_investigacion' : 'validada', avisos: [...f.avisos.filter((a) => esNotaDeDependencias(a) || esNotaDeIdea(a)), ...hs.filter((h) => h.fila_id === f.id && h.severidad === 'aviso').map((h) => h.ficha.que)] }
+  // 19-nov · grupo C2 · el calendario móvil (GO Lenovo 06:54Z): antes de dejarla `perdio_su_fecha`, la fila se mueve a la próxima fecha libre de su slot dentro de la tanda;
+  // sin fecha libre sale como siempre, con su aviso y su idea de vuelta al banco (`moverAlSlotLibre`). Sin filas vencidas no se lee nada más: lo de siempre, byte a byte.
+  const vencidas = filas.filter((f) => !SALIERON_EN_LA_CADENA.has(f.estado) && fueraDePlazoDeProduccion(f, hoy, formatos))
+  const movil = new Map<string, Cambio>()
+  if (vencidas.length) {
+    const ctx = await al.cargarContexto(campana.client_id, campana.plan_id)
+    const sedes = (ctx?.sedes ?? []).filter((s) => !campana.sedes.length || campana.sedes.includes(s.clave))
+    for (const c of moverAlSlotLibre(vencidas, semanas, { hoy, campana: { fecha_inicio: campana.fecha_inicio, fecha_fin: campana.fecha_fin }, filas, formatos, sedes })) movil.set(c.fila_id, c)
+  }
+  const finales: Fila[] = filas.map((original) => {
+    if (SALIERON_EN_LA_CADENA.has(original.estado)) return original
+    const fuera = fueraDePlazoDeProduccion(original, hoy, formatos)
+    const cambio = fuera ? movil.get(original.id) : undefined
+    if (fuera && cambio?.tipo !== 'reubicar') return { ...original, estado: 'perdio_su_fecha', avisos: [...original.avisos.filter((a) => esNotaDeDependencias(a) || esNotaDeIdea(a)), fuera, ...(cambio ? [cambio.aviso] : [])] }
+    const f = cambio?.tipo === 'reubicar' ? { ...original, fecha: cambio.fecha, semana: cambio.semana, dia_semana: cambio.dia_semana, hora: cambio.hora } : original
+    const delMovil = cambio ? [cambio.aviso] : []
+    if (f.estado === 'espera_video') return cambio ? { ...f, avisos: [...f.avisos, ...delMovil] } : f
+    return { ...f, estado: enInvestigacion.has(f.id) ? 'en_investigacion' : 'validada', avisos: [...f.avisos.filter((a) => esNotaDeDependencias(a) || esNotaDeIdea(a)), ...delMovil, ...hs.filter((h) => h.fila_id === f.id && h.severidad === 'aviso').map((h) => h.ficha.que)] }
   })
   const todas12 = tanda === 1 ? expandirPatron(estr, campana, Array.from({ length: SEMANAS_DE_PANORAMA }, (_, i) => i + 1).filter((s) => !semanas.includes(s)), 0, formatos).map((f) => ({ ...f, tanda: Math.ceil(f.semana / medidaDeCampana(campana).semanasPorTanda) })) : []
   await al.guardarFilas(campana.id, version, 1, [...finales, ...todas12], campana.seco)

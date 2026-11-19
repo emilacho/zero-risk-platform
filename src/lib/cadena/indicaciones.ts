@@ -11,6 +11,7 @@ import type { FechaEspecialVerificada } from './validador-calendario'
 import { contextoDeEstado } from '../sedes/por-abrir'
 import { TOPE_REAL_DEL_PEDIDO } from '../limites-de-tamano'
 import { diaSemanaIso, esFechaIso, fechaDeFila } from './fechas'
+import { ideasQueVolvieronAlBanco } from './reubicacion'
 
 const REGLAS_BASE = [
   'Respondes SOLO con el objeto que pide el formato de salida. No escribas nada fuera de él.',
@@ -210,6 +211,12 @@ function seccionesDelConcepto(p: PedidoDeCalendario): string[] {
     const ideas = c.banco.filter((i) => i.capitulo === cap.clave || i.capitulo === cap.fase)
     out.push(`# BANCO DE IDEAS DEL CAPÍTULO ${f.clave}`)
     out.push(ideas.length ? ideas.map((i) => `- ${i.id} · ${i.red} · ${i.formato} · ${i.idea} · mensaje: ${i.mensaje} · gancho: ${i.gancho}${i.serie ? ` · serie: ${i.serie}` : ''}${i.foto ? ` · foto:${i.foto}` : ''}`).join('\n') : '(banco vacío para este capítulo: dilo en `pendientes`)')
+  }
+  // 19-nov · C2 (condición de Lenovo 06:54Z, «que nada se pierda»): las ideas de las filas que salieron por el calendario móvil vuelven al banco y se ofrecen PRIMERO, de cualquier capítulo
+  const volvieron = ideasQueVolvieronAlBanco(p.filasPrevias, c.banco)
+  if (volvieron.length) {
+    out.push('', '# IDEAS QUE VOLVIERON AL BANCO (su fila perdió la fecha en una tanda anterior y no encontró otra: si calzan con esta tanda, úsalas antes que otras)')
+    out.push(volvieron.map((i) => `- ${i.id} · capítulo ${i.capitulo} · ${i.red} · ${i.formato} · ${i.idea} · mensaje: ${i.mensaje} · gancho: ${i.gancho}`).join('\n'))
   }
   return out
 }
