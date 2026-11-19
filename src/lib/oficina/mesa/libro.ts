@@ -4,6 +4,7 @@
  * que cada especialidad pertinente está citada (usada, o descartada con motivo). Puro.
  */
 import type { Aporte } from './tipos'
+import { TOPE_REAL_DEL_PEDIDO } from '../../limites-de-tamano'
 
 /** la referencia corta que ven los agentes: A<n> */
 export const refDe = (a: Pick<Aporte, 'n'>): string => `A${a.n}`
@@ -131,19 +132,21 @@ export function pegarCitas(integracion: string, respuesta: string, quitar: numbe
   return [...lineas.slice(0, ini + 1), ...seccion, ...nuevas.map((x) => x.linea), ...cola, ...lineas.slice(fin)].join('\n')
 }
 
-const recorte = (t: string, n: number): string => { const x = t.replace(/\s+/g, ' ').trim(); return x.length > n ? `${x.slice(0, n)}…` : x }
+const enUnaLinea = (t: string): string => t.replace(/\s+/g, ' ').trim()
 
 /**
  * Lo que la JEFATURA ve del tablero (bloqueante 1 de CC#3): cada aporte con su referencia, la cita de la dirección (usados / descartados, con el motivo) y lo que el código comprobó,
- * para que juzgue si cada aporte citado fue REAL (el código verifica existencia y cobertura; la calidad es de la jefatura). Puro. Tope de tamaño: el contexto de una revisión no es ilimitado.
+ * para que juzgue si cada aporte citado fue REAL (el código verifica existencia y cobertura; la calidad es de la jefatura). Puro.
+ * 19-nov · G8 (3) · GO Lenovo 10:36 · firma de Emilio «nada se recorta»: cada aporte va ENTERO (antes 600 por aporte) y el tablero entero hasta el techo real del pedido
+ * (antes 7000), con el aviso de cuánto quedó fuera si de verdad lo pasara. La jefatura juzgaba un aporte citado sin ver su final.
  */
-export function tableroParaLaJefatura(libro: Aporte[], integracion: string, pertinentes: string[], maxChars = 7000): string {
+export function tableroParaLaJefatura(libro: Aporte[], integracion: string, pertinentes: string[], maxChars = TOPE_REAL_DEL_PEDIDO): string {
   const v = verificarCitas(integracion, libro, pertinentes)
   const citas = leerCitas(integracion)
   const porN = new Map(libro.map((a) => [a.n, a] as const))
   const lineaCita = (c: Cita): string => `- ${refDe({ n: c.n })}${porN.get(c.n) ? ` (${porN.get(c.n)!.de})` : ' (NO EXISTE en el tablero)'}: ${c.motivo || '(sin motivo)'}`
   const lista = (xs: string[]): string[] => (xs.length ? xs : ['(ninguno)'])
-  const aportes = libro.filter((a) => ['dirige', 'aporta', 'responde', 'material', 'integra'].includes(a.tipo)).map((a) => `${refDe(a)} · ${a.de} · ${a.tipo}: ${recorte(a.texto, 600)}`)
+  const aportes = libro.filter((a) => ['dirige', 'aporta', 'responde', 'material', 'integra'].includes(a.tipo)).map((a) => `${refDe(a)} · ${a.de} · ${a.tipo}: ${enUnaLinea(a.texto)}`)
   const sinMotivo = [...new Set([...v.usos_sin_motivo, ...v.descartes_sin_motivo])]
   const partes = [
     '## Aportes del equipo (tablero)', ...(aportes.length ? aportes : ['(el tablero no tiene aportes)']),
