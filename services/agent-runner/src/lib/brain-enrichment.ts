@@ -120,6 +120,8 @@ export interface EnrichmentResult {
    */
   grounding: 'chunk_linked' | 'prose_only'
   error?: string // present only when something soft-failed
+  /** encargo 9 · 18-nov · el pedido apagó el empuje (`extra.sin_empuje: true`, la mesa que ya recibe la base y el índice de su pieza) */
+  brain_push?: 'apagado_por_el_pedido'
   /** E114 · caracteres de la consulta realmente embebida (tras el tope). */
   brain_query_chars?: number
   /** E114 · true si el pedido superaba MAX_QUERY_CHARS y se embebió sólo la cabeza · nunca silencioso. */

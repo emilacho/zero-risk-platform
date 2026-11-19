@@ -223,6 +223,8 @@ export interface BrainEnrichmentResultMeta {
   /** ADR-020 M1 · `prose_only` until real claim→chunk matching exists (honest · NO over-sell). */
   brain_grounding: 'chunk_linked' | 'prose_only'
   brain_error?: string
+  /** encargo 9 · el pedido apagó el empuje (`extra.sin_empuje`) */
+  brain_push?: 'apagado_por_el_pedido'
   /** E114 · caracteres de la consulta embebida y si el pedido se recortó a la cabeza (nunca silencioso). */
   brain_query_chars?: number
   brain_query_truncated?: boolean
@@ -1048,6 +1050,7 @@ function logExecution(
       // E114/E116 · lo que el cerebro declara llega también a la tabla de invocaciones (antes se quedaba en el log).
       brain_query_chars: brainEnrichment.brain_query_chars ?? null,
       brain_query_truncated: brainEnrichment.brain_query_truncated ?? null,
+      brain_push: brainEnrichment.brain_push ?? null,
       brain_chunks_old_version_dropped: brainEnrichment.brain_chunks_old_version_dropped ?? null,
       brain_manual_vigente_id: brainEnrichment.brain_manual_vigente_id ?? null,
       brain_chunks_untrusted_dropped: brainEnrichment.brain_chunks_untrusted_dropped ?? null,
@@ -1161,6 +1164,7 @@ function logExecution(
       // E114/E116 · lo que el cerebro declara llega también a la tabla de invocaciones (antes se quedaba en el log).
       brain_query_chars: brainEnrichment.brain_query_chars ?? null,
       brain_query_truncated: brainEnrichment.brain_query_truncated ?? null,
+      brain_push: brainEnrichment.brain_push ?? null,
       brain_chunks_old_version_dropped: brainEnrichment.brain_chunks_old_version_dropped ?? null,
       brain_manual_vigente_id: brainEnrichment.brain_manual_vigente_id ?? null,
       brain_chunks_untrusted_dropped: brainEnrichment.brain_chunks_untrusted_dropped ?? null,
@@ -1291,7 +1295,9 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
   // prompt. Graceful · NEVER throws · falls back to identity-only prompt
   // when clientId missing OR OpenAI/RPC fails OR brain empty for client.
   const { enrichSystemPromptWithClientBrain } = await import('./brain-enrichment')
-  const enrichment = await enrichSystemPromptWithClientBrain({
+  const { empujeApagadoPorElPedido, enriquecimientoApagadoPorElPedido } = await import('./empuje-del-pedido')
+  // encargo 9 · la mesa con índice apaga el empuje (`extra.sin_empuje: true`); queda anotado en la llamada
+  const enrichment = empujeApagadoPorElPedido(input.extra) ? enriquecimientoApagadoPorElPedido() : await enrichSystemPromptWithClientBrain({
     supabase,
     clientId: input.clientId,
     taskDescription: input.task ?? '',
@@ -1303,6 +1309,8 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
     console.log(
       `[brain-enrich] ${canonicalSlug} · ${enrichment.brain_chunks_count} chunks injected · ${enrichment.brain_query_ms}ms · client=${input.clientId} · $${enrichment.cost_usd.toFixed(6)} · query=${enrichment.brain_query_chars ?? '?'} chars${enrichment.brain_query_truncated ? ' (cabeza · recortada · E114)' : ''}`,
     )
+  } else if (enrichment.brain_push === 'apagado_por_el_pedido') {
+    console.log(`[brain-enrich] ${canonicalSlug} · empuje apagado por el pedido (extra.sin_empuje) · client=${input.clientId}`)
   } else if (input.clientId) {
     // Soft-fail: client_id provided but brain returned nothing · log for audit.
     console.warn(
@@ -1705,6 +1713,7 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
     brain_evidence_refs: enrichment.evidence_refs, // ADR-020 M1
     brain_grounding: enrichment.grounding, // ADR-020 M1 · prose_only until claim→chunk real
     ...(enrichment.error ? { brain_error: enrichment.error } : {}),
+    ...(enrichment.brain_push ? { brain_push: enrichment.brain_push } : {}),
     // E114 · la consulta al cerebro se recorta a la cabeza del pedido · se declara.
     ...(typeof enrichment.brain_query_chars === 'number' ? { brain_query_chars: enrichment.brain_query_chars } : {}),
     ...(typeof enrichment.brain_query_truncated === 'boolean' ? { brain_query_truncated: enrichment.brain_query_truncated } : {}),
