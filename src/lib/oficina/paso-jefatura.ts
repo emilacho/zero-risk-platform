@@ -253,7 +253,8 @@ function sentidoDeLaRevision(crudas: string[], s: NonNullable<OpcionesDeAplicaci
 export function avisoDeLaJefaturaALaMesa(desacuerdos: string[]): string {
   return [
     'La jefatura revisó la pieza y quedaron estos desacuerdos sin resolver. Corrígelos en la pieza (si falta un dato que el brief pide, inclúyelo; si no lo tienes, dilo en la pieza y no lo inventes):',
-    ...desacuerdos.slice(0, 8).map((d) => `- ${d.slice(0, 400)}`),
+    // 19-nov · G6 · firma de Emilio «nada se recorta» (18-nov): van TODOS los desacuerdos, enteros (antes 8 de 400, sin aviso)
+    ...desacuerdos.map((d) => `- ${d}`),
     'Es la única vuelta: después, la pieza va a la bandeja con lo que quede marcado.',
   ].join('\n')
 }
