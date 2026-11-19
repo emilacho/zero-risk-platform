@@ -397,6 +397,8 @@ export async function conceptoAbrir(al: Almacen, cuerpo: Record<string, unknown>
     // hueco 1 de CC3: el mismo sobre otra vez (la oficina es idempotente); el marco se rearma con la nota persistida en la fila
     const sobre: SobreParaLaOficina = {
       tipo_de_mesa: 'concepto', client_id: campana.client_id, campana_id: campana.id, version: ultimo.version, dry_run: campana.seco,
+      // 19-nov · ADENDA 1 · P2 (CC5): la gran idea también recibe el plan ENTERO (antes no: «el brief ya es su lectura», y así la hipótesis B se acortó en el reel auditado)
+      plan_texto: ctx.planTexto,
       marco_texto: marcoDelConcepto({ fichas: await fichasDeLaCampana(al, campana.id), ctx, estrategia, briefTexto: brief.texto_md ?? '', version: ultimo.version, nota: texto(ultimo.nota_de_emilio), inicio: campana.fecha_inicio, hoy: ahora.slice(0, 10), anterior: anteriorConCambios(todos, ultimo.version), perfil: await perfilParaLaMesa(al, campana.client_id, 'gran_idea') }), condiciones: condicionesDe(estrategia, await al.formatos()), insumos_del_banco: insumosDelBanco(estrategia),
     }
     return { status: 200, cuerpo: { ya_abierta: true, version: ultimo.version, concepto_id: idDeConcepto(campana.id, ultimo.version), brief_version: brief.version, sobre } }
@@ -418,6 +420,8 @@ export async function conceptoAbrir(al: Almacen, cuerpo: Record<string, unknown>
   await al.insertarConcepto(fila)
   const sobre: SobreParaLaOficina = {
     tipo_de_mesa: 'concepto', client_id: campana.client_id, campana_id: campana.id, version, dry_run: campana.seco,
+      // 19-nov · ADENDA 1 · P2 (CC5): la gran idea también recibe el plan ENTERO (antes no: «el brief ya es su lectura», y así la hipótesis B se acortó en el reel auditado)
+      plan_texto: ctx.planTexto,
     marco_texto: marcoDelConcepto({ fichas: await fichasDeLaCampana(al, campana.id), ctx, estrategia, briefTexto: brief.texto_md ?? '', version, nota, inicio: campana.fecha_inicio, hoy: ahora.slice(0, 10), anterior: anteriorConCambios([...todos, fila], version), perfil: await perfilParaLaMesa(al, campana.client_id, 'gran_idea') }), condiciones: condicionesDe(estrategia, await al.formatos()), insumos_del_banco: insumosDelBanco(estrategia),
   }
   return { status: 200, cuerpo: { version, concepto_id: idDeConcepto(campana.id, version), brief_version: brief.version, plazo_mesa_min: plazoMin, sobre } }
@@ -839,7 +843,8 @@ export async function hojaEscribir(al: Almacen, cuerpo: Record<string, unknown>,
   if (!filas.length) return err(409, 'E-SIN-FAMILIA', `ninguna fila del lote tiene un formato con familia: ${excluidas.map((x) => x.fila_id).join(', ')} · no se escribe la hoja ni se gasta`)
   const manual = ctx.referencias.find((r) => r.origen === 'manual')
   // 17-nov · Sprint 4 · A entrega 2: las fichas que escribió el lector de ESTA campaña; sin ellas (o sin almacén que las guarde) la hoja lo declara
-  const fichas = await fichasDeLaCampana(al, campana.id)
+  const guardadas = await al.ultimasFichas?.(campana.id)
+  const fichas = guardadas?.contenido ?? null
   // 18-nov · Lenovo (#1147): el estado de la oferta se lee EN VIVO del cerebro (consulta de «Hechos del negocio»); un fallo = null (vale la ficha y se avisa) · nunca frena
   const hechos = al.hechosDelNegocio ? await al.hechosDelNegocio(campana.client_id).catch(() => null) : undefined
   const hoja = escribirHoja({
@@ -847,7 +852,7 @@ export async function hojaEscribir(al: Almacen, cuerpo: Record<string, unknown>,
     hoy: ahora.slice(0, 10), lote_key: cadena(cuerpo.lote_key) ?? (ids ? `${campana.id.slice(0, 8)}:v${version}:ids` : `${campana.id.slice(0, 8)}:v${version}:s${semana}`),
     brief: brief.leido as unknown as BriefCreativoLeido, brief_id: idDeBrief(campana.id, brief.version), concepto: mesa.concepto, concepto_id: idDeConcepto(campana.id, mesa.version ?? 1),
     filas: filas.map((f) => ({ id: f.id, fecha: f.fecha, hora: f.hora, red: f.red, formato: f.formato, pilar: f.pilar, tema: f.tema, datos: f.datos, fase: f.fase ?? null, idea_ref: f.idea_ref ?? null, concepto: f.concepto ?? null, oferta: f.sede ?? null })),
-    formatos, seco: campana.seco, fichas, hechos,
+    formatos, seco: campana.seco, fichas, hechos, pendientes_de_las_fichas: guardadas?.pendientes ?? null,
   })
   return { status: 200, cuerpo: { hoja: hoja.texto_md, briefs: hoja.briefs, provenance: hoja.provenance, avisos: hoja.avisos, filas: filas.map((f) => f.id), ...(excluidas.length ? { excluidas } : {}), brief_version: brief.version, concepto_version: mesa.version } }
 }
