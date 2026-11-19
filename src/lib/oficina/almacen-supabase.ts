@@ -44,7 +44,7 @@ export function almacenDeSupabase(db: Db): Almacen {
       const plantilla: Plantilla = { tipo: String(f.tipo), familia: String(f.familia), ...(typeof f.clase === 'string' ? { clase: f.clase } : {}), pasos: f.pasos as Plantilla['pasos'], indicaciones: (f.indicaciones ?? {}) as Plantilla['indicaciones'], limites: f.limites as Plantilla['limites'] }
       // 17-nov · T7a · los topes que crecen con la pieza se calculan AL CARGAR (para la pieza más larga): el motor ve números. Dato inválido → la plantilla no se activa
       const t = aplicarTopesPorDuracion(plantilla)
-      return { plantilla: t.plantilla, activo: f.activo === true && t.errores.length === 0 }
+      return { plantilla: t.plantilla, activo: f.activo === true && t.errores.length === 0, cruda: plantilla }
     },
     async leerFormato(red, formato): Promise<FilaDeFormato | null> {
       const d = ok(await db.from('oficina_entrega_formatos').select('*').eq('red', red).eq('formato', formato).limit(1), 'leer el formato de entrega') as Fila[] | null

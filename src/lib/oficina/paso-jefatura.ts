@@ -53,7 +53,7 @@ export interface SobreDeRevisionDePieza {
 /** las marcas de los chequeos duros que siguen abiertas: viajan como DATO (regla 10), no entran en el pedido de nadie */
 const marcasHeredadas = (e: Estado): string[] => e.fichas.filter((f) => f.origen === 'chequeo' && f.estado === 'abierta').map((f) => `${f.donde}: ${f.que ?? ''}`.trim())
 
-export function sobreDeLaRevision(enc: Pick<Encargo, 'id' | 'client_id' | 'familia' | 'tope_usd' | 'dry_run' | 'sala_ref'>, pl: Pick<Plantilla, 'familia' | 'clase'>, e: Estado, m: MaterialDeLaRevision): SobreDeRevisionDePieza {
+export function sobreDeLaRevision(enc: Pick<Encargo, 'id' | 'client_id' | 'familia' | 'tope_usd' | 'dry_run' | 'sala_ref'>, pl: Pick<Plantilla, 'familia' | 'clase'> & Partial<Pick<Plantilla, 'limites'>>, e: Estado, m: MaterialDeLaRevision): SobreDeRevisionDePieza {
   const familia = familiaDePieza(pl)
   const heredadas = marcasHeredadas(e)
   const journey = enc.sala_ref && typeof enc.sala_ref._journey_id === 'string' && enc.sala_ref._journey_id ? enc.sala_ref._journey_id : null
@@ -72,7 +72,8 @@ export function sobreDeLaRevision(enc: Pick<Encargo, 'id' | 'client_id' | 'famil
       marcas_heredadas: heredadas,
       contexto: m.contexto,
       // lo que le queda al encargo: la jefatura nunca gasta más de lo que el encargo todavía tiene
-      tope_restante_usd: Math.max(0, +(enc.tope_usd - e.gasto_usd).toFixed(6)),
+      // 19-nov · G5b · 🔴 de CC7: lo que le queda a ESTA pieza (el tope de `plantillaDe`: min(su duración, el encargo)), no al sobre de la campaña
+      tope_restante_usd: Math.max(0, +(Math.min(enc.tope_usd, pl.limites?.tope_encargo_usd ?? enc.tope_usd) - e.gasto_usd).toFixed(6)),
       dry_run: enc.dry_run,
       version: e.artefactos[nombreDeLaPieza]?.version ?? 1,
       generado_por_jefatura: null,
