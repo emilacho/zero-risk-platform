@@ -40,7 +40,7 @@ export const SIN_RECEPCION_DE_LA_CADENA = 'la cadena aún no conecta la recepci�
 
 type Fila = Record<string, unknown>
 type Fetch = typeof fetch
-export interface Entorno { /** T3 de CC1: la recepción de la cadena para el brief y el concepto (mientras no exista, la entrega dice «no recibida») */ puertoDeLaCadena?: import('./puertos').PuertoDeLaCadena; /** la mesa lee las notas del dueño (encendida por omisión; `APRENDIZAJE_DEL_DUENO=0` la apaga): cada agente consulta al cerebro al abrirse su turno */ aprendizajeDelDueno?: boolean;/** el segundo cerebro del productor: con esto, el productor lee las notas del dueño y se auto-revisa; sin esto (por omisión) la oficina funciona exactamente como antes */ notasDelDueno?: boolean; baseUrl: string; internalKey: string; /** 11-nov · camino B · el servicio de Railway que encuadra fotos y une clips (`RAILWAY_AGENT_RUNNER_URL`); sin él, el video plano por plano falla visible sin gastar */ runnerUrl?: string; openaiKey?: string; revisorModelo?: string; revisorPrecioEntrada?: number; revisorPrecioSalida?: number; slackToken?: string; slackCanalHilo?: string; slackCanalAlertas?: string; bucket?: string; /** esperas entre reintentos del revisor (ms); por omisión 5 s, 20 s, 60 s */ esperasRevisorMs?: number[]; /** dormir (inyectable en pruebas) */ esperar?: (ms: number) => Promise<void>; /** J8a · para despertar el flujo `jefatura · turno` (la llave de despacho y la base de los webhooks de n8n; sin ellas la revisión se abre igual y la despierta el vigía de la jefatura) */ dispatchKey?: string; n8nWebhookBase?: string; /** la llave de los webhooks del portero (x-portero-key): sale de Doppler, nunca se escribe en un flujo ni en el código */ porteroWebhookKey?: string;/** S2-5 · el servicio de render HTML de Railway (RENDER_HTML_URL + RENDER_HTML_KEY); sin él, el anuncio fijo se dibuja como siempre */ renderHtml?: import('../render-html/cliente').ServicioDeRender | null; }
+export interface Entorno { /** 18-nov · la mesa lee el ÍNDICE del cerebro y pide por número (`OFICINA_MESA_INDICE=1`); apagado por omisión: la mesa abre con el pedido de siempre */ mesaIndice?: boolean; /** T3 de CC1: la recepción de la cadena para el brief y el concepto (mientras no exista, la entrega dice «no recibida») */ puertoDeLaCadena?: import('./puertos').PuertoDeLaCadena; /** la mesa lee las notas del dueño (encendida por omisión; `APRENDIZAJE_DEL_DUENO=0` la apaga): cada agente consulta al cerebro al abrirse su turno */ aprendizajeDelDueno?: boolean;/** el segundo cerebro del productor: con esto, el productor lee las notas del dueño y se auto-revisa; sin esto (por omisión) la oficina funciona exactamente como antes */ notasDelDueno?: boolean; baseUrl: string; internalKey: string; /** 11-nov · camino B · el servicio de Railway que encuadra fotos y une clips (`RAILWAY_AGENT_RUNNER_URL`); sin él, el video plano por plano falla visible sin gastar */ runnerUrl?: string; openaiKey?: string; revisorModelo?: string; revisorPrecioEntrada?: number; revisorPrecioSalida?: number; slackToken?: string; slackCanalHilo?: string; slackCanalAlertas?: string; bucket?: string; /** esperas entre reintentos del revisor (ms); por omisión 5 s, 20 s, 60 s */ esperasRevisorMs?: number[]; /** dormir (inyectable en pruebas) */ esperar?: (ms: number) => Promise<void>; /** J8a · para despertar el flujo `jefatura · turno` (la llave de despacho y la base de los webhooks de n8n; sin ellas la revisión se abre igual y la despierta el vigía de la jefatura) */ dispatchKey?: string; n8nWebhookBase?: string; /** la llave de los webhooks del portero (x-portero-key): sale de Doppler, nunca se escribe en un flujo ni en el código */ porteroWebhookKey?: string;/** S2-5 · el servicio de render HTML de Railway (RENDER_HTML_URL + RENDER_HTML_KEY); sin él, el anuncio fijo se dibuja como siempre */ renderHtml?: import('../render-html/cliente').ServicioDeRender | null; }
 
 /** reintentos del revisor GPT (firma de Emilio, 10-oct): espera creciente antes de cada uno */
 export { ESPERAS_DEL_REVISOR_MS }
@@ -255,6 +255,25 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
         return out
       } catch (e) { return { error: e instanceof Error ? e.message : String(e) } }
     },
+    // 18-nov · EL ÍNDICE DEL CEREBRO para la mesa (contrato con CC-CEREBRO); solo con el interruptor encendido. La llave interna viaja SOLO a nuestra propia casa
+    ...(env.mesaIndice ? {
+      indice: {
+        async indice(p: import('./mesa/indice-del-cerebro').PedidoDelIndice) {
+          try {
+            const r = await f(`${env.baseUrl}/api/brain/portero/indice`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': env.internalKey }, body: JSON.stringify(p), signal: AbortSignal.timeout(120000) })
+            const j = (await r.json().catch(() => ({}))) as Record<string, unknown>
+            return r.ok ? { ok: true as const, body: j } : { ok: false as const, error: String(j.detalle ?? j.error ?? `HTTP ${r.status}`), http: r.status }
+          } catch (e) { return { ok: false as const, error: e instanceof Error ? e.message : String(e) } }
+        },
+        async entregar(p: import('./mesa/indice-del-cerebro').PedidoDeFichas) {
+          try {
+            const r = await f(`${env.baseUrl}/api/brain/portero/entregar`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': env.internalKey }, body: JSON.stringify(p), signal: AbortSignal.timeout(55000) })
+            const j = (await r.json().catch(() => ({}))) as Record<string, unknown>
+            return r.ok ? { ok: true as const, body: j } : { ok: false as const, error: String(j.detalle ?? j.error ?? `HTTP ${r.status}`), http: r.status }
+          } catch (e) { return { ok: false as const, error: e instanceof Error ? e.message : String(e) } }
+        },
+      },
+    } : {}),
     // MATERIAL · el portero del cerebro (el pedido y la lectura de su resultado); la llave interna viaja SOLO a nuestra propia casa
     cerebro: {
       avisarA: `${env.baseUrl}/api/oficina/material-vuelta`,

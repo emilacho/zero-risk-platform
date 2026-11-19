@@ -22,6 +22,7 @@ import { condicionesDeLaPieza, direccionDe, especialistasPertinentes, ingenieroD
 import { condicionesDelVideo } from './condiciones-de-video'
 import { FORMATO_DE_PIEZA, destinatarioDe, leerRespuestaSobreNotas, quitarLineasDeNotas, rastroDeLasNotas, seccionDeNotasDelDueno, tareaParaConsultar } from './aprendizaje'
 import { separarRespuestas } from '../sentido-contra-la-ficha'
+import { leerIndice, pedidoDelIndice, piezaParaElCerebro } from './indice-del-cerebro'
 import { integracionDevuelta, pegarCitas, tableroParaLaJefatura, textoDeLoQueFalta } from './libro'
 import { siguienteDeLaMesa, techoDe, type ContextoDeLaMesa } from './planificador'
 import { traducirPieza, hayImagenesAGenerar, pedidoDeImagen, type ConceptoDeImagen, type OpcionesDeTraduccion, type Traduccion } from './traductor'
@@ -98,7 +99,7 @@ function contextoDe(enc: Encargo, est: EstadoMesa, tope: number = enc.tope_usd):
     return { cliente_nombre: m?.cliente_nombre ?? '', tipo: est.tipo, brief_id: enc.brief_id, brief_texto: m?.marco_texto ?? '(sin marco)', manual_texto: m?.manual_texto ?? '', plan_texto: m?.plan_texto ?? null, fotos: m?.fotos ?? [], tope_usd: tope, gasto_usd: enc.estado_del_motor.gasto_usd }
   }
   const b = baseDeLaminas(enc.estado_del_motor)
-  return { cliente_nombre: b.F.cliente_nombre, tipo: est.tipo, brief_id: enc.brief_id, brief_texto: b.brief.texto, manual_texto: b.F.manual_texto, plan_texto: b.F.plan_texto, fotos: b.F.fotos, tope_usd: tope, gasto_usd: enc.estado_del_motor.gasto_usd, ...(est.video ? { video: est.video } : {}), ...perfilDeLaMesa(b.F) }
+  return { ...(est.indice ? { cerebro: est.indice } : {}), cliente_nombre: b.F.cliente_nombre, tipo: est.tipo, brief_id: enc.brief_id, brief_texto: b.brief.texto, manual_texto: b.F.manual_texto, plan_texto: b.F.plan_texto, fotos: b.F.fotos, tope_usd: tope, gasto_usd: enc.estado_del_motor.gasto_usd, ...(est.video ? { video: est.video } : {}), ...perfilDeLaMesa(b.F) }
 }
 
 /** lo que pide ESTA pieza según su brief (puro): fotos propias etiquetadas, hechos del cliente, lo más gustado; el portero decide qué hay */
@@ -194,7 +195,7 @@ export async function pedidoDelTurno(P: Puertos, enc: Encargo, est: EstadoMesa, 
   const task = armarTarea({ tipo, agente: t.agente, tarjeta, est, libro, c, pedido: pedidoAporte, faltanCitas, metodo, ...(imagenesARedactar ? { imagenesARedactar } : {}), ...(relleno ? { relleno } : {}) }) + seccionDeCambiosDelDueno(enc.sala_ref) + seccionDeNotasDelDueno(t.notas_del_dueno, t.tipo) + cierreConElObjetivo(c, tipo)
   const paso = `${PREFIJO}${t.tipo}:${t.agente}`
   const reserva = Math.max(0.1, Math.min(COTAS.RESERVA_POR_TURNO_USD, techoDe(tope) - enc.estado_del_motor.gasto_usd))
-  return { agente: t.agente, paso, pedido: pedidoDeAgente({ agente: t.agente, task, encargo_id: enc.id, client_id: enc.client_id, dry_run: enc.dry_run, paso, reserva_usd: +reserva.toFixed(4), es_pieza: !esDeLaCadena(est.tipo), images: imagenesDelTurno(tipo, c.fotos) }) }
+  return { agente: t.agente, paso, pedido: pedidoDeAgente({ agente: t.agente, task, encargo_id: enc.id, client_id: enc.client_id, dry_run: enc.dry_run, paso, reserva_usd: +reserva.toFixed(4), es_pieza: !esDeLaCadena(est.tipo), images: imagenesDelTurno(tipo, c.fotos), sin_empuje: !!c.cerebro }) }
 }
 
 /** Sprint 1 · mejora 4 · las imágenes que la pieza integrada pide generar (ref + lo que pidió la dirección), leídas con el mismo traductor que usa el cierre · puro respecto del estado */
@@ -288,8 +289,19 @@ export async function avanzarMesa(P: Puertos, enc0: Encargo, pl: Plantilla, indi
     if (est.marcas.apertura_enriquecida !== true) {
       const portero = porteroDe(est.directorio_congelado)?.agente
       est = { ...est, marcas: { ...est.marcas, apertura_enriquecida: true } }
+      // 18-nov · LA MESA LEE EL ÍNDICE DEL CEREBRO (firma de Emilio 16:53 Zúrich), SIN CASILLAS (corrección 19:19 Zúrich): en las mesas de pieza, UNA lectura al abrir
+      //   con la HOJA completa de la pieza (brief + plan). Con el índice no sale el pedido mezclado: cada turno lee la base completa y pide por número (`pedir_fichas`).
+      //   Si el índice no responde, la mesa NO se frena: queda la marca con el motivo y abre con el pedido de siempre.
+      if (P.indice && !esDeLaCadena(est.tipo)) {
+        const bf = baseDeLaminas(enc.estado_del_motor)
+        const ped = pedidoDelIndice({ client_id: enc.client_id, agente: 'oficina-creativa', pieza: piezaParaElCerebro({ encargo_id: enc.id, fila: enc.sala_ref?.fila, brief_texto: bf.brief.texto, plan_texto: bf.F.plan_texto }) })
+        const r = await P.indice.indice(ped)
+        const ix = r.ok ? leerIndice(r.body) : null
+        if (ix) est = { ...est, indice: ix }
+        else est = { ...est, marcas: { ...est.marcas, indice_sin_respuesta: r.ok ? 'el índice no trajo huella ni lista' : String(r.error) } }
+      }
       // 10-nov · la mesa de reubicación decide fechas con lo que la cadena le pasa: NO abre con el cerebro (no se toca el cerebro)
-      if (P.cerebro && portero && est.tipo !== 'reubicacion' && est.tipo !== 'fallidos' && est.tipo !== 'banco') {
+      if (!est.indice && P.cerebro && portero && est.tipo !== 'reubicacion' && est.tipo !== 'fallidos' && est.tipo !== 'banco') {
         let que: string
         if (est.tipo === 'brief' || est.tipo === 'concepto') que = pedidoDeAperturaDeLaCadena(est.tipo, marcoDe(enc.estado_del_motor)?.cliente_nombre || 'este cliente')
         else {

@@ -219,7 +219,7 @@ const integracionCon = (libro: Array<{ n: number; de: string; tipo: string }>, c
 
 type Entregas = { briefs: Array<Parameters<PuertoDeLaCadena['entregarBrief']>[0]>; conceptos: Array<Parameters<PuertoDeLaCadena['entregarConcepto']>[0]>; pedidosAlPortero: Array<Record<string, unknown>> }
 
-async function montar(tipo: 'brief' | 'concepto', o: { directorio?: Tarjeta[]; cerebro?: boolean; cadenaFalla?: boolean; plantillaActiva?: boolean; condiciones?: string[]; dry?: boolean; insumos?: SobreDeLaCadena['insumos_del_banco']; extra?: Partial<SobreDeLaCadena> } = {}) {
+async function montar(tipo: 'brief' | 'concepto', o: { directorio?: Tarjeta[]; cerebro?: boolean; cadenaFalla?: boolean; plantillaActiva?: boolean; condiciones?: string[]; dry?: boolean; /** 18-nov · cuenta las lecturas del índice del cerebro */ indice?: { lecturas: number }; insumos?: SobreDeLaCadena['insumos_del_banco']; extra?: Partial<SobreDeLaCadena> } = {}) {
   const pl = tipo === 'brief' ? BRIEF_MESA : CONCEPTO_MESA
   const M = crearMemoria({ plantilla: pl, config: { familias_activas: [pl.familia] } })
   if (o.plantillaActiva === false) M.plantilla = { plantilla: M.plantilla!.plantilla, activo: false }
@@ -238,9 +238,22 @@ async function montar(tipo: 'brief' | 'concepto', o: { directorio?: Tarjeta[]; c
     }
     M.P.cerebro = cerebro
   }
+  if (o.indice) { const ix = o.indice; M.P.indice = { indice: async () => { ix.lecturas++; return { ok: true, body: { lista_texto: '1. algo', huella: 'h' } } }, entregar: async () => ({ ok: false, error: 'no se usa' }) } }
   const a = await abrirMesaDeLaCadena(M.P, sobre(tipo, { dry_run: o.dry ?? false, condiciones: o.condiciones ?? [], ...(o.insumos ? { insumos_del_banco: o.insumos } : {}), ...(o.extra ?? {}) }), avanzar)
   return { M, MS, hecho, a, id: String(a.cuerpo.encargo_id ?? '') }
 }
+
+// 18-nov · el índice del cerebro es solo para las mesas de pieza: la cadena (brief, concepto) sigue abriendo con el pedido de siempre
+describe('las mesas de la cadena no leen el índice del cerebro (en esta entrega)', () => {
+  for (const tipo of ['brief', 'concepto'] as const) {
+    it(`${tipo}: con el puerto del índice puesto, no lo pide y el pedido al portero sale como siempre`, async () => {
+      const indice = { lecturas: 0 }
+      const { hecho } = await montar(tipo, { indice })
+      expect(indice.lecturas).toBe(0)
+      expect(hecho.pedidosAlPortero).toHaveLength(1)
+    })
+  }
+})
 
 type Turno = { paso: string; agente: string; tipo: string; task: string; n: number }
 type Montaje = Awaited<ReturnType<typeof montar>>

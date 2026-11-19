@@ -40,11 +40,12 @@ export type Turno = { paso: string; agente: string; tipo: string; task: string; 
 export type Responder = (t: Turno, veces: number) => { texto?: string; error?: string; costo_usd?: number } | undefined
 
 // 19-nov · ADENDA 1 · P2b: `fuentes` opcional (p. ej. el perfil del público); sin ella, el arnés de siempre
-export async function montar(o: { dry_run?: boolean; tope?: number; aprendizaje?: NonNullable<Memoria['P']['aprendizaje']>; fuentes?: Parameters<typeof crearMemoria>[0] extends infer X ? X extends { fuentes?: infer F } ? F : never : never } = {}) {
+export async function montar(o: { dry_run?: boolean; tope?: number; aprendizaje?: NonNullable<Memoria['P']['aprendizaje']>; /** 18-nov · el índice del cerebro (falso) */ indice?: NonNullable<Memoria['P']['indice']>; fuentes?: Parameters<typeof crearMemoria>[0] extends infer X ? X extends { fuentes?: infer F } ? F : never : never } = {}) {
   const M: Memoria = crearMemoria({ parte: parteCon(BRIEF_CARRUSEL), plantilla: CARRUSEL_MESA, tope: o.tope, ...(o.fuentes ? { fuentes: o.fuentes } : {}) })
   const MS: MesaEnMemoria = crearMesaEnMemoria()
   M.P.mesa = MS
   if (o.aprendizaje) M.P.aprendizaje = o.aprendizaje
+  if (o.indice) M.P.indice = o.indice
   const a = await abrirEncargo(M.P, { cuerpo: { parte_id: PARTE, brief_id: 'BRF-0100', dry_run: o.dry_run ?? true, familia: 'carrusel_mesa' }, client_id: CLIENTE, target_step_id: TARGET_STEP_PRODUCIR })
   return { M, MS, a, id: String(a.cuerpo.encargo_id) }
 }

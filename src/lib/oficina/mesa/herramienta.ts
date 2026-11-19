@@ -8,11 +8,13 @@ import type { Respuesta } from '../orquestador'
 import type { Puertos } from '../puertos'
 import { porteroDe } from './directorio'
 import { huellaDePedido, idasYVueltas } from './libro'
+import { fichasEnTexto, leerEntrega, numerosPedidos, piezaParaElCerebro } from './indice-del-cerebro'
+import { baseDeLaminas } from '../orquestador-laminas'
 import { COTAS, COTAS_DE_LA_GRAN_IDEA, esFamiliaMesa, profundidadMaximaDe, type EstadoMesa, type TipoDeAporte } from './tipos'
 import { TOPE_DE_LO_ESCRITO } from '../../limites-de-tamano'
 
 const r = (status: number, cuerpo: Record<string, unknown>): Respuesta => ({ status, cuerpo })
-const HERRAMIENTAS = ['mesa_pedir', 'mesa_devolver', 'pedir_material'] as const
+const HERRAMIENTAS = ['mesa_pedir', 'mesa_devolver', 'pedir_material', 'pedir_fichas'] as const
 type Herramienta = (typeof HERRAMIENTAS)[number]
 /** máximo de pedidos/devoluciones que un mismo agente puede anotar en una pieza (el planificador además acota por pareja y profundidad) */
 export const MAX_PEDIDOS_POR_AGENTE = 6
@@ -41,6 +43,21 @@ export async function registrarHerramienta(P: Puertos, cuerpo: unknown): Promise
   const abierto = est?.turno_abierto
   // solo el agente del turno abierto escribe en el tablero (un pedido fuera de turno o «en nombre de» otro no se anota)
   if (!est || !abierto || abierto.agente !== de) return r(409, { ok: false, error: 'fuera_de_turno', detalle: `${de} no tiene el turno abierto en esta pieza` })
+
+  // 18-nov · `pedir_fichas`: el original completo de las fichas del índice que la mesa leyó al abrir, DENTRO del mismo turno. No escribe el tablero
+  //   (el rastro lo guarda el cerebro) y no cuenta como pedido a un compañero. Lo que no vuelve sale «no consta».
+  if (herramienta === 'pedir_fichas') {
+    if (!P.indice || !est.indice) return r(200, { ok: false, motivo: 'esta pieza no tiene el índice del cerebro: usa pedir_material si de verdad te falta algo' })
+    const numeros = numerosPedidos(b.numeros)
+    if (!numeros.length) return r(200, { ok: false, motivo: 'di qué números del índice quieres (por ejemplo [3, 12])' })
+    // sin casillas: la pieza va con su hoja completa (el cerebro rechaza `para_que` y cualquier casilla)
+    const bf = baseDeLaminas(enc.estado_del_motor)
+    const pieza = piezaParaElCerebro({ encargo_id: enc.id, fila: enc.sala_ref?.fila, brief_texto: bf.brief.texto, plan_texto: bf.F.plan_texto })
+    const e = await P.indice.entregar({ cliente: enc.client_id, agente: de, turno: `${abierto.tipo}:${de}`, pieza, numeros, huella: est.indice.huella })
+    if (!e.ok) return r(200, { ok: false, motivo: `el cerebro no respondió (${e.error}); sigue con lo que tienes y no des por sabido lo que no leíste` })
+    const fichas = leerEntrega(e.body, numeros)
+    return r(200, { ok: true, fichas: fichasEnTexto(fichas) })
+  }
 
   const libro = await P.mesa.libro(encargoId)
   const hechos = libro.filter((a) => (a.tipo === 'pide' || a.tipo === 'devuelve') && a.de === de).length

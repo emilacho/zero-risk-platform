@@ -6,6 +6,7 @@ import { NextResponse } from 'next/server'
 import { checkInternalKey } from '@/lib/internal-auth'
 import { armarIndice } from '@/lib/cerebro/portero/indice'
 import { consultaDelEntorno } from '@/lib/cerebro/portero/entorno'
+import { registrarEnLaBase } from '@/lib/portero-alimenta/rastro-de-la-pieza'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -16,6 +17,6 @@ export async function POST(request: Request) {
   if (!auth.ok) return NextResponse.json({ error: 'unauthorized', code: 'E-AUTH-001', detail: auth.reason }, { status: 401 })
   let cuerpo: unknown
   try { cuerpo = await request.json() } catch { return NextResponse.json({ error: 'invalid_json', code: 'E-INPUT-PARSE' }, { status: 400 }) }
-  const r = await armarIndice(consultaDelEntorno(), cuerpo)
+  const r = await armarIndice(consultaDelEntorno(), cuerpo, { registrar: registrarEnLaBase })
   return NextResponse.json(r.cuerpo, { status: r.status })
 }
