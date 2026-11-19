@@ -19,7 +19,9 @@ describe('ADENDA 1 · P1 · (b) los documentos van arriba, cada uno con su fuent
   it('🔴 el manual, el brief y el plan van en <documento fuente="…">, antes del turno', () => {
     const t = tarea('dirigir')
     for (const [fuente, texto] of [['el manual de marca', 'EL-MANUAL'], ['el brief de este entregable', BRIEF_DE_PIEZA], ['el plan de trabajo', 'EL-PLAN']]) {
-      expect(t, fuente).toContain(documento(fuente, texto))
+      // el texto esperado va LITERAL (no con `documento()`): si la etiqueta se rompe, la prueba lo ve (sabotaje a1)
+      expect(t, fuente).toContain(`<documento fuente="${fuente}">\n${texto}\n</documento>`)
+      expect(documento(fuente, texto)).toBe(`<documento fuente="${fuente}">\n${texto}\n</documento>`)
       expect(t.indexOf(`<documento fuente="${fuente}">`), fuente).toBeLessThan(t.indexOf('## Tu turno'))
     }
   })

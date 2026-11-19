@@ -19,7 +19,8 @@ const TAREAS: Array<[string, string, string]> = [
 
 describe('ADENDA 1 · P1c · el molde en la cadena', () => {
   it.each(TAREAS)('🔴 %s: el plan va en su <documento fuente> y ARRIBA de «# Qué te pido»', (_, t) => {
-    expect(t).toContain(documentoDeLaCadena('el plan', 'EL-PLAN-ENTERO'))
+    expect(t).toContain('<documento fuente="el plan">\nEL-PLAN-ENTERO\n</documento>')
+    expect(documentoDeLaCadena('el plan', 'X')).toBe('<documento fuente="el plan">\nX\n</documento>')
     expect(t.indexOf('<documento fuente="el plan">')).toBeLessThan(t.indexOf('# Qué te pido'))
     expect(t.indexOf('# REFERENCIAS')).toBeLessThan(t.indexOf('# Qué te pido'))
   })
@@ -43,6 +44,8 @@ describe('ADENDA 1 · P1c · el molde en la cadena', () => {
   it('🔴 las fechas: las páginas arriba, la instrucción después', () => {
     const t = tareaDeFechas({ tipo: 'feriados', ambito: 'nacional', anio: 2026, paginas: [{ url: 'https://ejemplo.test', texto: 'TEXTO-DE-LA-PAGINA' }] })
     expect(t.indexOf('TEXTO-DE-LA-PAGINA')).toBeLessThan(t.indexOf('# Qué te pido'))
+    // el molde (alcance y lo que se conserva) también va en las fechas, después de la instrucción (sabotaje c5)
+    expect(t.indexOf(MOLDE_DE_LA_CADENA)).toBeGreaterThan(t.indexOf('# Qué te pido'))
     expect(t).toContain('# Lo que importa\nEl objetivo: las fechas que las páginas dicen explícitamente')
   })
 })
