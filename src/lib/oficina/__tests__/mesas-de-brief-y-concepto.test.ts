@@ -182,7 +182,7 @@ const integracionCon = (libro: Array<{ n: number; de: string; tipo: string }>, c
 
 type Entregas = { briefs: Array<Parameters<PuertoDeLaCadena['entregarBrief']>[0]>; conceptos: Array<Parameters<PuertoDeLaCadena['entregarConcepto']>[0]>; pedidosAlPortero: Array<Record<string, unknown>> }
 
-async function montar(tipo: 'brief' | 'concepto', o: { directorio?: Tarjeta[]; cerebro?: boolean; cadenaFalla?: boolean; plantillaActiva?: boolean; condiciones?: string[]; dry?: boolean } = {}) {
+async function montar(tipo: 'brief' | 'concepto', o: { directorio?: Tarjeta[]; cerebro?: boolean; cadenaFalla?: boolean; plantillaActiva?: boolean; condiciones?: string[]; dry?: boolean; insumos?: SobreDeLaCadena['insumos_del_banco'] } = {}) {
   const pl = tipo === 'brief' ? BRIEF_MESA : CONCEPTO_MESA
   const M = crearMemoria({ plantilla: pl, config: { familias_activas: [pl.familia] } })
   if (o.plantillaActiva === false) M.plantilla = { plantilla: M.plantilla!.plantilla, activo: false }
@@ -201,7 +201,7 @@ async function montar(tipo: 'brief' | 'concepto', o: { directorio?: Tarjeta[]; c
     }
     M.P.cerebro = cerebro
   }
-  const a = await abrirMesaDeLaCadena(M.P, sobre(tipo, { dry_run: o.dry ?? false, condiciones: o.condiciones ?? [] }), avanzar)
+  const a = await abrirMesaDeLaCadena(M.P, sobre(tipo, { dry_run: o.dry ?? false, condiciones: o.condiciones ?? [], ...(o.insumos ? { insumos_del_banco: o.insumos } : {}) }), avanzar)
   return { M, MS, hecho, a, id: String(a.cuerpo.encargo_id ?? '') }
 }
 
@@ -541,7 +541,11 @@ describe('09-nov · la entrega de la mesa de CONCEPTO lleva las líneas de idea 
     expect(texto).toContain('## Banco de ideas · líneas de los aportes del equipo')
     const aportes = m.MS.filas.filter((x) => x.encargo_id === m.id && x.tipo === 'aporta')
     expect(aportes.length).toBeGreaterThan(0)
-    for (const a of aportes) expect(texto).toContain(limpia(a.de))
+    // 18-nov · ids únicos: todos escriben C1-I01; el primero lo conserva y los demás entran renumerados (C1-I02, …), con el resto de su línea igual
+    for (const a of aportes) expect(texto).toContain(limpia(a.de).replace(/^- C1-I01 · /, ''))
+    const enTexto = [...texto.matchAll(/^- (C1-I\d{2,}) · instagram · foto · la idea de /gm)].map((x) => x[1])
+    expect(new Set(enTexto).size).toBe(enTexto.length)
+    expect(enTexto).toContain('C1-I01')
     expect(texto).not.toContain('## Mi banco')
   })
   it('cerrada por tope con integración: también lleva las líneas de idea de los aportes', async () => {
@@ -554,5 +558,41 @@ describe('09-nov · la entrega de la mesa de CONCEPTO lleva las líneas de idea 
     const m = await montar('brief')
     await jugar(m, (t) => (t.tipo === 'integrar' ? { texto: '## Insight\nlo que sea\n## Mensaje\nuno' } : undefined))
     expect(m.hecho.briefs[0].texto).toBe('## Insight\nlo que sea\n## Mensaje\nuno')
+  })
+})
+
+// 18-nov · RELLENO DEL BANCO de punta a punta (CC1 · la (b) de Lenovo): el sobre trae la cuota, la dirección rellena UNA vez lo que falta y la cadena lo recibe
+describe('la mesa del CONCEPTO · relleno del banco hasta la cuota', () => {
+  const linea = (id: string, t: string) => `- ${id} · instagram · post · ${t} · mensaje: m ${t} · gancho: g ${t}`
+  const responder = (t: Turno): Dado => t.tipo === 'aportar' ? { texto: linea('C1-I01', `de ${t.agente}`) } : t.tipo === 'rellenar_banco' ? { texto: linea('C1-I03', 'la que faltaba') } : undefined
+
+  it('🔴 cuota 3 y el equipo trae 2: un solo turno de relleno (después de integrar), con lo que falta y desde qué id; se anota con su cabecera y la cadena recibe las 3', async () => {
+    const m = await montar('concepto', { insumos: { fases: [{ clave: 'abrir', semanas: 1 }], redes: [{ red: 'instagram', huecos_por_semana: 3 }] } })
+    const { ultima, turnos } = await jugar(m, responder)
+    const tipos = turnos.map((t) => t.tipo)
+    expect(tipos.filter((x) => x === 'rellenar_banco')).toHaveLength(1)
+    expect(tipos.lastIndexOf('integrar')).toBeLessThan(tipos.indexOf('rellenar_banco'))
+    // el relleno NO dispara otra integración
+    expect(tipos.slice(tipos.indexOf('rellenar_banco'))).not.toContain('integrar')
+    const tarea = turnos.find((t) => t.tipo === 'rellenar_banco')!.task
+    expect(tarea).toContain('«abrir»')
+    expect(tarea).toContain('- instagram: faltan 1 (la cuota es 3)')
+    expect(tarea).toContain('**C1-I03**')
+    const fila = m.MS.filas.filter((x) => x.encargo_id === m.id).find((x) => x.texto.includes('la que faltaba'))!
+    expect(fila).toMatchObject({ tipo: 'aporta', de: 'creative-director-mesa' })
+    expect(fila.texto.startsWith('## Relleno del banco · abrir')).toBe(true)
+    expect(ultima.cuerpo).toMatchObject({ accion: 'cerrado', estado: 'cerrado', resultado_para_la_sala: 'concepto_mesa' })
+    const entregado = m.hecho.conceptos[0].texto ?? ''
+    expect(entregado).toContain(linea('C1-I03', 'la que faltaba'))
+    expect(entregado).toContain(linea('C1-I01', 'de content-creator'))
+    expect(entregado).toContain(linea('C1-I02', 'de design-visual-storyteller'))
+  })
+  it('🔴 sin insumos en el sobre (o con la cuota cumplida) la mesa es la de siempre: ningún turno de relleno', async () => {
+    for (const insumos of [undefined, { fases: [{ clave: 'abrir', semanas: 1 }], redes: [{ red: 'instagram', huecos_por_semana: 2 }] }]) {
+      const m = await montar('concepto', insumos ? { insumos } : {})
+      const { turnos, ultima } = await jugar(m, responder)
+      expect(turnos.map((t) => t.tipo)).not.toContain('rellenar_banco')
+      expect(ultima.cuerpo).toMatchObject({ accion: 'cerrado', estado: 'cerrado' })
+    }
   })
 })

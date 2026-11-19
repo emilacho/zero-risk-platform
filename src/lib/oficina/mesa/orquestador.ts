@@ -9,7 +9,7 @@ import { avanzar, cerrarPorTope, fallar, plantillaDe, type Respuesta, type Resul
 import { baseDeLaminas } from '../orquestador-laminas'
 import { fotosDeReferencia } from '../foto-de-referencia'
 import { seccionDeCambiosDelDueno } from '../cambios-del-dueno'
-import { devolucionDelBrief, entregarALaCadena, marcoDe, textoDeLaMesaParaLaCadena } from './de-la-cadena'
+import { conCabeceraDelRelleno, devolucionDelBrief, entregarALaCadena, marcoDe, rellenoPendiente, textoDeLaMesaParaLaCadena } from './de-la-cadena'
 import { conMarcaDeLaCritica } from './critica'
 import { abrirMaterialDeLaMesa, materialDe } from '../material-orquestador'
 import { registrarPaso } from '../motor'
@@ -184,7 +184,8 @@ export async function pedidoDelTurno(P: Puertos, enc: Encargo, est: EstadoMesa, 
   const referencias = await referenciasDelTurno(P, enc, est)
   const metodo = [await metodoDelAsiento(P, t.agente), biblioteca, referencias].filter(Boolean).join('\n\n') || undefined
   const imagenesARedactar = tipo === 'redactar_prompts' ? imagenesAGenerarDe(enc, est) : undefined
-  const task = armarTarea({ tipo, agente: t.agente, tarjeta, est, libro, c, pedido: pedidoAporte, faltanCitas, metodo, ...(imagenesARedactar ? { imagenesARedactar } : {}) }) + seccionDeCambiosDelDueno(enc.sala_ref) + seccionDeNotasDelDueno(t.notas_del_dueno, t.tipo)
+  const relleno = tipo === 'rellenar_banco' ? rellenoPendiente(marcoDe(enc.estado_del_motor), libro) ?? undefined : undefined
+  const task = armarTarea({ tipo, agente: t.agente, tarjeta, est, libro, c, pedido: pedidoAporte, faltanCitas, metodo, ...(imagenesARedactar ? { imagenesARedactar } : {}), ...(relleno ? { relleno } : {}) }) + seccionDeCambiosDelDueno(enc.sala_ref) + seccionDeNotasDelDueno(t.notas_del_dueno, t.tipo)
   const paso = `${PREFIJO}${t.tipo}:${t.agente}`
   const reserva = Math.max(0.1, Math.min(COTAS.RESERVA_POR_TURNO_USD, techoDe(enc.tope_usd) - enc.estado_del_motor.gasto_usd))
   return { agente: t.agente, paso, pedido: pedidoDeAgente({ agente: t.agente, task, encargo_id: enc.id, client_id: enc.client_id, dry_run: enc.dry_run, paso, reserva_usd: +reserva.toFixed(4), es_pieza: !esDeLaCadena(est.tipo), images: imagenesDelTurno(tipo, c.fotos) }) }
@@ -344,7 +345,7 @@ export async function avanzarMesa(P: Puertos, enc0: Encargo, pl: Plantilla, indi
       // 17-nov · con propuestas en imagen: hay imágenes a generar si ALGUNA propuesta las pide (la lista del ingeniero, la misma que recibe)
       : esDeImagen(est.tipo) && (est.imagen?.propuestas ?? 1) > 1 ? imagenesAGenerarDe(enc, est).length > 0
       : hayImagenesAGenerar(est.pieza_texto, est.tipo, (b!.elementos ?? []).map((x) => x.ref))
-    const acc = siguienteDeLaMesa(est, libro, { gasto_usd: enc.estado_del_motor.gasto_usd, tope_usd: enc.tope_usd, hayImagenGenerada, tipo: est.tipo, ...reservaDeLaMesa(pl, est.tipo, enc.estado_del_motor), ...(typeof pl.limites.rondas_minimas === 'number' ? { rondas_minimas: pl.limites.rondas_minimas } : {}), ...(typeof pl.limites.rondas_de_la_mesa === 'number' ? { rondas_max: pl.limites.rondas_de_la_mesa } : {}), ...cotaDeLaMesaEnCurso(pl, est, enc.estado_del_motor) })
+    const acc = siguienteDeLaMesa(est, libro, { gasto_usd: enc.estado_del_motor.gasto_usd, tope_usd: enc.tope_usd, hayImagenGenerada, tipo: est.tipo, ...reservaDeLaMesa(pl, est.tipo, enc.estado_del_motor), ...(typeof pl.limites.rondas_minimas === 'number' ? { rondas_minimas: pl.limites.rondas_minimas } : {}), ...(typeof pl.limites.rondas_de_la_mesa === 'number' ? { rondas_max: pl.limites.rondas_de_la_mesa } : {}), ...cotaDeLaMesaEnCurso(pl, est, enc.estado_del_motor), relleno_del_banco: rellenoPendiente(marcoDe(enc.estado_del_motor), libro) })
 
     if (acc.accion === 'cierre_por_tope') {
       await guardarMesa(P, enc, { ...est, fase: 'cerrada' })
@@ -645,7 +646,9 @@ export async function recibirResultadoMesa(P: Puertos, encargoId: string, n: num
     const base = integracionDevuelta(libroAntes)
     if (base) textoFinal = pegarCitas(base.texto, textoFinal, t.faltan_citas?.inexistentes ?? [])
   }
-  const tipoAporte: Record<string, TipoDeAporte> = { dirigir: 'dirige', aportar: 'aporta', responder: 'responde', integrar: 'integra', devolver_citas: 'integra', redactar_prompts: 'aporta', criticar: 'aporta' }
+  // 18-nov · relleno del banco: se anota con la cabecera canónica de SU capítulo (el mismo cálculo que abrió el turno: el libro no cambió), así no se pide dos veces
+  if (t.tipo === 'rellenar_banco') { const rp = rellenoPendiente(marcoDe(e), await P.mesa.libro(enc.id)); textoFinal = conCabeceraDelRelleno(textoFinal, rp?.capitulo ?? 'sin_capitulo') }
+  const tipoAporte: Record<string, TipoDeAporte> = { dirigir: 'dirige', aportar: 'aporta', responder: 'responde', integrar: 'integra', devolver_citas: 'integra', rellenar_banco: 'aporta', redactar_prompts: 'aporta', criticar: 'aporta' }
   const pedido = t.responde_a ? (await P.mesa.libro(enc.id)).find((a) => a.id === t.responde_a) : undefined
   await P.mesa.aportar(aporteNuevo(enc, t.agente, t.tipo === 'responder' ? pedido?.de ?? null : null, tipoAporte[t.tipo] ?? 'aporta', textoFinal, { responde_a: t.tipo === 'responder' || t.tipo === 'devolver_citas' ? t.responde_a : null, profundidad: pedido ? pedido.profundidad : 0, costo_usd: costo, workflow_execution_id: res.workflow_execution_id ?? null }))
   const integra = t.tipo === 'integrar' || t.tipo === 'devolver_citas'

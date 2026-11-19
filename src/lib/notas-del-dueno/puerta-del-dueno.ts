@@ -6,13 +6,15 @@
  *  · LEER: la auto-revisión del productor lee lo último que dijo el dueño (hasta 20, sin tema) del cerebro del cliente.
  * Puro salvo el `fetch` que entra por parámetro. Nunca lanza.
  */
+import { TOPE_DEL_TEXTO_DEL_DUENO } from '../limites-de-tamano'
 
 /** los identificadores del flujo con el que se identifica esta llamada (la puerta exige ambos al escribir de verdad) */
 export const FLUJO_DE_LAS_NOTAS = 'slack-notas-del-dueno'
 export const OFICINA_QUE_PREGUNTA = 'oficina-creativa'
 export const AGENTE_QUE_PREGUNTA = 'content-creator'
 export const CANAL_QUE_SE_ANOTA = '#oficina-creativa'
-const MAX_RESPUESTA = 2000
+// 18-nov · G2 «nada se recorta» (CC5): lo que escribe Emilio llega entero, hasta el tope único del texto del dueño (antes 2000)
+const MAX_RESPUESTA = TOPE_DEL_TEXTO_DEL_DUENO
 const MAX_PREGUNTA = 500
 
 type Fetch = typeof fetch

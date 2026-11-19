@@ -34,11 +34,10 @@ describe('la forma EXACTA de la nota que sube a la puerta del dueño', () => {
       dry_run: false, workflow_id: FLUJO_DE_LAS_NOTAS, workflow_execution_id: `slack:C0C7XUKNCLS:${TS}`,
     })
   })
-  it('sin título ni familia la pregunta sigue siendo válida; los textos largos se recortan a lo que admite la puerta', () => {
+  it('sin título ni familia la pregunta sigue siendo válida; el comentario largo llega ENTERO (G2 18-nov: antes 2000); el título sí se recorta a lo que admite la puerta', () => {
     const c = cuerpoParaLaPuerta({ client_id: C1, hitl_id: HITL, pieza_titulo: null, pieza_familia: null, comentario: 'x'.repeat(5000), ts: TS, canal_slack: 'C1', respondido_en: 'z' })
     expect(c.pregunta).toBe('Revisión de la pieza «sin título»')
-    expect((c.respuesta as string).length).toBeLessThanOrEqual(2000)
-    expect((c.respuesta as string).endsWith('…')).toBe(true)
+    expect(c.respuesta).toBe('x'.repeat(5000))
     expect((cuerpoParaLaPuerta({ client_id: C1, hitl_id: HITL, pieza_titulo: 'T'.repeat(900), pieza_familia: null, comentario: 'a', ts: TS, canal_slack: 'C1', respondido_en: 'z' }).pregunta as string).length).toBeLessThanOrEqual(500)
   })
   it('el tema es corto (≤ 80, una sola palabra de id), distinto por pieza, y NO lleva el ts ni el uuid completo', () => {
