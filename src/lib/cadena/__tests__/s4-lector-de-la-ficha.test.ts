@@ -19,7 +19,7 @@ import { clienteA, clienteB, contextoDe, type ClienteFixture } from '../__fixtur
 import { fichasConHechos, fichasEnTexto, hechoEnTexto, leerFichasDelLector, type HechoDelNegocioPorOferta } from '../ficha-de-oferta'
 import { ESQUEMAS } from '../esquemas'
 import { bolsaDelPaso, gastoDeCampana, presupuestoDelLector } from '../nucleo'
-import { PASOS_CON_PRESUPUESTO_PROPIO, PASOS_SIN_REVISION, PRESUPUESTO_LECTOR_POR_OMISION, topeDelPaso } from '../constantes'
+import { bolsaDePlanificacion, medidaDeCampana, PASOS_CON_PRESUPUESTO_PROPIO, PASOS_SIN_REVISION, PRESUPUESTO_LECTOR_POR_OMISION, topeDelPaso } from '../constantes'
 
 const AHORA = '2026-10-09T12:00:00Z'
 const RAIZ = resolve(__dirname, '..', '..', '..', '..')
@@ -295,10 +295,11 @@ describe('🟡 1 de CC6 · RESPUESTA-LENOVO (b) · el lector gasta de su PROPIA 
     const c = clienteC(), al = almacen(c)
     const ab = await abrirCampana(al, { ...wf(), client_id: c.clientId, seco: true }, AHORA)
     const id = (ab.cuerpo.campana as { id: string }).id
+    campanaDe(al, id).presupuesto_planificacion_usd = 6 // 18-nov · hoy la bolsa nace de lo medido (× semanas × 3); el caso real nació con los US$ 6 fijos de entonces
     const pe = await estrategiaPreparar(al, { ...wf(), campana_id: id }, AHORA)
     await estrategiaGuardar(al, { ...wf(), campana_id: id, corrida_id: pe.cuerpo.corrida_id, resultado: ok(c.estrategia, 2.02) }, AHORA)
     const campana = campanaDe(al, id)
-    expect(campana.presupuesto_planificacion_usd).toBe(6)
+    expect(campana.presupuesto_planificacion_usd).toBe(6) // nació con los 6 de entonces y le alcanzó: no se agrandó
     expect(presupuestoDelLector(campana)).toBe(PRESUPUESTO_LECTOR_POR_OMISION)
     for (let i = 0; i < 5; i++) {
       const p = await fichasPreparar(al, { ...wf(), workflow_execution_id: `ex-${i}`, campana_id: id }, AHORA)

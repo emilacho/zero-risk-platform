@@ -16,7 +16,7 @@ import { registrarPaso } from '../motor'
 import { cotaDeLaMesa, loQueSigueDeLaMesa, pasadasDeLaMesa } from '../topes-por-duracion'
 import type { Cambios, Encargo, Puertos } from '../puertos'
 import type { Estado, Plantilla } from '../tipos'
-import { armarTarea, ASIENTOS_CON_METODO, pedidoDeAgente, seccionDeMetodo, type ContextoDeTurno, type TipoDeTurno } from './pedidos'
+import { armarTarea, ASIENTOS_CON_METODO, cierreConElObjetivo, pedidoDeAgente, seccionDeMetodo, type ContextoDeTurno, type TipoDeTurno } from './pedidos'
 import { imagenesDelTurno } from './fotos-a-la-vista'
 import { condicionesDeLaPieza, direccionDe, especialistasPertinentes, ingenieroDePrompts, porteroDe } from './directorio'
 import { condicionesDelVideo } from './condiciones-de-video'
@@ -34,6 +34,11 @@ import { avisosDeRitmo, bibliotecaDelCliente, seccionDeLaBiblioteca, type RitmoD
 import { desarmarReferencias, seccionDeReferencias } from '../video/referencias'
 import { aporteDePrompts, promptsParaElBrazo, type ConceptoDeLaImagen, type ImagenARedactar } from './prompts'
 import { COTAS, FAMILIAS_MESA, esDeLaCadena, type Aporte, type EstadoMesa, type LecturaDeNotas, type Tarjeta, type TipoDeAporte } from './tipos'
+import { bloqueDelPerfil } from '../../perfil-del-publico/lectores'
+import type { FuentesCompletas } from '../puertos'
+
+/** 19-nov · ADENDA 1 · P2b: el perfil del público de la mesa de piezas: el mismo bloque que leen la jefatura y los pedidos de la oficina (vigente, sin leer o ninguno, DICHO) */
+const perfilDeLaMesa = (F: Pick<FuentesCompletas, 'perfil_del_publico'>): { perfil_texto?: string } => { const b = F.perfil_del_publico ? bloqueDelPerfil(F.perfil_del_publico) : ''; return b ? { perfil_texto: b } : {} }
 
 const r = (status: number, cuerpo: Record<string, unknown>): Respuesta => ({ status, cuerpo })
 const sha = (x: unknown) => crypto.createHash('sha256').update(JSON.stringify(x)).digest('hex')
@@ -94,7 +99,7 @@ function contextoDe(enc: Encargo, est: EstadoMesa, tope: number = enc.tope_usd):
     return { cliente_nombre: m?.cliente_nombre ?? '', tipo: est.tipo, brief_id: enc.brief_id, brief_texto: m?.marco_texto ?? '(sin marco)', manual_texto: m?.manual_texto ?? '', plan_texto: m?.plan_texto ?? null, fotos: m?.fotos ?? [], tope_usd: tope, gasto_usd: enc.estado_del_motor.gasto_usd }
   }
   const b = baseDeLaminas(enc.estado_del_motor)
-  return { ...(est.indice ? { cerebro: est.indice } : {}), cliente_nombre: b.F.cliente_nombre, tipo: est.tipo, brief_id: enc.brief_id, brief_texto: b.brief.texto, manual_texto: b.F.manual_texto, plan_texto: b.F.plan_texto, fotos: b.F.fotos, tope_usd: tope, gasto_usd: enc.estado_del_motor.gasto_usd, ...(est.video ? { video: est.video } : {}) }
+  return { ...(est.indice ? { cerebro: est.indice } : {}), cliente_nombre: b.F.cliente_nombre, tipo: est.tipo, brief_id: enc.brief_id, brief_texto: b.brief.texto, manual_texto: b.F.manual_texto, plan_texto: b.F.plan_texto, fotos: b.F.fotos, tope_usd: tope, gasto_usd: enc.estado_del_motor.gasto_usd, ...(est.video ? { video: est.video } : {}), ...perfilDeLaMesa(b.F) }
 }
 
 /** lo que pide ESTA pieza según su brief (puro): fotos propias etiquetadas, hechos del cliente, lo más gustado; el portero decide qué hay */
@@ -187,7 +192,7 @@ export async function pedidoDelTurno(P: Puertos, enc: Encargo, est: EstadoMesa, 
   const metodo = [await metodoDelAsiento(P, t.agente), biblioteca, referencias].filter(Boolean).join('\n\n') || undefined
   const imagenesARedactar = tipo === 'redactar_prompts' ? imagenesAGenerarDe(enc, est) : undefined
   const relleno = tipo === 'rellenar_banco' ? rellenoPendiente(marcoDe(enc.estado_del_motor), libro) ?? undefined : undefined
-  const task = armarTarea({ tipo, agente: t.agente, tarjeta, est, libro, c, pedido: pedidoAporte, faltanCitas, metodo, ...(imagenesARedactar ? { imagenesARedactar } : {}), ...(relleno ? { relleno } : {}) }) + seccionDeCambiosDelDueno(enc.sala_ref) + seccionDeNotasDelDueno(t.notas_del_dueno, t.tipo)
+  const task = armarTarea({ tipo, agente: t.agente, tarjeta, est, libro, c, pedido: pedidoAporte, faltanCitas, metodo, ...(imagenesARedactar ? { imagenesARedactar } : {}), ...(relleno ? { relleno } : {}) }) + seccionDeCambiosDelDueno(enc.sala_ref) + seccionDeNotasDelDueno(t.notas_del_dueno, t.tipo) + cierreConElObjetivo(c, tipo)
   const paso = `${PREFIJO}${t.tipo}:${t.agente}`
   const reserva = Math.max(0.1, Math.min(COTAS.RESERVA_POR_TURNO_USD, techoDe(tope) - enc.estado_del_motor.gasto_usd))
   return { agente: t.agente, paso, pedido: pedidoDeAgente({ agente: t.agente, task, encargo_id: enc.id, client_id: enc.client_id, dry_run: enc.dry_run, paso, reserva_usd: +reserva.toFixed(4), es_pieza: !esDeLaCadena(est.tipo), images: imagenesDelTurno(tipo, c.fotos), sin_empuje: !!c.cerebro }) }

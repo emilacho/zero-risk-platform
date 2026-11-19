@@ -76,6 +76,8 @@ export interface DiscoveredIcpSegment {
   readonly budget_range?: string
   readonly preferred_channels?: readonly string[]
   readonly content_preferences?: string
+  /** 19-nov · juntar públicos: la decisión del agente frente a los públicos vigentes del cliente (`{ nuevo: true }` o `{ mismo_que | dentro_de | posible_duplicado_de: <id>, porque }`). La lee `leerDecision` en `guardar-publico.ts`; ausente = nuevo. */
+  readonly fusion?: unknown
 }
 
 /** Canon canonical · full Discovery output emitted by the agent. */

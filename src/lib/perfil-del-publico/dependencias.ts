@@ -38,7 +38,8 @@ export function dependenciasReales(a: { client_id: string; workflow_id: string; 
       return f ? { rubro: txt(f.industry) || null, plaza: txt(f.market) || null, pais: txt(f.country) || null, idioma: a.idioma, trato: a.trato } : null
     },
     async leerPublicos() {
-      const { data, error } = await db().from('client_icp_documents').select('id, audience_segment, segment_priority, job_titles, company_size, industries, geography').eq('client_id', a.client_id).limit(50)
+      // 19-nov · aviso de CC1 (migración 202611190700): solo los públicos VIGENTES; un absorbido (`fusionado_en` con el id del que lo absorbió) no se perfila dos veces
+      const { data, error } = await db().from('client_icp_documents').select('id, audience_segment, segment_priority, job_titles, company_size, industries, geography').eq('client_id', a.client_id).is('fusionado_en', null).limit(50)
       if (error) throw new Error(`client_icp_documents: ${error.message}`)
       return lista(data)
     },

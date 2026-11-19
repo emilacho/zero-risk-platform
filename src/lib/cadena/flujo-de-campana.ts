@@ -20,7 +20,7 @@ import { autorizarLlamada, cadena, compuerta, err, type Respuesta } from './auto
 import { arrancarAlActivar } from './arranque'
 import { medidaDeCampana, PASOS, PASOS_CON_PRESUPUESTO_PROPIO, topeDelPaso } from './constantes'
 import { diasEntre, esFechaIso, lunesDe } from './fechas'
-import { abrirEsperaDe, bolsaDelPaso, resolverEsperas } from './nucleo'
+import { abrirEsperaDe, bolsaAgrandada, bolsaDelPaso, resolverEsperas } from './nucleo'
 
 /**
  * Las transiciones del BOTÓN, aparte de `TRANSICIONES` de `campanas.ts` (🟡 de CC7: la tabla general NO se ensancha; `avanzar` desde un flujo sigue como antes):
@@ -115,7 +115,9 @@ export async function causaQueSigue(al: Almacen, c: Campana): Promise<string | n
   if (/presupuesto de planificación se agotó/i.test(String(c.estado_motivo ?? ''))) {
     // la MISMA comparación que frena el paso (`prepararCorrida`, nucleo.ts) con el tope MAYOR de los pasos que gastan de esta bolsa (sugerencia de CC3):
     // si un paso sube su esperado, una campaña parada en ESE paso no se da por resuelta antes de tiempo
-    const { gastado, presupuesto } = await bolsaDelPaso(al, c, 'calendario')
+    // 18-nov · Lenovo 17:21Z: mide con la bolsa que el paso tendrá (`bolsaAgrandada`, grupo A); si no, una campaña nacida con 6 queda roja para siempre aunque la regla ya la agrande
+    const { gastado, presupuesto: guardada } = await bolsaDelPaso(al, c, 'calendario')
+    const presupuesto = bolsaAgrandada(c, 'calendario') ?? guardada
     if (gastado + topeDeLaPlanificacion() > presupuesto) return `la bolsa de planificación sigue sin alcanzar (US$ ${gastado.toFixed(2)} de ${presupuesto})`
   }
   return null

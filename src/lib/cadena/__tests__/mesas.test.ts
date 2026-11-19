@@ -198,8 +198,13 @@ describe('la mesa de concepto', () => {
     expect(sobre).toMatchObject({ tipo_de_mesa: 'concepto', version: 1, dry_run: true, condiciones: ['si_instagram'] })
     expect(sobre.marco_texto).toContain('# BRIEF CREATIVO DE LA CAMPAÑA (validado)\n' + BRIEF_BUENO)
     expect(sobre.marco_texto).toContain('- f1: días 1–30')
+    // 19-nov · ADENDA 1 · P2 (CC5): la gran idea también recibe el plan ENTERO en su campo propio (antes no: «el brief ya es su lectura»)
+    expect(sobre.plan_texto).toBe(A.planTexto)
     expect(al.conceptos[0]).toMatchObject({ version: 1, estado: 'abierta', aprobacion: null, plazo_en: new Date(Date.parse(AHORA) + (PLAZO_DE_MESA_MIN.concepto + HOLGURA_DE_MESA_MIN) * 60_000).toISOString() })
-    expect((await conceptoAbrir(al, wf(), AHORA)).cuerpo).toMatchObject({ ya_abierta: true, version: 1 })
+    const rescate = await conceptoAbrir(al, wf(), AHORA)
+    expect(rescate.cuerpo).toMatchObject({ ya_abierta: true, version: 1 })
+    // el sobre de rescate (la mesa abierta cuyo sobre no llegó) también lo lleva
+    expect((rescate.cuerpo.sobre as Record<string, unknown>).plan_texto).toBe(A.planTexto)
     expect(al.conceptos).toHaveLength(1)
   })
   it('la gran idea entregada queda LISTA con aprobación pendiente · abre la espera que no vence y la tarjeta en la bandeja (origen cadena · tipo concepto)', async () => {

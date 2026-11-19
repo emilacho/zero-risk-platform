@@ -188,7 +188,10 @@ describe('la tabla por tipo, hecha política y plantilla', () => {
     const pol = politica('estrategia')
     const payload = { ...(sobre('estrategia').payload as object), contexto: [{ titulo: 'Plan vigente', texto: 'TEXTO DEL PLAN VIGENTE', funcion: 'la estrategia sale de él' }] } as never
     const r = tareaDeRevisionDeFondo({ politica: pol, payload, tipo: 'estrategia', texto: 'ARTEFACTO', duenos: duenosDe(pol.productores) })
-    expect(r.task).toContain('### Plan vigente — la estrategia sale de él')
+    // 19-nov · ADENDA 1 · P1: cada documento en <documento fuente="…">, y los documentos ANTES de la línea del tipo (la instrucción va después)
+    expect(r.task).toContain('<documento fuente="Plan vigente — la estrategia sale de él">\nTEXTO DEL PLAN VIGENTE\n</documento>')
+    expect(r.task.indexOf('<documento fuente="Plan vigente')).toBeLessThan(r.task.indexOf('Estás revisando'))
+    expect(r.task.trimEnd().endsWith('Señala solo lo que lo impide.')).toBe(true)
     expect(r.task).toContain('TEXTO DEL PLAN VIGENTE')
   })
   it('el manual no tiene revisor (no-circularidad) y brief no necesita esquema ni productores de corrección', () => {

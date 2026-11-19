@@ -3,12 +3,12 @@
  * `preparar` arma el cuerpo COMPLETO del `run-sdk` (tarea, esquema, tope, razonamiento, modelo, cabecera): el flujo n8n no duplica nada.
  * `guardar` valida con el código, hace UNA corrección si hace falta, y deja todo escrito con su reloj.
  */
-import type { Almacen, Campana, ContextoDelCliente, Corrida, EsperaFila } from './almacen'
+import type { Almacen, Campana, ContextoDelCliente, Corrida, EsperaFila, RondaDeEstrategia } from './almacen'
 import { activarYArrancar, type ResultadoDelArranque } from './arranque'
 import { autorizarLlamada, cadena, compuerta, err, type Respuesta } from './autorizar'
-import { AGENTE_POR_PASO, CABECERA_SALTAR_EDITOR, MAXIMO_DE_INTENTOS, modeloDeLaCadena, RAZONAMIENTO_POR_DEFECTO, medidaDeCampana, SEMANAS_DE_PANORAMA, TOTAL_DE_TANDAS, topeDelPaso, type MedidaDeCampana, type Paso } from './constantes'
+import { AGENTE_POR_PASO, CABECERA_SALTAR_EDITOR, MAXIMO_DE_INTENTOS, RONDAS_DE_CORRECCION, modeloDeLaCadena, RAZONAMIENTO_POR_DEFECTO, medidaDeCampana, SEMANAS_DE_PANORAMA, TOTAL_DE_TANDAS, topeDelPaso, type MedidaDeCampana, type Paso } from './constantes'
 import { bajarFaltantesDeCantidad, leerV08, sinFaltantesSiCorrige } from './cantidad'
-import { planDeCorreccion, resolverTrasCorreccion, slotDe } from './ciclo'
+import { bajarBloqueosDeConjuntoAAvisos, MOTIVO_DE_SALIDA, planDeCorreccion, resolverTrasCorreccion, resolverTrasLaUltimaRonda, slotDe } from './ciclo'
 import { ESQUEMA_CALENDARIO_TANDA, ESQUEMA_CALENDARIO_TANDA_V5, ESQUEMA_ESTRATEGIA, ESQUEMA_FICHAS_DE_OFERTA } from './esquemas'
 import { fichasConHechos, hechoEnTexto, leerFichasDelLector, type HechoDelNegocioPorOferta } from './ficha-de-oferta'
 import { CODIGO_CAMPANA_PAUSADA, conceptoParaElCalendario, empujarDesdeElTablero, EN_REVISION_DE_REGISTRO, etapaDeReentrada, nuevoOrdenEncendido, origenesDelCliente, recibirVueltaDeRegistro, siguienteDespuesDe, tramoDeReemision } from './mesas'
@@ -20,11 +20,12 @@ import { fueraDePlazoDeProduccion } from './lotes'
 import { esNotaDeDependencias, resolverDependencias } from './resolver-dependencias'
 import { tareaDeCalendario, tareaDeEstrategia, tareaDeFichas } from './indicaciones'
 import { metodoDeCalendario } from './metodos'
-import { abrirEsperaDe, ponerNecesitaHumano, prepararCorrida, resolverEsperas, semanaDeId } from './nucleo'
+import { delBriefParaElCalendario } from './brief-creativo'
+import { abrirEsperaDe, ponerNecesitaHumano, prepararCorrida, resolverEsperas, seguirConReintento, semanaDeId } from './nucleo'
 import { validarEsquemaDeSalida } from '@/lib/salida-estructurada'
 import { diasEntre, fechaDeFila } from './fechas'
 import { diaUnoDelPlan } from './fechas-en-texto'
-import type { Ajuste, Estrategia, Fila, FormatosPorRed, Hallazgo, TandaAgente } from './tipos'
+import { SALIERON_EN_LA_CADENA, type Ajuste, type Estrategia, type Fila, type FormatosPorRed, type Hallazgo, type TandaAgente } from './tipos'
 import { type LexicoAfirmaciones } from './afirmaciones'
 import { lexicoDelCliente } from './lexico-por-rubro'
 import { problemasDeEsquema, normalizarPilares, validarEstrategia } from './validador-estrategia'
@@ -95,7 +96,36 @@ function respuestaDePreparar(res: Awaited<ReturnType<typeof prepararCorrida>>): 
   return null
 }
 
+/**
+ * 19-nov · grupo C (GO Lenovo 04:29Z · firma de Emilio): las rondas de corrección. La clave de la corrida termina en `:c<ronda>` (0 = la primera pasada).
+ * Antes era `:c0`/`:c1`: con la misma clave, una segunda ronda habría contado como un intento más de la primera. Las claves viejas (`:c1`) se leen como ronda 1.
+ */
+/** la ronda sale de `…:c<ronda>`, también cuando la llave sigue con el reintento del tramo (`…:c<ronda>:r<tramo>`, grupo A · `llaveDeReintentoDelPaso`) */
+export const rondaDeClave = (clave: string): number => { const m = /:c(\d+)(?::r[^:]*)?$/.exec(clave); return m ? Number(m[1]) : 0 }
+/** la ronda de corrección que toca: 1 + las rondas de este paso y este prefijo que ya cerraron `ok` (una ronda cuya llamada falló se reintenta con su misma clave) */
+export async function rondaQueToca(al: Almacen, campanaId: string, paso: 'estrategia' | 'calendario', prefijo: string): Promise<number> {
+  const hechas = new Set(
+    (await al.corridasDeCampana(campanaId))
+      .filter((x) => x.paso === paso && x.estado === 'ok' && x.clave_idempotencia.startsWith(`${prefijo}:c`))
+      .map((x) => rondaDeClave(x.clave_idempotencia))
+      .filter((n) => n >= 1),
+  )
+  return Math.min(hechas.size + 1, RONDAS_DE_CORRECCION)
+}
+/** 19-nov · grupo C · la mejor pasada guardada: la de menos bloqueos; si empatan, la última */
+export function mejorRonda(rondas: RondaDeEstrategia[]): RondaDeEstrategia | null {
+  return [...rondas].sort((a, b) => a.bloqueos - b.bloqueos || b.ronda - a.ronda)[0] ?? null
+}
+
 // ─────────────────────────────────────────────────────────────── ESTRATEGIA
+/** 19-nov · ADENDA 1 · P2b: el brief VALIDADO de la campaña, en lo que lee el calendario · sin brief validado = null (la tarea de siempre) · nunca lanza */
+export async function briefParaElCalendario(al: Almacen, campanaId: string): Promise<{ publico: string; hechos_de_las_ofertas: string } | null> {
+  try {
+    const b = await al.ultimoBriefCreativo(campanaId)
+    return b && b.estado === 'validada' && b.texto_md ? delBriefParaElCalendario(b.texto_md) : null
+  } catch { return null }
+}
+
 export async function estrategiaPreparar(al: Almacen, cuerpo: Record<string, unknown>, ahora: string): Promise<Respuesta> {
   const c = await cargar(al, cuerpo)
   if (!c.ok) return c.r
@@ -109,13 +139,15 @@ export async function estrategiaPreparar(al: Almacen, cuerpo: Record<string, unk
   const esquema = validarEsquemaDeSalida(ESQUEMA_ESTRATEGIA)
   if (!esquema.ok || !esquema.valor || !esquema.hash) return err(500, 'E-ESQUEMA', 'el esquema de la estrategia no es válido')
   const modelo = await modeloDeLaCadena(al)
-  const prep = await prepararCorrida(al, campana, 'estrategia', `v${version}:c${fichas ? 1 : 0}`, cadena(cuerpo.workflow_id)!, cadena(cuerpo.workflow_execution_id)!, ahora, modelo, esquema.hash, async () => (await al.ultimaEstrategia(campana.id))?.estado === 'validada')
+  const ronda = fichas ? await rondaQueToca(al, campana.id, 'estrategia', `v${version}`) : 0
+  const prep = await prepararCorrida(al, campana, 'estrategia', `v${version}:c${ronda}`, cadena(cuerpo.workflow_id)!, cadena(cuerpo.workflow_execution_id)!, ahora, modelo, esquema.hash, async () => (await al.ultimaEstrategia(campana.id))?.estado === 'validada')
   const corto = respuestaDePreparar(prep)
   if (corto) return corto
   if (prep.tipo === 'intentos_agotados' || prep.tipo === 'presupuesto_agotado') {
-    const motivo = prep.tipo === 'intentos_agotados' ? 'la estrategia agotó sus 3 intentos' : `el presupuesto de planificación se agotó (US$ ${prep.gastado.toFixed(2)} de ${prep.presupuesto})`
-    const r = await ponerNecesitaHumano(al, campana, motivo, ahora)
-    return { status: 409, cuerpo: { error: prep.tipo, necesita_humano: true, alerta: r.alerta } }
+    // grupo A (18-nov · «nada detiene el flujo») · la campaña NO cambia de estado: el barrido de atascadas deja el sobre del plan en el tramo siguiente. El 409 con este `error` es el «fin declarado» del flujo.
+    const que = prep.tipo === 'intentos_agotados' ? 'agotó los intentos de este tramo' : `la bolsa de planificación no alcanza aun al triple (US$ ${prep.gastado.toFixed(2)} de ${prep.presupuesto})`
+    const r = await seguirConReintento(al, campana, 'estrategia', que)
+    return { status: 409, cuerpo: { error: prep.tipo, necesita_humano: false, reintenta: true, alerta: r.alerta } }
   }
   if (campana.estado === 'abierta') await al.actualizarCampana(campana.id, { estado: 'estrategia' })
   const llavesDeFechas = ctx.pais ? await al.llavesDeFechas(ctx.pais, campana.client_id) : []
@@ -138,12 +170,14 @@ export async function estrategiaGuardar(al: Almacen, cuerpo: Record<string, unkn
   const corrida = (await al.corridasDeCampana(campana.id)).find((x) => x.id === corridaId && x.paso === 'estrategia')
   if (!corrida) return err(404, 'E-CORRIDA', 'la corrida no existe para esta campaña')
   if (corrida.estado !== 'en_curso') return { status: 200, cuerpo: { ya_guardada: true, estado: corrida.estado } }
-  const esCorreccion = cuerpo.correccion === true
+  // 19-nov · grupo C · la ronda sale de la clave de la corrida (`v<n>:c<ronda>`): una corrida de corrección lo es aunque quien guarda no lo diga
+  const ronda = rondaDeClave(corrida.clave_idempotencia)
+  const esCorreccion = cuerpo.correccion === true || ronda >= 1
   const { objeto, reintentar } = await cerrarSegunResultado(al, corrida, leerResultado(cuerpo.resultado))
   if (objeto === null) {
     if (reintentar) return { status: 200, cuerpo: { reintentar: true } }
-    const r = await ponerNecesitaHumano(al, campana, 'la llamada de la estrategia no entregó el objeto estructurado tras 3 intentos', ahora)
-    return { status: 200, cuerpo: { necesita_humano: true, alerta: r.alerta } }
+    // grupo A · B: fallo de proveedor o de formato, no pide criterio. La corrida ya quedó cerrada; el flujo vuelve a `preparar`, que contesta el fin declarado (llave del tramo agotada) y reintenta en el siguiente
+    return { status: 200, cuerpo: { reintentar: true } }
   }
   const version = ((await al.ultimaEstrategia(campana.id))?.version ?? 0) + 1
   const { estrategia: objetoAjustado, aviso: avisoDePilares } = normalizarPilares(objeto)
@@ -152,29 +186,37 @@ export async function estrategiaGuardar(al: Almacen, cuerpo: Record<string, unkn
   const hs = [...(avisoDePilares ? [avisoDePilares] : []), ...validarEstrategia(objetoAjustado, { planTexto: ctx.planTexto, formatos, diasCampana: medidaDeCampana(campana).dias, fechaInicio: campana.fecha_inicio, llavesDeFechas })]
   await al.guardarValidaciones(campana.id, 'estrategia', version, null, esCorreccion ? 2 : 1, hs, campana.seco)
   const plan = planDeCorreccion(hs)
-  if (plan.necesita && !esCorreccion) return { status: 200, cuerpo: { correccion: true, modo: 'tanda', fichas: plan.fichas } }
+  // 19-nov · grupo C (firma de Emilio, ADENDA 17:22Z): hasta RONDAS_DE_CORRECCION rondas; cada pasada bloqueada se guarda APARTE. Tras la última, queda vigente
+  // la MEJOR (menos bloqueos; si empatan, la última) con sus fichas como avisos, y la campaña sigue. Ya no se pasa a humano por bloqueos.
+  let vigente = objetoAjustado as Estrategia
+  let avisosDeLaRonda: string[] = []
   if (plan.necesita) {
-    // la estrategia no tiene «filas que salen»: cualquier bloqueo tras la única corrección es de Emilio
-    const r = await ponerNecesitaHumano(al, campana, `la estrategia sigue con ${plan.fichas.length} bloqueo(s) tras la única corrección: ${plan.fichas.map((f) => f.que).join(' | ').slice(0, 300)}`, ahora)
-    return { status: 200, cuerpo: { necesita_humano: true, fichas: plan.fichas, alerta: r.alerta } }
+    const bloqueos = hs.filter((h) => h.severidad === 'bloquea')
+    await al.guardarRondaDeEstrategia({ campana_id: campana.id, version, ronda, contenido: objetoAjustado as Estrategia, bloqueos: bloqueos.length, fichas: bloqueos.map((h) => h.ficha), seco: campana.seco })
+    if (ronda < RONDAS_DE_CORRECCION) return { status: 200, cuerpo: { correccion: true, modo: 'tanda', fichas: plan.fichas, ronda: ronda + 1 } }
+    const mejor = mejorRonda(await al.rondasDeEstrategia(campana.id, version))!
+    vigente = mejor.contenido
+    avisosDeLaRonda = mejor.fichas.map((f) => `quedó vigente la mejor versión (ronda ${mejor.ronda}, ${mejor.bloqueos} bloqueo(s)) tras ${RONDAS_DE_CORRECCION} rondas de corrección: ${f.que}`)
   }
-  await al.insertarEstrategia({ campana_id: campana.id, version, estado: 'validada', contenido: objetoAjustado as Estrategia, agente: AGENTE_POR_PASO.estrategia, modelo: corrida.modelo, costo_usd: leerResultado(cuerpo.resultado).cost_usd ?? null, workflow_execution_id: corrida.workflow_execution_id, seco: campana.seco })
+  await al.insertarEstrategia({ campana_id: campana.id, version, estado: 'validada', contenido: vigente, agente: AGENTE_POR_PASO.estrategia, modelo: corrida.modelo, costo_usd: leerResultado(cuerpo.resultado).cost_usd ?? null, workflow_execution_id: corrida.workflow_execution_id, seco: campana.seco })
+  // la mejor versión de la ronda lleva SUS bloqueos como avisos (los avisos de esta pasada son de otra versión); sin rondas, los de siempre
+  const avisos = plan.necesita ? avisosDeLaRonda : hs.filter((h) => h.severidad === 'aviso').map((h) => h.ficha.que)
   // C · las temporadas del negocio: con cita se guardan para ESTE cliente; sin cita, pendientes y pregunta al dueño (nunca una fecha inventada)
-  const temporadas = await guardarTemporadas(al, campana, ctx, objetoAjustado as Estrategia, { workflow_id: cadena(cuerpo.workflow_id), workflow_execution_id: cadena(cuerpo.workflow_execution_id) ?? corrida.workflow_execution_id })
+  const temporadas = await guardarTemporadas(al, campana, ctx, vigente, { workflow_id: cadena(cuerpo.workflow_id), workflow_execution_id: cadena(cuerpo.workflow_execution_id) ?? corrida.workflow_execution_id })
   const conTemporadas = temporadas.guardadas.length || temporadas.pendientes.length || temporadas.avisos.length ? { temporadas } : {}
   // J7 · el punto de espera «antes de pasar»: si la jefatura abriría una revisión de la estrategia, se guarda todo igual pero la campaña NO pasa a `calendario` hasta que la revisión cierre
   // (o venza la espera). Con la jefatura apagada `retener` es false y esto es BYTE A BYTE lo de siempre.
   const retencion = await retencionDe(al, 'estrategia', campana.client_id)
   if (retencion.retener) {
     const espera = await retenerParaRevision(al, campana, 'estrategia', version, ahora)
-    return { status: 200, cuerpo: { ok: true, version, retenida_para_revision: { tipo: 'estrategia', version, objeto_id: espera.objeto_id, vence_en: espera.vence_en }, avisos: hs.filter((h) => h.severidad === 'aviso').map((h) => h.ficha.que), ...conTemporadas } }
+    return { status: 200, cuerpo: { ok: true, version, retenida_para_revision: { tipo: 'estrategia', version, objeto_id: espera.objeto_id, vence_en: espera.vence_en }, avisos: avisos, ...conTemporadas } }
   }
   // 18-nov · botón «Flujo de la campaña»: si el tablero la pausó mientras este paso corría, el paso termina pero la campaña NO se despausa (al reanudar vuelve a `calendario`)
-  if (await anotarSiPausadaPorElTablero(al, campana, 'calendario', ahora)) return { status: 200, cuerpo: { ok: true, version, pausada_por_el_tablero: true, avisos: hs.filter((h) => h.severidad === 'aviso').map((h) => h.ficha.que), ...conTemporadas } }
+  if (await anotarSiPausadaPorElTablero(al, campana, 'calendario', ahora)) return { status: 200, cuerpo: { ok: true, version, pausada_por_el_tablero: true, avisos: avisos, ...conTemporadas } }
   await al.actualizarCampana(campana.id, { estado: 'calendario' })
   // los tipos de fechas que ESTE cliente declaró (puede ser ninguno: lo normal) y los años de la campaña: el flujo investiga solo eso
-  const fechasPedidas = fechasPedidasDe(campana, ctx.pais, objeto as Estrategia)
-  return { status: 200, cuerpo: { ok: true, version, fechas_pedidas: fechasPedidas, avisos: hs.filter((h) => h.severidad === 'aviso').map((h) => h.ficha.que), ...conTemporadas } }
+  const fechasPedidas = fechasPedidasDe(campana, ctx.pais, vigente)
+  return { status: 200, cuerpo: { ok: true, version, fechas_pedidas: fechasPedidas, avisos: avisos, ...conTemporadas } }
 }
 
 // ─────────────────────────────────────────────────────────────── FICHAS (Sprint 4 · A entrega 2 · el lector)
@@ -305,14 +347,16 @@ export async function calendarioPreparar(al: Almacen, cuerpo: Record<string, unk
   const esquema = validarEsquemaDeSalida(mesa.concepto ? ESQUEMA_CALENDARIO_TANDA_V5 : ESQUEMA_CALENDARIO_TANDA)
   if (!esquema.ok || !esquema.valor || !esquema.hash) return err(500, 'E-ESQUEMA', 'el esquema del calendario no es válido')
   const modelo = await modeloDeLaCadena(al)
-  const prep = await prepararCorrida(al, campana, 'calendario', `t${tanda}:v${version}:c${correccion ? 1 : 0}`, cadena(cuerpo.workflow_id)!, cadena(cuerpo.workflow_execution_id)!, ahora, modelo, esquema.hash,
+  const ronda = correccion ? await rondaQueToca(al, campana.id, 'calendario', `t${tanda}:v${version}`) : 0
+  const prep = await prepararCorrida(al, campana, 'calendario', `t${tanda}:v${version}:c${ronda}`, cadena(cuerpo.workflow_id)!, cadena(cuerpo.workflow_execution_id)!, ahora, modelo, esquema.hash,
     async () => (await al.filas(campana.id, version)).some((f) => f.tanda === tanda && f.estado !== 'esquema'))
   const corto = respuestaDePreparar(prep)
   if (corto) return corto
   if (prep.tipo === 'intentos_agotados' || prep.tipo === 'presupuesto_agotado') {
-    const motivo = prep.tipo === 'intentos_agotados' ? `la tanda ${tanda} agotó sus 3 intentos` : `el presupuesto de planificación se agotó (US$ ${prep.gastado.toFixed(2)} de ${prep.presupuesto})`
-    const r = await ponerNecesitaHumano(al, campana, motivo, ahora)
-    return { status: 409, cuerpo: { error: prep.tipo, necesita_humano: true, alerta: r.alerta } }
+    // grupo A · la campaña NO cambia de estado: el vigía reemite la tanda en su pasada siguiente (`calendario · siguiente`, con su tramo)
+    const que = prep.tipo === 'intentos_agotados' ? `la tanda ${tanda} agotó los intentos de este tramo` : `la tanda ${tanda}: la bolsa de planificación no alcanza aun al triple (US$ ${prep.gastado.toFixed(2)} de ${prep.presupuesto})`
+    const r = await seguirConReintento(al, campana, 'calendario', que)
+    return { status: 409, cuerpo: { error: prep.tipo, necesita_humano: false, reintenta: true, alerta: r.alerta } }
   }
   const filasMalas = correccion?.fila_ids?.length ? todas.filter((f) => correccion.fila_ids!.includes(f.id)) : []
   const tarea = tareaDeCalendario({
@@ -327,6 +371,8 @@ export async function calendarioPreparar(al: Almacen, cuerpo: Record<string, unk
     metodo: mesa.concepto ? await metodoDeCalendario(al) : undefined,
     // 18-nov (DECISIÓN DE EMILIO · día 1 = apertura): el día 1 puede caer a media semana; la tarea dice qué días de la tanda quedan fuera
     fechaInicio: campana.fecha_inicio, fechaFin: campana.fecha_fin,
+    // 19-nov · ADENDA 1 · P2b (CC5): el calendario lee del brief VALIDADO el público y los hechos de las ofertas, enteros (solo con la gran idea: el nuevo orden)
+    brief: mesa.concepto ? await briefParaElCalendario(al, campana.id) : undefined,
   })
   return {
     status: 200,
@@ -350,14 +396,15 @@ export async function calendarioGuardar(al: Almacen, cuerpo: Record<string, unkn
   if (!corrida) return err(404, 'E-CORRIDA', 'la corrida no existe para esta campaña')
   if (corrida.estado !== 'en_curso') return { status: 200, cuerpo: { ya_guardada: true, estado: corrida.estado } }
   // r74 · una corrida de CORRECCIÓN (clave `…:c1`) lo es aunque quien guarda no lo diga (el reenvío tras una llamada vencida pide la corrección por su cuenta)
-  const esCorreccion = cuerpo.correccion === true || /:c1$/.test(corrida.clave_idempotencia)
+  // 19-nov · grupo C · y la ronda de corrección sale de la clave (`…:c<ronda>`; las claves viejas `:c1` son la ronda 1)
+  const ronda = rondaDeClave(corrida.clave_idempotencia)
+  const esCorreccion = cuerpo.correccion === true || ronda >= 1
   const modo = cuerpo.modo === 'filas' ? 'filas' : 'tanda'
   const { objeto, reintentar } = await cerrarSegunResultado(al, corrida, leerResultado(cuerpo.resultado))
   if (objeto === null || !esTanda(objeto)) {
     if (objeto !== null) await al.cerrarCorrida(corrida.id, { estado: 'fallida', error: 'el objeto no tiene la forma de una tanda' })
-    if (reintentar || objeto !== null) return { status: 200, cuerpo: { reintentar: true } }
-    const r = await ponerNecesitaHumano(al, campana, `la llamada del calendario (tanda ${tanda}) no entregó el objeto tras 3 intentos`, ahora)
-    return { status: 200, cuerpo: { necesita_humano: true, alerta: r.alerta } }
+    // grupo A · B: sin objeto tras los intentos tampoco detiene: vuelve a `preparar`, que contesta el fin declarado y el vigía reintenta en su pasada siguiente
+    return { status: 200, cuerpo: { reintentar: true } }
   }
   const estr = (await al.ultimaEstrategia(campana.id))!.contenido
   const version = Math.max(1, await al.ultimaVersionDeCalendario(campana.id))
@@ -384,22 +431,45 @@ export async function calendarioGuardar(al: Almacen, cuerpo: Record<string, unkn
   }
   const salen: string[] = []
   if (plan.necesita) {
-    const res = resolverTrasCorreccion(hs, semanaDeId)
-    if (res.estado === 'necesita_humano') {
-      await al.guardarFilas(campana.id, version, 1, filas, campana.seco)
-      const r = await ponerNecesitaHumano(al, campana, `la tanda ${tanda} sigue con bloqueos tras la única corrección: ${res.fichasPendientes.map((f) => f.que).join(' | ').slice(0, 300)}`, ahora)
-      return { status: 200, cuerpo: { necesita_humano: true, fichas: res.fichasPendientes, alerta: r.alerta } }
+    let res = resolverTrasCorreccion(hs, semanaDeId)
+    // 19-nov · grupo C (firma de Emilio): lo que pide criterio vuelve al creador hasta RONDAS_DE_CORRECCION rondas; tras la última, la FILA bloqueada sale
+    // (`descartada_por_bloqueo`, con su slot omitido y su aviso) y la tanda se cierra con las demás. Ya no se pasa a humano por bloqueos.
+    if (res.estado === 'necesita_humano' && ronda < RONDAS_DE_CORRECCION) {
+      await al.guardarFilas(campana.id, version, 1, filas, campana.seco) // quedan `propuesta`: la ronda siguiente parchea sobre ellas
+      return { status: 200, cuerpo: { correccion: true, modo: plan.modo, fila_ids: plan.filaIds, fichas: plan.fichas, ronda: ronda + 1 } }
     }
-    // dato sin fuente: la FILA sale (nunca se le pregunta a nadie del cliente) y se vuelve a validar con el slot anotado como omitido
+    if (res.estado === 'necesita_humano') res = resolverTrasLaUltimaRonda(hs, semanaDeId)
+    // dato sin fuente: la FILA sale (nunca se le pregunta a nadie del cliente) y se vuelve a validar con el slot anotado como omitido; tras la última ronda, también la bloqueada
+    const antesDeSacar = filas
     salen.push(...res.filasQueSalen)
-    filas = filas.map((f) => (salen.includes(f.id) ? { ...f, estado: 'descartada_sin_fuente' as const } : f))
-    hs = bajarFaltantesDeCantidad(validarTodo(insumosDe(campana, ctx, estr, formatos, tanda, semanas, filas, previas, [...ajustes, ...res.ajustes], fechas, ahora, lexico, revisaRegistro)))
-    await al.guardarValidaciones(campana.id, 'calendario', version, tanda, 2, hs, campana.seco)
-    if (hs.some((h) => h.severidad === 'bloquea')) {
-      await al.guardarFilas(campana.id, version, 1, filas, campana.seco)
-      const r = await ponerNecesitaHumano(al, campana, `la tanda ${tanda} sigue con bloqueos tras sacar las filas sin fuente`, ahora)
-      return { status: 200, cuerpo: { necesita_humano: true, fichas: hs.filter((h) => h.severidad === 'bloquea').map((h) => h.ficha), alerta: r.alerta } }
+    const porBloqueo = new Set(res.porBloqueo ?? [])
+    filas = marcarPorBloqueo(filas.map((f) => (salen.includes(f.id) && !porBloqueo.has(f.id) ? { ...f, estado: 'descartada_sin_fuente' as const } : f)), [...porBloqueo], hs)
+    let ajustesDeSalida = [...ajustes, ...res.ajustes]
+    hs = bajarFaltantesDeCantidad(validarTodo(insumosDe(campana, ctx, estr, formatos, tanda, semanas, filas, previas, ajustesDeSalida, fechas, ahora, lexico, revisaRegistro)))
+    if (hs.some((h) => h.severidad === 'bloquea') && ronda < RONDAS_DE_CORRECCION) {
+      // quedan bloqueos tras sacar las filas sin fuente y todavía hay rondas: vuelve al creador (las filas sin fuente se vuelven a resolver en la ronda siguiente)
+      const otra = planDeCorreccion(hs)
+      await al.guardarFilas(campana.id, version, 1, antesDeSacar, campana.seco)
+      return { status: 200, cuerpo: { correccion: true, modo: otra.modo, fila_ids: otra.filaIds, fichas: otra.fichas, ronda: ronda + 1 } }
     }
+    // tras la última ronda: la fila que todavía bloquea también sale (una vez: sacar filas solo puede dejar bloqueos de conjunto o de frecuencia)
+    const quedan = resolverTrasLaUltimaRonda(hs, semanaDeId)
+    if (quedan.filasQueSalen.length) {
+      for (const id of quedan.filasQueSalen) { if (!salen.includes(id)) salen.push(id); porBloqueo.add(id) }
+      filas = marcarPorBloqueo(filas, quedan.filasQueSalen, hs)
+      ajustesDeSalida = [...ajustesDeSalida, ...quedan.ajustes.map((a) => ({ ...a, motivo: MOTIVO_DE_SALIDA.descartada_por_bloqueo }))]
+      hs = bajarFaltantesDeCantidad(validarTodo(insumosDe(campana, ctx, estr, formatos, tanda, semanas, filas, previas, ajustesDeSalida, fechas, ahora, lexico, revisaRegistro)))
+    }
+    // un bloqueo de CONJUNTO (semana sin filas, frecuencia…) que no se arregló sacando filas: la tanda se cierra con un AVISO y el hueco queda anotado (la campaña no se detiene).
+    // Una fila que SIGUIERA bloqueando aquí (no debería) también sale, para no producir nada bloqueado.
+    const aunFila = hs.filter((h) => h.severidad === 'bloquea' && !!h.fila_id).map((h) => h.fila_id as string)
+    if (aunFila.length) {
+      for (const id of aunFila) { if (!salen.includes(id)) salen.push(id); porBloqueo.add(id) }
+      filas = marcarPorBloqueo(filas, aunFila, hs)
+      hs = hs.map((h) => (h.severidad === 'bloquea' && !!h.fila_id ? { ...h, severidad: 'aviso' as const, ficha: { ...h.ficha, gravedad: 'aviso' as const, que: `${h.ficha.que} (la fila salió: ${MOTIVO_DE_SALIDA.descartada_por_bloqueo})` } } : h))
+    }
+    hs = bajarBloqueosDeConjuntoAAvisos(hs)
+    await al.guardarValidaciones(campana.id, 'calendario', version, tanda, 2, hs, campana.seco)
   }
   if (revisaRegistro) return retenerTandaParaRegistro(al, ctx, { campana, formatos, estr, version, tanda, semanas, filas, hs, salen, ahora })
   return cerrarTanda(al, { campana, formatos, estr, version, tanda, semanas, filas, hs, salen, ahora })
@@ -413,7 +483,7 @@ export async function cerrarTanda(al: Almacen, p: { campana: Campana; formatos: 
   // GO de Lenovo 10-nov 14:59Z: lo que cae antes de hoy (zona del cliente) + el plazo de producción de su formato no se programa; queda `perdio_su_fecha` con la razón escrita
   const hoy = hoyEnZona(ahora, campana.zona_horaria)
   const finales: Fila[] = filas.map((f) => {
-    if (f.estado === 'descartada_sin_fuente') return f
+    if (SALIERON_EN_LA_CADENA.has(f.estado)) return f
     const fuera = fueraDePlazoDeProduccion(f, hoy, formatos)
     if (fuera) return { ...f, estado: 'perdio_su_fecha', avisos: [...f.avisos.filter((a) => esNotaDeDependencias(a) || esNotaDeIdea(a)), fuera] }
     if (f.estado === 'espera_video') return f
@@ -443,7 +513,7 @@ export async function cerrarTanda(al: Almacen, p: { campana: Campana; formatos: 
     } else arranque = (await activarYArrancar(al, campana, ahora)).arranque // 20-oct · parte 3: la campaña pasa a `activa` AQUÍ en el camino real; el arranque por evento tiene que salir de aquí también
   }
   const cuenta = (e: Fila['estado']) => finales.filter((f) => f.estado === e).length
-  return { status: 200, cuerpo: { ok: true, tanda, filas: finales.length, validadas: cuenta('validada'), en_investigacion: cuenta('en_investigacion'), espera_video: cuenta('espera_video'), salieron_sin_fuente: salen, fuera_de_plazo: cuenta('perdio_su_fecha'), panorama_semanas: todas12.length ? SEMANAS_DE_PANORAMA : 0, avisos: hs.filter((h) => h.severidad === 'aviso').length, ...(retenida ? { retenida_para_revision: retenida } : {}), ...(arranque ? { arranque } : {}) } }
+  return { status: 200, cuerpo: { ok: true, tanda, filas: finales.length, validadas: cuenta('validada'), en_investigacion: cuenta('en_investigacion'), espera_video: cuenta('espera_video'), salieron_sin_fuente: salen.filter((id) => finales.find((f) => f.id === id)?.estado !== 'descartada_por_bloqueo'), salieron_por_bloqueo: finales.filter((f) => f.estado === 'descartada_por_bloqueo').map((f) => f.id), fuera_de_plazo: cuenta('perdio_su_fecha'), panorama_semanas: todas12.length ? SEMANAS_DE_PANORAMA : 0, avisos: hs.filter((h) => h.severidad === 'aviso').length, ...(retenida ? { retenida_para_revision: retenida } : {}), ...(arranque ? { arranque } : {}) } }
 }
 
 // ─────────────────────────────────────────────────────────────── VALIDAR (sin escribir nada)
@@ -532,8 +602,9 @@ export async function retomarPorCantidades(al: Almacen, campana: Campana, ahora:
   const semanas = semanasDeTanda(tanda, medidaDeCampana(campana))
   const previas = todas.filter((f) => f.tanda < tanda && f.estado !== 'esquema')
   const filas = todas.filter((f) => f.tanda === tanda && f.estado !== 'esquema')
-  const salen = filas.filter((f) => f.estado === 'descartada_sin_fuente').map((f) => f.id)
-  const ajustes: Ajuste[] = [...omitidosImplicitos(estr, semanas, filas), ...salen.map((id) => ({ semana: semanaDeId(id), slot: slotDe(id), accion: 'omitir' as const, motivo: 'la fila salió: dato sin fuente tras la corrección' }))]
+  const quienesSalen = filas.filter((f) => SALIERON_EN_LA_CADENA.has(f.estado))
+  const salen = quienesSalen.map((f) => f.id)
+  const ajustes: Ajuste[] = [...omitidosImplicitos(estr, semanas, filas), ...quienesSalen.map(ajusteDeSalida)]
   const hs = bajarFaltantesDeCantidad(validarTodo(insumosDe(campana, ctx, estr, formatos, tanda, semanas, filas, previas, ajustes, await fechasDeclaradas(al, ctx, estr, campana), ahora, lexico)))
   if (hs.some((h) => h.severidad === 'bloquea')) return no('al re-validar queda algún bloqueo que no es de cantidad')
   await al.guardarValidaciones(campana.id, 'calendario', version, tanda, 2, hs, campana.seco)
@@ -556,7 +627,18 @@ export async function retomarPorCantidades(al: Almacen, campana: Campana, ahora:
  */
 type CierreDeTanda = Parameters<typeof cerrarTanda>[1]
 /** los estados de una tanda guardada que todavía no se cerró (cerrarTanda los lleva a validada · en_investigacion · perdio_su_fecha) */
-const ESTADOS_SIN_CERRAR: ReadonlySet<Fila['estado']> = new Set(['propuesta', 'espera_video', 'descartada_sin_fuente'])
+/** 19-nov · grupo C · el slot de una fila que SALIÓ queda omitido, con el motivo de su estado */
+/** 19-nov · grupo C · la fila que sale por bloqueo lleva escrito POR QUÉ: el motivo y lo que la bloqueaba (las fichas de esa fila) */
+export function marcarPorBloqueo(filas: Fila[], ids: readonly string[], hs: Hallazgo[]): Fila[] {
+  return filas.map((f) => {
+    if (!ids.includes(f.id)) return f
+    const que = hs.filter((h) => h.severidad === 'bloquea' && h.fila_id === f.id).map((h) => h.ficha.que)
+    return { ...f, estado: 'descartada_por_bloqueo' as const, avisos: [...f.avisos, `${MOTIVO_DE_SALIDA.descartada_por_bloqueo}${que.length ? `: ${que.join(' | ')}` : ''}`.slice(0, 500)] }
+  })
+}
+const ajusteDeSalida = (f: Fila): Ajuste => ({ semana: semanaDeId(f.id), slot: slotDe(f.id), accion: 'omitir', motivo: f.estado === 'descartada_por_bloqueo' ? MOTIVO_DE_SALIDA.descartada_por_bloqueo : MOTIVO_DE_SALIDA.descartada_sin_fuente })
+
+const ESTADOS_SIN_CERRAR: ReadonlySet<Fila['estado']> = new Set(['propuesta', 'espera_video', 'descartada_sin_fuente', 'descartada_por_bloqueo'])
 
 const avisoDeFila = (filaId: string, que: string): Hallazgo => ({
   chequeo: 'V15', severidad: 'aviso', fila_id: filaId, alcance: 'fila',
@@ -605,8 +687,9 @@ async function cerrarTandaDeRegistro(al: Almacen, campana: Campana, tanda: numbe
   const semanas = semanasDeTanda(tanda, medidaDeCampana(campana))
   const previas = todas.filter((f) => f.tanda < tanda && f.estado !== 'esquema')
   const originales = todas.filter((f) => f.tanda === tanda && f.estado !== 'esquema')
-  const salen = originales.filter((f) => f.estado === 'descartada_sin_fuente').map((f) => f.id)
-  const ajustes: Ajuste[] = [...omitidosImplicitos(estr, semanas, originales), ...salen.map((id) => ({ semana: semanaDeId(id), slot: slotDe(id), accion: 'omitir' as const, motivo: 'la fila salió: dato sin fuente tras la corrección' }))]
+  const quienesSalen = originales.filter((f) => SALIERON_EN_LA_CADENA.has(f.estado))
+  const salen = quienesSalen.map((f) => f.id)
+  const ajustes: Ajuste[] = [...omitidosImplicitos(estr, semanas, originales), ...quienesSalen.map(ajusteDeSalida)]
   const fechas = await fechasDeclaradas(al, ctx, estr, campana)
   const validar = (fs: Fila[]) => bajarFaltantesDeCantidad(validarTodo(insumosDe(campana, ctx, estr, formatos, tanda, semanas, fs, previas, ajustes, fechas, ahora, lexico, true)))
   /** los chequeos que BLOQUEAN, por fila (o `tanda` si son del conjunto) */

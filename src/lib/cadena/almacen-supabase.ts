@@ -22,7 +22,7 @@ import { crearPuertos as crearPuertosDeLaJefatura, entornoDeProceso as entornoDe
 import { resolverCierre } from '../jefatura/revision/cierre'
 import { N8N_POR_OMISION, VERCEL_DE_LA_PLATAFORMA } from '../jefatura/revision/contrato'
 import { ESTADOS_TERMINALES } from '../jefatura/revision/puertos'
-import type { Almacen, BriefCreativoGuardado, Campana, ConceptoGuardado, ContextoDelCliente, Corrida, EntradaDeRegistro, EsperaFila, EstrategiaGuardada, FechaCobertura, FichasGuardadas, ResultadoDeAbrirRegistro } from './almacen'
+import type { Almacen, BriefCreativoGuardado, Campana, ConceptoGuardado, ContextoDelCliente, Corrida, EntradaDeRegistro, EsperaFila, EstrategiaGuardada, RondaDeEstrategia, FechaCobertura, FichasGuardadas, ResultadoDeAbrirRegistro } from './almacen'
 import { horarioDeNorm } from './horario'
 import { registroDelCliente } from './registro'
 import { zonaDelCliente } from '@/lib/zona-horaria/por-pais'
@@ -406,6 +406,9 @@ export function almacenDeSupabase(): Almacen {
 
     async ultimaEstrategia(campanaId) { return (await lista<EstrategiaGuardada>(db.from('cadena_estrategias').select('*').eq('campana_id', campanaId).order('version', { ascending: false }).limit(1)))[0] ?? null },
     async insertarEstrategia(e) { const { error } = await db.from('cadena_estrategias').insert(e); if (error) fallo(error) },
+    // 19-nov · grupo C · las pasadas bloqueadas de la estrategia (tabla aparte: migración 202611190600) · única por (campaña, versión, ronda): un reenvío no duplica
+    async guardarRondaDeEstrategia(r) { const { error } = await db.from('cadena_estrategia_rondas').upsert(r, { onConflict: 'campana_id,version,ronda', ignoreDuplicates: true }); if (error) fallo(error) },
+    async rondasDeEstrategia(campanaId, version) { return lista<RondaDeEstrategia>(db.from('cadena_estrategia_rondas').select('*').eq('campana_id', campanaId).eq('version', version).order('ronda', { ascending: true })) },
     // 17-nov · Sprint 4 · A entrega 2 · las fichas de hechos por oferta (una fila por campaña y versión · único en la base: la primera que cierra gana)
     // la tabla puede no existir todavía (código publicado antes que la migración): leer = «sin fichas» (la hoja lo declara) · escribir sí falla ruidoso
     async ultimasFichas(campanaId) {
@@ -557,9 +560,13 @@ export function almacenDeSupabase(): Almacen {
     },
 
     async hallazgosQueBloquean(campanaId, tanda) {
-      const filas = await lista<{ intento: number; severidad: string; fila_id: string | null; ficha: Ficha; chequeo: string }>(db.from('cadena_validaciones').select('intento, severidad, fila_id, ficha, chequeo').eq('campana_id', campanaId).eq('objeto', 'calendario').eq('tanda', tanda).limit(1000))
+      // 19-nov · grupo C: con varias rondas de corrección hay varias tandas de validaciones en el intento 2; vale SOLO la última guardada
+      // (un insert = una transacción = una sola `creada_en`): los bloqueos de una ronda vieja ya no cuentan como abiertos
+      const filas = await lista<{ intento: number; severidad: string; fila_id: string | null; ficha: Ficha; chequeo: string; creada_en: string }>(db.from('cadena_validaciones').select('intento, severidad, fila_id, ficha, chequeo, creada_en').eq('campana_id', campanaId).eq('objeto', 'calendario').eq('tanda', tanda).limit(1000))
       const ultimo = filas.reduce((m, x) => Math.max(m, x.intento), 0)
-      return filas.filter((x) => x.intento === ultimo && x.severidad === 'bloquea').map((x) => ({ ficha: x.ficha, fila_id: x.fila_id, chequeo: x.chequeo }))
+      const delUltimo = filas.filter((x) => x.intento === ultimo)
+      const ultimaVez = delUltimo.reduce((m, x) => (Date.parse(x.creada_en) > Date.parse(m) ? x.creada_en : m), delUltimo[0]?.creada_en ?? '')
+      return delUltimo.filter((x) => x.creada_en === ultimaVez && x.severidad === 'bloquea').map((x) => ({ ficha: x.ficha, fila_id: x.fila_id, chequeo: x.chequeo }))
     },
 
     async corridaPorClave(campanaId, paso, k, intento) { return uno<Corrida>(db.from('cadena_corridas').select('*').eq('campana_id', campanaId).eq('paso', paso).eq('clave_idempotencia', k).eq('intento', intento).maybeSingle()) },

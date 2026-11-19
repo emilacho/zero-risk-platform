@@ -34,7 +34,15 @@ export interface Resolucion {
   /** se pasan a la re-validación para que la frecuencia no castigue a la fila que salió */
   ajustes: Ajuste[]
   fichasPendientes: Ficha[]
+  /** 19-nov · grupo C · de `filasQueSalen`, las que salen por un bloqueo que NO es «dato sin fuente» (`descartada_por_bloqueo`) */
+  porBloqueo?: string[]
 }
+
+/** 19-nov · grupo C · el motivo del slot que queda omitido cuando una fila SALE en la cadena (por cada uno de los estados de `SALIERON_EN_LA_CADENA`) */
+export const MOTIVO_DE_SALIDA = {
+  descartada_sin_fuente: 'la fila salió: dato sin fuente tras la corrección',
+  descartada_por_bloqueo: 'la fila salió: siguió bloqueada tras la última ronda de corrección',
+} as const
 
 export function slotDe(id: string): string {
   return id.replace(/^s\d+-d\d+-/, '')
@@ -52,7 +60,33 @@ export function resolverTrasCorreccion(hs: Hallazgo[], semanaDe: (filaId: string
   return {
     estado: 'filas_salen',
     filasQueSalen: ids,
-    ajustes: ids.map((id) => ({ semana: semanaDe(id), slot: slotDe(id), accion: 'omitir' as const, motivo: 'la fila salió: dato sin fuente tras la corrección' })),
+    ajustes: ids.map((id) => ({ semana: semanaDe(id), slot: slotDe(id), accion: 'omitir' as const, motivo: MOTIVO_DE_SALIDA.descartada_sin_fuente })),
     fichasPendientes: faltantes.map((x) => x.ficha),
   }
+}
+
+/**
+ * 19-nov · grupo C (firma de Emilio, ADENDA 17:22Z) · tras la ÚLTIMA ronda de corrección: toda fila que sigue bloqueada SALE. La de dato sin fuente como siempre
+ * (`descartada_sin_fuente`); la de cualquier otro bloqueo, `descartada_por_bloqueo`. Cada una deja su slot omitido con su motivo. Los bloqueos de CONJUNTO (sin fila)
+ * no tienen fila que sacar: los baja a aviso `bajarBloqueosDeConjuntoAAvisos` después de re-validar.
+ */
+export function resolverTrasLaUltimaRonda(hs: Hallazgo[], semanaDe: (filaId: string) => number): Resolucion {
+  const bloqueos = hs.filter((x) => x.severidad === 'bloquea' && !!x.fila_id)
+  const faltante = (x: Hallazgo) => CHEQUEOS_DE_DATO_FALTANTE.has(x.chequeo)
+  const porBloqueo = [...new Set(bloqueos.filter((x) => !faltante(x)).map((x) => x.fila_id as string))]
+  const sinFuente = [...new Set(bloqueos.filter(faltante).map((x) => x.fila_id as string))].filter((id) => !porBloqueo.includes(id))
+  const ids = [...sinFuente, ...porBloqueo]
+  return {
+    estado: ids.length ? 'filas_salen' : 'ok',
+    filasQueSalen: ids,
+    porBloqueo,
+    ajustes: ids.map((id) => ({ semana: semanaDe(id), slot: slotDe(id), accion: 'omitir' as const, motivo: porBloqueo.includes(id) ? MOTIVO_DE_SALIDA.descartada_por_bloqueo : MOTIVO_DE_SALIDA.descartada_sin_fuente })),
+    fichasPendientes: bloqueos.map((x) => x.ficha),
+  }
+}
+
+/** 19-nov · grupo C · un bloqueo de CONJUNTO que quedó tras sacar las filas: pasa a AVISO con el hueco anotado (la tanda se cierra; la campaña no se detiene) */
+export const NOTA_DEL_HUECO = 'quedó anotado tras la última ronda de corrección; la tanda se cierra igual'
+export function bajarBloqueosDeConjuntoAAvisos(hs: Hallazgo[]): Hallazgo[] {
+  return hs.map((x) => (x.severidad === 'bloquea' && !x.fila_id ? { ...x, severidad: 'aviso' as const, ficha: { ...x.ficha, gravedad: 'aviso' as const, que: `${x.ficha.que} (${NOTA_DEL_HUECO})` } } : x))
 }

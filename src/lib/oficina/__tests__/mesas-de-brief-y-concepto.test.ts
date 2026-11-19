@@ -7,6 +7,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { TOPE_REAL_DEL_PEDIDO } from '@/lib/limites-de-tamano'
 import { avanzar, recibirResultado, type Respuesta } from '../orquestador'
 import { direccionDe, especialistasPertinentes } from '../mesa/directorio'
 import { abrirMesaDeLaCadena, briefIdDeLaCadena, devolucionDelBrief, textoParaLaCadena, validarSobreDeLaCadena, type SobreDeLaCadena } from '../mesa/de-la-cadena'
@@ -352,13 +353,13 @@ describe('la mesa del BRIEF de punta a punta', () => {
     expect(blanco.ok && 'plan_texto' in blanco.sobre).toBe(false)
   })
 
-  it('el manual y el plan llegan COMPLETOS al brief (dieta de la cadena) y la dieta de las piezas sigue siendo la de hoy', () => {
+  it('19-nov · ADENDA 1 · P2: el manual, el marco y el plan llegan ENTEROS a todas las mesas que los leen (antes las piezas 7000/5000/3000 y la gran idea sin plan)', () => {
     expect(DIETA.brief.marco).toBeGreaterThanOrEqual(100_000)
-    expect(DIETA.carrusel).toEqual({ manual: 7000, marco: 5000, plan: 3000 })
-    expect(DIETA.kit).toEqual({ manual: 7000, marco: 5000, plan: 3000 })
+    for (const tipo of ['carrusel', 'kit', 'post', 'video', 'brief', 'concepto', 'reubicacion'] as const) expect(DIETA[tipo], tipo).toEqual({ manual: TOPE_REAL_DEL_PEDIDO, marco: TOPE_REAL_DEL_PEDIDO, plan: TOPE_REAL_DEL_PEDIDO })
+    expect(DIETA.fallidos).toEqual({ manual: 0, marco: TOPE_REAL_DEL_PEDIDO, plan: 0 })
     expect(DIETA.brief.manual).toBeGreaterThanOrEqual(100_000)
     expect(DIETA.brief.plan).toBeGreaterThanOrEqual(100_000)
-    expect(DIETA.concepto.plan).toBe(0)
+    expect(DIETA.banco).toEqual({ manual: TOPE_REAL_DEL_PEDIDO, marco: TOPE_REAL_DEL_PEDIDO, plan: 0 })
   })
 })
 
@@ -537,11 +538,12 @@ describe('textos puros', () => {
     expect(textoParaLaCadena([l('dirige', 'abre', 'e'), l('aporta', 'idea', 'c')], null)).toBe('[e] abre\n\n[c] idea')
     expect(textoParaLaCadena([], '')).toBe('')
   })
-  it('armarTarea: el recorte avisa cuánto cortó y de qué documento (nunca callado)', () => {
+  it('armarTarea: un documento que pasa el techo del pedido se recorta AVISANDO cuánto y de qué documento (nunca callado); por debajo llega entero', () => {
     const est = { tipo: 'carrusel', directorio_congelado: TRAS_LA_MIGRACION, direccion: 'creative-director-mesa', turnos: 0, integraciones: 0, devoluciones_por_citas: 0, libro_visto: 0, preguntas_del_traductor: 0, marcas: {}, fase: 'trabajando', cierre_forzado: null, pieza_texto: null, turno_abierto: null } as EstadoMesa
-    const t = armarTarea({ tipo: 'dirigir', agente: 'creative-director-mesa', tarjeta: undefined, est, libro: [], c: { cliente_nombre: 'X', tipo: 'carrusel', brief_id: 'b', brief_texto: 'y'.repeat(100), manual_texto: 'm'.repeat(9000), plan_texto: 'p'.repeat(4000), fotos: [], tope_usd: 1, gasto_usd: 0 } })
-    expect(t).toContain('[… recortado: 7000 de 9000 caracteres de el manual de marca]')
-    expect(t).toContain('[… recortado: 3000 de 4000 caracteres de el plan]')
+    const t = armarTarea({ tipo: 'dirigir', agente: 'creative-director-mesa', tarjeta: undefined, est, libro: [], c: { cliente_nombre: 'X', tipo: 'carrusel', brief_id: 'b', brief_texto: 'y'.repeat(100), manual_texto: 'm'.repeat(TOPE_REAL_DEL_PEDIDO + 2000), plan_texto: 'p'.repeat(4000), fotos: [], tope_usd: 1, gasto_usd: 0 } })
+    expect(t).toContain(`[… recortado: ${TOPE_REAL_DEL_PEDIDO} de ${TOPE_REAL_DEL_PEDIDO + 2000} caracteres de el manual de marca]`)
+    expect(t).toContain('p'.repeat(4000))
+    expect(t).not.toContain('de el plan]')
     expect(t).not.toContain('de el marco]')
   })
 })

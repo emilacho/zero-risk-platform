@@ -137,6 +137,15 @@ function textosPorSeccion(md: string): (k: (typeof SECCIONES_DEL_BRIEF)[number])
 }
 
 /**
+ * 19-nov · ADENDA 1 · P2b (CC5): lo que el CALENDARIO lee del brief validado: «Público» y «Hechos de las ofertas», ENTEROS (nada se recorta).
+ * Con el mismo lector que valida el brief (los mismos títulos y sus otros nombres). Una sección ausente queda vacía: quien arma la tarea lo dice.
+ */
+export function delBriefParaElCalendario(md: string): { publico: string; hechos_de_las_ofertas: string } {
+  const t = textosPorSeccion(md)
+  return { publico: t('Público'), hechos_de_las_ofertas: t('Hechos de las ofertas') }
+}
+
+/**
  * LAS SECCIONES OBLIGATORIAS QUE LE FALTAN A UN BRIEF, con el MISMO criterio que el lector (ausente o vacía).
  * 10-nov · el brief v3 de Náufrago se devolvió porque el anterior (validado antes de #968) no tenía «Público» ni «Cómo sabremos que funcionó»
  * y la mesa lo conservó «tal cual»: el marco de un pedido de cambios lo usa para nombrar lo que hay que agregar.

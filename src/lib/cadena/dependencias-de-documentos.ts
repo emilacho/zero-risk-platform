@@ -7,7 +7,7 @@
  *   · brief       ← plan, manual, estrategia                 (`mesas.ts` `marcoDelBrief({ ctx, estrategia })` · además cita el plan literal)
  *   · gran_idea   ← brief, estrategia, manual · plan (vía brief) (`mesas.ts` `marcoDelConcepto({ ctx, estrategia, briefTexto })`: el pedido NO lleva el plan;
  *                                                              un cambio del plan le llega en cadena plan → brief → gran idea · GO Lenovo 10-nov 18:01Z, opción A)
- *   · calendario  ← gran_idea, estrategia, manual, plan      (`pasos.ts` `calendarioPreparar` · `conceptoParaElCalendario` + estrategia validada + ctx)
+ *   · calendario  ← brief, gran_idea, estrategia, manual, plan (`pasos.ts` `calendarioPreparar` · `conceptoParaElCalendario` + estrategia validada + ctx)
  *   · pieza       ← calendario, gran_idea, brief, manual, plan (`hoja.ts` `InsumosDeLaHoja`: plan_id, manual_id + versión, brief, concepto, filas)
  *
  * Corrección 2 de CC7 (10-nov): NO es una fila. Un cambio del manual va DIRECTO al brief, a la gran idea, al calendario y a las piezas, sin pasar por el plan.
@@ -30,7 +30,7 @@ export const LEE: Readonly<Record<Documento, readonly Documento[]>> = {
   estrategia: ['plan', 'manual'],
   brief: ['plan', 'manual', 'estrategia'],
   gran_idea: ['brief', 'estrategia', 'manual'], // el plan, vía brief (no directo)
-  calendario: ['gran_idea', 'estrategia', 'manual', 'plan'],
+  calendario: ['brief', 'gran_idea', 'estrategia', 'manual', 'plan'], // 19-nov · ADENDA 1 · P2b: el calendario lee del brief el público y los hechos de las ofertas
   pieza: ['calendario', 'gran_idea', 'brief', 'manual', 'plan'],
 }
 
