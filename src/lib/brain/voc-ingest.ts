@@ -180,7 +180,7 @@ export async function ingestVocEntries(
       source_table: 'client_voc_library',
       source_id: vocId,
       section_label: 'quote',
-      chunk_text: buildVocContentText(e).slice(0, 8000),
+      chunk_text: buildVocContentText(e), // encargo 11: entero, igual que su huella semántica (antes 8000)
       embedding: embed.embeddings[i],
       provenance_tag: buildBrainProvenanceTag({
         source: `voc:${e.source}`,
