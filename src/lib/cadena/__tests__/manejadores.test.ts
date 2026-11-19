@@ -303,17 +303,23 @@ describe('la estrategia: preparar y guardar', () => {
     const otra = await estrategiaPreparar(al, { ...wf(), campana_id: id }, AHORA)
     expect(otra.status === 200 || otra.status === 409).toBe(true)
   })
-  it('la llamada que no entrega el objeto: reintentar; a la tercera, necesita_humano con su reloj (nada queda colgado)', async () => {
+  it('la llamada que no entrega el objeto: reintentar; a la tercera, el fin declarado · 18-nov grupo A: sin necesita_humano, el reintento es del tramo siguiente (nada queda colgado)', async () => {
     const al = almacen()
     const id = idCampana(await abrir(al))
     for (let i = 1; i <= 3; i++) {
       const p = await estrategiaPreparar(al, { ...wf(), campana_id: id }, AHORA)
       const g = await estrategiaGuardar(al, { ...wf(), campana_id: id, corrida_id: p.cuerpo.corrida_id, resultado: { success: false, error: 'E-OUTPUT-SCHEMA-MISSING', cost_usd: 0.2 } }, AHORA)
-      if (i < 3) expect(g.cuerpo.reintentar).toBe(true)
-      else expect(g.cuerpo.necesita_humano).toBe(true)
+      expect(g.cuerpo.reintentar).toBe(true)
+      expect(g.cuerpo.necesita_humano).toBeUndefined()
     }
-    expect(al.campanas[0].estado).toBe('necesita_humano')
-    expect(al.esperas.some((e) => e.objeto_tipo === 'necesita_humano' && e.estado === 'viva')).toBe(true)
+    // la vuelta del flujo después del tercero: `preparar` contesta el fin declarado (en este tramo no se insiste)
+    const cuarta = await estrategiaPreparar(al, { ...wf(), campana_id: id }, AHORA)
+    expect(cuarta.status).toBe(409)
+    expect(cuarta.cuerpo.error).toBe('intentos_agotados')
+    expect(cuarta.cuerpo.reintenta).toBe(true)
+    expect(al.campanas[0].estado).not.toBe('necesita_humano')
+    expect(al.esperas.some((e) => e.objeto_tipo === 'necesita_humano')).toBe(false)
+    expect(al.corridas).toHaveLength(3)
     expect(al.corridas.every((c) => c.estado === 'fallida')).toBe(true)
   })
   it('19-nov · grupo C · una estrategia inválida: hasta 3 rondas de corrección con sus fichas; si sigue mal, queda vigente la MEJOR con avisos y la campaña sigue (ya no necesita_humano)', async () => {
@@ -377,10 +383,11 @@ describe('la estrategia: preparar y guardar', () => {
     expect(g.cuerpo.avisos as string[]).toHaveLength(bloqueos[1])
     expect((g.cuerpo.avisos as string[])[0]).toContain('ronda 1')
   })
-  it('🔴 el presupuesto de planificación se respeta: sin presupuesto no se llama (necesita_humano) y un corte con costo 0 en el libro cuenta el tope', async () => {
+  it('🔴 el presupuesto de planificación se respeta: sin presupuesto no se llama (18-nov grupo A: sin necesita_humano) y un corte con costo 0 en el libro cuenta el tope', async () => {
     const al = almacen()
     const id = idCampana(await abrir(al))
     al.campanas[0].presupuesto_planificacion_usd = 1.5
+    al.campanas[0].tope_gasto_usd = 1.5 // la bolsa se agrandaría sola al triple; el tope de la campaña la deja donde está
     const p = await estrategiaPreparar(al, { ...wf(), campana_id: id }, AHORA)
     await estrategiaGuardar(al, { ...wf(), campana_id: id, corrida_id: p.cuerpo.corrida_id, resultado: { success: false, cost_usd: 0, cerrada_por_tope: true, error: 'cortada' } }, AHORA)
     expect(al.corridas[0].estado).toBe('cerrada_por_tope')
@@ -389,7 +396,8 @@ describe('la estrategia: preparar y guardar', () => {
     const otra = await estrategiaPreparar(al, { ...wf(), campana_id: id }, AHORA)
     expect(otra.status).toBe(409)
     expect(otra.cuerpo.error).toBe('presupuesto_agotado')
-    expect(al.campanas[0].estado).toBe('necesita_humano')
+    expect(al.campanas[0].estado).not.toBe('necesita_humano')
+    expect(al.campanas[0].presupuesto_planificacion_usd).toBe(1.5)
   })
   it('la corrida de otra campaña o inexistente es 404; guardar dos veces la misma no la duplica', async () => {
     const al = almacen()

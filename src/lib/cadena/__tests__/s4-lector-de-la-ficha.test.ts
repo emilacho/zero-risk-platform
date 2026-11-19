@@ -295,12 +295,11 @@ describe('🟡 1 de CC6 · RESPUESTA-LENOVO (b) · el lector gasta de su PROPIA 
     const c = clienteC(), al = almacen(c)
     const ab = await abrirCampana(al, { ...wf(), client_id: c.clientId, seco: true }, AHORA)
     const id = (ab.cuerpo.campana as { id: string }).id
+    campanaDe(al, id).presupuesto_planificacion_usd = 6 // 18-nov · hoy la bolsa nace de lo medido (× semanas × 3); el caso real nació con los US$ 6 fijos de entonces
     const pe = await estrategiaPreparar(al, { ...wf(), campana_id: id }, AHORA)
     await estrategiaGuardar(al, { ...wf(), campana_id: id, corrida_id: pe.cuerpo.corrida_id, resultado: ok(c.estrategia, 2.02) }, AHORA)
     const campana = campanaDe(al, id)
-    // 19-nov · C1 (DECISIÓN Lenovo 05:00Z): la bolsa ya no es 6 fijo; es la de las tandas de esta campaña
-    const bolsa = bolsaDePlanificacion(medidaDeCampana(campana).totalTandas)
-    expect(campana.presupuesto_planificacion_usd).toBe(bolsa)
+    expect(campana.presupuesto_planificacion_usd).toBe(6) // nació con los 6 de entonces y le alcanzó: no se agrandó
     expect(presupuestoDelLector(campana)).toBe(PRESUPUESTO_LECTOR_POR_OMISION)
     for (let i = 0; i < 5; i++) {
       const p = await fichasPreparar(al, { ...wf(), workflow_execution_id: `ex-${i}`, campana_id: id }, AHORA)
@@ -310,7 +309,7 @@ describe('🟡 1 de CC6 · RESPUESTA-LENOVO (b) · el lector gasta de su PROPIA 
     expect(al.corridas.filter((x) => x.paso === 'fichas').map((x) => x.estado)).toEqual(['fallida', 'fallida', 'fallida'])
     expect((await bolsaDelPaso(al, campana, 'fichas')).gastado).toBe(1.5)
     // la planificación ve SOLO lo suyo: la estrategia
-    expect(await bolsaDelPaso(al, campana, 'calendario')).toEqual({ gastado: 2.02, presupuesto: bolsa })
+    expect(await bolsaDelPaso(al, campana, 'calendario')).toEqual({ gastado: 2.02, presupuesto: 6 })
     expect((await calendarioPreparar(al, { ...wf(), campana_id: id, tanda: 1 }, AHORA)).status).toBe(200)
     expect(campanaDe(al, id).estado).not.toBe('necesita_humano')
   })

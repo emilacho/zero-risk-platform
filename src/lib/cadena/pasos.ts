@@ -20,7 +20,7 @@ import { fueraDePlazoDeProduccion } from './lotes'
 import { esNotaDeDependencias, resolverDependencias } from './resolver-dependencias'
 import { tareaDeCalendario, tareaDeEstrategia, tareaDeFichas } from './indicaciones'
 import { metodoDeCalendario } from './metodos'
-import { abrirEsperaDe, ponerNecesitaHumano, prepararCorrida, resolverEsperas, semanaDeId } from './nucleo'
+import { abrirEsperaDe, ponerNecesitaHumano, prepararCorrida, resolverEsperas, seguirConReintento, semanaDeId } from './nucleo'
 import { validarEsquemaDeSalida } from '@/lib/salida-estructurada'
 import { diasEntre, fechaDeFila } from './fechas'
 import { diaUnoDelPlan } from './fechas-en-texto'
@@ -99,7 +99,8 @@ function respuestaDePreparar(res: Awaited<ReturnType<typeof prepararCorrida>>): 
  * 19-nov · grupo C (GO Lenovo 04:29Z · firma de Emilio): las rondas de corrección. La clave de la corrida termina en `:c<ronda>` (0 = la primera pasada).
  * Antes era `:c0`/`:c1`: con la misma clave, una segunda ronda habría contado como un intento más de la primera. Las claves viejas (`:c1`) se leen como ronda 1.
  */
-export const rondaDeClave = (clave: string): number => { const m = /:c(\d+)$/.exec(clave); return m ? Number(m[1]) : 0 }
+/** la ronda sale de `…:c<ronda>`, también cuando la llave sigue con el reintento del tramo (`…:c<ronda>:r<tramo>`, grupo A · `llaveDeReintentoDelPaso`) */
+export const rondaDeClave = (clave: string): number => { const m = /:c(\d+)(?::r[^:]*)?$/.exec(clave); return m ? Number(m[1]) : 0 }
 /** la ronda de corrección que toca: 1 + las rondas de este paso y este prefijo que ya cerraron `ok` (una ronda cuya llamada falló se reintenta con su misma clave) */
 export async function rondaQueToca(al: Almacen, campanaId: string, paso: 'estrategia' | 'calendario', prefijo: string): Promise<number> {
   const hechas = new Set(
@@ -134,9 +135,10 @@ export async function estrategiaPreparar(al: Almacen, cuerpo: Record<string, unk
   const corto = respuestaDePreparar(prep)
   if (corto) return corto
   if (prep.tipo === 'intentos_agotados' || prep.tipo === 'presupuesto_agotado') {
-    const motivo = prep.tipo === 'intentos_agotados' ? 'la estrategia agotó sus 3 intentos' : `el presupuesto de planificación se agotó (US$ ${prep.gastado.toFixed(2)} de ${prep.presupuesto})`
-    const r = await ponerNecesitaHumano(al, campana, motivo, ahora)
-    return { status: 409, cuerpo: { error: prep.tipo, necesita_humano: true, alerta: r.alerta } }
+    // grupo A (18-nov · «nada detiene el flujo») · la campaña NO cambia de estado: el barrido de atascadas deja el sobre del plan en el tramo siguiente. El 409 con este `error` es el «fin declarado» del flujo.
+    const que = prep.tipo === 'intentos_agotados' ? 'agotó los intentos de este tramo' : `la bolsa de planificación no alcanza aun al triple (US$ ${prep.gastado.toFixed(2)} de ${prep.presupuesto})`
+    const r = await seguirConReintento(al, campana, 'estrategia', que)
+    return { status: 409, cuerpo: { error: prep.tipo, necesita_humano: false, reintenta: true, alerta: r.alerta } }
   }
   if (campana.estado === 'abierta') await al.actualizarCampana(campana.id, { estado: 'estrategia' })
   const llavesDeFechas = ctx.pais ? await al.llavesDeFechas(ctx.pais, campana.client_id) : []
@@ -165,8 +167,8 @@ export async function estrategiaGuardar(al: Almacen, cuerpo: Record<string, unkn
   const { objeto, reintentar } = await cerrarSegunResultado(al, corrida, leerResultado(cuerpo.resultado))
   if (objeto === null) {
     if (reintentar) return { status: 200, cuerpo: { reintentar: true } }
-    const r = await ponerNecesitaHumano(al, campana, 'la llamada de la estrategia no entregó el objeto estructurado tras 3 intentos', ahora)
-    return { status: 200, cuerpo: { necesita_humano: true, alerta: r.alerta } }
+    // grupo A · B: fallo de proveedor o de formato, no pide criterio. La corrida ya quedó cerrada; el flujo vuelve a `preparar`, que contesta el fin declarado (llave del tramo agotada) y reintenta en el siguiente
+    return { status: 200, cuerpo: { reintentar: true } }
   }
   const version = ((await al.ultimaEstrategia(campana.id))?.version ?? 0) + 1
   const { estrategia: objetoAjustado, aviso: avisoDePilares } = normalizarPilares(objeto)
@@ -342,9 +344,10 @@ export async function calendarioPreparar(al: Almacen, cuerpo: Record<string, unk
   const corto = respuestaDePreparar(prep)
   if (corto) return corto
   if (prep.tipo === 'intentos_agotados' || prep.tipo === 'presupuesto_agotado') {
-    const motivo = prep.tipo === 'intentos_agotados' ? `la tanda ${tanda} agotó sus 3 intentos` : `el presupuesto de planificación se agotó (US$ ${prep.gastado.toFixed(2)} de ${prep.presupuesto})`
-    const r = await ponerNecesitaHumano(al, campana, motivo, ahora)
-    return { status: 409, cuerpo: { error: prep.tipo, necesita_humano: true, alerta: r.alerta } }
+    // grupo A · la campaña NO cambia de estado: el vigía reemite la tanda en su pasada siguiente (`calendario · siguiente`, con su tramo)
+    const que = prep.tipo === 'intentos_agotados' ? `la tanda ${tanda} agotó los intentos de este tramo` : `la tanda ${tanda}: la bolsa de planificación no alcanza aun al triple (US$ ${prep.gastado.toFixed(2)} de ${prep.presupuesto})`
+    const r = await seguirConReintento(al, campana, 'calendario', que)
+    return { status: 409, cuerpo: { error: prep.tipo, necesita_humano: false, reintenta: true, alerta: r.alerta } }
   }
   const filasMalas = correccion?.fila_ids?.length ? todas.filter((f) => correccion.fila_ids!.includes(f.id)) : []
   const tarea = tareaDeCalendario({
@@ -389,9 +392,8 @@ export async function calendarioGuardar(al: Almacen, cuerpo: Record<string, unkn
   const { objeto, reintentar } = await cerrarSegunResultado(al, corrida, leerResultado(cuerpo.resultado))
   if (objeto === null || !esTanda(objeto)) {
     if (objeto !== null) await al.cerrarCorrida(corrida.id, { estado: 'fallida', error: 'el objeto no tiene la forma de una tanda' })
-    if (reintentar || objeto !== null) return { status: 200, cuerpo: { reintentar: true } }
-    const r = await ponerNecesitaHumano(al, campana, `la llamada del calendario (tanda ${tanda}) no entregó el objeto tras 3 intentos`, ahora)
-    return { status: 200, cuerpo: { necesita_humano: true, alerta: r.alerta } }
+    // grupo A · B: sin objeto tras los intentos tampoco detiene: vuelve a `preparar`, que contesta el fin declarado y el vigía reintenta en su pasada siguiente
+    return { status: 200, cuerpo: { reintentar: true } }
   }
   const estr = (await al.ultimaEstrategia(campana.id))!.contenido
   const version = Math.max(1, await al.ultimaVersionDeCalendario(campana.id))

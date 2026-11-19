@@ -158,6 +158,10 @@ describe('las claves de las rondas', () => {
     expect(rondaDeClave('v2:c1')).toBe(1)
     expect(rondaDeClave('t3:v1:c3')).toBe(3)
     expect(rondaDeClave('v2')).toBe(0)
+    // con el reintento del tramo del grupo A (`llaveDeReintentoDelPaso`), la ronda es la misma
+    expect(rondaDeClave('t1:v1:c2:r2026-11-19am')).toBe(2)
+    expect(rondaDeClave('v1:c0:r2026-11-19pm')).toBe(0)
+    expect(rondaDeClave('v1:c3:x')).toBe(0)
   })
   it('la mejor ronda: menos bloqueos; si empatan, la última', () => {
     const r = (ronda: number, bloqueos: number): RondaDeEstrategia => ({ campana_id: 'c', version: 1, ronda, bloqueos, contenido: {} as never, fichas: [], seco: true })

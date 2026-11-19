@@ -10,6 +10,7 @@ import { readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { ACCIONES } from '../acciones'
+import { ponerNecesitaHumano } from '../nucleo'
 import { AlmacenMemoria } from '../__fixtures__/almacen-memoria'
 import { SimuladorN8n, type FlujoN8n, type Item, type PeticionHttp, type RespuestaHttp } from '../__fixtures__/simulador-n8n'
 import { clienteA, contextoDe, piezaBuena, tandaBuena, type ClienteFixture } from '../__fixtures__/clientes'
@@ -502,10 +503,11 @@ describe('COMPORTAMIENTO · el vigía', () => {
   })
   it('los avisos van agregados por campaña y, en ensayo, se REGISTRAN y no se mandan a Slack; encendida, sale UN mensaje con «qué hacer»', async () => {
     const m = mundo({ estado: 'ensayo' })
-    // 19-nov · grupo C: los bloqueos ya no llevan a una persona; lo que sí la pide es la llamada que no entrega el objeto tras 3 intentos
-    const f = { __fallo: 'se cayó' }
-    await correr(m, sobreAbrir({ _simulacros: { estrategia: [f, f, f] } }))
-    expect(m.al.campanas[0].estado).toBe('necesita_humano') // el control: hay una espera que avisar
+    // 19-nov · con el grupo A (las caídas reintentan solas) y el C1 (los bloqueos se corrigen en rondas) la planificación ya no pide a una persona:
+    // la espera la pone otra mesa (`ponerNecesitaHumano`, p. ej. la del brief). Lo que se prueba aquí es cómo el vigía la avisa.
+    await correr(m, sobreAbrir({ _simulacros: simulacros(m.cliente) }))
+    await ponerNecesitaHumano(m.al, m.al.campanas[0], 'la mesa del brief no entregó dos veces', '2026-10-09T08:00:00.000Z')
+    expect(m.al.esperas.some((e) => e.objeto_tipo === 'necesita_humano')).toBe(true) // el control: hay una espera que avisar
     await m.sim.ejecutar(ID_VIGIA, [{ json: {} }])
     expect(m.reg.slack).toHaveLength(0)
     m.al.config.set('estado_cadena', 'encendida')
@@ -551,22 +553,28 @@ describe('afinando lo que las mutaciones dejaron vivo (flujos)', () => {
     for (const p of m.reg.agente) expect((p.cuerpo as any).dry_run).toBe(false)
     expect(m.al.campanas[0].seco).toBe(false)
   })
-  it('🔴 el tope de presupuesto de planificación detiene antes de llamar al agente y el cable le cuenta a la sala que la campaña necesita a Emilio', async () => {
+  it('🔴 el tope de presupuesto de planificación detiene antes de llamar al agente · 18-nov grupo A: la campaña NO pasa a necesita_humano (sigue con una alerta)', async () => {
     const m = mundo({ agente: () => { throw new Error('no debía llamar al agente') } })
     await abrirYa(m)
     m.al.campanas[0].presupuesto_planificacion_usd = 0.5
+    m.al.campanas[0].tope_gasto_usd = 0.5 // la bolsa se agrandaría sola al triple; con el tope de la campaña en 0,50 no puede crecer
+    const antes = m.al.campanas[0].estado
     const e = await sub(m, IDS.estrategia, { campana_id: m.al.campanas[0].id, seco: true })
-    expect(e[0].json.resultado).toBe('necesita_humano')
+    expect(e[0].json.resultado).toBe('necesita_humano') // la etiqueta del fin declarado en n8n
+    expect(e[0].json.alerta).toMatch(/sigue sola/)
     expect(m.reg.agente).toHaveLength(0)
-    expect(m.al.campanas[0].estado).toBe('necesita_humano')
+    expect(m.al.campanas[0].estado).toBe(antes)
+    expect(m.al.campanas[0].presupuesto_planificacion_usd).toBe(0.5)
   })
   it('🔴 si el calendario no queda (la llamada no entrega tras 3 intentos), el cable cuenta necesita_humano (no «cadena_abierta»)', async () => {
     const m = mundo()
     const f = { __fallo: 'se cayó' }
     const r = await correr(m, sobreAbrir({ _simulacros: { estrategia: [m.cliente.estrategia], calendario: [f, f, f] } }))
-    expect(r[0].json.resultado).toBe('necesita_humano')
+    expect(r[0].json.resultado).toBe('necesita_humano') // la etiqueta del fin declarado en n8n
     expect(m.reg.cable[0].resultado).toBe('necesita_humano')
-    expect(m.al.campanas[0].estado).toBe('necesita_humano')
+    // grupo A: la campaña NO cambia de estado; sigue sola y lo reintenta en el tramo siguiente
+    expect(m.al.campanas[0].estado).toBe('calendario')
+    expect(m.al.campanas[0].estado_motivo).toMatch(/^reintento automático · calendario/)
   })
   it('19-nov · grupo C · una pieza que sigue bloqueada tras 3 rondas SALE y el cable cuenta «cadena_abierta»', async () => {
     const m = mundo()

@@ -339,6 +339,7 @@ describe('mutantes vivos de la 1.ª corrida del mutador sobre #464 (relevo 41)',
     expect((await prepararCorrida(al, c, 'estrategia', 'P1', 'wf-cadena', 'e1', AHORA, 'm', 'h')).tipo).toBe('lista')
     const al2 = almacen(); const id2 = idDe(await abrir(al2)); const c2 = camp(al2, id2)
     c2.presupuesto_planificacion_usd = tope - 0.01
+    c2.tope_gasto_usd = tope - 0.01 // grupo A (18-nov): la bolsa se agranda sola al triple, pero nunca pasa el tope de la campaña · con el tope igual a la bolsa, el borde es el de siempre
     expect((await prepararCorrida(al2, c2, 'estrategia', 'P1', 'wf-cadena', 'e1', AHORA, 'm', 'h')).tipo).toBe('presupuesto_agotado')
   })
   it('avanzar exige campana_id Y a: con uno solo, 400', async () => {
