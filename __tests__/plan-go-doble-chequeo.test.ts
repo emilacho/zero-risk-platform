@@ -10,6 +10,7 @@ import { semanasFechadas, validarFormaDelPlan } from '../src/lib/planeacion/vali
 import { PASO_DE_ANALISIS } from '../src/app/api/planeacion/mesa-de-analisis/route'
 import { PASO_DE_MERCADO } from '../src/app/api/planeacion/brazo/mercado/route'
 import { TOPE_DEL_PLAN_COMPLETO_USD } from '../src/lib/planeacion/mesa/plantilla'
+import { DEFAULT_RUN_SCOPED_CAP_USD } from '../src/lib/run-sdk-spend-gate'
 import { planParaLaCadena } from '../src/lib/cadena/almacen-supabase'
 import { debePausar } from '../src/lib/finanzas/conversa/orquestador'
 import type { CatalogoSnapshot } from '../src/lib/planeacion/dato-v1/catalogo'
@@ -57,26 +58,28 @@ describe('el tope del plan completo corta de verdad', () => {
   beforeEach(() => { filas = []; fallaLaLecturaDelPlan = false; process.env.RUN_SPEND_CAP_ENFORCE = 'true'; process.env.RUN_SPEND_CAP_USD = '1000'; delete process.env.PLAN_CAP_USD })
   afterEach(() => { delete process.env.RUN_SPEND_CAP_ENFORCE; delete process.env.RUN_SPEND_CAP_USD })
 
-  it('🔴 son US$ 15', () => { expect(TOPE_DEL_PLAN_COMPLETO_USD).toBe(15) })
+  it('🔴 son US$ 21,86 (US$ 15 → 3 × lo medido, 18-nov)', () => { expect(TOPE_DEL_PLAN_COMPLETO_USD).toBe(21.86) })
   it('🔴 suma todas las ejecuciones de la corrida: ninguna llega sola al tope de ejecución', async () => {
-    filas = [0, 1, 2, 3].map((i) => ({ cost_usd: 3.75, workflow_execution_id: `ej-${i}`, ...DEL_PLAN }))
+    // 2 × 10,93 = 21,86 justo en el tope del plan; cada una queda bajo la vara por corrida (13,58)
+    filas = [0, 1].map((i) => ({ cost_usd: 10.93, workflow_execution_id: `ej-${i}`, ...DEL_PLAN }))
+    expect(10.93).toBeLessThan(DEFAULT_RUN_SCOPED_CAP_USD)
     const { r } = await medir({ trabajo: DEL_PLAN })
-    expect(r).toMatchObject({ blocked: true, reason: 'plan_over_cap', plan_cap_usd: 15, plan_spent_usd: 15 })
+    expect(r).toMatchObject({ blocked: true, reason: 'plan_over_cap', plan_cap_usd: TOPE_DEL_PLAN_COMPLETO_USD, plan_spent_usd: TOPE_DEL_PLAN_COMPLETO_USD })
   })
   it('🔴 lo gastado en el análisis y el mercado no acerca al plan a su corte', async () => {
     filas = [
       { cost_usd: 5, workflow_execution_id: 'a', paso: PASO_DE_ANALISIS('mercado'), ...DEL_PLAN },
       { cost_usd: 1, workflow_execution_id: 'b', paso: PASO_DE_MERCADO, ...DEL_PLAN },
-      { cost_usd: 14, workflow_execution_id: 'c', paso: 'redactor', ...DEL_PLAN },
+      { cost_usd: 20.86, workflow_execution_id: 'c', paso: 'redactor', ...DEL_PLAN },
     ]
     expect((await medir({ trabajo: { ...DEL_PLAN, paso: 'redactor' } })).r.blocked).toBe(false)
   })
   it('🔴 lo demás, incluida una fila sin paso, sí cuenta: sin dato no se regala', async () => {
-    filas = [{ cost_usd: 14, workflow_execution_id: 'c', paso: 'redactor', ...DEL_PLAN }, { cost_usd: 1, workflow_execution_id: 'd', paso: null, ...DEL_PLAN }]
-    expect((await medir({ trabajo: { ...DEL_PLAN, paso: 'redactor' } })).r).toMatchObject({ blocked: true, reason: 'plan_over_cap', plan_spent_usd: 15 })
+    filas = [{ cost_usd: 20.86, workflow_execution_id: 'c', paso: 'redactor', ...DEL_PLAN }, { cost_usd: 1, workflow_execution_id: 'd', paso: null, ...DEL_PLAN }]
+    expect((await medir({ trabajo: { ...DEL_PLAN, paso: 'redactor' } })).r).toMatchObject({ blocked: true, reason: 'plan_over_cap', plan_spent_usd: TOPE_DEL_PLAN_COMPLETO_USD })
   })
   it('🔴 el corte no frena al análisis ni al mercado, aunque el plan ya esté lleno', async () => {
-    filas = [{ cost_usd: 15, workflow_execution_id: 'c', paso: 'redactor', ...DEL_PLAN }]
+    filas = [{ cost_usd: TOPE_DEL_PLAN_COMPLETO_USD, workflow_execution_id: 'c', paso: 'redactor', ...DEL_PLAN }]
     for (const paso of [PASO_DE_ANALISIS('competencia'), PASO_DE_MERCADO]) {
       expect((await medir({ trabajo: { ...DEL_PLAN, paso } })).r.blocked, paso).toBe(false)
     }
@@ -88,7 +91,7 @@ describe('el tope del plan completo corta de verdad', () => {
     expect((await medir({ trabajo: { ...DEL_PLAN, paso: PASO_DE_ANALISIS('mercado') } })).r).toMatchObject({ blocked: true, reason: 'over_cap' })
   })
   it('🔴 por debajo sigue', async () => {
-    filas = [{ cost_usd: 14.99, workflow_execution_id: 'ej', ...DEL_PLAN }]
+    filas = [{ cost_usd: 21.85, workflow_execution_id: 'ej', ...DEL_PLAN }]
     expect((await medir({ trabajo: DEL_PLAN })).r.blocked).toBe(false)
   })
   it('🔴 lo de otra corrida no cuenta', async () => {
@@ -118,11 +121,17 @@ const snap = { tope: (t: string) => TOPES[t] ?? null } as unknown as CatalogoSna
 
 describe('el pre-vuelo cuenta lo que el plan puede gastar', () => {
   it('🔴 sin mesa ni análisis: una pasada de finanzas, y el mercado aparte con su repetición', () => { expect(sumaDeTopes(snap)).toBe(10.6) })
-  it('🔴 con mesa cuenta la segunda pasada, y el tope del plan pone el límite a lo de los agentes', () => {
-    // mesa 4 + oficina 5 × 2 + redacción 2,5 + jefatura 0,7 = 17,2 → corta a 15; más recolección 0,4 y mercado 1 × 2, que no pasan por el freno
-    expect(sumaDeTopes(snap, true)).toBe(17.4)
+  it('🔴 con mesa cuenta la segunda pasada', () => {
+    // mesa 4 + oficina 5 × 2 + redacción 2,5 + jefatura 0,7 = 17,2 (bajo el tope del plan, 21,86: no corta); más recolección 0,4 y mercado 1 × 2, que no pasan por el freno
+    expect(sumaDeTopes(snap, true)).toBe(19.6)
   })
-  it('🔴 el análisis va aparte del tope del plan, con su repetición al volver de una pausa larga', () => { expect(sumaDeTopes(snap, true, true)).toBe(27.4) })
+  it('🔴 el tope del plan pone el límite a lo de los agentes', () => {
+    // con la oficina en su tope de hoy (11,10): mesa 4 + 11,1 × 2 + 2,5 + 0,7 = 29,4 → corta a 21,86; más recolección 0,4 y mercado 1 × 2
+    const caro = { tope: (t: string) => ({ ...TOPES, oficina: 11.1 })[t] ?? null } as unknown as CatalogoSnapshot
+    expect(sumaDeTopes(caro, true)).toBe(24.26)
+    expect(sumaDeTopes(caro, true, true)).toBe(34.26)
+  })
+  it('🔴 el análisis va aparte del tope del plan, con su repetición al volver de una pausa larga', () => { expect(sumaDeTopes(snap, true, true)).toBe(29.6) })
   it('🔴 el peor caso cabe en los US$ 30 de la ficha de Náufrago', () => { expect(sumaDeTopes(snap, true, true)).toBeLessThanOrEqual(30) })
   it('🔴 la migración trae el tope del mercado que se suma aquí', () => {
     const sql = readFileSync('supabase/migrations/202611051110_topes_del_go_doble_chequeo.sql', 'utf8')

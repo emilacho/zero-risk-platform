@@ -96,7 +96,8 @@ export interface Cambios {
 export interface Almacen {
   leerConfig(): Promise<ConfigDeOficina>
   /** la plantilla de una familia y si está activa */
-  leerPlantilla(familia: string): Promise<{ plantilla: Plantilla; activo: boolean } | null>
+  /** 19-nov · G5b · `cruda` = la plantilla tal como está en la base (con los topes por segundo sin calcular): con ella `plantillaDe` calcula los de la duración de cada encargo */
+  leerPlantilla(familia: string): Promise<{ plantilla: Plantilla; activo: boolean; cruda?: Plantilla } | null>
   leerFormato(red: string, formato: string): Promise<FilaDeFormato | null>
   crearEncargo(n: NuevoEncargo): Promise<{ ok: true; encargo: Encargo; nuevo: boolean } | { ok: false; error: string }>
   leerEncargo(id: string): Promise<Encargo | null>

@@ -74,14 +74,18 @@ export function erroresDeLosTopesPorDuracion(p: Plantilla): string[] {
  * La plantilla con cada tope YA calculado para la pieza más larga que se puede pedir · pura, idempotente.
  * Sin partes por segundo/plano devuelve la MISMA plantilla (las demás familias no cambian). Con un dato inválido no calcula nada y devuelve los errores.
  * El paso de función `video` con parte por segundo/plano fija además `limites.video.tope_por_video_usd` (el que usa la cotización), para que no haya dos cifras.
+ * 19-nov · G5b (A′ · GO Lenovo 03:41Z) · con `segundos` (la duración de ESTA pieza, la que declaró su brief) los topes se calculan para ella y no para la más larga;
+ * nunca más que `limites.video.segundos_max`. Sin `segundos`, como siempre: la más larga.
  */
-export function aplicarTopesPorDuracion(p: Plantilla): { plantilla: Plantilla; errores: string[] } {
+export function aplicarTopesPorDuracion(p: Plantilla, segundos?: number): { plantilla: Plantilla; errores: string[] } {
   if (!p || !Array.isArray(p.pasos) || !p.limites || !tieneUnidades(p)) return { plantilla: p, errores: [] }
   const errores = erroresDeLosTopesPorDuracion(p)
   if (errores.length) return { plantilla: p, errores }
   const lim = p.limites as Record<string, unknown>
   const v = objeto(lim.video)
-  const seg = num(v.segundos_max) ?? 0, planos = num(v.planos_max) ?? 0
+  const maxDeLaPlantilla = num(v.segundos_max) ?? 0
+  const seg = typeof segundos === 'number' && Number.isFinite(segundos) && segundos > 0 ? Math.min(segundos, maxDeLaPlantilla) : maxDeLaPlantilla
+  const planos = num(v.planos_max) ?? 0
   let topeDelVideo: number | null = null
   const pasos: Paso[] = p.pasos.map((s) => {
     const x = s as unknown as Record<string, unknown>

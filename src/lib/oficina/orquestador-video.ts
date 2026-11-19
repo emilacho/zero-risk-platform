@@ -26,7 +26,8 @@ import { CATALOGO_POR_OMISION, RELACIONES_PERMITIDAS, RELACION_POR_FORMATO, fich
 import { sessionIdDeVideo } from '../video/libro'
 import { guionLegible, type PersonajeDeLaHoja, type TraduccionDeGuion } from './video/guion'
 import { LISTA_DE_FOTOS } from './mesa/pedidos'
-import { costoDeVolver } from './topes-por-duracion'
+import { aplicarTopesPorDuracion, costoDeVolver } from './topes-por-duracion'
+import { CLAVE_DE_LA_DURACION, duracionAbierta } from './video/duracion-de-la-pieza'
 import { armarPedidoDeLaOficina, buscarFotoPropia, formatoDeEntrega, formatoDeVideo, fotosPropiasConDireccion, pedidosParaCotizar, type PedidoDeVideoDeLaOficina } from './video/pedido'
 import { avisoDeLaMiradaALaMesa, leerMirada, miradaLegible, nombreDelCuadro, PASO_MIRAR_VIDEO, tareaDeLaMirada, type CuadroDelVideo, type MiradaDelVideo, type SenalesDelVideo } from './video/mirada'
 import { CONTRATOS_EN_TEXTO } from './pedidos'
@@ -103,8 +104,8 @@ type SalidaCodigoV = { res: ResultadoDePaso; gastos?: Cambios['gastos']; fallido
 export async function ejecutarCodigoV(P: Puertos, enc: Encargo, pl: Plantilla, paso: Paso): Promise<SalidaCodigoV> {
   switch (paso.funcion) {
     case 'abrir_video': return abrir(P, enc, pl)
-    case 'pedido_de_video': return pedido(enc, pl, enc.estado_del_motor)
-    case 'chequeos_video': return chequeos(enc.estado_del_motor, pl)
+    case 'pedido_de_video': return pedido(P, enc, pl, enc.estado_del_motor)
+    case 'chequeos_video': return chequeos(enc.estado_del_motor, pl, enc)
     case 'cuadros_video': return cuadrosDelVideo(P, enc)
     case 'imagenes_clave': return imagenesClave(P, enc, pl, paso)
     case 'empaquetar_entrega_video': return empaquetar(P, enc)
@@ -203,12 +204,29 @@ async function cotizarPrimero(P: Puertos, enc: Encargo, pl: Plantilla, brief: Br
 }
 
 /** el guion de la mesa → el pedido al brazo (sin red): la clave idempotente es `<encargo>:<brief>:v<versión del guion>` */
-function pedido(enc: Encargo, pl: Plantilla, e: Estado): SalidaCodigoV {
+async function pedido(P: Puertos, enc: Encargo, pl: Plantilla, e: Estado): Promise<SalidaCodigoV> {
   const b = baseV(e)
   const g = datos(e, 'guion') as unknown as GuionDeLaMesa | undefined
   // Sprint 2 · S2-1 · con propuestas, el guion es la ELEGIDA: sin aprobación todavía no hay qué filmar (una plantilla que pide propuestas necesita su paso de aprobación antes de este)
   if ((!g || !Array.isArray(g.planos) || !g.planos.length) && e.artefactos.propuestas_video) return { res: { costo_usd: 0 }, fallido: 'hay propuestas del video sin aprobar y no hay guion elegido que pedir (la plantilla pide propuestas pero no tiene el paso de aprobación del dueño antes del pedido)' }
   if (!g || !Array.isArray(g.planos) || !g.planos.length) return { res: { costo_usd: 0 }, fallido: 'no hay guion traducido que pedir (la mesa no dejó planos)' }
+  // 19-nov · G5b (A′ · GO Lenovo 03:41Z, cambio 2: «nada se recorta») · el guion dura MÁS que lo que abrió el brief: los topes de este encargo se recalculan con la
+  //   duración del guion, dentro del tope de la campaña (el del encargo), y se avisa. Solo si no cabe vuelve UNA vez a la mesa con el aviso; sin vuelta, no se recorta: queda para decidir
+  const abierta = duracionAbierta(enc)
+  let duracionNueva: { duracion_s: number; aviso_duracion: string } | undefined
+  if (abierta !== null && Number.isFinite(g.segundos) && g.segundos > abierta) {
+    const leida = await P.almacen.leerPlantilla(enc.familia)
+    const cruda = leida?.cruda ?? leida?.plantilla
+    const nueva = cruda ? aplicarTopesPorDuracion(cruda, g.segundos).plantilla : null
+    const segundos = Math.round(g.segundos)
+    if (nueva && nueva.limites.tope_encargo_usd <= enc.tope_usd + 1e-9) {
+      duracionNueva = { duracion_s: segundos, aviso_duracion: `el guion dura ${segundos} s y el brief abrió ${abierta} s: los topes se recalcularon para ${segundos} s (encargo hasta US$ ${nueva.limites.tope_encargo_usd}), dentro del tope de la campaña (US$ ${enc.tope_usd})` }
+    } else {
+      const porQue = nueva ? `con ${segundos} s el encargo pediría hasta US$ ${nueva.limites.tope_encargo_usd} y el tope de la campaña es US$ ${enc.tope_usd}` : 'no se pudo leer la plantilla para recalcular los topes'
+      if (quedaVueltaALaMesa(pl, e)) return { res: { costo_usd: 0, artefacto: { clave: `${enc.id}:${enc.brief_id}:v${e.artefactos['guion']?.version ?? 1}`, fotos_no_halladas: [], avisos_del_guion: g.avisos ?? [], vuelve_a_la_mesa: true, aviso_a_la_mesa: `El guion dura ${segundos} s y el brief de la pieza abrió ${abierta} s: ${porQue}. Rehaz el guion dentro de ${abierta} s, o escribe en el guion por qué esta pieza necesita más.` } } }
+      return { res: { costo_usd: 0 }, fallido: `el guion dura ${segundos} s y el brief abrió ${abierta} s: ${porQue}, y ya volvió a la mesa. No se recorta: hace falta subir el tope de la campaña o acortar el guion` }
+    }
+  }
   const lim = (pl.limites.video ?? {}) as { resolucion?: string }
   const clave = `${enc.id}:${enc.brief_id}:v${e.artefactos['guion']?.version ?? 1}`
   const a = armarPedidoDeLaOficina({ catalogo: catalogoDelEncargo(b), guion: g, brief: b.brief, fotos: b.F.fotos, clave, relacion: b.proporcion, ...(lim.resolucion ? { resolucion: lim.resolucion } : {}) })
@@ -232,7 +250,7 @@ function pedido(enc: Encargo, pl: Plantilla, e: Estado): SalidaCodigoV {
     if (!pp.ok) return { res: { costo_usd: 0 }, fallido: `los pedidos por plano no son válidos: ${pp.errores.join(' · ')}` }
     planos = pp.pedidos
   }
-  return { res: { costo_usd: 0, artefacto: { pedido: a.pedido, clave, fotos_no_halladas: a.pedido.fotos_no_halladas, avisos_del_guion: g.avisos ?? [], vuelve_a_la_mesa: false, ...(planos ? { planos } : {}) }, ...(fichas.length ? { fichas } : {}) } }
+  return { res: { costo_usd: 0, artefacto: { pedido: a.pedido, clave, fotos_no_halladas: a.pedido.fotos_no_halladas, avisos_del_guion: g.avisos ?? [], vuelve_a_la_mesa: false, ...(planos ? { planos } : {}), ...(duracionNueva ?? {}) }, ...(fichas.length ? { fichas } : {}) } }
 }
 
 /** ¿al paso del pedido le queda su vuelta a la mesa Y CABE en el tope? (dato de la plantilla: `vuelve_a` del paso `pedido_de_video`; sin él, nunca vuelve).
@@ -255,7 +273,7 @@ export function avisoDeFotosALaMesa(noHalladas: string[], ambiguas: string[], fo
   return `${cab}\nRehaz el guion con las fotos que sí hay (en «Foto:» va su nombre) o deja esos planos sin foto. Integra el guion completo otra vez.\nFotos propias disponibles:\n${LISTA_DE_FOTOS(propias)}`
 }
 
-function chequeos(e: Estado, pl: Plantilla): SalidaCodigoV {
+function chequeos(e: Estado, pl: Plantilla, enc?: Pick<Encargo, 'sala_ref'>): SalidaCodigoV {
   const b = baseV(e)
   const cv = datos(e, 'copy_video')
   if (!cv) return { res: { costo_usd: 0, artefacto: { fichas: 0 } }, fallido: 'no hay pie ni etiquetas que chequear' }
@@ -280,6 +298,10 @@ function chequeos(e: Estado, pl: Plantilla): SalidaCodigoV {
     if (typeof lim.tope_por_video_usd === 'number' && v.costo_usd > lim.tope_por_video_usd + 1e-9) nueva('sugerencia', `el video cobró US$ ${v.costo_usd.toFixed(4)}, más que el tope por video (US$ ${lim.tope_por_video_usd})`, TOPE_POR_VIDEO, 'alarma de gasto al cierre: el dinero ya se gastó, la pieza sigue (Lenovo · revisión 2, pregunta 4: no bloquea)')
   }
   for (const a of arr(pv?.avisos_del_guion)) nueva('sugerencia', `el traductor del guion avisó: ${a}`, 'guion de la mesa', 'mirar el video con eso en mente')
+  // 19-nov · G5b (A′ · GO Lenovo 03:41Z) · la duración: la de por omisión (nadie la razonó) o la que el guion subió, a la vista del dueño; nunca callada
+  const dur = enc?.sala_ref?.[CLAVE_DE_LA_DURACION] as { aviso?: unknown } | undefined
+  if (typeof dur?.aviso === 'string' && dur.aviso) nueva('sugerencia', dur.aviso, 'duración del brief de la pieza', 'que quien escribe el brief declare la duración con su porqué')
+  if (typeof pv?.aviso_duracion === 'string' && pv.aviso_duracion) nueva('sugerencia', pv.aviso_duracion, 'duración del guion de la mesa', 'mirar que el largo del video lo justifique')
   return { res: { costo_usd: 0, artefacto: { fichas: fichas.length }, fichas, reemplazar_fichas: { origen: 'chequeo', donde: ['texto', 'hashtags', 'video'] } } }
 }
 
