@@ -20,6 +20,7 @@ import { fueraDePlazoDeProduccion } from './lotes'
 import { esNotaDeDependencias, resolverDependencias } from './resolver-dependencias'
 import { tareaDeCalendario, tareaDeEstrategia, tareaDeFichas } from './indicaciones'
 import { metodoDeCalendario } from './metodos'
+import { delBriefParaElCalendario } from './brief-creativo'
 import { abrirEsperaDe, ponerNecesitaHumano, prepararCorrida, resolverEsperas, seguirConReintento, semanaDeId } from './nucleo'
 import { validarEsquemaDeSalida } from '@/lib/salida-estructurada'
 import { diasEntre, fechaDeFila } from './fechas'
@@ -117,6 +118,14 @@ export function mejorRonda(rondas: RondaDeEstrategia[]): RondaDeEstrategia | nul
 }
 
 // ─────────────────────────────────────────────────────────────── ESTRATEGIA
+/** 19-nov · ADENDA 1 · P2b: el brief VALIDADO de la campaña, en lo que lee el calendario · sin brief validado = null (la tarea de siempre) · nunca lanza */
+export async function briefParaElCalendario(al: Almacen, campanaId: string): Promise<{ publico: string; hechos_de_las_ofertas: string } | null> {
+  try {
+    const b = await al.ultimoBriefCreativo(campanaId)
+    return b && b.estado === 'validada' && b.texto_md ? delBriefParaElCalendario(b.texto_md) : null
+  } catch { return null }
+}
+
 export async function estrategiaPreparar(al: Almacen, cuerpo: Record<string, unknown>, ahora: string): Promise<Respuesta> {
   const c = await cargar(al, cuerpo)
   if (!c.ok) return c.r
@@ -362,6 +371,8 @@ export async function calendarioPreparar(al: Almacen, cuerpo: Record<string, unk
     metodo: mesa.concepto ? await metodoDeCalendario(al) : undefined,
     // 18-nov (DECISIÓN DE EMILIO · día 1 = apertura): el día 1 puede caer a media semana; la tarea dice qué días de la tanda quedan fuera
     fechaInicio: campana.fecha_inicio, fechaFin: campana.fecha_fin,
+    // 19-nov · ADENDA 1 · P2b (CC5): el calendario lee del brief VALIDADO el público y los hechos de las ofertas, enteros (solo con la gran idea: el nuevo orden)
+    brief: mesa.concepto ? await briefParaElCalendario(al, campana.id) : undefined,
   })
   return {
     status: 200,

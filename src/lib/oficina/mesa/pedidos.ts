@@ -34,6 +34,8 @@ export interface ContextoDeTurno {
   gasto_usd: number
   /** Sprint 2 · S2-1 · solo video: la duración y las propuestas que dice la plantilla (dato) */
   video?: ParametrosDelVideo
+  /** 19-nov · ADENDA 1 · P2b (CC5): el bloque del perfil del público (el mismo que leen la jefatura y los pedidos de la oficina) · ausente/vacío = sin sección */
+  perfil_texto?: string
 }
 
 /** UNA sola función de recorte: nunca corta callado (ADENDAS 5 y 6 de la ORDEN del 31-oct). Sin nombre del documento conserva el aviso corto de siempre. */
@@ -68,9 +70,19 @@ export const DIETA: Record<TipoDePieza, { manual: number; marco: number; plan: n
  * 19-nov · ADENDA 1 · P2 (CC5 · firma de Emilio «nada se recorta»): antes iban enteros solo los 10 más recientes hasta 12 000 (cada uno a 2500) y el resto a 220.
  * En el reel auditado (INGENIERIA-INVERSA-CC7): A12 «De A10 solo vi completo el plano 1», A17 «texto recortado en el tablero», y la crítica leyó mal lo que A9 y A15 habían elegido.
  */
-export function tableroEnTexto(libro: Aporte[]): string {
+export function tableroEnTexto(libro: Aporte[], o: { materialArriba?: boolean } = {}): string {
   if (!libro.length) return '(el tablero está vacío: eres el primero)'
-  return libro.map((a) => `**${refDe(a)}** · ${a.de}${a.para ? ` → ${a.para}` : ''} · ${a.tipo}\n${a.texto}`).join('\n\n')
+  // 19-nov · ADENDA 1 · P2b: con `materialArriba`, lo que trajo el portero ya va entero en su propio <documento> (arriba); en el tablero queda su lugar y su ref, sin repetir el texto
+  const texto = (a: Aporte) => (o.materialArriba && a.tipo === 'material' ? `(lo que trajo el portero: está arriba, entero, en «${TITULO_DEL_PORTERO}»; cítalo como ${refDe(a)})` : a.texto)
+  return libro.map((a) => `**${refDe(a)}** · ${a.de}${a.para ? ` → ${a.para}` : ''} · ${a.tipo}\n${texto(a)}`).join('\n\n')
+}
+
+/** 19-nov · ADENDA 1 · P2b (CC5): lo que reunió el portero como un DOCUMENTO propio de la mesa (antes solo dentro del tablero), cada entrega con su ref para citarla */
+export const TITULO_DEL_PORTERO = 'Lo que reunió el portero'
+export function seccionDelPortero(libro: Aporte[]): string[] {
+  const material = libro.filter((a) => a.tipo === 'material')
+  if (!material.length) return []
+  return [`## ${TITULO_DEL_PORTERO} (cítalo con su A<n>)`, documento('el portero', material.map((a) => `**${refDe(a)}** · ${a.de}\n${a.texto}`).join('\n\n')), '']
 }
 
 /** 18-nov · «los creativos ven las fotos»: con `aLaVista`, cada foto dice si llega adjunta como imagen o solo como descripción; sin él, la lista es la de siempre (la reusa el aviso del video) */
@@ -377,12 +389,15 @@ export function armarTarea(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarj
     '## 3 · El plan de trabajo',
     c.plan_texto ? documento('el plan de trabajo', recorta(c.plan_texto, DIETA[c.tipo].plan, 'el plan')) : '(sin plan)',
     '',
+    // 19-nov · ADENDA 1 · P2b: el perfil del público, entero, como un documento más (antes la mesa no lo recibía)
+    ...(c.perfil_texto ? ['## El perfil del público', documento('el perfil del público', c.perfil_texto), ''] : []),
     '## Fotos propias del cliente (ids para `Imagen: foto:<id>`)',
     LISTA_DE_FOTOS(c.fotos, new Set(fotosALaVista(c.fotos).map((f) => f.id))),
     '',
     ...(fotosDeLaLista(c.fotos).length ? [REGLA_DE_LOS_ELEMENTOS_REALES, ''] : []),
+    ...seccionDelPortero(libro),
     '## Tablero (aportes hasta ahora; cita con A<n>)',
-    tableroEnTexto(libro),
+    tableroEnTexto(libro, { materialArriba: true }),
     '',
   ].join('\n')
 

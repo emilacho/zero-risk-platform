@@ -97,7 +97,7 @@ export function tareaDeFichas(p: PedidoDeFichas): string {
     '',
     `# HECHOS DEL NEGOCIO (del cerebro)\n${p.hechosDelCerebro === null ? '(hechos del negocio: aún no disponibles)' : p.hechosDelCerebro.length ? p.hechosDelCerebro.map((h) => `- ${h}`).join('\n') : '(el cerebro no tiene hechos de este negocio: no consta)'}`,
     '',
-    `# REFERENCIAS (ids que puedes citar en \`fuente\`)\n${referencias(p.ctx)}`,
+    `# REFERENCIAS (ids que puedes citar en \`fuente\`)\n${referencias(p.ctx, { plan: true, manual: true })}`,
     '',
     `# PLAN\n${documentoDeLaCadena('el plan', p.ctx.planTexto)}`,
     '',
@@ -139,7 +139,7 @@ export function tareaDeEstrategia(p: PedidoDeEstrategia): string {
     '',
     lineaDeLlavesDeFechas(p.llavesDeFechas),
     '',
-    `# REFERENCIAS (ids que puedes citar en \`ref\`)\n${referencias(p.ctx)}`,
+    `# REFERENCIAS (ids que puedes citar en \`ref\`)\n${referencias(p.ctx, { plan: true, manual: true })}`,
     '',
     `# PLAN\n${documentoDeLaCadena('el plan', p.ctx.planTexto)}`,
     '',
@@ -190,6 +190,16 @@ export interface PedidoDeCalendario {
   /** 18-nov (DECISIÓN DE EMILIO · día 1 = apertura): el primer y el último día de la campaña. Si una semana de la tanda tiene días fuera de la campaña, la tarea lo dice; ausente = la tarea de antes, byte a byte */
   fechaInicio?: string | null
   fechaFin?: string | null
+  /** 19-nov · ADENDA 1 · P2b (CC5): del brief VALIDADO, «Público» y «Hechos de las ofertas», enteros · solo con `concepto` (el nuevo orden); ausente = la tarea de siempre */
+  brief?: { publico: string; hechos_de_las_ofertas: string } | null
+}
+
+/** el brief que lee el calendario: un <documento> con las dos secciones; la que falta se dice */
+function seccionDelBrief(p: PedidoDeCalendario): string[] {
+  if (!p.concepto || !p.brief) return []
+  const s = (titulo: string, x: string) => `## ${titulo}\n${x.trim() || '(el brief no trae esta sección)'}`
+  const cuerpo = [s('Público', p.brief.publico), s('Hechos de las ofertas', p.brief.hechos_de_las_ofertas)].join('\n\n')
+  return [`# EL BRIEF DE LA CAMPAÑA (lo que dice del público y de las ofertas)\n${documentoDeLaCadena('el brief de la campaña', cuerpo)}`, '']
 }
 
 /** 18-nov · el día 1 ya no es lunes (es el día de apertura): la semana 1 y la última pueden tener días fuera de la campaña. La línea los nombra solo si la tanda los toca; si no, vacía */
@@ -268,10 +278,11 @@ export function tareaDeCalendario(p: PedidoDeCalendario): string {
     '',
     `# SEDES y horarios\n${p.ctx.sedes.length ? p.ctx.sedes.map((s) => `- ${s.clave}: ${s.horario ? JSON.stringify(s.horario) : '(sin horario conocido)'}${contextoDeEstado(s.estado) ? ` · ${contextoDeEstado(s.estado)}` : ''}`).join('\n') : '(sin sedes)'}`,
     '',
+    ...seccionDelBrief(p),
     ...seccionDeOfertas(p),
     seccionDeFechas(p),
     '',
-    `# REFERENCIAS (ids que puedes citar en \`ref\`)\n${referencias(p.ctx)}`,
+    `# REFERENCIAS (ids que puedes citar en \`ref\`)\n${referencias(p.ctx, { plan: true, manual: false })}`,
     p.filasPrevias.length ? `\n# Piezas de tandas anteriores (para no repetir temas)\n${p.filasPrevias.map((f) => `- ${f.id}: ${f.tema ?? ''}`).join('\n')}` : '',
     '',
     `# PLAN\n${documentoDeLaCadena('el plan', p.ctx.planTexto)}`,
@@ -330,11 +341,15 @@ export function tareaDeFechas(p: PedidoDeFechas): string {
   ].join('\n')
 }
 
-function referencias(ctx: ContextoDelCliente): string {
+function referencias(ctx: ContextoDelCliente, arriba: { plan: boolean; manual: boolean }): string {
   if (!ctx.referencias.length) return '(no hay referencias: no escribas datos concretos)'
+  // 19-nov · ADENDA 1 · P2b (CC5): si el pedido ya trae el plan o el manual ENTEROS en su <documento> (# PLAN · # MANUAL DE MARCA), aquí queda su id para citarlo,
+  // sin repetir el texto; el que el pedido no trae arriba (el calendario no trae el manual) sigue entero aquí
+  const texto = (r: ContextoDelCliente['referencias'][number]) =>
+    r.origen === 'plan' && arriba.plan ? '(el plan entero: está en «# PLAN»)' : r.origen === 'manual' && arriba.manual ? '(el manual entero: está en «# MANUAL DE MARCA»)' : r.texto.replace(/\s+/g, ' ')
   return ctx.referencias
     .filter((r) => r.origen !== 'trozo' || r.confianza === 'system_trusted' || r.confianza === 'tenant_trusted')
-    .map((r) => `- ${r.id} [${r.origen}${r.firmada ? ', firmada' : ''}${r.fuente ? `, ${r.fuente}` : ''}${r.sede ? `, sede ${r.sede}` : ''}]: ${r.texto.replace(/\s+/g, ' ')}`)
+    .map((r) => `- ${r.id} [${r.origen}${r.firmada ? ', firmada' : ''}${r.fuente ? `, ${r.fuente}` : ''}${r.sede ? `, sede ${r.sede}` : ''}]: ${texto(r)}`)
     .join('\n')
 }
 
