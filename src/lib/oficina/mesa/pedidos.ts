@@ -50,7 +50,8 @@ export const DIETA: Record<TipoDePieza, { manual: number; marco: number; plan: n
   carrusel: { manual: 7000, marco: 5000, plan: 3000 },
   kit: { manual: 7000, marco: 5000, plan: 3000 },
   post: { manual: 7000, marco: 5000, plan: 3000 },
-  brief: { manual: 120000, marco: 40000, plan: 120000 },
+  // 19-nov · G4 (CC5 · Lenovo 01:00Z): el marco del brief ENTERO (antes 40 000 cortaba el plan, que iba al final: llegaba el 48,6 %); el plan va aparte, en su lugar propio
+  brief: { manual: 120000, marco: 120000, plan: 120000 },
   concepto: { manual: 120000, marco: 60000, plan: 0 },
   video: { manual: 7000, marco: 5000, plan: 3000 },
   // la reubicación decide fechas: el marco (las filas, plazos y horarios) completo; el manual y el plan solo como contexto

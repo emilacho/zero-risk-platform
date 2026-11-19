@@ -24,7 +24,7 @@ const r = (status: number, cuerpo: Record<string, unknown>): Respuesta => ({ sta
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 /** lo que la cadena le pasa a la oficina para abrir una mesa de la campaña */
-export interface SobreDeLaCadena { tipo_de_mesa: TipoDeMesaDeLaCadena; client_id: string; campana_id: string; version: number; marco_texto: string; dry_run: boolean; /** 17-nov · solo BAJA el tope de la plantilla (el reintento de una corrección del banco va dentro del MISMO tope: lo que queda) */ tope_usd?: number; /** condiciones del directorio que la estrategia activa (`si_instagram`, `si_video`…): las calcula la CADENA del plan de canales, no la oficina */ condiciones: string[]; /** 18-nov · relleno del banco: solo la mesa de concepto; sin esto la mesa entrega el banco como esté (como antes) */ insumos_del_banco?: InsumosDelBanco }
+export interface SobreDeLaCadena { tipo_de_mesa: TipoDeMesaDeLaCadena; client_id: string; campana_id: string; version: number; marco_texto: string; dry_run: boolean; /** 19-nov · G4 (CC5): el plan entero que manda la cadena (la mesa del brief); sin él, el de las fuentes */ plan_texto?: string; /** 17-nov · solo BAJA el tope de la plantilla (el reintento de una corrección del banco va dentro del MISMO tope: lo que queda) */ tope_usd?: number; /** condiciones del directorio que la estrategia activa (`si_instagram`, `si_video`…): las calcula la CADENA del plan de canales, no la oficina */ condiciones: string[]; /** 18-nov · relleno del banco: solo la mesa de concepto; sin esto la mesa entrega el banco como esté (como antes) */ insumos_del_banco?: InsumosDelBanco }
 
 /** lo que viaja dentro del encargo (artefacto `marco_cadena`): el contexto de la cadena + lo que el cliente tiene (manual, plan, fotos) leído UNA vez al abrir */
 export interface MarcoDeLaCadena {
@@ -53,11 +53,12 @@ export function validarSobreDeLaCadena(x: unknown): { ok: true; sobre: SobreDeLa
   if (!Number.isInteger(b.version) || (b.version as number) < 1) errores.push('`version` debe ser un entero positivo')
   if (typeof b.marco_texto !== 'string' || b.marco_texto.trim().length < 20) errores.push('`marco_texto` falta (el marco de la mesa)')
   if (b.condiciones !== undefined && (!Array.isArray(b.condiciones) || b.condiciones.some((c) => typeof c !== 'string' || !/^si_[a-z0-9_]{1,30}$/.test(c)))) errores.push('`condiciones` debe ser una lista de claves `si_…`')
+  if (b.plan_texto !== undefined && b.plan_texto !== null && typeof b.plan_texto !== 'string') errores.push('`plan_texto` debe ser texto')
   if (b.tope_usd !== undefined && (typeof b.tope_usd !== 'number' || !Number.isFinite(b.tope_usd) || b.tope_usd <= 0)) errores.push('`tope_usd` debe ser un número positivo')
   const ib = insumosDelBancoDelSobre(b.insumos_del_banco, b.tipo_de_mesa)
   if (typeof ib === 'string') errores.push(ib)
   if (errores.length) return { ok: false, errores }
-  return { ok: true, sobre: { ...(typeof b.tope_usd === 'number' ? { tope_usd: b.tope_usd } : {}), ...(ib && typeof ib === 'object' ? { insumos_del_banco: ib } : {}), condiciones: ((b.condiciones as string[] | undefined) ?? []).slice(0, 20), tipo_de_mesa: b.tipo_de_mesa as TipoDeMesaDeLaCadena, client_id: b.client_id as string, campana_id: b.campana_id as string, version: b.version as number, marco_texto: (b.marco_texto as string).slice(0, TOPE_REAL_DEL_PEDIDO), dry_run: b.dry_run as boolean } }
+  return { ok: true, sobre: { ...(typeof b.plan_texto === 'string' && b.plan_texto.trim() ? { plan_texto: b.plan_texto } : {}), ...(typeof b.tope_usd === 'number' ? { tope_usd: b.tope_usd } : {}), ...(ib && typeof ib === 'object' ? { insumos_del_banco: ib } : {}), condiciones: ((b.condiciones as string[] | undefined) ?? []).slice(0, 20), tipo_de_mesa: b.tipo_de_mesa as TipoDeMesaDeLaCadena, client_id: b.client_id as string, campana_id: b.campana_id as string, version: b.version as number, marco_texto: (b.marco_texto as string).slice(0, TOPE_REAL_DEL_PEDIDO), dry_run: b.dry_run as boolean } }
 }
 
 /**
@@ -97,7 +98,8 @@ export async function abrirMesaDeLaCadena(P: Puertos, s: SobreDeLaCadena, avanza
   if (!P.mesa) return r(409, { error: 'mesa_sin_puerto', detalle: 'la mesa no tiene su puerto (libro y directorio) configurado' })
   const fu = await P.fuentes(s.client_id)
   if ('error' in fu) return r(409, { error: 'sin_fuentes', detalle: fu.error })
-  const marco: MarcoDeLaCadena = { tipo_de_mesa: s.tipo_de_mesa, campana_id: s.campana_id, version: s.version, cliente_nombre: fu.cliente_nombre, manual_texto: fu.manual_texto, plan_texto: fu.plan_texto, marco_texto: s.marco_texto, condiciones: s.condiciones, fotos: fu.fotos, ...(s.insumos_del_banco ? { insumos_del_banco: s.insumos_del_banco } : {}) }
+  // 19-nov · h2 de CC6: un plan en blanco del sobre no pisa el de las fuentes
+  const marco: MarcoDeLaCadena = { tipo_de_mesa: s.tipo_de_mesa, campana_id: s.campana_id, version: s.version, cliente_nombre: fu.cliente_nombre, manual_texto: fu.manual_texto, plan_texto: s.plan_texto?.trim() ? s.plan_texto : fu.plan_texto, marco_texto: s.marco_texto, condiciones: s.condiciones, fotos: fu.fotos, ...(s.insumos_del_banco ? { insumos_del_banco: s.insumos_del_banco } : {}) }
   const e0: Estado = estadoInicial()
   const estado: Estado = { ...e0, artefactos: { ...e0.artefactos, [ARTEFACTO_MARCO]: { version: 1, version_consumida: 0, datos: marco as unknown as Record<string, unknown> } } }
   const topeDeLaPlantilla = pl.plantilla.limites.tope_encargo_usd ?? TOPE_POR_OMISION_USD[s.tipo_de_mesa]
