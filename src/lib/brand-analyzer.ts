@@ -15,6 +15,7 @@ import { SupabaseClient } from '@supabase/supabase-js'
 import { DiscoveryResult, CompetitorScrapeResult } from './web-discovery'
 import { resolveModel } from './models'
 import { pedirMensajePorFlujo } from './anthropic-por-flujo'
+import { guardarPublico, type Db as DbDePublicos } from './discovery-output/guardar-publico'
 
 // ============================================================
 // Types
@@ -456,10 +457,11 @@ Genera JSON:
         `Channels: ${segment.preferred_channels.join(', ')}`,
       ].join('\n')
 
-      const { error } = await this.supabase
-        .from('client_icp_documents')
-        .insert({
-          client_id: clientId,
+      // 19-nov · juntar públicos: el segundo camino de entrada usa la MISMA función que el descubrimiento (insert, sin decisión = nuevo, como antes)
+      const r = await guardarPublico(this.supabase as unknown as DbDePublicos, {
+        client_id: clientId,
+        modo: 'insert',
+        fila: {
           audience_segment: segment.audience_segment,
           segment_priority: segment.segment_priority,
           job_titles: segment.job_titles,
@@ -475,9 +477,10 @@ Genera JSON:
           recommended_tone: segment.recommended_tone,
           messaging_angle: segment.messaging_angle,
           content_text: contentText,
-        })
+        },
+      })
 
-      if (!error) count++
+      if (r.ok) count++
     }
     return count
   }
