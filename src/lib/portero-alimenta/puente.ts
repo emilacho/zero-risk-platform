@@ -57,12 +57,28 @@ export function esBuscable(f: FichaParaPuente): boolean {
   return !f.retirada_en && f.descartada !== true && f.propiedad !== 'incierta' && f.prueba !== true && !!String(f.contenido ?? '').trim()
 }
 
+/**
+ * ENCARGO 11 (19-nov · «nada se recorta»): el índice recibe la ficha ENTERA. Hasta `MAX_TEXTO` va en un solo trozo (como siempre);
+ * si pasa, va en trozos PAREJOS y seguidos que juntos son el texto completo (ninguno se corta ni se pierde), todos con el mismo
+ * `source_id` (la ficha) y su número en la etiqueta y en `metadata`. La ficha sigue siendo la fuente de verdad: el lector de fichas entrega su `contenido` entero.
+ */
+export function trozosParejos(texto: string, tope: number = MAX_TEXTO): string[] {
+  if (texto.length <= tope) return [texto]
+  const tam = Math.ceil(texto.length / Math.ceil(texto.length / tope))
+  return texto.match(new RegExp(`[\\s\\S]{1,${tam}}`, 'g')) ?? [texto]
+}
+export function seccionesDeLaFicha(etiqueta: string, texto: string): PuenteDeIndice['sections'] {
+  const trozos = trozosParejos(texto)
+  if (trozos.length === 1) return [{ section_label: etiqueta, text: texto }]
+  return trozos.map((t, i) => ({ section_label: `${etiqueta} · trozo ${i + 1} de ${trozos.length}`, text: t, metadata: { trozo: i + 1, trozos: trozos.length } }))
+}
+
 export function puenteDeFicha(f: FichaParaPuente): PuenteDeIndice {
   const fuente = /^portero:([^:]+):/.exec(f.ref)?.[1] ?? 'desconocida'
   const fecha = f.fecha_fuente ? `(fecha ${iso10(f.fecha_fuente)})` : `(visto ${iso10(f.observado_en ?? f.creado_en)})`
   return {
     source_table: 'cerebro_fichas', source_id: f.id, client_id: f.client_id, source: 'portero_diario',
-    sections: [{ section_label: String(f.clase ?? fuente), text: limpiarInvisibles(`${f.titulo ?? fuente} — ${f.contenido ?? ''} ${fecha}`).slice(0, MAX_TEXTO) }],
+    sections: seccionesDeLaFicha(String(f.clase ?? fuente), limpiarInvisibles(`${f.titulo ?? fuente} — ${f.contenido ?? ''} ${fecha}`)),
     // la voz de un TERCERO va marcada como raspado ajeno: el corredor no la inyecta sin sello (regla estrecha de CC#1, 02-oct)
     metadata: { portero_diario: true, fuente, propiedad: f.propiedad, origen: f.origen, ficha_id: f.id, ...(f.origen === 'tercero' ? { apify_function: 'portero_diario_tercero' } : {}) },
   }

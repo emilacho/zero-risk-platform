@@ -17238,13 +17238,6 @@
   },
   {
    "archivo": "src/app/api/brain/ingest-source/route.ts",
-   "huella": "6af02615de09e050",
-   "n": 311,
-   "veces": 1,
-   "clase": "por-revisar-en-G8"
-  },
-  {
-   "archivo": "src/app/api/brain/ingest-source/route.ts",
    "huella": "43b97c8888032249",
    "n": 341,
    "veces": 1,
@@ -18091,20 +18084,6 @@
    "clase": "por-revisar-en-G8"
   },
   {
-   "archivo": "src/lib/brain/persist-chunks.ts",
-   "huella": "c6c2d635bd19dfc4",
-   "n": 156,
-   "veces": 1,
-   "clase": "por-revisar-en-G8"
-  },
-  {
-   "archivo": "src/lib/brain/portero.ts",
-   "huella": "47f9431bd671fb7e",
-   "n": 65,
-   "veces": 1,
-   "clase": "por-revisar-en-G8"
-  },
-  {
    "archivo": "src/lib/brain/push-al-terminar.ts",
    "huella": "d03252ce9aa78937",
    "n": 140,
@@ -18122,13 +18101,6 @@
    "archivo": "src/lib/brain/voc-ingest.ts",
    "huella": "6db7511b4abbedb8",
    "n": 153,
-   "veces": 1,
-   "clase": "por-revisar-en-G8"
-  },
-  {
-   "archivo": "src/lib/brain/voc-ingest.ts",
-   "huella": "7eb8c53f009cadd4",
-   "n": 183,
    "veces": 1,
    "clase": "por-revisar-en-G8"
   },
@@ -25854,13 +25826,6 @@
    "clase": "fecha-o-id"
   },
   {
-   "archivo": "src/lib/portero-alimenta/puente.ts",
-   "huella": "9b3e1ef07cc94d86",
-   "n": 65,
-   "veces": 1,
-   "clase": "por-revisar-en-G8"
-  },
-  {
    "archivo": "src/lib/portero-alimenta/pulido-aparte.ts",
    "huella": "c408c6b3bdb918a9",
    "n": 59,
@@ -26466,69 +26431,6 @@
    "archivo": "src/lib/portero-alimenta/unidades.ts",
    "huella": "86808f1f75d89015",
    "n": 63,
-   "veces": 1,
-   "clase": "por-revisar-en-G8"
-  },
-  {
-   "archivo": "src/lib/portero-alimenta/unidades.ts",
-   "huella": "48761d01243e6c7c",
-   "n": 96,
-   "veces": 1,
-   "clase": "por-revisar-en-G8"
-  },
-  {
-   "archivo": "src/lib/portero-alimenta/unidades.ts",
-   "huella": "e8a0e538b2eac09f",
-   "n": 136,
-   "veces": 1,
-   "clase": "por-revisar-en-G8"
-  },
-  {
-   "archivo": "src/lib/portero-alimenta/unidades.ts",
-   "huella": "4a7355c2e8c3743e",
-   "n": 155,
-   "veces": 1,
-   "clase": "por-revisar-en-G8"
-  },
-  {
-   "archivo": "src/lib/portero-alimenta/unidades.ts",
-   "huella": "858a64f4b1559c08",
-   "n": 160,
-   "veces": 1,
-   "clase": "por-revisar-en-G8"
-  },
-  {
-   "archivo": "src/lib/portero-alimenta/unidades.ts",
-   "huella": "a744683d6274f265",
-   "n": 166,
-   "veces": 1,
-   "clase": "por-revisar-en-G8"
-  },
-  {
-   "archivo": "src/lib/portero-alimenta/unidades.ts",
-   "huella": "4a059d3bef3fdb88",
-   "n": 171,
-   "veces": 1,
-   "clase": "por-revisar-en-G8"
-  },
-  {
-   "archivo": "src/lib/portero-alimenta/unidades.ts",
-   "huella": "c9926018cc5dd0c3",
-   "n": 176,
-   "veces": 1,
-   "clase": "por-revisar-en-G8"
-  },
-  {
-   "archivo": "src/lib/portero-alimenta/unidades.ts",
-   "huella": "177086260398dbda",
-   "n": 182,
-   "veces": 1,
-   "clase": "por-revisar-en-G8"
-  },
-  {
-   "archivo": "src/lib/portero-alimenta/unidades.ts",
-   "huella": "defce028c38c9051",
-   "n": 193,
    "veces": 1,
    "clase": "por-revisar-en-G8"
   },

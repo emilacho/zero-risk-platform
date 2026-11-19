@@ -533,7 +533,7 @@ const DIA_EN_MS = 86_400_000
 const TOPE_DE_FILAS_DE_LA_BASE = 1000
 
 export async function leerFichas(ctx: Contexto): Promise<Salida> {
-  const COLUMNAS_DE_FICHAS = ['id', 'clase', 'titulo', 'que_es', 'contenido', 'archivo_nombre', 'archivo_tipo', 'archivo_enlace', 'archivo_bytes', 'origen', 'fecha_fuente', 'reconfirmado_en', 'plazo', 'vigente_hasta', 'version_de', 'retirada_en', 'motivo_retirada', 'producto', 'sede', 'propiedad', 'residual', 'creado_en', 'prueba', 'descartada']
+  const COLUMNAS_DE_FICHAS = ['id', 'clase', 'titulo', 'que_es', 'contenido', 'archivo_nombre', 'archivo_tipo', 'archivo_enlace', 'archivo_bytes', 'origen', 'fecha_fuente', 'reconfirmado_en', 'plazo', 'vigente_hasta', 'version_de', 'retirada_en', 'motivo_retirada', 'producto', 'sede', 'propiedad', 'residual', 'creado_en', 'prueba', 'descartada', 'otro_negocio_motivo', 'otro_negocio_prueba', 'otro_negocio_como', 'otro_negocio_nivel']
   const r = await leer(ctx, { tabla: 'cerebro_fichas', columnas: COLUMNAS_DE_FICHAS, donde: { client_id: ctx.cliente } })
   if (r.error) return fallo(['fichas'], r.error)
   // las fichas de ZONA (feriados, temporada) no llevan cliente: se leen aparte por el id de zona que le toca al cliente; una falla de esa lectura se DICE (no se lee como «sin contexto»)
@@ -599,6 +599,8 @@ export async function leerFichas(ctx: Contexto): Promise<Salida> {
     if (reemplazada) salida.ref_de_la_vigente = `cerebro_fichas:${hoja(id)}`
     if (avisos.length) salida.aviso = avisos.join(' · ')
     if (f.propiedad === 'ajena') salida.sobre_terceros = true
+    // encargo 10 · lo de OTRO negocio va con su marca, su motivo y su prueba (no se oculta: el que lee decide con el dato)
+    if (texto(f.otro_negocio_motivo)) salida.otro_negocio = { motivo: texto(f.otro_negocio_motivo) as string, prueba: texto(f.otro_negocio_prueba) ?? '', como: f.otro_negocio_como === 'mercado' ? 'mercado' : 'nada', nivel: texto(f.otro_negocio_nivel) ?? null }
     if (producto && producto.length) salida.producto = producto
     if (texto(f.sede)) salida.sede = texto(f.sede)
     if (texto(f.archivo_enlace)) salida.enlace = texto(f.archivo_enlace)

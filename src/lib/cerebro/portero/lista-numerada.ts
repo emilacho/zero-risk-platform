@@ -51,8 +51,14 @@ const dia = (iso: string | null): string => (iso ? iso.slice(0, 10) : 'sin fecha
 const NOMBRE_DE_DECISION: Record<DecisionDelDueno, string> = { aprobada: 'aprobada', rechazada: 'rechazada', cambio_pedido: 'cambio pedido' }
 
 /** `#n estante clase · título · qué es (100) [· producto] · estado · fecha · vigencia [· versión] · peso N` */
+/** encargo 10 · la marca de OTRO negocio, entera (el motivo no se recorta): va en la línea, junto al título */
+export function textoDeLaMarca(m: NonNullable<Ficha['otro_negocio']>): string {
+  return `NO ES DE ESTE CLIENTE: ${m.motivo}${m.como === 'mercado' ? ` · sirve solo como referencia de mercado${m.nivel ? ` (nivel ${m.nivel})` : ''}; nunca como competencia ni como dato del cliente` : ''}`
+}
+
 export function lineaParaElModelo(n: number, f: Ficha): string {
   const partes = [`${f.estante} ${f.clase}`, una(f.titulo), recorte(una(f.que_es), LARGO_DEL_RESUMEN)]
+  if (f.otro_negocio) partes.splice(2, 0, textoDeLaMarca(f.otro_negocio))
   if (f.producto && f.producto.length) partes.push(`producto: ${f.producto.map(una).join(', ')}`)
   if (f.que_muestra) partes.push(`muestra: ${recorte(una(f.que_muestra), 100)}`)
   partes.push(f.estado, dia(f.fecha_fuente))

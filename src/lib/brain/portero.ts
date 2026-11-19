@@ -62,7 +62,7 @@ export async function quarantineChunk(
         args.decision.block_reason ?? args.decision.block_gate ?? 'ingress_filter_block',
       payload: {
         section_label: args.sectionLabel,
-        chunk_text: text.slice(0, 8000),
+        chunk_text: text, // encargo 11: la cuarentena guarda el texto ENTERO (antes 8000)
         request_id: args.decision.request_id,
         shadow_blocks: args.decision.shadow_blocks,
       },

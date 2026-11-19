@@ -102,7 +102,9 @@ export function promptDeImagenClave(p: PlanoDeLaHoja, o: { total: number; propor
     cuerpo,
     // 18-nov · segunda opinión de GPT (CC6): «premium» estaba en el envoltorio de TODOS los prompts y es palabra prohibida de un manual. El envoltorio fijo no
     //   lleva adjetivos de marca: el estilo lo pone la hoja de la mesa (que sí lee el manual del cliente)
-    'Photographic and realistic. A pose or moment that can continue in motion.',
+    // 19-nov · AVISO Lenovo (Emilio 16:32): tampoco «Photographic and realistic». El estilo de cada imagen sale del manual del cliente («cómo se produce con IA»)
+    //   y lo escribe la mesa en su «Prompt de imagen»; aquí solo queda lo funcional (el cuadro tiene que poder seguir en movimiento)
+    'A pose or moment that can continue in motion.',
     'No text, letters, captions, logos or watermarks in the image: any text is added later in editing.',
   ].filter(Boolean).join('\n')
 }

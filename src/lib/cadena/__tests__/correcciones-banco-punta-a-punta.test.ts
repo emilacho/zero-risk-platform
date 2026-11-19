@@ -13,7 +13,7 @@ import type { Fila } from '../tipos'
 import { relojDeLaCadena } from '../reloj'
 import { INTERRUPTOR_DEL_BANCO, recibirCorreccionDelBanco } from '../banco-correcciones'
 import { ACCIONES } from '../acciones'
-import { bloqueaLaPieza } from '../correcciones'
+import { bloqueaLaPieza, VUELTAS_DE_REGLA_DURA } from '../correcciones'
 
 const A = clienteA()
 const CAMP = '28de888e-b3f2-4aca-86b3-2c7f7bf6685a'
@@ -75,15 +75,19 @@ describe('el banco de punta a punta por el reloj', () => {
     await relojDeLaCadena(al, VIGIA, mas(30))
     expect(al.sobresDelBanco).toHaveLength(1)
   })
-  it('🔴 dura que el banco no toma dos veces: la pieza sigue FRENADA, la fila no vuelve y sale UNA alarma', async () => {
+  it('🔴 19-nov · dura que el banco no toma: vuelve al banco (otra mesa por vuelta) y la pieza espera; agotadas las vueltas, FRENADA, la fila no vuelve y sale UNA alarma', async () => {
     const { al, entrega } = almacen()
     await devolver(al)
-    await relojDeLaCadena(al, VIGIA, T0)
-    await entrega(bloque({ respuesta: 'no_tomada', explicacion: 'la idea no promete la oferta' }), mas(5))
-    await relojDeLaCadena(al, VIGIA, mas(6))
-    if (al.sobresDelBanco.length > 1) await entrega(bloque({ respuesta: 'no_tomada', explicacion: 'sigo sin verlo' }), mas(10))
-    for (const m of [11, 20, 90, 200]) await relojDeLaCadena(al, VIGIA, mas(m))
+    let entregados = 0
+    for (let m = 0; m <= 400; m += 10) {
+      await relojDeLaCadena(al, VIGIA, mas(m))
+      if (m === 30) { expect(al.correcciones[0].estado).not.toBe('respondida'); expect(await paraLaPiezaDe(al)).toEqual(['esperando']); expect(al.alarmasEnviadas).toEqual([]) }
+      if (al.sobresDelBanco.length > entregados) { entregados = al.sobresDelBanco.length; await entrega(bloque({ respuesta: 'no_tomada', explicacion: `no lo veo (${entregados})` }), mas(m + 5)) }
+    }
+    // cada vuelta abrió su propia mesa (el puerto es idempotente por llave): hubo más mesas que las 2 de una sola vuelta
+    expect(al.sobresDelBanco.length).toBeGreaterThan(2)
     const c = al.correcciones[0]
+    expect(c.intentos).toBe(VUELTAS_DE_REGLA_DURA)
     expect(c).toMatchObject({ estado: 'respondida', respuesta: 'no_dicha' })
     expect(bloqueaLaPieza(c)).toBe(true)
     expect(filaDe(al, FILA).estado).toBe('briefeada')
@@ -160,6 +164,47 @@ describe('el banco de punta a punta por el reloj', () => {
     await entrega(tomarla, mas(5))
     await relojDeLaCadena(al, VIGIA, mas(6))
     expect(al.correcciones[0]).toMatchObject({ estado: 'respondida', respuesta: 'tomada', frena: true, version_nueva: { filas_al_brief: [], fila_publicada: false } })
+    expect(await paraLaPiezaDe(al)).toEqual(['frenada'])
+    expect(al.alarmasEnviadas).toHaveLength(1)
+  })
+  // 19-nov · caso 2 (nada se frena) · una DURA tomada cuya fila no volvió al brief
+  const tomadaConLaFila = async (preparar: (al: ReturnType<typeof almacen>['al']) => void) => {
+    const { al, entrega } = almacen()
+    preparar(al)
+    await devolver(al)
+    await relojDeLaCadena(al, VIGIA, T0)
+    await entrega(tomarla, mas(5))
+    await relojDeLaCadena(al, VIGIA, mas(6))
+    return al
+  }
+  it('🔴 19-nov · caso 2 · la fila ya está para brief por otra razón (sin la marca de esta corrección): la pieza vieja queda REEMPLAZADA, sin alarma', async () => {
+    const al = await tomadaConLaFila((a) => { filaDe(a, FILA).estado = 'lista_para_brief'; filaDe(a, FILA).avisos = ['volvió por otra corrección'] })
+    expect(al.correcciones[0]).toMatchObject({ estado: 'respondida', respuesta: 'tomada', frena: false, version_nueva: { filas_al_brief: [], fila_sin_la_pieza_vieja: 'lista_para_brief' } })
+    expect(await paraLaPiezaDe(al)).toEqual(['reemplazada'])
+    expect(al.alarmasEnviadas).toEqual([])
+  })
+  it('🔴 19-nov · caso 2 · la fila quedó cerrada (cancelada) o salió del calendario: REEMPLAZADA, sin alarma', async () => {
+    const cancelada = await tomadaConLaFila((a) => { filaDe(a, FILA).estado = 'cancelada' })
+    expect(cancelada.correcciones[0].version_nueva).toMatchObject({ fila_sin_la_pieza_vieja: 'cancelada' })
+    expect(await paraLaPiezaDe(cancelada)).toEqual(['reemplazada'])
+    const fuera = await tomadaConLaFila((a) => { const filas = a.filas.bind(a); a.filas = async (c, v) => (await filas(c, v)).filter((f) => f.id !== FILA || a.correcciones.length === 0 || a.correcciones[0].estado === 'recibida') })
+    expect(fuera.correcciones[0].version_nueva).toMatchObject({ fila_sin_la_pieza_vieja: 'fuera_del_calendario' })
+    expect(await paraLaPiezaDe(fuera)).toEqual(['reemplazada'])
+    expect([...cancelada.alarmasEnviadas, ...fuera.alarmasEnviadas]).toEqual([])
+  })
+  it('🔴 19-nov · caso 2 · la fila perdió la carrera UNA vez: se reintenta en el mismo sondeo y vuelve al brief → REEMPLAZADA', async () => {
+    const al = await tomadaConLaFila((a) => {
+      const reubicar = a.reubicarFila.bind(a)
+      let primera = true
+      a.reubicarFila = async (...x: Parameters<typeof reubicar>) => { if (primera && x[2] === FILA) { primera = false; return false } return reubicar(...x) }
+    })
+    expect(filaDe(al, FILA).estado).toBe('lista_para_brief')
+    expect(al.correcciones[0]).toMatchObject({ frena: false, version_nueva: { filas_al_brief: [FILA] } })
+    expect(await paraLaPiezaDe(al)).toEqual(['reemplazada'])
+  })
+  it('🔴 19-nov · caso 2 · la fila sigue esperando ESA pieza (espera su video) y no puede volver: FRENADA (no se publica), UNA alarma, y la campaña sigue', async () => {
+    const al = await tomadaConLaFila((a) => { filaDe(a, FILA).estado = 'espera_video' })
+    expect(al.correcciones[0].version_nueva).not.toHaveProperty('fila_sin_la_pieza_vieja')
     expect(await paraLaPiezaDe(al)).toEqual(['frenada'])
     expect(al.alarmasEnviadas).toHaveLength(1)
   })
