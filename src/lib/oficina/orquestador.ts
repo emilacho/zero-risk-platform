@@ -318,7 +318,22 @@ function materialDeLaRevision(pl: Plantilla, e: Estado) {
 /** la hoja de la pieza (el brief leído); un encargo sin ella no tiene ficha */
 const briefDe = (e: Estado): BriefLeido | null => (datos(e, 'encargo') as unknown as Partial<Base> | undefined)?.brief ?? null
 /** cambio 4 · lo que la aplicación necesita para el sentido: la ficha de la hoja, la pieza, la fila (la del calendario o, si no viaja, el brief, que es su id) y lo ya devuelto */
-async function sentidoDe(P: Pick<Puertos, 'hechosPorOferta'>, enc: Pick<Encargo, 'id' | 'brief_id' | 'sala_ref' | 'client_id'>, e: Estado, textoDeLaPieza: string): Promise<OpcionesDeAplicacion['sentido']> {
+/**
+ * 19-nov · caso 3 del grupo 2 (nada se frena) · ¿la pieza está en una campaña? Sin campaña, sus correcciones no tienen a quién volver en la cadena:
+ * la jefatura las manda al creador DE LA PIEZA (la vuelta a la mesa de #1182). Se decide solo con lo que se SABE: sin parte, o un parte leído sin campaña.
+ * Si la lectura falla, no se decide nada (queda como antes) · la espera de la cadena lo vuelve a mirar.
+ */
+export async function piezaSinCampana(P: Pick<Puertos, 'parte'>, enc: Pick<Encargo, 'parte_id' | 'client_id'>): Promise<boolean> {
+  if (!enc.parte_id) return true
+  try {
+    const parte = await P.parte(enc.parte_id, enc.client_id)
+    return !(typeof parte?.campana_id === 'string' && parte.campana_id.trim())
+  } catch {
+    return false
+  }
+}
+
+async function sentidoDe(P: Pick<Puertos, 'hechosPorOferta' | 'parte'>, enc: Pick<Encargo, 'id' | 'brief_id' | 'sala_ref' | 'client_id' | 'parte_id' | 'dry_run'>, e: Estado, textoDeLaPieza: string): Promise<OpcionesDeAplicacion['sentido']> {
   const fila = (enc.sala_ref?.fila as { id?: unknown } | undefined)?.id
   // firma de Emilio · si la revisión anterior mandó correcciones a la mesa, esta revisión lee lo que respondió el creador (la mesa guardó sus líneas al cerrar)
   const enviadas = datosDeLaJefatura(e)?.sentido?.enviadas ?? []
@@ -329,7 +344,10 @@ async function sentidoDe(P: Pick<Puertos, 'hechosPorOferta'>, enc: Pick<Encargo,
   const deLaHoja = fichaDeLaHoja(briefDe(e)?.texto)
   const hechos = deLaHoja.oferta && P.hechosPorOferta ? await P.hechosPorOferta(String(enc.client_id)).catch(() => null) : null
   const vivo = fichaConCierreVivo(deLaHoja, hechos, fechaDeLaFila(enc.sala_ref))
-  return { ficha: vivo.ficha, declarado: vivo.declarado, textoDeLaPieza, filaId: typeof fila === 'string' && fila ? fila : enc.brief_id || null, encargoId: enc.id, yaDevueltas: llavesYaDevueltas(e), exactos: chequeosExactos, previas }
+  // sin campaña, ninguna fila de la cadena: todo lo que vio la jefatura vuelve al creador de la pieza (`aPieza` en `sentidoDeLaRevision`).
+  //   Solo en lo real: el ensayo no toca la cadena (sus devoluciones se declaran y la pieza sigue), así que ahí no cambia nada
+  const sinCampana = !enc.dry_run && (await piezaSinCampana(P, enc))
+  return { ficha: vivo.ficha, declarado: vivo.declarado, textoDeLaPieza, filaId: sinCampana ? null : typeof fila === 'string' && fila ? fila : enc.brief_id || null, encargoId: enc.id, yaDevueltas: llavesYaDevueltas(e), exactos: chequeosExactos, previas }
 }
 
 export function puedeVolverALaMesa(pl: Plantilla, paso: Paso, e: Estado): ((costo: number) => boolean) | undefined {
