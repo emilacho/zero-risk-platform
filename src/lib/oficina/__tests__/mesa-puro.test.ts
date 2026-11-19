@@ -88,6 +88,12 @@ describe('libro · citas (condición 2) y participación', () => {
     expect(idasYVueltas([p, r], 'y', 'x')).toBe(2)
     expect(huellaDePedido('x', 'y', '  Dame   LA foto ')).toBe(huellaDePedido('x', 'y', 'dame la foto'))
   })
+  it('G8 · la huella mira el pedido ENTERO: dos pedidos con los mismos 200 primeros caracteres y final distinto no son el mismo', () => {
+    const comienzo = 'Necesito el titular del hook con el plato del día, la sede del centro y el horario de la tarde, '.repeat(3)
+    expect(comienzo.length).toBeGreaterThan(200)
+    expect(huellaDePedido('x', 'y', `${comienzo}para la lámina 1`)).not.toBe(huellaDePedido('x', 'y', `${comienzo}para la lámina 7`))
+    expect(huellaDePedido('x', 'y', `${comienzo}para la lámina 1`)).toBe(huellaDePedido('x', 'y', `  ${comienzo.toUpperCase()}  para   la lámina 1 `))
+  })
 })
 
 describe('planificador · el código reparte turnos y exige participación, no dicta el orden', () => {

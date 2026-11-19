@@ -36,6 +36,39 @@ describe('LA MESA · herramientas del tablero', () => {
     expect(MS.filas.filter((f) => f.tipo === 'pide')).toHaveLength(1)
   })
 
+  // 19-nov · G8 (4b), lo vio CC6 en #1222: la huella comparaba solo 200 caracteres y un segundo pedido distinto se daba por «ya anotado»
+  it('dos pedidos al mismo compañero con el mismo comienzo largo y final distinto se anotan los dos; el idéntico, una vez', async () => {
+    const { M, MS, id, turno } = await preparado()
+    const comienzo = 'Necesito el titular del hook con el plato del día, la sede del centro y el horario de la tarde, '.repeat(3)
+    const r1 = await llamar(M, { herramienta: 'mesa_pedir', encargo_id: id, de: turno.agente, a: 'content-creator', que: `${comienzo}para la lámina 1` })
+    const r2 = await llamar(M, { herramienta: 'mesa_pedir', encargo_id: id, de: turno.agente, a: 'content-creator', que: `${comienzo}para la lámina 7` })
+    expect(r1.cuerpo).toMatchObject({ ok: true })
+    expect(r2.cuerpo).toMatchObject({ ok: true })
+    expect(r2.cuerpo.duplicado).toBeUndefined()
+    expect((await llamar(M, { herramienta: 'mesa_pedir', encargo_id: id, de: turno.agente, a: 'content-creator', que: `${comienzo}para la lámina 7` })).cuerpo).toMatchObject({ ok: true, duplicado: true })
+    expect(MS.filas.filter((f) => f.tipo === 'pide').map((f) => f.texto.slice(-7))).toEqual(['lámina 1', 'lámina 7'].map((x) => x.slice(-7)))
+  })
+  // 19-nov · el k7 y el k6 de CC7 en #1225: el repetido mira también al destinatario, y una devolución idéntica tampoco se anota dos veces
+  it('k7 · el mismo pedido a dos compañeros distintos se anota las dos veces', async () => {
+    const { M, MS, id, turno } = await preparado()
+    const o = { herramienta: 'mesa_pedir', encargo_id: id, de: turno.agente, que: 'tres titulares para el hook' }
+    expect((await llamar(M, { ...o, a: 'content-creator' })).cuerpo).toMatchObject({ ok: true, para: 'content-creator' })
+    const r2 = await llamar(M, { ...o, a: 'carousel-designer' })
+    expect(r2.cuerpo).toMatchObject({ ok: true, para: 'carousel-designer' })
+    expect(r2.cuerpo.duplicado).toBeUndefined()
+    expect(MS.filas.filter((f) => f.tipo === 'pide').map((f) => f.para)).toEqual(['content-creator', 'carousel-designer'])
+  })
+  it('k6 · una devolución idéntica a la misma pareja no se anota dos veces; una distinta, sí', async () => {
+    const { M, MS, id, turno } = await preparado()
+    await MS.aportar({ encargo_id: id, de: 'content-creator', para: null, tipo: 'aporta', texto: 'tres titulares', refs: [], responde_a: null, profundidad: 0, costo_usd: 0, workflow_execution_id: null })
+    const o = { herramienta: 'mesa_devolver', encargo_id: id, de: turno.agente, a: 'content-creator' }
+    expect((await llamar(M, { ...o, comentarios: 'el segundo titular promete un descuento que no existe' })).cuerpo).toMatchObject({ ok: true })
+    expect((await llamar(M, { ...o, comentarios: '  El segundo titular promete un DESCUENTO que no existe ' })).cuerpo).toMatchObject({ ok: true, duplicado: true })
+    expect((await llamar(M, { ...o, comentarios: 'el tercer titular es demasiado largo para la lámina' })).cuerpo).toMatchObject({ ok: true })
+    expect(MS.filas.filter((f) => f.tipo === 'devuelve')).toHaveLength(2)
+  })
+
+
   it('pedir_material le escribe al portero; sin portero en el directorio responde ok:false (nunca éxito falso)', async () => {
     const { M, MS, id, turno } = await preparado()
     const r = await llamar(M, { herramienta: 'pedir_material', encargo_id: id, de: turno.agente, que: 'el precio vigente del plato' })
