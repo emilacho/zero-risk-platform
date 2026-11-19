@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { normalizar } from '../../manual/texto'
-import { unidadesDeRaspados, type FilaCruda } from '../unidades'
+import { huellaDeTexto, unidadesDeRaspados, type FilaCruda } from '../unidades'
 import { puenteAlIndice } from '../entorno'
 import { puenteDeFicha, seccionesDeLaFicha, trozosParejos, type FichaParaPuente } from '../puente'
 import { CASOS, montar, tablas } from './fixtures-despertar'
@@ -47,6 +47,23 @@ describe('unidades: el texto se guarda ENTERO', () => {
     expect(us[0].texto).toBe(normalizar(texto))
     const otra = unidadesDeRaspados([fila('website_content_scraper', [{ url: 'https://diario.example/nota', text: largo(4000) + 'OTRO FINAL distinto del primero, con más texto aquí' }], { metadata: { llamado_por: 'ogfq56oIEoHufFPM#articulo' } } as never)], { propios: { sitio: 'https://naufrago.example', handles: [] } }).filter((u) => u.fuente === 'articulo')
     expect(otra[0].huella, 'dos artículos que solo difieren después del carácter 4000 ya no comparten huella').not.toBe(us[0].huella)
+  })
+  it('🔴 t20 de CC6 · dos artículos con los MISMOS primeros 6000 caracteres (normalizados siguen pasando del viejo corte de 4000) tienen huellas distintas, y la huella es la del texto entero', () => {
+    const comun = largo(6000)
+    expect(normalizar(comun).length, 'lo común, normalizado, pasa del viejo corte').toBeGreaterThan(4000)
+    const art = (texto: string) => unidadesDeRaspados([fila('website_content_scraper', [{ url: 'https://diario.example/nota', text: texto }], { metadata: { llamado_por: 'ogfq56oIEoHufFPM#articulo' } } as never)], { propios: { sitio: 'https://naufrago.example', handles: [] } }).filter((u) => u.fuente === 'articulo')[0]
+    const a = art(comun + ' FINAL UNO, con su cierre propio del primer diario.'), b = art(comun + ' FINAL DOS, con otro cierre distinto del segundo diario.')
+    expect(a.huella).toBe(huellaDeTexto(comun + ' FINAL UNO, con su cierre propio del primer diario.'))
+    expect(b.huella, 'solo difieren después del carácter 6000').not.toBe(a.huella)
+  })
+  it.each([
+    ['🔴 t01 de CC6 · una reseña larga de Mapas (la que trae la ficha propia, antes 1500) se guarda entera', fila('own_google_maps_profile', [{ title: 'Náufrago', url: 'https://maps.example/naufrago', reviews: [{ reviewId: 'r1', text: largo(4200), publishedAtDate: '2026-11-18' }] }]), 4200],
+    ['🔴 t02 de CC6 · una reseña larga de otro raspador (resenas_*, antes 1500) se guarda entera', fila('resenas_tripadvisor', [{ id: 'r2', text: largo(3600), publishedAtDate: '2026-11-18' }]), 3600],
+  ])('%s', (_n, f, n) => {
+    const rs = unidadesDeRaspados([f], { propios: { sitio: 'https://naufrago.example', handles: ['naufrago.ec'] }, fichaDeMapas: (xs) => (xs[0] as never) ?? null }).filter((u) => u.fuente === 'resenas')
+    expect(rs).toHaveLength(1)
+    expect(rs[0].texto).toBe(normalizar(largo(n)))
+    expect(rs[0].huella).toBe(huellaDeTexto(largo(n)))
   })
   it('lo corto sigue igual', () => {
     expect(uno(fila('instagram_post_comments_scraper', [{ id: 'c3', text: 'Muy rico todo, gracias', timestamp: '2026-11-18' }]), 'comentarios').texto).toBe(normalizar('Muy rico todo, gracias'))
@@ -128,6 +145,18 @@ describe('la entrega al índice: todo o nada por ficha', () => {
     // la base falsa anota el DELETE (no lo aplica): se pide sacar TODOS los trozos de la ficha, por cliente, tabla y ficha
     expect(m.base.escrituras.filter((w) => w.tabla === 'client_brain_chunks' && w.op === 'delete')).toEqual([{ tabla: 'client_brain_chunks', op: 'delete', fila: undefined, filtros: [['client_id', c.id], ['source_table', 'cerebro_fichas'], ['source_id', 'm1']] }])
     expect(t.cerebro_fichas.find((f) => f.id === 'm1')!.indice_rechazo).toBe('regex_deny')
+  })
+  it('🔴 t18 de CC6 · si sacar la media ficha falla, el error sale en los errores del puente (no se calla)', async () => {
+    const t = tablas(c) as T
+    t.client_brain_chunks ??= []
+    const contenido = largo(7500) + ' PROHIBIDA ' + largo(3000)
+    t.cerebro_fichas.push({ ...ficha('m3', contenido) })
+    const m = montar(t, { fallaEn: 'client_brain_chunks' })
+    const idx = indiceFalso(t, 'PROHIBIDA')
+    const puente = puenteAlIndice({ origen: 'https://x', llaveInterna: 'k', db: m.base.db as never, fetchImpl: idx.impl, avisar: async () => undefined })
+    const out = await puente({ escribir: [puenteDeFicha(ficha('m3', contenido))], sacar: [], client_id: c.id })
+    expect(out.rechazados).toEqual([{ source_id: 'm3', razon: 'regex_deny' }])
+    expect(out.errores).toEqual([expect.stringContaining('sacar la media ficha m3')])
   })
   it('si entran todos los trozos, la ficha queda escrita entera (y lleva el número de cada trozo)', async () => {
     const t = tablas(c) as T
