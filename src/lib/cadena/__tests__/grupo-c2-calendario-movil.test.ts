@@ -11,6 +11,7 @@ import { AlmacenMemoria } from '../__fixtures__/almacen-memoria'
 import { clienteA, contextoDe, formatosDeLaMigracion, tandaBuena } from '../__fixtures__/clientes'
 import { fechaDeFila, sumarDias } from '../fechas'
 import { tareaDeCalendario } from '../indicaciones'
+import { cerrarTanda } from '../pasos'
 import { leadDeFormato, PREFIJO_FUERA_DE_PLAZO } from '../lotes'
 import { ideasQueVolvieronAlBanco, MARCA_DE_REUBICADA, MARCA_IDEA_DE_VUELTA, moverAlSlotLibre, PREFIJO_CALENDARIO_MOVIL, PREFIJO_REUBICACION, yaReubicada, type ContextoDeReubicacion } from '../reubicacion'
 import type { ConceptoLeido, IdeaDelBanco } from '../conceptos'
@@ -179,5 +180,77 @@ describe('por el camino real (calendarioGuardar → cerrarTanda)', () => {
     expect(movida.hora).toBe(v.hora)
     expect(vencida(movida)).toBe(false)
     expect(movida.avisos.some((a) => a.startsWith(`${MARCA_DE_REUBICADA}${v.fecha} al ${movida.fecha}`) && a.includes(PREFIJO_CALENDARIO_MOVIL))).toBe(true)
+  })
+})
+
+describe('🟡 de CC7 (07:15Z) · los 5 caminos sin prueba', () => {
+  it('s3 · dos vencidas de slots distintos con la misma red y formato no pasan el máximo por día: se mueve una y la otra sale', () => {
+    const a = fila(1, 1, 'a', { red: 'tiktok', formato: 'video' }), b = fila(1, 1, 'b', { red: 'tiktok', formato: 'video' }) // tiktok/video: máximo 1 por día
+    const r = moverAlSlotLibre([a, b], [1, 2], ctx([a, b]))
+    expect(r.map((c) => c.tipo)).toEqual(['reubicar', 'descartar'])
+    expect(r[1].aviso).toContain('máximo 1 por día')
+  })
+  it('s4 · B depende de A y las dos vencen: A se mueve a la semana 3, y B no queda en la semana 2 (antes de A)', () => {
+    const A = fila(1, 1, 'a'), B = fila(1, 2, 'b', { depende_de: ['s1-d1-a'] })
+    const r = moverAlSlotLibre([A, B], [1, 2, 3, 4], ctx([A, B, fila(2, 1, 'a')])) // la semana 2 ya tiene su «a»: A va a la 3
+    expect(r.find((c) => c.fila_id === A.id)).toMatchObject({ tipo: 'reubicar', semana: 3 })
+    expect(r.find((c) => c.fila_id === B.id)).toMatchObject({ tipo: 'reubicar', semana: 3 }) // el martes de la semana 3, después del lunes de A
+  })
+
+  describe('por cerrarTanda, sobre una campaña abierta por el camino real', () => {
+    const A = clienteA()
+    const ABRE = '2026-10-12T12:00:00Z'
+    const HOY = '2026-10-14T12:00:00Z'
+    const wf = (extra: Record<string, unknown> = {}) => ({ workflow_id: 'wf-cadena', workflow_execution_id: 'ex-1', ...extra })
+    const ok = (o: unknown) => ({ success: true, structured_output: o, cost_usd: 0.3 })
+    async function campana(sedes = contextoDe(A).sedes) {
+      const al = new AlmacenMemoria({
+        contextos: { [A.clientId]: { ...contextoDe(A), sedes, zonaHoraria: 'UTC' } },
+        planes: { [A.clientId]: [{ plan_id: 'plan-1', fecha: '2026-10-08' }] },
+        config: { flujos: ['wf-cadena', 'wf-vigia'], puerta_workflow_id: 'wf-puerta' },
+        journeys: [{ journeyId: 'journey-1', clientId: A.clientId }],
+      })
+      const ab = await abrirCampana(al, { ...wf(), client_id: A.clientId, seco: true }, ABRE)
+      const id = (ab.cuerpo.campana as { id: string }).id
+      const pe = await estrategiaPreparar(al, { ...wf(), campana_id: id }, ABRE)
+      await estrategiaGuardar(al, { ...wf(), campana_id: id, corrida_id: pe.cuerpo.corrida_id, resultado: ok(A.estrategia) }, ABRE)
+      const c = (await al.campana(id))!
+      expect(c.fecha_inicio).toBe(INICIO)
+      return { al, c, estr: (await al.ultimaEstrategia(id))!.contenido }
+    }
+    const cerrar = (x: Awaited<ReturnType<typeof campana>>, filas: Fila[], extra: Partial<Parameters<typeof cerrarTanda>[1]> = {}) =>
+      cerrarTanda(x.al, { campana: x.c, formatos: FORMATOS, estr: x.estr, version: 1, tanda: 1, semanas: [1, 2, 3, 4], filas, hs: [], salen: [], ahora: HOY, ...extra })
+    const leida = async (x: Awaited<ReturnType<typeof campana>>, id: string) => (await x.al.filas(x.c.id, 1)).find((f) => f.id === id)!
+
+    it('s1 · una tanda SIN vencidas no lee el contexto: con un `cargarContexto` que falla, cierra igual', async () => {
+      const x = await campana()
+      x.al.cargarContexto = async () => { throw new Error('no debía leerse') }
+      const r = await cerrar(x, [fila(2, 1, 'a'), fila(3, 2, 'b')])
+      expect(r.status).toBe(200)
+      expect((await leida(x, 's2-d1-a')).estado).toBe('validada')
+      // y con una vencida sí lo lee (la prueba no pasa por no llegar nunca a la lectura)
+      await expect(cerrar(x, [fila(1, 1, 'a')])).rejects.toThrow('no debía leerse')
+    })
+    it('s11 · solo las sedes de la campaña: una sede ajena cerrada ese día no frena; la propia cerrada sí', async () => {
+      const abiertoMartes = { 2: [{ abre: '08:00', cierra: '18:00' }] }
+      const sedes = [{ clave: 'propia', nombre: 'Propia', telefono: '0', horario: abiertoMartes }, { clave: 'ajena', nombre: 'Ajena', telefono: '0', horario: abiertoMartes }] as never
+      const x = await campana(sedes)
+      x.c = { ...x.c, sedes: ['propia'] }
+      const ajena = fila(1, 1, 'a', { requiere_abierto: true, sede: 'ajena' } as Partial<Fila>) // lunes: la ajena cierra, pero no es de esta campaña
+      const propia = fila(1, 1, 'b', { requiere_abierto: true, sede: 'propia' } as Partial<Fila>) // lunes: la propia cierra
+      await cerrar(x, [ajena, propia])
+      expect(await leida(x, ajena.id)).toMatchObject({ estado: 'validada', semana: 2 })
+      const p = await leida(x, propia.id)
+      expect(p.estado).toBe('perdio_su_fecha')
+      expect(p.avisos.some((a) => a.includes('la sede propia está cerrada'))).toBe(true)
+    })
+    it('s12 · una pieza en `espera_video` que se mueve sigue esperando el video, con su fecha nueva y su aviso', async () => {
+      const x = await campana()
+      const v = fila(1, 1, 'a', { estado: 'espera_video' } as Partial<Fila>)
+      await cerrar(x, [v])
+      const f = await leida(x, v.id)
+      expect(f).toMatchObject({ estado: 'espera_video', semana: 2, fecha: fechaDeFila(INICIO, 2, 1) })
+      expect(f.avisos.some((a) => a.startsWith(`${MARCA_DE_REUBICADA}${v.fecha} al ${f.fecha}`) && a.includes(PREFIJO_CALENDARIO_MOVIL))).toBe(true)
+    })
   })
 })
