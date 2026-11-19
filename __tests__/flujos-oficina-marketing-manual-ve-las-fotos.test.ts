@@ -1,6 +1,6 @@
 /**
  * 19-nov · GO de Lenovo «la mesa creativa del manual ve las fotos» (CC2; certificó CC6, 🟡 menor: «ninguna prueba del repositorio mira estos 2 nodos»).
- * Ejecuta el CÓDIGO VIVO del nodo «[BB] Equipo · mesa creativa · preparar» (copia tomada con un GET después de aplicar, versionId c745d997)
+ * Ejecuta el CÓDIGO VIVO del nodo «[BB] Equipo · mesa creativa · preparar» (copia tomada con un GET del vivo: aplicado en c745d997; hoy af6dabe3, tras G2c #1198, que trae las fotos intactas)
  * con una base falsa de fotos. Fija:
  *  · el filtro: solo las propias, `ok`, sin duplicado, https y fuera de la carpeta de la web del cliente;
  *  · el orden por confianza y el tope de 20 (el máximo del cable `images`), con rótulo `foto:<id>` y modo base64;
