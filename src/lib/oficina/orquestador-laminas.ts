@@ -5,7 +5,7 @@
  * No publica en ninguna red: la entrega (sala 4) deja los archivos y la hoja de pasos para publicar A MANO.
  */
 import { candidatasDelEncargo } from './material-fotos'
-import { fotosDeReferencia, fotosPorImagen } from './foto-de-referencia'
+import { avisoDeImagenGenerada, fotosDeReferencia, fotosPorImagen, otrasFotosDeLaImagen } from './foto-de-referencia'
 import { rolesSinImagen } from './marcas-de-origen'
 import { datos, fichaNueva, reglasParaPrompts, reglasVisuales } from './ayudas'
 import { elementosDelKit, planDeOrigen, fechaLimiteDelBrief, parsearBrief, prohibePersonas, protagonistasDelBrief, proporcionDelBrief, type BriefLeido, type ElementoDelKit } from './brief'
@@ -216,7 +216,7 @@ function chequearPromptsRef(e: Estado, pl: Plantilla, esRe = false): SalidaCodig
 
 async function imagenRef(P: Puertos, enc: Encargo, pl: Plantilla, esRe = false): Promise<SalidaCodigoL> {
   const e = enc.estado_del_motor
-  const porRef = (datos(e, 'prompts_validos')?.por_ref ?? {}) as Record<string, { prompts: Array<{ prompt: string; foto_de_referencia?: string }> }>
+  const porRef = (datos(e, 'prompts_validos')?.por_ref ?? {}) as Record<string, { prompts: Array<{ prompt: string; foto_de_referencia?: string; otras_fotos_de_referencia?: string[] }> }>
   const maxRefs = Number(pl.limites.imagenes_generadas_max ?? 2)
   const versiones = Number(pl.limites.versiones_por_ref ?? 2)
   const previo = arr<Record<string, unknown>>(datos(e, 'imagenes')?.items)
@@ -237,11 +237,18 @@ async function imagenRef(P: Puertos, enc: Encargo, pl: Plantilla, esRe = false):
   // la foto que nombró el ingeniero de prompts (mesa) pesa primero, si es apta; si no, la rotación de siempre y una ficha que lo dice (sin rejas)
   const porImagen = fotosPorImagen(aptas, pendientes.map((ref) => porRef[ref].prompts[0]?.foto_de_referencia))
   for (const { i, id } of porImagen.no_aptas) fichas.push(fichaNueva(`imagen-foto-no-apta-${intento}-${pendientes[i]}`, 'chequeo', 'imagen', 'sugerencia', `el ingeniero de prompts pidió la foto «${id}» para «${pendientes[i]}», pero no sirve de referencia (no muestra el protagonista, no tiene dirección o ya va como foto real): ${porImagen.fotos[i] ? `se usa «${porImagen.fotos[i]!.id}»` : 'se genera sin foto'}`, 'fotos propias del cliente', 'mirar que el producto sea el real'))
+  // 19-nov · «lo real es el set» · las otras fotos que nombró el ingeniero viajan con la base; una imagen sin nombradas hereda las de la pieza (sin base no hay edición)
+  const nombradas = (ref: string) => [porRef[ref].prompts[0]?.foto_de_referencia, ...(porRef[ref].prompts[0]?.otras_fotos_de_referencia ?? [])]
+  const deLaPieza = pendientes.flatMap(nombradas)
   for (const [j, ref] of pendientes.entries()) {
     const prompts = porRef[ref].prompts.slice(0, versiones)
     const foto = porImagen.fotos[j]
+    const o = otrasFotosDeLaImagen(baseL(e).F.fotos, foto, nombradas(ref), deLaPieza)
+    for (const id of o.no_aptas) fichas.push(fichaNueva(`imagen-otra-foto-no-apta-${intento}-${ref}-${id}`, 'chequeo', 'imagen', 'sugerencia', `el ingeniero de prompts nombró la foto «${id}» para «${ref}», pero no se puede usar (no existe o no tiene dirección): la imagen sale sin ella`, 'fotos del cliente', 'nombrar una foto propia que exista'))
+    const otras = foto ? o.otras : []
+    if (!foto) fichas.push(fichaNueva(`imagen-generada-${intento}-${ref}`, 'chequeo', 'imagen', 'sugerencia', avisoDeImagenGenerada(`la imagen «${ref}»`), 'fotos del cliente', 'si el cliente tiene una foto real de esto, subirla al cerebro'))
     for (let k = 0; k < prompts.length; k++) {
-      const g = await P.imagen({ prompt: prompts[k].prompt, client_id: enc.client_id, encargo_id: enc.id, dry_run: enc.dry_run, foto })
+      const g = await P.imagen({ prompt: prompts[k].prompt, client_id: enc.client_id, encargo_id: enc.id, dry_run: enc.dry_run, foto, ...(otras.length ? { otras_fotos: otras } : {}) })
       if (!g.ok) { fichas.push(fichaNueva(`imagen-${intento}-${ref}-${k}`, 'chequeo', 'imagen', 'sugerencia', `el generador no devolvió una imagen para «${ref}» (prompt ${k + 1}): ${g.error}`)); continue }
       if (foto && !g.referencia?.usada) fichas.push(fichaNueva(`imagen-sin-foto-${intento}-${ref}-${k}`, 'chequeo', 'imagen', 'sugerencia', `la imagen «${ref}» (prompt ${k + 1}) se generó sin la foto real «${foto.id}» (${g.referencia?.motivo ?? 'sin motivo'}): el producto puede no ser el del cliente`, 'fotos propias del cliente', 'mirar que el producto sea el real'))
       items.push({ indice: items.length, ref, intento, prompt_idx: k, url: g.url, generation_id: g.generation_id, prompt: prompts[k].prompt, ...(foto && g.referencia?.usada ? { foto_referencia_id: foto.id } : {}) })

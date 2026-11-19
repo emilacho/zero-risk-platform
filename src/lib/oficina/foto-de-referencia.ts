@@ -23,6 +23,33 @@ export function fotosDeReferencia(fotos: FotoConUrl[], candidatas: CandidataMin[
   return aptas
 }
 
+/** 19-nov · «lo real es el set» (precisión de Emilio 16:34) · sin foto real la imagen se genera igual con el estilo del manual, y la pieza lo dice: nunca frena */
+export const avisoDeImagenGenerada = (cual: string): string => `${cual} salió generada con el estilo del manual: el cliente no tiene una foto real de esto`
+
+/** 19-nov · «lo real es el set» · cuántas fotos viajan con la base en un pedido (la edición admite 16 en total) */
+export const MAX_OTRAS_FOTOS = 15
+
+/**
+ * 19-nov · «lo real es el set» (GO Lenovo + ADENDA 1: nadie arma un juego aparte) · las OTRAS fotos que viajan con la base de UNA imagen. Pura.
+ * Las elige el agente que crea: las que nombró para esta imagen; si para esta no nombró ninguna, hereda las que nombró en las demás imágenes de la pieza
+ * (bases y otras, en su orden). Sirve cualquier foto propia con dirección (el lugar, el personaje, el producto), no solo las candidatas del protagonista.
+ * Nunca repite la base ni una foto ya puesta; tope `MAX_OTRAS_FOTOS`. `no_aptas`: las que nombró para ESTA imagen y no se pueden usar (sin dirección o no existen).
+ * Sin fotos nombradas en toda la pieza → [] (cero fotos: se genera igual, sin frenar).
+ */
+export function otrasFotosDeLaImagen(propias: FotoConUrl[], base: FotoDeReferencia | null, deEstaImagen: Array<string | null | undefined>, deLaPieza: Array<string | null | undefined>): { otras: FotoDeReferencia[]; no_aptas: string[] } {
+  const propiasDeEsta = deEstaImagen.filter((x): x is string => typeof x === 'string' && !!x.trim())
+  const lista = propiasDeEsta.length ? propiasDeEsta : deLaPieza.filter((x): x is string => typeof x === 'string' && !!x.trim())
+  const otras: FotoDeReferencia[] = []
+  const no_aptas: string[] = []
+  for (const id of lista) {
+    if (id === base?.id || otras.some((o) => o.id === id)) continue
+    const url = propias.find((f) => f.id === id)?.url
+    if (typeof url !== 'string' || !url.trim()) { if (propiasDeEsta.length && !no_aptas.includes(id)) no_aptas.push(id); continue }
+    if (otras.length < MAX_OTRAS_FOTOS) otras.push({ id, url })
+  }
+  return { otras, no_aptas }
+}
+
 /** la n-ésima foto de referencia (rota sobre las aptas) */
 export function fotoDeReferencia(aptas: FotoDeReferencia[], n: number): FotoDeReferencia | null {
   return aptas.length ? aptas[n % aptas.length] : null

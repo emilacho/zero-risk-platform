@@ -12,7 +12,7 @@
  *  · La tarjeta (CC5) lee `borrador_imagen.propuestas[i].laminas[j]` por `n` (`direccion/decisiones-propuestas.ts`).
  */
 import { datos } from '../ayudas'
-import { fotosDeReferencia, fotosPorImagen, type FotoDeReferencia } from '../foto-de-referencia'
+import { avisoDeImagenGenerada, fotosDeReferencia, fotosPorImagen, otrasFotosDeLaImagen, type FotoDeReferencia } from '../foto-de-referencia'
 import { armarLaminasDeCarrusel, armarLaminasDeKit, type ElementoDeCopyKit, type ElementoDeEstructura, type ImagenDeRef, type Lamina } from '../laminas'
 import type { Cambios, Encargo, FuentesCompletas, Puertos } from '../puertos'
 import type { Estado, Plantilla } from '../tipos'
@@ -58,7 +58,7 @@ export function topeDelBorradorDeImagen(pl: Pick<Plantilla, 'pasos'>): number {
 }
 
 interface ImagenDecidida { ref: string; modo: 'real' | 'generada' | 'ninguna'; foto_id?: string }
-type PorRef = Record<string, { prompts?: Array<{ prompt: string; foto_de_referencia?: string }> }>
+type PorRef = Record<string, { prompts?: Array<{ prompt: string; foto_de_referencia?: string; otras_fotos_de_referencia?: string[] }> }>
 const arr = <T>(x: unknown): T[] => (Array.isArray(x) ? (x as T[]) : [])
 const esHttp = (u: unknown): u is string => typeof u === 'string' && /^https?:\/\//.test(u)
 const r4 = (n: number) => Math.round(n * 1e4) / 1e4
@@ -77,7 +77,7 @@ function refsPorLamina(p: PropuestaDeImagen): Array<{ n: number; ref: string }> 
 }
 
 /** lo que una propuesta va a pedir al generador (en su orden) y lo que ya se sabe de ella antes de gastar */
-interface PlanDeLaPropuesta { p: PropuestaDeImagen; porRef: Record<string, ImagenDeRef>; errores: string[]; costo: number; pedidos: Array<{ ref: string; prompt: string; foto: FotoDeReferencia | null }> }
+interface PlanDeLaPropuesta { p: PropuestaDeImagen; porRef: Record<string, ImagenDeRef>; errores: string[]; costo: number; pedidos: Array<{ ref: string; prompt: string; foto: FotoDeReferencia | null; otras_fotos: FotoDeReferencia[] }> }
 
 function planDeLaPropuesta(e: Estado, p: PropuestaDeImagen, fotos: FuentesCompletas['fotos'], maxRefs: number): PlanDeLaPropuesta {
   const errores: string[] = []
@@ -100,7 +100,17 @@ function planDeLaPropuesta(e: Estado, p: PropuestaDeImagen, fotos: FuentesComple
   const usadas = imagenes.filter((i) => i.modo === 'real' && i.foto_id).map((i) => i.foto_id!)
   const aptas = fotosDeReferencia(fotos, arr<{ id: string; cercana?: boolean }>(datos(e, 'candidatas_foto')?.candidatas), { excluir: usadas })
   const porImagen = fotosPorImagen(aptas, pendientes.map((i) => prompts[i.ref].prompts![0].foto_de_referencia))
-  return { p, porRef, errores, costo: 0, pedidos: pendientes.map((i, j) => ({ ref: i.ref, prompt: prompts[i.ref].prompts![0].prompt, foto: porImagen.fotos[j] })) }
+  // 19-nov · «lo real es el set» · las otras fotos que nombró el ingeniero viajan con la base; una imagen sin nombradas hereda las de la propuesta (sin base no hay edición: se genera con el manual)
+  const primero = (i: ImagenDecidida) => prompts[i.ref].prompts![0]
+  const deLaPieza = pendientes.flatMap((i) => [primero(i).foto_de_referencia, ...(primero(i).otras_fotos_de_referencia ?? [])])
+  const pedidos = pendientes.map((i, j) => {
+    const foto = porImagen.fotos[j]
+    const o = otrasFotosDeLaImagen(fotos, foto, [primero(i).foto_de_referencia, ...(primero(i).otras_fotos_de_referencia ?? [])], deLaPieza)
+    for (const id of o.no_aptas) errores.push(`el ingeniero nombró la foto «${id}» para «${i.ref}» y no se puede usar (no existe o no tiene dirección): la imagen sale sin ella`)
+    if (!foto) errores.push(avisoDeImagenGenerada(`«${i.ref}»`))
+    return { ref: i.ref, prompt: primero(i).prompt, foto, otras_fotos: foto ? o.otras : [] }
+  })
+  return { p, porRef, errores, costo: 0, pedidos }
 }
 
 /**
@@ -134,7 +144,7 @@ export async function correrBorradorDeImagen(P: Puertos, enc: Encargo, pl: Plant
         plan.errores.push(`«${q.ref}» no cabe en el tope del borrador (US$ ${tope}: comprometido ${r4(comprometido)} + ${estimado} por imagen): sin imagen en el borrador`)
         continue
       }
-      const g = await P.imagen({ prompt: q.prompt, client_id: enc.client_id, encargo_id: enc.id, dry_run: enc.dry_run, foto: q.foto, ...calidad })
+      const g = await P.imagen({ prompt: q.prompt, client_id: enc.client_id, encargo_id: enc.id, dry_run: enc.dry_run, foto: q.foto, ...(q.foto && q.otras_fotos.length ? { otras_fotos: q.otras_fotos } : {}), ...calidad })
       // pedida = comprometida, salga o no (un fallo del proveedor puede haber cobrado igual)
       comprometido += Math.max(estimado, g.ok ? g.costo_usd : 0)
       if (!g.ok) { plan.errores.push(`el generador no devolvió la imagen de «${q.ref}»: ${g.error}`); continue }
