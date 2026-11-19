@@ -19,7 +19,7 @@ import { abrirCampana, hoyEnZona } from '../campanas'
 import { fichasGuardar, fichasPreparar } from '../pasos'
 import { briefAbrir, conceptoAbrir, conceptoDecidir, hojaEscribir, recibirBrief, recibirConcepto, TIPO_DE_ESPERA_DE_CONCEPTO } from '../mesas'
 import { ACCIONES } from '../acciones'
-import { CAMPO_OFERTA_CERRADA } from '../hoja'
+import { CAMPO_OFERTA_CERRADA, CAMPO_PENDIENTES_DE_LA_FICHA } from '../hoja'
 import type { Campana } from '../almacen'
 import type { HechoDelNegocioPorOferta } from '../ficha-de-oferta'
 import { AlmacenMemoria } from '../__fixtures__/almacen-memoria'
@@ -127,7 +127,7 @@ const conceptoDe = (c: Practica, titulo = 'Para ti · Noventa días cerca') => [
 ].join('\n')
 const D = (valor: string) => ({ valor, fuente: 'manual:1', vigente_desde: '', vigente_hasta: '', red: '' })
 const vacia = (clave: string, nombre: string) => ({ clave, nombre, que_es: [D(`qué es ${nombre}`)], para_quien_y_donde: [], se_puede_afirmar: [D(`se afirma de ${nombre}`)], no_se_puede_afirmar: [], oferta_y_precio: [], como_se_compra: [], que_mostrar: [], que_nunca_mostrar: [], obligatorios_legales: [], objetivo_por_fecha: [] })
-const lectorDe = (c: Practica) => ({ fichas: c.sedes.map((s) => vacia(s.clave, s.nombre ?? s.clave)), pendientes: [] })
+const lectorDe = (c: Practica, pendientes: string[] = []) => ({ fichas: c.sedes.map((s) => vacia(s.clave, s.nombre ?? s.clave)), pendientes })
 
 // ───────────────────────────────────────── el doble: el cliente como queda tras la limpieza del camino (B) de Lenovo
 // La campaña del plan (`plan-1`) ya NO existe (R2 la borró). Para la medida 3 queda sembrada una campaña VIEJA, cerrada y de OTRO plan, con todo lo suyo.
@@ -171,7 +171,7 @@ async function abrirLaDelPlan(c: Practica, al: AlmacenMemoria) {
   const id = (r.cuerpo.campana as { id?: string } | undefined)?.id ?? ''
   return { r, id, nueva: r.status === 201 && !r.cuerpo.ya_abierta && id !== '' && id !== VIEJA && id !== DEL_PLAN }
 }
-async function recorrer(c: Practica, al: AlmacenMemoria) {
+async function recorrer(c: Practica, al: AlmacenMemoria, o: { pendientesDelLector?: string[] } = {}) {
   const t: Tramo[] = []
   const anota = (paso: string, r: { status: number; cuerpo: Record<string, unknown> }) => { t.push({ paso, status: r.status, cuerpo: r.cuerpo }); return r }
   const ab = await abrirLaDelPlan(c, al)
@@ -180,7 +180,7 @@ async function recorrer(c: Practica, al: AlmacenMemoria) {
   const pe = anota('estrategia·preparar', await estrategiaPreparar(al, wf({ campana_id: NUEVA }), AHORA))
   anota('estrategia·guardar', await estrategiaGuardar(al, wf({ campana_id: NUEVA, corrida_id: pe.cuerpo.corrida_id, resultado: ok(c.estrategia) }), AHORA))
   const pf = anota('lector·preparar', await fichasPreparar(al, wf({ campana_id: NUEVA }), AHORA))
-  anota('lector·guardar', await fichasGuardar(al, wf({ campana_id: NUEVA, corrida_id: pf.cuerpo.corrida_id, resultado: ok(lectorDe(c)) })))
+  anota('lector·guardar', await fichasGuardar(al, wf({ campana_id: NUEVA, corrida_id: pf.cuerpo.corrida_id, resultado: ok(lectorDe(c, o.pendientesDelLector)) })))
   anota('brief·abrir', await briefAbrir(al, wf({ campana_id: NUEVA }), AHORA))
   const rb = await recibirBrief(al, { campana_id: NUEVA, version: 1, encargo_id: 'enc-brief', texto: briefDe(c), costo_usd: 0, motivo: null }, AHORA)
   anota('brief·entregar', { status: rb.ok && (rb as { estado?: string }).estado === 'validada' ? 200 : 409, cuerpo: { ...(rb as object), devolucion: (await al.ultimoBriefCreativo(NUEVA))?.devolucion_texto } as never })
@@ -213,6 +213,21 @@ describe('R5 · ensayo con dobles · el tramo de la cadena en tres rubros', () =
       expect((hoja.filas as string[]).length).toBeGreaterThan(0)
     })
   }
+})
+
+// ── 19-nov · ADENDA 1 · P2 (CC5): lo que el lector de fichas NO pudo saber llega a la hoja de cada pieza, por el camino entero (lector → hoja)
+describe('ADENDA 1 · P2 · los pendientes del lector llegan a la hoja', () => {
+  it('🔴 un pendiente del lector aparece en la sección de CADA pieza de la hoja, como pendiente', async () => {
+    const c = restaurante()
+    const al = doble(c)
+    const PENDIENTE = 'Si el canal de pedidos directos está activo'
+    const t = await recorrer(c, al, { pendientesDelLector: [PENDIENTE] })
+    expect((await al.ultimasFichas(t.id))!.pendientes).toEqual([PENDIENTE])
+    const hoja = t.find((x) => x.paso === 'hojas')!.cuerpo
+    const filas = hoja.filas as string[]
+    expect(filas.length).toBeGreaterThan(0)
+    for (const id of filas) expect(parsearBrief(hoja.hoja as string, id)!.texto, id).toContain(`- ${CAMPO_PENDIENTES_DE_LA_FICHA}:\n  - ${PENDIENTE}`)
+  })
 })
 
 // ── 2 · en la tienda en línea y en el servicio profesional no queda nada atado a comida ni a locales
