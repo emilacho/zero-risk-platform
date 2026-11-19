@@ -167,6 +167,8 @@ export interface EstadoMesa {
   video?: import('./pedidos').ParametrosDelVideo
   /** 17-nov · propuestas también en IMAGEN · solo kit, carrusel y foto: cuántas propuestas presenta la mesa (`limites.propuestas`), congelado al abrir; ausente = una pieza, como hoy */
   imagen?: { propuestas: number }
+  /** 19-nov · la tanda B (`un-autor.ts`): la mesa trabaja con UN autor y revisores (dato `limites.modo_de_la_mesa`), congelado al abrir; ausente = la mesa de siempre */
+  modo?: import('./un-autor').ModoDeLaMesa
   /** 17-nov · GO Lenovo (encendido de imagen) · lo que costaron los turnos de agente de esta mesa, en todas sus pasadas (la cota de la mesa se mide contra esto) */
   gasto_de_los_turnos_usd?: number
   turno_abierto: { n: number; agente: string; tipo: 'dirigir' | 'aportar' | 'responder' | 'integrar' | 'devolver_citas' | 'rellenar_banco' | 'redactar_prompts' | 'criticar' | 'traducir'; responde_a: string | null; /** lo que el cerebro entregó a este agente al abrirse el turno (se consulta UNA vez: la reentrega del turno muestra lo mismo) */ notas_del_dueno?: LecturaDeNotas; /** 18-nov · `devolver_citas`: lo que el código comprobó que falta (el director escribe solo esas líneas) */ faltan_citas?: FaltanCitas } | null
