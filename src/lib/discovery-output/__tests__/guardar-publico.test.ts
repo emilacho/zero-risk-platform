@@ -343,3 +343,15 @@ describe('idempotencia · la misma decisión dos veces', () => {
     expect(filas.find((f) => f.id === P2)).toMatchObject({ fusionado_en: null, posible_duplicado_de: P1 })
   })
 })
+
+// 19-nov · 🟡 CC6 #1211 ADENDA 2 · k1: el «no se toca» de la idempotencia vale SOLO para «mismo_que» ese destino; otra decisión sobre el mismo destino sí cambia y se dice
+describe('k1 · absorbido en P1 + otra decisión sobre P1', () => {
+  for (const [tipo, marca] of [['dentro_de', 'segmento_de'], ['posible_duplicado_de', 'posible_duplicado_de']] as const) {
+    it(`🔴 «X ${tipo} P1» con X absorbido en P1: ${marca} = P1, fusionado_en null, vigente y aviso de deshecho`, async () => {
+      const { db, filas } = base({ filas: [vigente(P1, 'Turistas de playa'), { ...vigente(P2, 'Turista playero'), fusionado_en: P1, fusion_porque: 'viejo' }] })
+      const r = await guardarPublico(db, { client_id: CLIENTE, fila: publico('Turista playero'), decision: { [tipo]: P1, porque: 'es un segmento' }, modo: 'upsert' })
+      expect(r).toEqual({ ok: true, id: P2, vigente: true, aplicada: { tipo, id: P1, porque: 'es un segmento' }, aviso: `se deshizo la fusión de «Turista playero» (estaba absorbido en ${P1})` })
+      expect(filas.find((f) => f.id === P2)).toMatchObject({ [marca]: P1, fusionado_en: null, fusion_porque: 'es un segmento' })
+    })
+  }
+})
