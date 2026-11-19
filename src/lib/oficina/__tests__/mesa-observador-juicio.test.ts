@@ -18,6 +18,18 @@ describe('el pedido al observador lleva el texto de la pieza y las dos preguntas
     expect(t).toMatch(/NO la evalúes/)
   })
   it('sin texto de la pieza lo dice', () => { expect(PEDIDO_DEL_OBSERVADOR('x')).toMatch(/Texto de la pieza: \(sin texto\)/) })
+  // 19-nov · G8 (GO Lenovo 10:36 · «nada se recorta»): antes el pedido llegaba a 600 y el texto de la pieza a 1500
+  it('el pedido y el texto de la pieza llegan ENTEROS, también el final de uno largo', () => {
+    const lamina = (i: number) => `Lámina ${i}: el casco certificado protege en obra, sin excusas, todos los días del año.`
+    const texto = Array.from({ length: 40 }, (_, i) => lamina(i + 1)).join('\n')
+    const pedido = `${'Un obrero con casco amarillo en una obra al amanecer, luz cálida, plano medio. '.repeat(12)}FIN-DEL-PEDIDO`
+    expect(texto.length).toBeGreaterThan(1500)
+    expect(pedido.length).toBeGreaterThan(600)
+    const t = PEDIDO_DEL_OBSERVADOR(pedido, texto)
+    expect(t).toContain(`La imagen se pidió así: ${pedido}\n`)
+    expect(t).toContain('Lámina 40: el casco certificado protege en obra, sin excusas, todos los días del año.')
+    expect(t).toContain(`Texto de la pieza: ${texto.replace(/\s+/g, ' ')}`)
+  })
 })
 
 describe('el código solo lee el sí o el no', () => {
