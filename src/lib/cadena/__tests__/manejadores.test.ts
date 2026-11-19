@@ -695,6 +695,31 @@ describe('afinando lo que las mutaciones dejaron vivo (manejadores)', () => {
     al.campanas[0].estado = 'calendario'
     expect((await calendarioPreparar(al, { ...wf(), campana_id: id, tanda: 1 }, AHORA)).cuerpo.code).toBe('E-SIN-ESTRATEGIA')
   })
+  it('🔴 19-nov · grupo C · un bloqueo de CONJUNTO que sigue tras la última ronda (V11 · «9 posts del grid antes del primer anuncio») no detiene: la tanda se cierra y queda como AVISO con el hueco anotado', async () => {
+    const al = almacen()
+    const { id } = await conEstrategia(al)
+    const t = tandaBuena(A)
+    // un anuncio en la semana 1: antes de él no hay 9 piezas del grid (bloqueo de la tanda, sin fila: sacar filas no lo arregla)
+    const anuncio = { ...piezaBuena(A, 1, 'a', 'Anuncio de apertura'), slot: 'z', pieza_fija: 'anuncio-1', formato: 'anuncio_imagen' }
+    const mala = { ...t, piezas: [...t.piezas, anuncio] }
+    let { g } = await tandaDe(al, id, 1, mala)
+    expect(JSON.stringify(g!.cuerpo.fichas)).toContain('antes solo hay') // el control: el bloqueo es el V11 de conjunto
+    for (let ronda = 1; ronda <= 3; ronda++) {
+      expect(g!.cuerpo.correccion).toBe(true)
+      const p = await calendarioPreparar(al, { ...wf(), campana_id: id, tanda: 1, correccion: { fichas: g!.cuerpo.fichas, fila_ids: g!.cuerpo.fila_ids, modo: g!.cuerpo.modo } }, AHORA)
+      g = await calendarioGuardar(al, { ...wf(), campana_id: id, tanda: 1, corrida_id: p.cuerpo.corrida_id, correccion: true, modo: g!.cuerpo.modo, resultado: ok(mala) }, AHORA)
+    }
+    expect(g!.cuerpo.ok).toBe(true)
+    expect(al.campanas.find((c) => c.id === id)!.estado).not.toBe('necesita_humano')
+    const ultima = al.validaciones.filter((v) => v.objeto === 'calendario' && v.tanda === 1).at(-1)!
+    const hueco = ultima.hallazgos.find((h) => h.chequeo === 'V11' && h.fila_id === null)
+    expect(hueco).toBeDefined()
+    expect(hueco!.severidad).toBe('aviso')
+    expect(hueco!.ficha.gravedad).toBe('aviso')
+    expect(hueco!.ficha.que).toContain('quedó anotado tras la última ronda de corrección')
+    expect(ultima.hallazgos.some((h) => h.severidad === 'bloquea')).toBe(false)
+    expect(await al.hallazgosQueBloquean(id, 1)).toEqual([])
+  })
   it('19-nov · grupo C · la fila que sale por bloqueo deja dicho POR QUÉ (el motivo y lo que la bloqueaba), y lo viejo no queda como bloqueo abierto', async () => {
     const al = almacen()
     const { id } = await conEstrategia(al)
