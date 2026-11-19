@@ -202,13 +202,16 @@ describe('lectura que falla y lo que no se lista', () => {
       expect(caida.delJefe.map((f) => f.gravedad)).toEqual(['bloquea'])
     })
   }
-  it(`más de ${MAXIMO_DE_CIFRAS_LISTADAS} cifras: se listan ${MAXIMO_DE_CIFRAS_LISTADAS} y el resto se declara`, () => {
+  // 19-nov · G6a · firma de Emilio «nada se recorta» (18-nov): antes se listaban 60 y el resto se declaraba; ahora van todas
+  it('65 cifras: se listan las 65 y no hay aviso de cifras sin listar', () => {
+    expect(MAXIMO_DE_CIFRAS_LISTADAS).toBe(Number.POSITIVE_INFINITY)
     const f = fichaDe(CLIENTES[0])
-    const texto = Array.from({ length: MAXIMO_DE_CIFRAS_LISTADAS + 5 }, (_, i) => `dato ${i + 100}.`).join(' ')
-    const b = bloqueDeCifrasParaElJefe(f, cifrasParaElJefe(texto, f))
-    expect(b).toContain(`c${MAXIMO_DE_CIFRAS_LISTADAS} ·`)
-    expect(b).not.toContain(`c${MAXIMO_DE_CIFRAS_LISTADAS + 1} ·`)
-    expect(b).toMatch(/hay 5 cifras más que no se listan/)
+    const texto = Array.from({ length: 65 }, (_, i) => `dato ${i + 100}.`).join(' ')
+    const cifras = cifrasParaElJefe(texto, f)
+    const b = bloqueDeCifrasParaElJefe(f, cifras)
+    expect(cifras.length).toBeGreaterThanOrEqual(65)
+    expect(b).toContain(`c${cifras.length} ·`)
+    expect(b).not.toMatch(/cifras más que no se listan/)
   })
   it('el formato nuevo admite «cifra» y «respaldo» y sigue rechazando campos ajenos', () => {
     expect(procesarSalidaDeRevision(JSON.stringify({ fichas: [ficha({ cifra: 'c1', respaldo: ['dueno:x'] })] }), 'fichas_con_cifras.v1', 1, 0).ok).toBe(true)
@@ -378,14 +381,17 @@ describe('CC7 6 · CC6 2 · el interruptor solo sale de la POLÍTICA', () => {
 })
 
 describe('CC7 7 · el tamaño se mide y el recorte se declara', () => {
-  it(`una ficha de más de ${MAXIMO_DE_CARACTERES_DE_LA_FICHA} caracteres se recorta, van primero los que tocan una cifra, y lo dice`, () => {
+  // 19-nov · G6a · firma de Emilio «nada se recorta» (18-nov): antes una ficha de más de 20.000 caracteres se recortaba; ahora va entera
+  it('una ficha de más de 20.000 caracteres va entera y no anuncia recorte', () => {
+    expect(MAXIMO_DE_CARACTERES_DE_LA_FICHA).toBe(Number.POSITIVE_INFINITY)
     const largos = Array.from({ length: 80 }, (_, i) => ({ tema: `tema largo ${i}`, respuesta: `${'texto del dueño '.repeat(30)} fin`, sede: null }))
     const f = fichaDe(CLIENTES[0], largos)
     const cifras = cifrasParaElJefe(CLIENTES[0].sostenida, f)
     const v = fichaParaElJefe(f, cifras)
-    expect(v.recortada).toBe(true)
-    expect(v.ficha.hechos[0].ref).toBe(CLIENTES[0].ref)
-    expect(bloqueDeCifrasParaElJefe(f, cifras)).toContain(`ficha recortada: van ${v.mostrados} de ${v.total} hechos`)
+    expect(JSON.stringify(f.hechos).length).toBeGreaterThan(20_000)
+    expect(v.recortada).toBe(false)
+    expect(v.ficha.hechos.length).toBe(f.hechos.length)
+    expect(bloqueDeCifrasParaElJefe(f, cifras)).not.toMatch(/ficha recortada/)
   })
   it('una ficha chica no se recorta ni lo anuncia', () => {
     const f = fichaDe(CLIENTES[1])
