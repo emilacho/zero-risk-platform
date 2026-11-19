@@ -12,6 +12,8 @@ import { TARGET_STEP_PRODUCIR } from '../sobre'
 import { CONVENCION_DE_PROMPTS, leerPromptsDelIngeniero } from '../mesa/prompts'
 import { MAX_OTRAS_FOTOS, avisoDeImagenGenerada, otrasFotosDeLaImagen } from '../foto-de-referencia'
 import type { Tarjeta } from '../mesa/tipos'
+import { traducirGuion } from '../video/guion'
+import { fotosDelPlano, pedidosDeImagenClave, type PlanoDeLaHoja } from '../video/imagen-clave'
 import { CLIENTE, FUENTES, PARTE, crearMemoria } from './memoria'
 import { DIRECTORIO, crearMesaEnMemoria } from './mesa-memoria'
 import { BRIEF_CARRUSEL, LAMINAS_OK, jugar, parteCon, pieza } from './mesa-arnes'
@@ -104,5 +106,50 @@ describe('por la mesa (carrusel, en seco): el pedido al generador lleva las foto
   it('🔴 con foto base no se dice «salió generada»', async () => {
     const { M, id } = await correr('foto:780fc5e1')
     expect(M.encargos.get(id)!.estado_del_motor.fichas.some((x) => x.id.startsWith('imagen-generada'))).toBe(false)
+  })
+})
+
+describe('punto 2 en el video · las fotos que la hoja nombró valen para toda la pieza (imagen clave, puro)', () => {
+  const URLV = (id: string) => `https://x.supabase.co/storage/v1/object/public/fotos/${id}.jpg`
+  const PROPIAS_V = ['a7512c1c', '8abc6e54', '3b215a19', 'f00dcafe'].map((id) => ({ id, url: URLV(id) }))
+  const HOJA = [
+    '## Personajes',
+    '- El Náufrago: esqueleto con ropa surfer, personaje de la marca · Fotos: foto:8abc6e54',
+    '## Plano 1 · 0–3 s', 'Rol: captar', 'Se ve: el bowl en la terraza', 'Producto: sí', 'Foto: foto:a7512c1c, foto:3b215a19 · plato real y terraza del local',
+    '## Plano 2 · 3–6 s', 'Rol: giro', 'Se ve: el bowl de cerca', 'Producto: sí', 'Foto: foto:a7512c1c',
+    '## Plano 3 · 6–9 s', 'Rol: ambiente', 'Se ve: el Náufrago mira el bowl', 'Producto: sí', 'Foto: foto:a7512c1c', 'Personajes: El Náufrago',
+    '## Plano 4 · 9–12 s', 'Rol: cierre', 'Se ve: el mar al atardecer', 'Producto: no', 'Foto: ninguna',
+  ].join('\n')
+  const pedidos = (fotos = PROPIAS_V) => {
+    const g = traducirGuion(HOJA)
+    expect(g.ok).toBe(true)
+    return pedidosDeImagenClave({ planos: g.planos as PlanoDeLaHoja[], aptas: fotos, proporcion: '9:16', personajes: g.personajes, propias: fotos }).pedidos
+  }
+  it('🔴 un plano que no nombra otras fotos ni personajes hereda las de la pieza (sin repetir su base) y el prompt dice qué es', () => {
+    const [p1, p2] = pedidos()
+    expect(p1.otras_fotos?.map((f) => f.id)).toEqual(['3b215a19'])
+    expect(p2.foto?.id).toBe('a7512c1c')
+    expect(p2.otras_fotos?.map((f) => f.id)).toEqual(['3b215a19'])
+    expect(p2.prompt).toMatch(/Image 2 is a real photo of the client chosen for this piece: keep the same real place, light and colors/)
+  })
+  it('🔴 un plano con personaje lleva SUS fotos y no hereda (no se mete el lugar como si fuera del personaje); el personaje no pasa a otros planos', () => {
+    const [p1, p2, p3] = pedidos()
+    expect(p3.otras_fotos?.map((f) => f.id)).toEqual(['8abc6e54'])
+    expect([p1, p2].flatMap((p) => p.otras_fotos ?? []).map((f) => f.id)).not.toContain('8abc6e54')
+  })
+  it('🔴 sin base no se hereda nada (una foto heredada no se vuelve base de un plano que no la pidió)', () => {
+    const p4 = pedidos()[3]
+    expect(p4.foto).toBeNull()
+    expect(p4.otras_fotos).toBeUndefined()
+  })
+  it('🔴 cero fotos: los planos piden igual, sin base ni otras', () => {
+    const ps = pedidos([])
+    expect(ps).toHaveLength(4)
+    expect(ps.every((p) => p.foto === null && !p.otras_fotos)).toBe(true)
+  })
+  it('fotosDelPlano sin heredadas queda exacto como antes', () => {
+    const base = PROPIAS_V[0]
+    expect(fotosDelPlano({}, base, [], PROPIAS_V)).toEqual(fotosDelPlano({}, base, [], PROPIAS_V, []))
+    expect(fotosDelPlano({}, null, [], PROPIAS_V, ['3b215a19'])).toEqual({ base: null, otras: [], texto: '', sin_foto: [] })
   })
 })

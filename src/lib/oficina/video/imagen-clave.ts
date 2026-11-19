@@ -147,7 +147,7 @@ export interface FotosDelPlano {
  *  · un personaje sin foto ni marca: el prompt pide diseñarlo nuevo desde su descripción, sin presentarlo como uno que ya existe (no se inventa lo real).
  * Cada foto va una vez; hasta MAX_FOTOS_POR_IMAGEN con la base. Solo fotos propias con dirección (`propias`). Puro y agnóstico: no sabe de clientes ni de rubros.
  */
-export function fotosDelPlano(p: Pick<PlanoDeLaHoja, 'fotos_extra' | 'personajes'>, base: FotoDeReferencia | null, personajes: PersonajeDeLaHoja[], propias: FotoDeReferencia[]): FotosDelPlano {
+export function fotosDelPlano(p: Pick<PlanoDeLaHoja, 'fotos_extra' | 'personajes'>, base: FotoDeReferencia | null, personajes: PersonajeDeLaHoja[], propias: FotoDeReferencia[], /** 19-nov · «lo real es el set» · las fotos que la mesa eligió para la pieza (solo viajan si hay base) */ heredadas: string[] = []): FotosDelPlano {
   const items: Array<{ foto: FotoDeReferencia; que: string }> = []
   const lineas: string[] = []
   const sin_foto: string[] = []
@@ -158,6 +158,7 @@ export function fotosDelPlano(p: Pick<PlanoDeLaHoja, 'fotos_extra' | 'personajes
   }
   if (base) poner(base, 'the real photo chosen for this shot')
   for (const id of p.fotos_extra ?? []) poner(de(id), 'another real element of the client that this shot shows: keep it exactly as in the photo')
+  if (base) for (const id of heredadas) poner(de(id), 'a real photo of the client chosen for this piece: keep the same real place, light and colors (do not add its contents if this shot does not show them)')
   for (const pid of p.personajes ?? []) {
     const c = personajes.find((x) => x.id === pid)
     if (!c) continue
@@ -181,11 +182,14 @@ export function pedidosDeImagenClave(o: { planos: PlanoDeLaHoja[]; aptas: FotoDe
   const porFoto = fotosPorImagen(o.aptas, pedidas)
   if (o.rotar === false) porFoto.fotos = porFoto.fotos.map((f, i) => (pedidas[i] && f?.id === pedidas[i] ? f : null))
   const fotoDe = new Map(deProducto.map((p, i) => [p.n, porFoto.fotos[i] ?? null]))
+  // 19-nov · «lo real es el set» (ADENDA 1: nadie arma un juego aparte) · las fotos que la mesa nombró en la hoja valen para toda la pieza: un plano que no nombra
+  //   fotos extra ni personajes las hereda (las de personajes NO: no se mete a un personaje en un plano que no lo muestra)
+  const deLaPieza = [...new Set(o.planos.flatMap((p) => [p.foto_id, ...(p.fotos_extra ?? [])]).filter(esTexto).map((s) => s.trim()))]
   const pedidos = o.planos.map((p) => {
     const producto = esPlanoDeProducto(p)
     const fotoDelPlano = producto ? fotoDe.get(p.n) ?? null : fotoNombradaApta(p, o.aptas)
     const forma = { total: o.planos.length, proporcion: o.proporcion }
-    const r = fotosDelPlano(p, fotoDelPlano, o.personajes ?? [], o.propias ?? [])
+    const r = fotosDelPlano(p, fotoDelPlano, o.personajes ?? [], o.propias ?? [], p.fotos_extra?.length || p.personajes?.length ? [] : deLaPieza)
     const mas = (s: string) => (r.texto ? `${s}\n${r.texto}` : s)
     return {
       n: p.n, prompt: mas(promptDeImagenClave(p, forma)), foto: r.base, sin_foto_apta: producto && !fotoDelPlano,
