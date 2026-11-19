@@ -17,6 +17,7 @@ import { seccionDeLaCriticaParaLaDireccion, tareaDeLaCritica } from './critica'
 import { fotosALaVista, fotosDeLaLista, REGLA_DE_LOS_ELEMENTOS_REALES, rotuloDeLaFoto } from './fotos-a-la-vista'
 import type { ImagenDelPedido } from '../../imagenes-del-pedido'
 import type { RellenoPendiente } from './de-la-cadena'
+import { TOPE_REAL_DEL_PEDIDO } from '../../limites-de-tamano'
 
 export type TipoDeTurno = 'dirigir' | 'aportar' | 'responder' | 'integrar' | 'devolver_citas' | 'rellenar_banco' | 'redactar_prompts' | 'criticar'
 
@@ -39,41 +40,37 @@ export interface ContextoDeTurno {
 const recorta = (t: string, n: number, doc?: string) => (t.length <= n ? t : t.slice(0, n) + (doc ? `\n[… recortado: ${n} de ${t.length} caracteres de ${doc}]` : '\n[…recortado]'))
 
 /**
- * LA DIETA: cuánto de cada documento recibe cada familia de mesa. Es un DATO: los valores de las mesas de piezas son los de HOY (ADENDA 6: no cambian hasta que Emilio firme D3);
- * las mesas de la cadena reciben el manual COMPLETO (ADENDA 4), con un límite muy alto solo contra desbordes y el aviso de recorte si algo se cortara.
- * El plan: el brief lo recibe COMPLETO (es su fuente); el concepto NO (el brief ya es su lectura del plan).
+ * LA DIETA: cuánto de cada documento recibe cada familia de mesa.
+ * 19-nov · ADENDA 1 · P2 (CC5 · GO Lenovo 05:17Z · firma de Emilio 18-nov «nada se recorta» y «cada agente recibe los originales completos», que DEROGA la ADENDA 6 / D3):
+ *   todas las mesas que leen el manual, el marco o el plan los reciben ENTEROS, hasta el techo del pedido (`TOPE_REAL_DEL_PEDIDO`, con el aviso de recorte si un documento solo
+ *   lo pasara). Antes las piezas y el video leían 7000 del manual, 5000 del brief y 3000 del plan: en el reel auditado (INGENIERIA-INVERSA-CC7, 18-nov) la hipótesis B del plan
+ *   (carácter 15 114) y el tema de la semana (desde el 11 752) nunca llegaron. La gran idea ahora también recibe el plan (antes 0).
+ *   Un 0 no es un recorte: es un documento que esa mesa no usa (fallidos y banco no leen el plan; fallidos tampoco el manual).
  */
+const ENTERO = TOPE_REAL_DEL_PEDIDO
 export const DIETA: Record<TipoDePieza, { manual: number; marco: number; plan: number }> = {
-  carrusel: { manual: 7000, marco: 5000, plan: 3000 },
-  kit: { manual: 7000, marco: 5000, plan: 3000 },
-  post: { manual: 7000, marco: 5000, plan: 3000 },
-  // 19-nov · G4 (CC5 · Lenovo 01:00Z): el marco del brief ENTERO (antes 40 000 cortaba el plan, que iba al final: llegaba el 48,6 %); el plan va aparte, en su lugar propio
-  brief: { manual: 120000, marco: 120000, plan: 120000 },
-  concepto: { manual: 120000, marco: 60000, plan: 0 },
-  video: { manual: 7000, marco: 5000, plan: 3000 },
-  // la reubicación decide fechas: el marco (las filas, plazos y horarios) completo; el manual y el plan solo como contexto
-  reubicacion: { manual: 20000, marco: 60000, plan: 20000 },
-  // 11-nov · la revisión de fallidos juzga causas contra arreglos: el marco (las causas y los arreglos) completo; el manual y el plan no hacen falta
-  fallidos: { manual: 0, marco: 80000, plan: 0 },
-  // 17-nov · la corrección del banco: la idea, la corrección y sus hermanas (el marco) completo; el manual como contexto de la voz; el plan no hace falta
-  banco: { manual: 20000, marco: 30000, plan: 0 },
+  carrusel: { manual: ENTERO, marco: ENTERO, plan: ENTERO },
+  kit: { manual: ENTERO, marco: ENTERO, plan: ENTERO },
+  post: { manual: ENTERO, marco: ENTERO, plan: ENTERO },
+  brief: { manual: ENTERO, marco: ENTERO, plan: ENTERO },
+  concepto: { manual: ENTERO, marco: ENTERO, plan: ENTERO },
+  video: { manual: ENTERO, marco: ENTERO, plan: ENTERO },
+  // la reubicación decide fechas: lee los tres enteros
+  reubicacion: { manual: ENTERO, marco: ENTERO, plan: ENTERO },
+  // 11-nov · la revisión de fallidos juzga causas contra arreglos: lee el marco (las causas y los arreglos) entero; el manual y el plan no los usa
+  fallidos: { manual: 0, marco: ENTERO, plan: 0 },
+  // 17-nov · la corrección del banco: la idea, la corrección y sus hermanas (el marco) y el manual (la voz) enteros; el plan no lo usa
+  banco: { manual: ENTERO, marco: ENTERO, plan: 0 },
 }
 
-/** el tablero: lo más reciente completo, lo antiguo en resumen (el líder mantiene el hilo; los demás no releen todo) */
-export function tableroEnTexto(libro: Aporte[], max = 12000): string {
+/**
+ * el tablero: TODOS los aportes, cada uno ENTERO.
+ * 19-nov · ADENDA 1 · P2 (CC5 · firma de Emilio «nada se recorta»): antes iban enteros solo los 10 más recientes hasta 12 000 (cada uno a 2500) y el resto a 220.
+ * En el reel auditado (INGENIERIA-INVERSA-CC7): A12 «De A10 solo vi completo el plano 1», A17 «texto recortado en el tablero», y la crítica leyó mal lo que A9 y A15 habían elegido.
+ */
+export function tableroEnTexto(libro: Aporte[]): string {
   if (!libro.length) return '(el tablero está vacío: eres el primero)'
-  const filas = libro.map((a) => ({ a, cab: `**${refDe(a)}** · ${a.de}${a.para ? ` → ${a.para}` : ''} · ${a.tipo}` }))
-  let total = 0
-  const salida: string[] = []
-  for (let i = filas.length - 1; i >= 0; i--) {
-    const { a, cab } = filas[i]
-    const completo = `${cab}\n${recorta(a.texto, 2500)}`
-    const resumen = `${cab}\n${recorta(a.texto, 220)}`
-    const t = total + completo.length <= max && salida.length < 10 ? completo : resumen
-    total += t.length
-    salida.unshift(t)
-  }
-  return salida.join('\n\n')
+  return libro.map((a) => `**${refDe(a)}** · ${a.de}${a.para ? ` → ${a.para}` : ''} · ${a.tipo}\n${a.texto}`).join('\n\n')
 }
 
 /** 18-nov · «los creativos ven las fotos»: con `aLaVista`, cada foto dice si llega adjunta como imagen o solo como descripción; sin él, la lista es la de siempre (la reusa el aviso del video) */
@@ -347,7 +344,7 @@ export function tareaDelRelleno(r: RellenoPendiente | undefined): string {
     `Escribe SOLO las ideas que faltan, una por línea, con el formato del banco y numeradas desde **C${r.prefijo}-I${String(r.desde).padStart(2, '0')}**:`,
     `- C${r.prefijo}-I${String(r.desde).padStart(2, '0')} · <red> · <formato> · <idea> · mensaje: <mensaje propio> · gancho: <gancho>`,
     'Cada idea cuenta lo que dice el capítulo en tu gran idea, con un mensaje y un gancho que no repiten los de las ideas que ya están. No inventes datos del cliente: usa lo que está en el tablero y en el marco.',
-    ...(r.ya_estan.length ? ['', '## Ya están en el banco de este capítulo (no las repitas)', ...r.ya_estan.slice(0, 60).map((i) => `- ${i.id} · ${i.red} · ${i.mensaje.slice(0, 140)}`)] : []),
+    ...(r.ya_estan.length ? ['', '## Ya están en el banco de este capítulo (no las repitas)', ...r.ya_estan.map((i) => `- ${i.id} · ${i.red} · ${i.mensaje}`)] : []),
   ].join('\n')
 }
 
@@ -378,7 +375,7 @@ export function armarTarea(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarj
     recorta(c.brief_texto, DIETA[c.tipo].marco, 'el marco'),
     '',
     '## 3 · El plan de trabajo',
-    c.tipo === 'concepto' ? '(el brief de la campaña ya es la lectura del plan: no se repite aquí)' : c.plan_texto ? recorta(c.plan_texto, DIETA[c.tipo].plan, 'el plan') : '(sin plan)',
+    c.plan_texto ? recorta(c.plan_texto, DIETA[c.tipo].plan, 'el plan') : '(sin plan)',
     '',
     '## Fotos propias del cliente (ids para `Imagen: foto:<id>`)',
     LISTA_DE_FOTOS(c.fotos, new Set(fotosALaVista(c.fotos).map((f) => f.id))),

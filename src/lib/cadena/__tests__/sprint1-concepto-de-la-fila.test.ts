@@ -121,7 +121,9 @@ describe('la hoja escribe el concepto de la pieza y la oficina lo lee', () => {
     const b = parsearBrief(h.texto_md, 'F1-S1-ig-01')!
     // sin idea propia de la fila NO hay IDEA DE LA PIEZA; 17-nov · Sprint 4 · F: la descripción del banco va UNA vez, tal cual, en IDEA DEL BANCO
     expect(b.idea_de_la_pieza).toBeUndefined()
-    expect(h.texto_md.split('la primera silla').length - 1).toBe(1)
+    // 19-nov · ADENDA 1 · P2: la descripción va una vez en IDEA DEL BANCO; la otra aparición es el TEMA DE LA FILA (el fixture usa el mismo texto)
+    expect(h.texto_md.split('la primera silla').length - 1).toBe(2)
+    expect(h.texto_md).toMatch(/^- TEMA DE LA FILA: la primera silla · pilar: producto$/m)
     expect(h.texto_md).toMatch(/^- IDEA DEL BANCO: C1-I01 · la primera silla · /m)
     expect(b.que_se_ve).toBeUndefined()
     expect(b.mensaje).toBe('aquí siempre hay una silla para ti')
