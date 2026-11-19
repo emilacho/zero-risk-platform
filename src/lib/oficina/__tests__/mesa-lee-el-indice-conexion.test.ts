@@ -6,7 +6,7 @@ import { createRequire } from 'node:module'
 import { afterEach, describe, expect, it } from 'vitest'
 import { crearPuertos } from '../adaptadores'
 import { entornoConBase } from '../ruta'
-import { fichasEnTexto, leerEntrega, seccionDelCerebro } from '../mesa/indice-del-cerebro'
+import { fichasEnTexto, filaParaElCerebro, leerEntrega, piezaParaElCerebro, seccionDelCerebro } from '../mesa/indice-del-cerebro'
 
 const require_ = createRequire(import.meta.url)
 const { respuestaDeFichas } = require_('../../../../services/agent-runner/src/lib/mcp/mesa-fichas.js') as { respuestaDeFichas: (r: unknown) => { isError?: boolean; content: Array<{ text: string }> } }
@@ -81,6 +81,26 @@ describe('o12 · lo que el conector del corredor le devuelve al empleado', () =>
     const no = respuestaDeFichas({ ok: true, cuerpo: { ok: false, motivo: 'esta pieza no tiene el índice del cerebro' } })
     expect(no).toEqual({ isError: true, content: [{ type: 'text', text: 'esta pieza no tiene el índice del cerebro' }] })
     expect(respuestaDeFichas({ ok: false, error: 'HTTP 500' })).toEqual({ isError: true, content: [{ type: 'text', text: 'HTTP 500' }] })
+  })
+})
+
+describe('19-nov · 🔴 de CC6 sobre #1185 · la fila viaja como TEXTO (el cerebro responde 400 a un objeto)', () => {
+  it('la fila real de producción es un objeto {id, hora, fecha}: va su id como texto', () => {
+    expect(filaParaElCerebro({ id: 's4-d5-vie_reel_olon', hora: '09:00', fecha: '2026-11-27' })).toBe('s4-d5-vie_reel_olon')
+    const p = piezaParaElCerebro({ encargo_id: 'e1', fila: { id: 's4-d5-vie_reel_olon', hora: '09:00', fecha: '2026-11-27' }, brief_texto: 'b', plan_texto: null })
+    expect(p.fila).toBe('s4-d5-vie_reel_olon')
+    expect(typeof p.fila).toBe('string')
+  })
+  it('un texto pasa igual (sin espacios); un número, como texto', () => {
+    expect(filaParaElCerebro('  s1-d1  ')).toBe('s1-d1')
+    expect(filaParaElCerebro(7)).toBe('7')
+    expect(filaParaElCerebro({ id: 12 })).toBe('12')
+  })
+  it('sin id legible no va fila (nunca el objeto, nunca «[object Object]»)', () => {
+    for (const f of [undefined, null, '', '   ', {}, { hora: '09:00' }, { id: '' }, { id: { x: 1 } }, [], NaN]) {
+      expect(filaParaElCerebro(f)).toBeUndefined()
+      expect(piezaParaElCerebro({ encargo_id: 'e1', fila: f, brief_texto: 'b', plan_texto: null })).not.toHaveProperty('fila')
+    }
   })
 })
 
