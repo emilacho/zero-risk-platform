@@ -20,7 +20,8 @@ export const seccionDelPerfil = (F: Pick<FuentesCompletas, 'perfil_del_publico'>
 
 export const AVISO_DEL_CEREBRO = 'Este cliente tiene un cerebro (almacén de conocimiento) que se actualiza a diario; lo esencial va abajo. Si necesitas algo que no está, dilo en el campo `necesito` de tu respuesta (máximo 3, cada uno con la forma {"que": "…", "para_que": "…"}; ninguna otra clave) y la sala se lo pide; lo que no se consiga se declara, no se inventa.'
 
-const recorta = (t: string, n: number) => (t.length > n ? `${t.slice(0, n)}\n[… recortado: ${t.length - n} caracteres más en el manual]` : t)
+// 19-nov · ADENDA 1 · P2b: el aviso dice de QUÉ documento es lo que falta (antes decía «en el manual» también al cortar el plan)
+const recorta = (t: string, n: number, de = 'el manual') => (t.length > n ? `${t.slice(0, n)}\n[… recortado: ${t.length - n} caracteres más en ${de}]` : t)
 const lista = (xs: string[]) => (xs.length ? xs.map((x) => `- ${x}`).join('\n') : '- (ninguno)')
 
 export const CONTRATOS_EN_TEXTO: Record<string, string> = {
@@ -61,7 +62,7 @@ export function describirReglas(r: ReglasDeImagen): string {
 /** la tarea de un paso de agente; las imágenes (URL) que se le muestran van aparte */
 export function construirTarea(clave: string, c: ContextoDePedido, extra?: { fichas?: Ficha[]; errorDeFormato?: string }): { task: string; images: string[]; esquema: string } {
   const F = c.fuentes
-  const base = `${AVISO_DEL_CEREBRO}\n\n## Manual de marca del cliente\n${recorta(F.manual_texto, 12000)}\n\n## El brief de este entregable (${BRIEF_GUIA_NO_REGLA})\n${c.brief.texto}\n${c.fuentes.plan_texto ? `\n## Plan de trabajo del cliente (contexto)\n${recorta(c.fuentes.plan_texto, 8000)}\n` : ''}${seccionDelPerfil(F)}`
+  const base = `${AVISO_DEL_CEREBRO}\n\n## Manual de marca del cliente\n${recorta(F.manual_texto, TOPE_REAL_DEL_PEDIDO)}\n\n## El brief de este entregable (${BRIEF_GUIA_NO_REGLA})\n${c.brief.texto}\n${c.fuentes.plan_texto ? `\n## Plan de trabajo del cliente (contexto)\n${recorta(c.fuentes.plan_texto, TOPE_REAL_DEL_PEDIDO, 'el plan')}\n` : ''}${seccionDelPerfil(F)}`
   const datosVerificados = `## Datos verificados del cliente (solo estos; no inventes otros)\nTeléfonos: ${F.propios.telefonos.join(', ') || '(no se pudieron leer)'}\nUsuarios: ${F.propios.handles.join(', ') || '(no se pudieron leer)'}\nPrecios de la carta: ${F.fuentes.precios.join(', ') || '(no hay carta guardada)'}`
   let task = '', esquema = '', images: string[] = []
   const finalizar = (t: string) => ({ task: extra?.errorDeFormato ? `${t}\n\n## Corrección de formato\n${extra.errorDeFormato}` : t, images, esquema })
@@ -150,3 +151,13 @@ export function contextoDelRevisor(c: ContextoDePedido): { pieza: string; imagen
   }
 }
 const recortaManual = (t: string) => recorta(t, TOPE_REAL_DEL_PEDIDO)
+
+/**
+ * 19-nov · ADENDA 1 · P2b (CC5): el RESUMEN DEL ENCARGO como un documento más del jefe de la pieza (red, formato, qué es, objetivo, llamado).
+ * Antes existía pero no viajaba: el jefe juzgaba sin saber para qué red ni con qué objetivo era la pieza. Lo que la hoja no dice, se dice.
+ */
+export const FUNCION_DEL_RESUMEN = 'para qué red, en qué formato y con qué objetivo es esta pieza'
+export function contextoDelEncargo(r: ResumenDelEncargo): ContextoDelRevisor {
+  const l = (k: string, v: string | undefined) => `- ${k}: ${(v ?? '').trim() || '(la hoja no lo dice)'}`
+  return { titulo: 'El resumen del encargo', funcion: FUNCION_DEL_RESUMEN, texto: [l('red', r.red), l('formato', r.formato), l('qué es', r.que_es), l('objetivo', r.objetivo), l('llamado', r.llamado), ...(r.publico ? [l('público', r.publico)] : [])].join('\n') }
+}

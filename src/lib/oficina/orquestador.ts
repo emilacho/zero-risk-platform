@@ -39,7 +39,7 @@ import { seccionDeCambiosDelDueno } from './cambios-del-dueno'
 import { antesDeLasFotos, despuesDeUnAgente, pedirLoQueElAgenteNecesita, seccionDeMaterialParaElAgente } from './material-orquestador'
 import { duenoDeLaFicha, registrarPaso, siguientePaso, type ResultadoDePaso } from './motor'
 import { contextoDeHechos } from './hechos-del-negocio'
-import { construirTarea, contextoDelRevisor, CONTRATOS_EN_TEXTO, type ContextoDePedido } from './pedidos'
+import { construirTarea, contextoDelEncargo, contextoDelRevisor, CONTRATOS_EN_TEXTO, resumenDelEncargo, type ContextoDePedido } from './pedidos'
 import { seccionDeAutorevision, validarAutorevision, type NotaVista } from '../notas-del-dueno/autorevision'
 import type { Cambios, Encargo, FuentesCompletas, Puertos, TurnoRegistrado } from './puertos'
 import { chequearPrompts, citasExisten, derivarDecision, elegirVersion, veredictoDeImagenes, type ObservacionDeImagen, type ReglasDeImagen } from './reglas-de-imagen'
@@ -262,7 +262,10 @@ export async function avanzar(P: Puertos, encargoId: string): Promise<Respuesta>
         const hechos = contextoDeHechos(P.hechosDelNegocio ? await P.hechosDelNegocio(String(enc.client_id)).catch((x: unknown) => ({ no_se_pudo_leer: x instanceof Error ? x.message : String(x) })) : null)
         // cambio 4 · la ficha de la oferta, tal cual la trae la hoja: SOLO si la hay (sin ficha el pedido queda como antes)
         const ficha = contextoDeLaFicha(fichaDeLaHoja(briefDe(e)?.texto))
-        const sobre = sobreDeLaRevision(enc, pl, e, { pieza: material.pieza, imagenes: material.imagenes, contexto: [...material.contexto, ...carpeta, hechos, ...(ficha ? [ficha] : [])] })
+        // 19-nov · ADENDA 1 · P2b: el resumen del encargo (red, formato, objetivo, llamado) va al jefe como un documento más, en las tres familias
+        const hoja = briefDe(e)
+        const resumen = hoja ? [contextoDelEncargo(resumenDelEncargo(hoja))] : []
+        const sobre = sobreDeLaRevision(enc, pl, e, { pieza: material.pieza, imagenes: material.imagenes, contexto: [...resumen, ...material.contexto, ...carpeta, hechos, ...(ficha ? [ficha] : [])] })
         const ap = P.jefatura ? await P.jefatura(sobre) : ({ estado: 'error', motivo: 'el puerto de la jefatura no está configurado' } as const)
         if (ap.estado === 'esperando') {
           const n = turnoDe(e)
