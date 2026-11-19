@@ -325,7 +325,8 @@ export async function alimentarCliente(e: EntradaDeAlimentar): Promise<Resultado
     const ok = await w(e.db.from('cerebro_ingresos').insert({ id, client_id: e.client_id, origen: o, fuente_ref: 'portero-alimentar', es_completa: false, huella: `${dia}:${o}`, material: null, estado: 'fichado', workflow_id: e.workflow_id ?? null, workflow_execution_id: e.workflow_execution_id ?? null }), `ingreso ${o}`)
     if (ok) ingresoDe.set(o, id)
   }
-  await enTandas(pruebas && !pruebas.ok ? [] : plan.fichas, ESCRITURAS_A_LA_VEZ, async (x) => {
+  // sin pruebas no hay ingresos (arriba) y sin ingreso ninguna ficha se escribe: un solo freno
+  await enTandas(plan.fichas, ESCRITURAS_A_LA_VEZ, async (x) => {
     const ingreso = ingresoDe.get(x.origen)
     if (!ingreso) return
     const marca = pruebas && pruebas.ok ? marcaDeOtroNegocio(x, pruebas.pruebas) : null

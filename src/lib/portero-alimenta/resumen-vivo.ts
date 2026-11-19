@@ -114,6 +114,8 @@ export interface EntradaDelResumen {
   /** fichas de zona (feriados, temporada) que le tocan por país */
   zona: FichaParaResumen[]
   sedes: Array<{ clave: string; ciudad: string | null; id?: string }>
+  /** encargo 10 · cuántas fichas vivas quedaron FUERA del resumen por estar marcadas «no es de este cliente» (se dice; no se esconde) */
+  fuera_por_otro_negocio?: number
   /** claves de las sedes que el dueño o la ficha dicen «por abrir»: su horario y su atención salen rotulados (los precios no) */
   sedes_por_abrir?: string[]
   /** claves de las sedes que el dueño o la ficha dicen «cerradas»: igual que las por abrir, su horario y su atención salen rotulados */
@@ -265,7 +267,9 @@ export async function cargarEntradaDelResumen(db: Db, o: { client_id: string; no
   if (q.error) return { ok: false, detalle: `cerebro_fichas: ${String(q.error.message).slice(0, 120)}` }
   const todas = (Array.isArray(q.data) ? q.data : []) as unknown as Array<FichaParaResumen & { descartada?: boolean; otro_negocio_motivo?: string | null }>
   // encargo 10 · el resumen es DEL CLIENTE: lo marcado «no es de este cliente» no entra (la ficha sigue en el cerebro, con su marca, para quien la lea)
-  const fichas = todas.filter((f) => !f.descartada && !f.otro_negocio_motivo && f.clase !== CLASE_DEL_RESUMEN && (!f.retirada_en || (f.observado_en ?? '') >= desde))
+  const entran = (f: (typeof todas)[number]) => !f.descartada && f.clase !== CLASE_DEL_RESUMEN && (!f.retirada_en || (f.observado_en ?? '') >= desde)
+  const fichas = todas.filter((f) => entran(f) && !f.otro_negocio_motivo)
+  const fueraPorOtroNegocio = todas.filter((f) => entran(f) && !!f.otro_negocio_motivo).length
   const zona: FichaParaResumen[] = []
   for (const z of o.zonas) {
     const zq = await db.from('cerebro_fichas').select(campos).eq('client_id', z).limit(200)
@@ -286,7 +290,7 @@ export async function cargarEntradaDelResumen(db: Db, o: { client_id: string; no
   const porAbrir = [...estados].filter(([, v]) => v === 'por_abrir').map(([k]) => k)
   const cerradas = [...estados].filter(([, v]) => v === 'cerrada').map(([k]) => k)
   const manual = await leerEstadoDelManual(db, o.client_id)
-  return { ok: true, entrada: { client_id: o.client_id, nombre: o.nombre, rubro: o.rubro, ahora: o.ahora, fichas, zona, sedes: o.sedes, ...('version' in manual ? { manual } : {}), ...(porAbrir.length ? { sedes_por_abrir: porAbrir } : {}), ...(cerradas.length ? { sedes_cerradas: cerradas } : {}) } }
+  return { ok: true, entrada: { client_id: o.client_id, nombre: o.nombre, rubro: o.rubro, ahora: o.ahora, fichas, zona, sedes: o.sedes, ...('version' in manual ? { manual } : {}), ...(porAbrir.length ? { sedes_por_abrir: porAbrir } : {}), ...(cerradas.length ? { sedes_cerradas: cerradas } : {}), ...(fueraPorOtroNegocio ? { fuera_por_otro_negocio: fueraPorOtroNegocio } : {}) } }
 }
 
 /** LA LECTURA DE LAS OFICINAS: el resumen vigente del cliente en UNA llamada (y los de sus sedes). Una falla de lectura se DICE; sin resumen = `null`, no un texto inventado. */

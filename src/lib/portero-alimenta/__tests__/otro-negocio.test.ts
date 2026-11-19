@@ -7,12 +7,16 @@
  *   · los datos de hoy de Olón y Guayaquil (sitio propio, el dueño, Mapas, Instagram sin «https://»);
  *   · las 4 páginas de homónimos que el rastreador guardó (myplainview, lmtonline, wanderlog, clickclackhotel).
  */
+import fs from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { baseDeFicha } from '../../propio/regla-propio'
+import { alimentarCliente } from '../alimentar'
 import { archivarFichasDeBrazos } from '../brazos/archivo'
+import { cargarEntradaDelResumen } from '../resumen-vivo'
 import type { FichaDeBrazo } from '../brazos/tipos'
 import { cargarPruebasDelCliente, columnasDeLaMarca, marcaDeOtroNegocio, paginaDeOtroSitio, sedesDeOtroNegocio, MARCADO_POR_LA_REGLA, type PruebasDelCliente } from '../otro-negocio'
 import { crearBaseFalsa } from './base-falsa'
+import { ALTA, AHORA as AHORA_ALTA, CASOS, ON, REAL, tablas as tablasDelCaso } from './fixtures-despertar'
 
 const CL = '0a2ffbd4-957c-4315-a37f-b9e4fbbbb312'
 const AHORA = new Date('2026-11-19T15:00:00Z')
@@ -69,6 +73,8 @@ describe('¿es una página web de otro sitio? (la regla única «¿es del client
   })
   it('lo que no es una dirección web, o un cliente sin sitio ni cuentas (no hay con qué comparar), NO prueba nada', () => {
     expect(paginaDeOtroSitio(BASE, 'instagram.com/naufrago.ec')).toBeNull()
+    expect(paginaDeOtroSitio(BASE, 'www.clickclackhotel.com/en/hotel-clickclackmedellin-in-medellin/')).toBeNull() // sin «https://» no es una dirección que pruebe nada
+    expect(paginaDeOtroSitio(BASE, 'ftp://clickclackhotel.com/medellin/')).toBeNull() // ni otro esquema: solo una página web prueba
     expect(paginaDeOtroSitio(BASE, null)).toBeNull()
     expect(paginaDeOtroSitio(BASE, 'corrección del dueño')).toBeNull()
     expect(paginaDeOtroSitio(baseDeFicha({ website_url: null, config: {} }), HOTEL)).toBeNull()
@@ -199,5 +205,75 @@ describe('el archivo de los brazos guarda la marca (de punta a punta, con la bas
     expect(r.plan).toHaveLength(1)
     expect(b.lecturas).not.toContain('client_sede_datos')
     expect(b.escrituras).toEqual([])
+  })
+})
+
+describe('alimentar guarda la marca en el camino real del artículo (el caso de Plainview)', () => {
+  const PLAINVIEW = ARTICULOS[0]
+  const conArticulo = () => {
+    const c = CASOS[0]
+    const t = tablasDelCaso(c)
+    t.apify_raw.push({ id: 'art', client_id: c.id, apify_function: 'website_content_scraper', ensayo: false, created_at: ALTA.toISOString(), metadata: { llamado_por: 'ogfq56oIEoHufFPM#articulo' }, params: {},
+      respuesta: [{ url: PLAINVIEW, text: `${c.nombre} fue nombrada en una nota del diario local sobre servicios de salud de la ciudad, con horarios y precios.` }] })
+    return { c, t }
+  }
+  it('la nota del diario se guarda MARCADA («nada», con su prueba); lo del sitio y de las redes del cliente, sin marca; nada se deja de guardar', async () => {
+    const { c, t } = conArticulo()
+    const r = await alimentarCliente({ db: crearBaseFalsa(t as never).db as never, client_id: c.id, ...REAL, interruptores: ON, ahora: AHORA_ALTA })
+    expect(r.errores).toEqual([])
+    const fichas = t.cerebro_fichas as Array<Record<string, unknown>>
+    const nota = fichas.filter((f) => f.fuente_url === PLAINVIEW)
+    expect(nota).toHaveLength(1)
+    expect(nota[0]).toMatchObject({ propiedad: 'incierta', otro_negocio_como: 'nada', otro_negocio_nivel: null, otro_negocio_prueba: PLAINVIEW, otro_negocio_por: MARCADO_POR_LA_REGLA, otro_negocio_en: AHORA_ALTA.toISOString() })
+    expect(String(nota[0].otro_negocio_motivo)).toContain('myplainview.com')
+    const resto = fichas.filter((f) => f.fuente_url !== PLAINVIEW)
+    expect(resto.length).toBeGreaterThan(3)
+    for (const f of resto) expect(f, String(f.fuente_url)).not.toHaveProperty('otro_negocio_motivo')
+    expect(r.escrituras.fichas).toBe(fichas.length)
+  })
+  it('si no se pueden leer las pruebas, no escribe fichas ni ingresos a ciegas y lo dice', async () => {
+    const { c, t } = conArticulo()
+    const b = crearBaseFalsa(t as never, { fallaEn: 'client_sede_datos' })
+    const r = await alimentarCliente({ db: b.db as never, client_id: c.id, ...REAL, interruptores: ON, ahora: AHORA_ALTA })
+    expect(r.errores.join(' ')).toMatch(/no es de este cliente: client_sede_datos.* no se escribieron \d+ fichas/)
+    expect(t.cerebro_fichas).toEqual([])
+    expect(t.cerebro_ingresos).toEqual([])
+  })
+  it('en seco no lee las pruebas', async () => {
+    const { c, t } = conArticulo()
+    const b = crearBaseFalsa(t as never)
+    await alimentarCliente({ db: b.db as never, client_id: c.id, dry_run: true, interruptores: ON, ahora: AHORA_ALTA })
+    expect(b.lecturas).not.toContain('client_sede_datos')
+  })
+})
+
+describe('el resumen vivo es DEL CLIENTE: lo marcado no entra y se dice cuántas quedaron fuera', () => {
+  const viva = (id: string, o: Record<string, unknown> = {}) => ({ id, client_id: CL, clase: 'hecho', titulo: `Hecho ${id}`, contenido: `Contenido ${id}`, atributo: null, observado_en: AHORA.toISOString(), fecha_fuente: null, vigente_hasta: null, retirada_en: null, provenance_tag: {}, descartada: false, creado_en: AHORA.toISOString(), ...o })
+  const entrada = async (fichas: Array<Record<string, unknown>>) => {
+    const r = await cargarEntradaDelResumen(crearBaseFalsa({ cerebro_fichas: fichas } as never).db as never, { client_id: CL, nombre: 'Náufrago', rubro: 'marisquería', ahora: AHORA, zonas: [], sedes: [] })
+    if (!r.ok) throw new Error(r.detalle)
+    return r.entrada
+  }
+  it('las 2 marcadas (Medellín y Laredo) quedan fuera; la del cliente entra; fuera_por_otro_negocio = 2', async () => {
+    const e = await entrada([viva('propia'), viva('mde', { otro_negocio_motivo: 'negocio de Medellín' }), viva('lar', { otro_negocio_motivo: 'sede laredo' })])
+    expect(e.fichas.map((f) => f.id)).toEqual(['propia'])
+    expect(e.fuera_por_otro_negocio).toBe(2)
+  })
+  it('una descartada marcada no se cuenta dos veces; sin marcadas, el campo no aparece', async () => {
+    const e = await entrada([viva('propia'), viva('x', { descartada: true, otro_negocio_motivo: 'artículo' })])
+    expect(e.fichas.map((f) => f.id)).toEqual(['propia'])
+    expect(e).not.toHaveProperty('fuera_por_otro_negocio')
+  })
+})
+
+describe('las lecturas PIDEN las columnas de la marca (la base falsa no valida columnas: se lee el código)', () => {
+  const fuente = (rel: string) => fs.readFileSync(new URL(rel, import.meta.url), 'utf-8')
+  it('el lector de fichas pide las 4 columnas que entrega', () => {
+    const linea = fuente('../../cerebro/lectores.ts').split(/\r?\n/).find((l) => l.includes('const COLUMNAS_DE_FICHAS = ['))!
+    for (const c of ['otro_negocio_motivo', 'otro_negocio_prueba', 'otro_negocio_como', 'otro_negocio_nivel']) expect(linea, c).toContain(`'${c}'`)
+  })
+  it('el resumen vivo pide `otro_negocio_motivo` (sin ella no podría dejar fuera lo marcado)', () => {
+    const linea = fuente('../resumen-vivo.ts').split(/\r?\n/).find((l) => l.includes("const campos = '"))!
+    expect(linea.split("'")[1].split(',').map((x) => x.trim())).toContain('otro_negocio_motivo')
   })
 })
