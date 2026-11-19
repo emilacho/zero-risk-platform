@@ -13,6 +13,7 @@ import { datos, fichaNueva, opinionExterna, reglasParaPrompts, reglasVisuales } 
 import { parsearBrief, planDeOrigen, prohibePersonas, proporcionDelBrief, protagonistasDelBrief, fechaLimiteDelBrief, type BriefLeido } from './brief'
 import { briefEsDelEncargo, claseDeLaFamilia } from './familia-del-brief'
 import { chequeosDePost, type FuentesDelCliente } from './chequeos'
+import { corregirContactoDeLaPieza } from './contacto-ajeno'
 import { comoDataUri, disenoDeAnuncio, textoEnImagenDe, textoEnImagenParaChequear } from './composicion'
 import { encajarAProporcion } from './encaje'
 import { aUtc, chequeosDeEntrega, cuandoSePublica, manifiesto, nombreDeArchivo, textoParaCopiar, leerMedidas, type ArchivoDeEntrega } from './entrega'
@@ -333,7 +334,11 @@ async function sentidoDe(P: Pick<Puertos, 'hechosPorOferta'>, enc: Pick<Encargo,
 
 export function puedeVolverALaMesa(pl: Plantilla, paso: Paso, e: Estado): ((costo: number) => boolean) | undefined {
   if (paso.vuelve_a?.paso !== 'mesa' || !quedaVueltaDelPaso(paso, e)) return undefined
-  return (costo) => cabeLaVuelta(pl, { ...e, gasto_usd: e.gasto_usd + costo }, costoDeVolver(pl, paso))
+  // 18-nov · con varias vueltas por regla dura, también tiene que caber en los PASOS: lo que falta desde la mesa hasta el final, dentro de plantilla + margen
+  //   (sin esto, la vuelta empezaría y el motor cerraría por tope de pasos a mitad de camino)
+  const iMesa = pl.pasos.findIndex((x) => x.clave === 'mesa')
+  const cabenLosPasos = iMesa >= 0 && e.pasos_ejecutados + (pl.pasos.length - iMesa) < pl.pasos.length + pl.limites.margen
+  return (costo) => cabenLosPasos && cabeLaVuelta(pl, { ...e, gasto_usd: e.gasto_usd + costo }, costoDeVolver(pl, paso))
 }
 
 /**
@@ -610,8 +615,11 @@ async function ejecutarCodigo(P: Puertos, enc: Encargo, pl: Plantilla, paso: Pas
     }
     case 'chequeos': {
       const b = base(e)
-      const pz = datos(e, 'pieza_post')
-      if (!pz) return { res: { costo_usd: 0, artefacto: { fichas: 0 } }, fallido: 'no hay pieza que chequear' }
+      const pz0 = datos(e, 'pieza_post')
+      if (!pz0) return { res: { costo_usd: 0, artefacto: { fichas: 0 } }, fallido: 'no hay pieza que chequear' }
+      // 18-nov · GO Lenovo «lo exacto se autocorrige»: el teléfono o el @ ajeno del texto que se publica se reemplaza por el del cliente ANTES de chequear (sin modelo)
+      const auto = corregirContactoDeLaPieza(pz0, b.F.fuentes as FuentesDelCliente)
+      const pz = auto.pieza
       const fin = datos(e, 'imagen_final') ?? {}
       const fs = chequeosDePost({
         // Mejora 5 · lo que va escrito sobre la imagen se chequea igual que el pie (prohibidas, registro, teléfonos, @ y precios); el tope del pie no lo cuenta
@@ -622,7 +630,7 @@ async function ejecutarCodigo(P: Puertos, enc: Encargo, pl: Plantilla, paso: Pas
         imagen: { generada: fin.origen === 'generada', declarada_en_bandeja: true },
       })
       const prefijo = `chk${e.pasos_ejecutados}`
-      return { res: { costo_usd: 0, artefacto: { fichas: fs.length }, fichas: fs.map((f, i) => ({ ...f, id: `${prefijo}-${i}` })), reemplazar_fichas: { origen: 'chequeo', donde: ['texto', 'hashtags'] } } }
+      return { res: { costo_usd: 0, artefacto: { fichas: fs.length, ...(auto.declarado.length ? { autocorregido: auto.declarado } : {}) }, fichas: fs.map((f, i) => ({ ...f, id: `${prefijo}-${i}` })), reemplazar_fichas: { origen: 'chequeo', donde: ['texto', 'hashtags'] }, ...(auto.declarado.length ? { otros_artefactos: { pieza_post: pz } } : {}) } }
     }
     case 'empaquetar_entrega': return empaquetar(P, enc, pl)
     case 'cierre': return { res: { costo_usd: 0, artefacto: { cerrado_en: P.ahora().toISOString() } } }
@@ -1157,8 +1165,9 @@ export async function cerrar(P: Puertos, enc: Encargo, pl: Plantilla, parcial: b
     // una alarma por incidente: si el cierre fue por tope (ya avisó a #alertas) o es la versión 2 o más del mismo brief, va al hilo (ADENDA 2 de CC7 a #1148)
     const nt = reglasDurasNoTomadas(e)
     const motivos = [...nt.map((h) => `${h.destino}: ${h.que}`), ...frenoDuro.filter((f) => !f.id.startsWith('sentido-no-tomada-')).map((f) => `${f.donde}: ${f.que ?? ''}`)]
-    await P.avisar({ canal: parcial || enc.version_encargo >= 2 ? 'hilo' : 'alertas', encargo_id: enc.id, texto: `🛑 Pieza frenada · ${enc.brief_id}: regla dura no tomada tras la vuelta — ${motivos.slice(0, 3).join(' | ')}. No se publica (firma de Emilio: se toma sí o sí).${textoDelGasto ? ` ${textoDelGasto}` : ''}`, dry_run: enc.dry_run })
-    return r(200, { accion: 'cerrado', estado: estadoFinal, con_desacuerdo: true, frenada: true, simulado: enc.dry_run, gasto_usd: e.gasto_usd, output_id: null, hitl_queue_id: null, resultado_para_la_sala: 'con_desacuerdo', sala_ref: enc.sala_ref, desacuerdos, ...(observaciones.length ? { observaciones } : {}) })
+    // 18-nov · GO Lenovo 13:52Z · ya no «frenada»: mientras cupo, la pieza volvió a su creador; aquí ya no cabe otra vuelta y queda EN CORRECCIÓN (la campaña sigue)
+    await P.avisar({ canal: parcial || enc.version_encargo >= 2 ? 'hilo' : 'alertas', encargo_id: enc.id, texto: `🔁 Pieza en corrección · ${enc.brief_id}: regla dura pendiente — ${motivos.join(' | ')}. No se publica ni va a la bandeja hasta cumplirla; su creador ya no tiene otra vuelta dentro del tope del encargo, así que espera tu criterio. Las demás piezas siguen.${textoDelGasto ? ` ${textoDelGasto}` : ''}`, dry_run: enc.dry_run })
+    return r(200, { accion: 'cerrado', estado: estadoFinal, con_desacuerdo: true, frenada: true, en_correccion: true, simulado: enc.dry_run, gasto_usd: e.gasto_usd, output_id: null, hitl_queue_id: null, resultado_para_la_sala: 'con_desacuerdo', sala_ref: enc.sala_ref, desacuerdos, ...(observaciones.length ? { observaciones } : {}) })
   }
   // la alarma de gasto sola (la pieza sigue): las versiones 2+ y el cierre por tope (ya avisó) van al hilo
   if (textoDelGasto) await P.avisar({ canal: parcial || enc.version_encargo >= 2 ? 'hilo' : 'alertas', encargo_id: enc.id, texto: `${textoDelGasto} La pieza sigue (el dinero ya se gastó).`, dry_run: enc.dry_run })

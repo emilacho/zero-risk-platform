@@ -7,6 +7,7 @@ import crypto from 'node:crypto'
 import { datos } from '../ayudas'
 import { avanzar, cerrarPorTope, fallar, plantillaDe, type Respuesta, type ResultadoDeTurno } from '../orquestador'
 import { baseDeLaminas } from '../orquestador-laminas'
+import { corregirContactoAjeno, declaracionDeContacto } from '../contacto-ajeno'
 import { fotosDeReferencia } from '../foto-de-referencia'
 import { seccionDeCambiosDelDueno } from '../cambios-del-dueno'
 import { conCabeceraDelRelleno, devolucionDelBrief, entregarALaCadena, marcoDe, rellenoPendiente, textoDeLaMesaParaLaCadena } from './de-la-cadena'
@@ -423,8 +424,13 @@ async function cerrarLaMesa(P: Puertos, enc: Encargo, pl: Plantilla, indice: num
   // cambio 4 · firma de Emilio · la dirección responde las correcciones de la jefatura en líneas propias: se guardan aparte y NO salen en la pieza (sin ellas, el texto es el mismo)
   const resp = separarRespuestas(ult.texto)
   if (resp.lineas.length) est = { ...est, respuestas_a_la_jefatura: resp.lineas }
-  const textoPieza = quitarLineasDeNotas(resp.pieza)
   const b = baseDeLaminas(enc.estado_del_motor)
+  // 18-nov · GO Lenovo «lo exacto se autocorrige»: el teléfono o el @ que no es del cliente se reemplaza por el suyo en el texto de la mesa ANTES de traducirlo,
+  //   así llega corregido a lo que se DIBUJA (láminas), a lo que se filma (guion), al pie y a la jefatura. Sin modelo; ante la duda no se toca (ver `contacto-ajeno.ts`)
+  const autoMesa = corregirContactoAjeno(quitarLineasDeNotas(resp.pieza), b.F.fuentes)
+  const textoPieza = autoMesa.texto
+  const declarados = declaracionDeContacto(autoMesa.cambios)
+  if (declarados.length || est.autocorregido) est = { ...est, autocorregido: declarados.length ? declarados : undefined }
   const maxLaminas = Number(pl.limites?.laminas_max)
   // 17-nov · GO Lenovo (a) · el máximo de cuadros por elemento del kit es dato de la plantilla (sin dato, el traductor usa 10)
   const maxCuadros = Number(pl.limites?.cuadros_por_elemento_max)
@@ -444,6 +450,7 @@ async function cerrarLaMesa(P: Puertos, enc: Encargo, pl: Plantilla, indice: num
       p.guion.avisos.push(...deRitmo)
       tp.resultado.avisos.push(...deRitmo.map((a) => `${p.id} · ${a}`))
     }
+    tp.resultado.avisos.push(...declarados)
     return cerrarConPropuestas(P, enc, pl, indice, est, libro, textoPieza, tp.resultado, forzado, vuelta)
   }
   const opcionesDeImagen: OpcionesDeTraduccion = {
@@ -467,6 +474,7 @@ async function cerrarLaMesa(P: Puertos, enc: Encargo, pl: Plantilla, indice: num
       hayGeneradasEnAlguna = hayGeneradasEnAlguna || a.hayGeneradas
       tp.resultado.avisos.push(...a.avisos)
     })
+    tp.resultado.avisos.push(...declarados)
     return guardarElCierre(P, enc, pl, indice, est, libro, textoPieza, { [ARTEFACTO_PROPUESTAS_IMAGEN]: { ...tp.resultado, texto: textoPieza } as unknown as Record<string, unknown> }, tp.resultado.avisos, hayGeneradasEnAlguna, forzado, vuelta)
   }
   // el VIDEO (parte 2 · 31-oct): la pieza es un GUION; el traductor de láminas no aplica (sin imágenes que generar: el brazo filma)
@@ -486,6 +494,7 @@ async function cerrarLaMesa(P: Puertos, enc: Encargo, pl: Plantilla, indice: num
   const otros: Record<string, Record<string, unknown>> = {}
   const avisosDePrompts: string[] = []
   let hayGeneradas = false
+  tr.avisos.push(...declarados)
   if ('planos' in tr) {
     // 17-nov · los avisos de ritmo de la biblioteca (CC4) en el guion: avisan, no rechazan
     tr.avisos.push(...avisosDeRitmoDelGuion(tr, b.brief.red ?? null, await ritmosDelVideo(P, enc)))

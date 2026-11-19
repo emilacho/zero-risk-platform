@@ -12,6 +12,7 @@ import { fechaLimiteDelBrief, parsearBrief, planDeOrigen, proporcionDelBrief, ty
 import { briefEsDelEncargo, claseDeLaFamilia } from './familia-del-brief'
 import { claseDe } from './clase'
 import { chequeosDePost, type FuentesDelCliente } from './chequeos'
+import { corregirContactoDeLaPieza } from './contacto-ajeno'
 import type { ContextoDelRevisor } from './ciego'
 import { aUtc, chequeosDeEntrega, cuandoSePublica, manifiesto, nombreDeArchivo, textoParaCopiar, type ArchivoDeEntrega } from './entrega'
 import { registrarPaso, siguientePaso, type ResultadoDePaso } from './motor'
@@ -275,8 +276,11 @@ export function avisoDeFotosALaMesa(noHalladas: string[], ambiguas: string[], fo
 
 function chequeos(e: Estado, pl: Plantilla, enc?: Pick<Encargo, 'sala_ref'>): SalidaCodigoV {
   const b = baseV(e)
-  const cv = datos(e, 'copy_video')
-  if (!cv) return { res: { costo_usd: 0, artefacto: { fichas: 0 } }, fallido: 'no hay pie ni etiquetas que chequear' }
+  const cv0 = datos(e, 'copy_video')
+  if (!cv0) return { res: { costo_usd: 0, artefacto: { fichas: 0 } }, fallido: 'no hay pie ni etiquetas que chequear' }
+  // 18-nov · GO Lenovo «lo exacto se autocorrige»: el teléfono o el @ ajeno del pie se reemplaza por el del cliente ANTES de chequear (sin modelo)
+  const auto = corregirContactoDeLaPieza(cv0, b.F.fuentes as FuentesDelCliente)
+  const cv = auto.pieza
   const fs = chequeosDePost({
     pieza: { pie_de_foto: txt(cv.pie_de_foto), hashtags: arr(cv.hashtags), llamado: typeof cv.llamado === 'string' ? cv.llamado : undefined },
     fuentes: b.F.fuentes as FuentesDelCliente,
@@ -304,7 +308,7 @@ function chequeos(e: Estado, pl: Plantilla, enc?: Pick<Encargo, 'sala_ref'>): Sa
   const dur = enc?.sala_ref?.[CLAVE_DE_LA_DURACION] as { aviso?: unknown; por_omision?: unknown } | undefined
   if (typeof dur?.aviso === 'string' && dur.aviso && dur.por_omision !== true) nueva('sugerencia', dur.aviso, 'duración de la idea', 'mirar si la idea cabe en el techo de la cadena o se parte en piezas')
   if (typeof pv?.aviso_duracion === 'string' && pv.aviso_duracion) nueva('sugerencia', pv.aviso_duracion, 'duración del guion de la mesa', 'mirar que el largo del video lo justifique')
-  return { res: { costo_usd: 0, artefacto: { fichas: fichas.length }, fichas, reemplazar_fichas: { origen: 'chequeo', donde: ['texto', 'hashtags', 'video'] } } }
+  return { res: { costo_usd: 0, artefacto: { fichas: fichas.length, ...(auto.declarado.length ? { autocorregido: auto.declarado } : {}) }, fichas, reemplazar_fichas: { origen: 'chequeo', donde: ['texto', 'hashtags', 'video'] }, ...(auto.declarado.length ? { otros_artefactos: { copy_video: cv } } : {}) } }
 }
 
 /** un mp4 mínimo (solo la caja `ftyp`): lo que se entrega en dry_run para que la hoja, el manifiesto y los chequeos de entrega se ejerzan sin red */
