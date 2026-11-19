@@ -24,6 +24,18 @@ const tomar = (sql: string, d: string) => { const a = `$${d}$`; const i = sql.in
 const json = (x: unknown) => JSON.parse(JSON.stringify(x))
 const copia = (p: Plantilla): Plantilla => JSON.parse(JSON.stringify(p))
 const r2 = (n: number) => Math.round(n * 100) / 100
+/** los límites como están EN VIVO: el borrador del video quedó apagado por #1165 directo en la base (sin migración) · 🔴 CC6 #1200 */
+const apagado = (lim: Record<string, any>) => ({ ...lim, video: { ...lim.video, borrador: { ...lim.video.borrador, activo: false } } })
+/** aplica a unos límites el jsonb_set que trae el SQL (ruta y valor leídos del texto) */
+function aplicarJsonbSet(sql: string, lim: Record<string, any>) {
+  const m = sql.match(/limites = jsonb_set\(limites, '\{([^}]+)\}', '([^']+)'::jsonb\)/)
+  expect(m).not.toBeNull()
+  const ruta = m![1].split(','), out = JSON.parse(JSON.stringify(lim))
+  let o = out
+  for (const k of ruta.slice(0, -1)) o = o[k]
+  o[ruta[ruta.length - 1]] = JSON.parse(m![2])
+  return out
+}
 
 function con(segundos: number, resolucion: '720p' | '1080p'): Plantilla {
   const p = copia(VIDEO_MESA_POR_SEGUNDO)
@@ -164,12 +176,30 @@ describe('topes al triple · el brazo (no se toca aquí: va con CC5 en G5)', () 
 })
 
 describe('la migración 202611190330 y su reversa', () => {
+  it('🔴 CC6 #1200 · el borrador del video APAGADO en vivo se conserva: los límites cambian con jsonb_set (solo la cifra del encargo a 720p), no se reescriben', () => {
+    for (const sql of [MIG, REV]) {
+      expect(sql).not.toMatch(/limites = \$lim\$/)
+      expect(tomar(sql, 'lim_antes').video.borrador).toEqual({ activo: false, resolucion: '480p' })
+      expect(tomar(sql, 'lim').video.borrador).toEqual({ activo: false, resolucion: '480p' })
+      // aplicar el jsonb_set a lo vivo da EXACTAMENTE lo que la verificación posterior exige
+      expect(aplicarJsonbSet(sql, tomar(sql, 'lim_antes'))).toEqual(tomar(sql, 'lim'))
+    }
+    expect(aplicarJsonbSet(MIG, tomar(MIG, 'lim_antes')).tope_encargo_usd_por_segundo).toEqual({ '720p': 4.86, '1080p': 4.9 })
+    expect(aplicarJsonbSet(REV, tomar(REV, 'lim_antes')).tope_encargo_usd_por_segundo).toEqual({ '720p': 3.9, '1080p': 4.9 })
+  })
+  it('🔴 CC6 #1200 · después de aplicar, se niega si el borrador no quedó apagado, y si los límites no son los exigidos', () => {
+    for (const sql of [MIG, REV]) {
+      expect(sql).toContain("IF (SELECT limites->'video'->'borrador'->>'activo' FROM public.oficina_tipos_de_grupo WHERE familia = 'video_mesa') IS DISTINCT FROM 'false' THEN")
+      expect(sql.lastIndexOf("->>'activo'")).toBeGreaterThan(sql.indexOf('UPDATE public.oficina_tipos_de_grupo'))
+      expect(sql.lastIndexOf('IS DISTINCT FROM $lim$')).toBeGreaterThan(sql.indexOf('UPDATE public.oficina_tipos_de_grupo'))
+    }
+  })
   it('🔴 «antes» = lo que dejó 202611171900; «después» = el dato del código (encargo 117,9)', () => {
     expect(tomar(MIG, 'pasos_antes')).toEqual(tomar(MIG_1900, 'pasos'))
-    expect(tomar(MIG, 'lim_antes')).toEqual(tomar(MIG_1900, 'lim'))
+    expect(tomar(MIG, 'lim_antes')).toEqual(apagado(tomar(MIG_1900, 'lim')))
     expect(tomar(MIG, 'pasos_antes')).toEqual(json(VIDEO_MESA_POR_SEGUNDO_1900.pasos))
     expect(tomar(MIG, 'pasos')).toEqual(json(VIDEO_MESA_POR_SEGUNDO.pasos))
-    expect(tomar(MIG, 'lim')).toEqual(json(VIDEO_MESA_POR_SEGUNDO.limites))
+    expect(tomar(MIG, 'lim')).toEqual(apagado(json(VIDEO_MESA_POR_SEGUNDO.limites)))
     expect(MIG).toContain('IS DISTINCT FROM 103.5::numeric THEN')
     expect(MIG).toContain('SET tope_encargo_usd = 117.9,')
     expect(topeDelEncargoDeLaFila({ tope_encargo_usd: 117.9, limites: tomar(MIG, 'lim'), pasos: tomar(MIG, 'pasos') })).toBe(117.9)

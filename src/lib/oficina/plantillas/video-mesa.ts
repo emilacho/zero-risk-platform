@@ -179,7 +179,7 @@ export const CIFRAS_POR_SEGUNDO_T7B = {
 
 /**
  * 19-nov · TOPES AL TRIPLE DE LO MEDIDO (regla firmada por Emilio · GO Lenovo 18-nov 16:17Z · DECISIÓN Lenovo 19-nov 03:25Z «va la A») · CC3 · cuenta de CC2.
- * El video medido cuesta 7,8216 por pieza de 15 s → triple 23,47 → 1,96/s a 720p (1,5648/s × 3 ≈ 1,96 redondeado arriba al centavo por segundo medido, CC6).
+ * El video medido cuesta 0,6518/s (barrido 18-nov: `costs` higgsfield:seedance-2.5, importe ÷ segundos, 4 filas a 1080p) → × 3 = 1,9554 → 1,96/s a 720p.
  * El 1080p (2/s) ya está sobre el triple: no cambia. El encargo cuenta el video UNA vez: 3,9 + 0,96 = 4,86/s a 720p; el fijo (45) y el 1080p (4,9) no cambian.
  * A 15 s y 720p: video 29,4 · encargo 117,9 (techo, no gasto). Migración 202611190330 + su reversa. Las cifras de T7b quedan arriba como HISTORIA (202611171900).
  */
