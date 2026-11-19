@@ -215,12 +215,12 @@ describe('rehacer-pieza', () => {
     expect(cinco.topes).toEqual([])
     expect(JSON.stringify(cinco.s)).toContain('tope_no_cubre')
   })
-  it('🔴 17-nov · T7a/T7b · con la plantilla por segundo el tablero lee el tope CALCULADO (103,5 desde T7b), no la parte fija (45)', async () => {
+  it('🔴 17-nov · T7a/T7b · con la plantilla por segundo el tablero lee el tope CALCULADO (117,9 desde los topes al triple · 202611190330; era 103,5 con T7b), no la parte fija (45)', async () => {
     const MV = crearMemoria({ plantilla: VIDEO_MESA_POR_SEGUNDO, fuentes: FUENTES })
     const db = new DbFalsa().semilla('oficina_encargos', [fila({ tipo_de_grupo: 'video_mesa', familia: 'video_mesa' })]).semilla('oficina_tipos_de_grupo', [{ tipo: 'video_mesa', familia: 'video_mesa', limites: { ...VIDEO_MESA_POR_SEGUNDO.limites }, pasos: VIDEO_MESA_POR_SEGUNDO.pasos }])
     // (en memoria no hay brazo de video: la pieza nace con su tope y luego cae al cotizar, que es otra cosa; como en la prueba de arriba, se mira el tope con que nace)
     await llamar('rehacer-pieza', db, { encargo_id: ENC, confirmo_gasto: true, tope_usd: 200 }, MV.P)
-    expect([...MV.encargos.values()].map((x) => x.tope_usd)).toEqual([103.5])
+    expect([...MV.encargos.values()].map((x) => x.tope_usd)).toEqual([117.9])
   })
   it('sin plantilla de su familia, sin tope legible o sin familia → 409 y no reabre', async () => {
     const sola = new DbFalsa().semilla('oficina_encargos', [fila()])
