@@ -14,6 +14,7 @@ import { relojDeLaCadena } from '../reloj'
 import { avisosDeReubicacion, CLAVE_DE_LA_LIBRETA, INTERRUPTOR_DE_REUBICACION } from '../reubicar'
 import { claveDeLaLibretaDeCorrecciones, creadorDelCalendario, VERSION_BASE_DE_CORRECCION, type LibretaDeCorrecciones } from '../correcciones-calendario'
 import { ACCIONES } from '../acciones'
+import { INTENTOS_POR_CORRECCION, VUELTAS_DE_REGLA_DURA } from '../correcciones'
 import type { Fila } from '../tipos'
 
 interface Caso { nombre: string; c: ClienteFixture; ahora: string; hoy: string; abierto: string; cerrado: string; red: string; formato: string; hora: string }
@@ -119,16 +120,17 @@ describe.each(CASOS)('$nombre', (k) => {
       expect(al.correcciones[0].estado, texto).toBe('recibida')
     }
   })
-  it('🔴 una DURA no se cierra con «no tomada»: no dicha, se reintenta; tras el reintento queda no_dicha y la pieza sigue frenada', async () => {
+  it('🔴 una DURA no se cierra con «no tomada»: no dicha, vuelve al creador (19-nov · nada se frena); tras sus vueltas queda no_dicha y la pieza no se publica', async () => {
     const al = almacen(k)
     await corregir(al, k, { dura: true, origen: 'codigo' })
-    await reloj(al, k.ahora)
-    expect(await entregar(al, k, V1, `${R}: no tomada: no me parece`)).toMatchObject({ estado: 'fallida' })
-    expect(al.correcciones[0]).toMatchObject({ estado: 'recibida', intentos: 1 })
-    await reloj(al, masMin(k.ahora, 10))
-    expect(await entregar(al, k, V2, `${R}: no tomada: sigue sin parecerme`)).toMatchObject({ estado: 'fallida' })
-    const v = (await ACCIONES.correcciones.del_encargo(al, { encargo_id: 'enc-pieza' }, k.ahora)).cuerpo.correcciones as Array<Record<string, unknown>>
-    expect(v[0]).toMatchObject({ estado: 'respondida', respuesta: 'no_dicha', bloquea_la_pieza: true })
+    const vista = async () => ((await ACCIONES.correcciones.del_encargo(al, { encargo_id: 'enc-pieza' }, k.ahora)).cuerpo.correcciones as Array<Record<string, unknown>>)[0]
+    const n = INTENTOS_POR_CORRECCION * VUELTAS_DE_REGLA_DURA
+    for (let i = 1; i <= n; i++) {
+      await reloj(al, masMin(k.ahora, 10 * i))
+      expect(await entregar(al, k, VERSION_BASE_DE_CORRECCION + i, `${R}: no tomada: no me parece (${i})`), `intento ${i}`).toMatchObject({ estado: 'fallida' })
+      if (i === INTENTOS_POR_CORRECCION) expect(await vista()).toMatchObject({ estado: 'recibida', intentos: i, bloquea_la_pieza: true })
+    }
+    expect(await vista()).toMatchObject({ estado: 'respondida', respuesta: 'no_dicha', intentos: n, bloquea_la_pieza: true })
   })
   it('🔴 tomada con descartar: la fila pierde su fecha (la oferta no existe en la campaña)', async () => {
     const al = almacen(k)

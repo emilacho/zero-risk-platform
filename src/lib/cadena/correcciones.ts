@@ -17,8 +17,15 @@ export const DESTINOS_DE_CORRECCION = ['hoja', 'calendario', 'banco'] as const
 export type DestinoDeCorreccion = (typeof DESTINOS_DE_CORRECCION)[number]
 export type EstadoDeCorreccion = 'recibida' | 'en_manos_del_creador' | 'respondida'
 export type RespuestaDeCorreccion = 'tomada' | 'tomada_en_parte' | 'no_tomada' | 'no_dicha'
-/** intentos del creador por corrección (el primero + un reintento); agotados, queda respondida «no_dicha» y visible: no bloquea más */
+/** intentos del creador por corrección (el primero + un reintento); agotados, una de criterio queda respondida «no_dicha» y visible; una dura vuelve (VUELTAS_DE_REGLA_DURA) */
 export const INTENTOS_POR_CORRECCION = 2
+/**
+ * 19-nov · ADENDA 1 de Emilio («NADA detiene el flujo») + respuesta de Lenovo 16:45Z: una REGLA DURA que el creador no toma NO se cierra al agotar los intentos:
+ * vuelve a su creador enseguida (la vigía la reparte en su próxima vuelta), con el motivo de la vez anterior. La guarda son estas vueltas (el tope firmado);
+ * el dinero sigue siendo el freno duro (cada mesa del banco trae su propio tope por vuelta). Agotadas, la pieza NO se publica (la regla dura no se negocia),
+ * sale UNA alarma y la campaña sigue con las demás.
+ */
+export const VUELTAS_DE_REGLA_DURA = 3
 /** minutos que se espera la respuesta de un creador antes de reintentar */
 export const PLAZO_DEL_CREADOR_MIN = 60
 export const LARGO_MAXIMO_DE_TEXTO = 2000
@@ -200,12 +207,20 @@ export function paraLaPieza(c: Pick<Correccion, 'estado' | 'respuesta' | 'dura' 
   if (c.estado !== 'respondida') return 'esperando'
   if (frenadaPorReglaDura(c)) return 'frenada'
   if (c.respuesta !== 'tomada' && c.respuesta !== 'tomada_en_parte') return 'sigue'
-  const vn = (c.version_nueva ?? {}) as { accion?: unknown; filas_al_brief?: unknown; fila_publicada?: unknown }
-  const movida = c.destino === 'calendario' ? typeof vn.accion === 'string' : Array.isArray(vn.filas_al_brief) && vn.filas_al_brief.includes(c.fila_id)
+  const vn = (c.version_nueva ?? {}) as { accion?: unknown; filas_al_brief?: unknown; fila_publicada?: unknown; fila_sin_la_pieza_vieja?: unknown }
+  // 19-nov · caso 2 · la fila que ya no espera la pieza vieja (ya está para brief, no tenía brief o salió del calendario): la pieza vieja queda reemplazada, no frena
+  const movida = c.destino === 'calendario' ? typeof vn.accion === 'string' : (Array.isArray(vn.filas_al_brief) && vn.filas_al_brief.includes(c.fila_id)) || typeof vn.fila_sin_la_pieza_vieja === 'string'
   if (movida) return 'reemplazada'
   // 🔴 CC6 · una DURA tomada sin mover la fila: la pieza vieja rompe la regla → frena (con su alarma), salvo que se sepa que ya se publicó
   return c.dura && vn.fila_publicada !== true ? 'frenada' : 'sigue'
 }
+/** las vueltas que ya hizo la corrección: el banco hace sus reintentos adentro (cada intento aquí es una vuelta); el calendario gasta INTENTOS_POR_CORRECCION por vuelta */
+export const vueltasHechas = (c: Pick<Correccion, 'intentos' | 'destino'>): number => (c.destino === 'banco' ? c.intentos : Math.ceil(c.intentos / INTENTOS_POR_CORRECCION))
+/** cuántos intentos puede gastar la corrección: una de criterio, los de siempre; una dura, los de todas sus vueltas */
+export const topeDeIntentos = (c: Pick<Correccion, 'dura' | 'destino'>): number => (!c.dura ? INTENTOS_POR_CORRECCION : c.destino === 'banco' ? VUELTAS_DE_REGLA_DURA : INTENTOS_POR_CORRECCION * VUELTAS_DE_REGLA_DURA)
+/** la llave con que el banco conoce ESTA vuelta: el puerto es idempotente por `correccion_id`, así que cada vuelta nueva lleva la suya (la 1.ª, la llave tal cual) */
+export const llaveDeLaVueltaDelBanco = (c: Pick<Correccion, 'llave' | 'intentos'>): string => (c.intentos <= 1 ? c.llave : `${c.llave}~v${c.intentos}`)
+
 const vista = (c: Correccion) => ({ llave: llaveDeLaOficina(c.llave), llave_guardada: c.llave, fila_id: c.fila_id, destino: c.destino, destino_pedido: c.destino_pedido, estado: c.estado, respuesta: c.respuesta, explicacion: c.explicacion, dura: c.dura, intentos: c.intentos, respondida_en: c.respondida_en, bloquea_la_pieza: bloqueaLaPieza(c), para_la_pieza: paraLaPieza(c), regla: c.regla })
 
 // ───────────────────────────────────────────── 3 · la respuesta del creador (una línea fija · el mismo formato de la oficina)
@@ -236,11 +251,13 @@ const normalizarValor = (v: string): Exclude<RespuestaDeCorreccion, 'no_dicha'> 
 }
 
 /** lo que va al marco del creador: INSUMO, no orden; él decide y lo deja escrito */
-export function marcoDeLaCorreccion(c: Pick<Correccion, 'motivo' | 'linea_de_la_ficha' | 'dura' | 'fila_id'>): string {
+export function marcoDeLaCorreccion(c: Pick<Correccion, 'motivo' | 'linea_de_la_ficha' | 'dura' | 'fila_id'> & Partial<Pick<Correccion, 'explicacion' | 'intentos'>>): string {
   return [
     `# CORRECCIÓN DE LA JEFATURA (${ID_EN_EL_MARCO}) · fila ${c.fila_id}`,
     `- Qué vio la jefatura: ${c.motivo}`,
     ...(c.linea_de_la_ficha ? [`- La línea de la ficha de la oferta que lo contradice: «${c.linea_de_la_ficha}»`] : []),
+    // 19-nov · la regla dura que vuelve: el creador sabe por qué no quedó tomada la vez anterior
+    ...(c.dura && (c.intentos ?? 0) > 1 && c.explicacion ? [`- Ya te llegó antes y no quedó tomada: ${c.explicacion}`] : []),
     c.dura
       ? '- Es una REGLA DURA de la agencia: se toma sí o sí. Tú decides CÓMO resolverla (y si la tomas entera o en parte), no si la tomas.'
       : '- Es una observación de criterio: es un insumo, no una orden. Tú decides si la tomas entera, en parte o no la tomas.',
@@ -257,7 +274,8 @@ export async function guardarRespuesta(al: Almacen, llave: string, leida: Respue
   const c = await al.correccion(llave)
   if (!c) return null
   if (c.estado === 'respondida') return { estado: c.estado, respuesta: c.respuesta, ya_respondida: true }
-  if (leida.respuesta === 'no_dicha' && !final && c.intentos < INTENTOS_POR_CORRECCION) {
+  // sin respuesta con intentos por delante → vuelve a recibida. Una DURA vuelve aunque el puerto haya dado su respuesta final: le quedan vueltas (19-nov · nada se frena)
+  if (leida.respuesta === 'no_dicha' && (!final || c.dura) && c.intentos < topeDeIntentos(c)) {
     await al.correccionActualizar(llave, { estado: 'recibida', explicacion: recortar(leida.motivo_no_dicha ?? null) }, c.estado)
     return { estado: 'recibida', respuesta: null }
   }
@@ -317,10 +335,22 @@ export async function devolverFilasAlBrief(al: Almacen, c: Pick<Correccion, 'cam
 /** la marca que deja la vuelta en la fila: con ella, una vuelta repetida (el cierre perdió) sabe que la fila YA volvió por esta corrección (🔴 CC6 21:40) */
 export const avisoDeLaVuelta = (llave: string) => `la jefatura corrigió su idea del banco (corrección ${llave}): el brief se rehace y la pieza vieja queda reemplazada`
 
+/**
+ * 19-nov · caso 2 · ¿la fila ya no espera la pieza vieja? Sí si salió del calendario, si ya está para brief (su brief se rehace igual), si todavía no tenía brief
+ * o si quedó cerrada (cancelada, vencida, descartada): la pieza vieja no se publica y nada queda frenado. No, si la fila sigue esperando ESA pieza
+ * (briefeada, en la oficina, aprobada o esperando su video): ahí la pieza vieja rompe la regla y frena (no se publica), con su alarma.
+ */
+export const ESTADOS_QUE_ESPERAN_LA_PIEZA: readonly Fila['estado'][] = ['briefeada', 'en_oficina', 'aprobada', 'espera_video']
+export function filaSinLaPiezaVieja(f: Pick<Fila, 'estado'> | undefined): string | null {
+  if (!f) return 'fuera_del_calendario'
+  return ESTADOS_QUE_ESPERAN_LA_PIEZA.includes(f.estado) ? null : f.estado
+}
+
 export function sondeoDelBanco(puerto: PuertoDelBanco): SondeoDeCorreccion {
   return async (al, c, ahora) => {
     if (!c.idea_id || !c.idea_sello) return { estado: 'respondida', leida: { respuesta: 'no_dicha', explicacion: null, motivo_no_dicha: 'la corrección al banco llegó sin la idea o sin su sello' }, version_nueva: null }
-    const e = await puerto(al, { correccion_id: c.llave, campana_id: c.campana_id, idea_id: c.idea_id, idea_sello: c.idea_sello, filas_afectadas: [c.fila_id], motivo: c.motivo, linea_de_la_ficha: c.linea_de_la_ficha, regla: c.regla }, ahora)
+    const id = llaveDeLaVueltaDelBanco(c)
+    const e = await puerto(al, { correccion_id: id, campana_id: c.campana_id, idea_id: c.idea_id, idea_sello: c.idea_sello, filas_afectadas: [c.fila_id], motivo: c.motivo, linea_de_la_ficha: c.linea_de_la_ficha, regla: c.regla }, ahora)
     if (e.estado === 'en_curso') return { estado: 'en_curso', detalle: e.intentos === -1 ? 'error pasajero del puerto' : undefined }
     const x = e.resultado.respuesta
     const explicacion = recortar(cadena(x.explicacion ?? null))
@@ -334,18 +364,28 @@ export function sondeoDelBanco(puerto: PuertoDelBanco): SondeoDeCorreccion {
     // al editar el puerto no dice qué filas tenían brief (al retirar, sí: `con_brief_sin_tocar`, ya reasignadas): las que citan la idea corregida, más esas
     const citan = c.idea_id ? (await al.filas(c.campana_id, Math.max(1, await al.ultimaVersionDeCalendario(c.campana_id)))).filter((f) => f.idea_ref === c.idea_id).map((f) => f.id) : []
     const candidatas = [...citan, ...(e.resultado.con_brief_sin_tocar ?? [])]
-    if (tomada) await devolverFilasAlBrief(al, c, candidatas)
+    if (tomada) await devolverFilasAlBrief(al, { ...c, llave: id }, candidatas)
     // las devueltas se cuentan por el ESTADO de la fila y la marca de ESTA corrección, no por lo que movió esta llamada: repetir da lo mismo
-    const ahoraFilas = tomada ? await al.filas(c.campana_id, Math.max(1, await al.ultimaVersionDeCalendario(c.campana_id))) : []
-    const filas_al_brief = ahoraFilas.filter((f) => candidatas.includes(f.id) && f.estado === 'lista_para_brief' && f.avisos.includes(avisoDeLaVuelta(c.llave))).map((f) => f.id)
-    // 🔴 CC6 · una dura tomada cuya fila NO volvió: solo «sigue» si se SABE que la pieza ya se publicó; si no, frena
+    const leerFilas = async () => (tomada ? await al.filas(c.campana_id, Math.max(1, await al.ultimaVersionDeCalendario(c.campana_id))) : [])
+    const devueltas = (fs: Fila[]) => fs.filter((f) => candidatas.includes(f.id) && f.estado === 'lista_para_brief' && f.avisos.includes(avisoDeLaVuelta(id))).map((f) => f.id)
+    let ahoraFilas = await leerFilas()
+    let filas_al_brief = devueltas(ahoraFilas)
+    // 19-nov · caso 2 (nada se frena) · una DURA tomada cuya fila no volvió: si la fila cambió entre leer y escribir, se reintenta UNA vez aquí (la escritura es condicional)
+    if (tomada && c.dura && !filas_al_brief.includes(c.fila_id) && candidatas.includes(c.fila_id)) {
+      await devolverFilasAlBrief(al, { ...c, llave: id }, [c.fila_id])
+      ahoraFilas = await leerFilas()
+      filas_al_brief = devueltas(ahoraFilas)
+    }
+    // 🔴 CC6 · una dura tomada cuya fila NO volvió: solo «sigue» si se SABE que la pieza ya se publicó
     const propia = ahoraFilas.find((f) => f.id === c.fila_id)
     const fila_publicada = !!(tomada && propia && !filas_al_brief.includes(c.fila_id) && al.piezaPublicada && (await al.piezaPublicada(c.campana_id, c.fila_id)))
+    // 19-nov · caso 2 · la fila que ya no espera la pieza vieja: se nombra su estado (la pieza vieja queda reemplazada); la que sí la espera y no volvió frena (no se publica)
+    const fila_sin_la_pieza_vieja = tomada && c.dura && !fila_publicada && !filas_al_brief.includes(c.fila_id) ? filaSinLaPiezaVieja(propia) : null
     // 19-nov · #1195 · decisión A de Lenovo (🔴 de CC7, cuidados de CC3 00:59Z): la pieza vieja de las OTRAS filas que volvieron se archiva, ANTES de cerrar la corrección
     // (después de `respondida` el sondeo no se repite). La de la fila corregida NO: esa la maneja la oficina con `paraLaPieza` (reemplazada) · un solo escritor por pieza
     const otras = filas_al_brief.filter((id) => id !== c.fila_id)
     const piezas_viejas = otras.length ? await archivarPiezasViejas(al, c.campana_id, otras, motivoDePiezaVieja(c.idea_id, x.accion === 'editar' ? 'editar' : 'retirar'), ahora) : null
-    return { estado: 'respondida', leida, version_nueva: { version: e.resultado.version, accion: x.accion ?? null, reasignadas: e.resultado.reasignadas ?? [], con_brief_sin_tocar: e.resultado.con_brief_sin_tocar ?? [], filas_al_brief, fila_publicada, ...(piezas_viejas ? { piezas_viejas } : {}) } }
+    return { estado: 'respondida', leida, version_nueva: { version: e.resultado.version, accion: x.accion ?? null, reasignadas: e.resultado.reasignadas ?? [], con_brief_sin_tocar: e.resultado.con_brief_sin_tocar ?? [], filas_al_brief, fila_publicada, ...(fila_sin_la_pieza_vieja ? { fila_sin_la_pieza_vieja } : {}), ...(piezas_viejas ? { piezas_viejas } : {}) } }
   }
 }
 
@@ -354,10 +394,11 @@ export function sondeoDelBanco(puerto: PuertoDelBanco): SondeoDeCorreccion {
  * Una por incidente: solo quien cierra la corrección la manda (la escritura condicional al estado la cierra una sola vez) · si Slack no confirma, `alarma_en` queda vacío
  * y la vigía la reintenta (`alarmasPendientes`): un aviso que no salió no se da por avisado.
  */
-export function textoDeLaAlarma(c: Pick<Correccion, 'fila_id' | 'campana_id' | 'destino' | 'motivo' | 'linea_de_la_ficha' | 'explicacion'> & { respuesta?: Correccion['respuesta'] }): string {
+export function textoDeLaAlarma(c: Pick<Correccion, 'fila_id' | 'campana_id' | 'destino' | 'motivo' | 'linea_de_la_ficha' | 'explicacion'> & { respuesta?: Correccion['respuesta']; intentos?: number }): string {
+  const vueltas = c.intentos ? vueltasHechas({ intentos: c.intentos, destino: c.destino }) : 0
   const porque = c.respuesta === 'tomada' || c.respuesta === 'tomada_en_parte'
     ? `El creador (${c.destino}) la tomó, pero la fila no pudo volver al brief (la pieza vieja sigue rompiendo la regla): ${c.explicacion ?? 'sin explicación'}.`
-    : `El creador (${c.destino}) no la tomó tras el reintento: ${c.explicacion ?? 'sin respuesta'}.`
+    : `El creador (${c.destino}) no la tomó${vueltas ? ` en ${vueltas} vuelta${vueltas === 1 ? '' : 's'}` : ' tras el reintento'}: ${c.explicacion ?? 'sin respuesta'}. Las demás piezas y la campaña siguen.`
   return `⛔ Regla dura sin tomar · la pieza de la fila ${c.fila_id} (campaña ${c.campana_id}) NO se publica. La jefatura vio: ${c.motivo}${c.linea_de_la_ficha ? ` (ficha: «${c.linea_de_la_ficha}»)` : ''}. ${porque}`
 }
 async function alarmaSiFrena(al: Almacen, c: Correccion, ahora: string): Promise<void> {
@@ -414,8 +455,10 @@ export async function repartirCorrecciones(al: Almacen, ahora: string, creadores
       const creador = creadores[c.destino]
       // sin creador: queda recibida y visible en la corrección (la bandeja la lee); no se avisa en cada vuelta (menos ruido)
       if (!creador) continue
-      if (c.intentos >= INTENTOS_POR_CORRECCION) {
-        if (await al.correccionActualizar(c.llave, { estado: 'respondida', respuesta: 'no_dicha', explicacion: c.explicacion ?? 'intentos agotados', respondida_en: ahora }, c.estado)) await alarmaSiFrena(al, { ...c, estado: 'respondida', respuesta: 'no_dicha', explicacion: c.explicacion ?? 'intentos agotados' }, ahora)
+      if (c.intentos >= topeDeIntentos(c)) {
+        const cerrada: Correccion = { ...c, estado: 'respondida', respuesta: 'no_dicha', explicacion: c.explicacion ?? 'intentos agotados', respondida_en: ahora }
+        const frena = paraLaPieza(cerrada) === 'frenada'
+        if (await al.correccionActualizar(c.llave, { estado: 'respondida', respuesta: 'no_dicha', explicacion: cerrada.explicacion, respondida_en: ahora, frena }, c.estado)) await alarmaSiFrena(al, { ...cerrada, frena }, ahora)
         aplicado.push(`${c.llave}: intentos agotados → no_dicha`)
         continue
       }

@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest'
 import { AlmacenMemoria } from '../__fixtures__/almacen-memoria'
 import { ACCIONES } from '../acciones'
-import { bloqueaLaPieza, destinoFinal, devolverFilasAlBrief, paraLaPieza, guardarRespuesta, sondeoDelBanco, textoDeLaAlarma, type PuertoDelBanco, INTENTOS_POR_CORRECCION, leerRespuestaDelCreador, marcoDeLaCorreccion, PLAZO_DEL_CREADOR_MIN, repartirCorrecciones, type CreadorDeCorreccion } from '../correcciones'
+import { VUELTAS_DE_REGLA_DURA, topeDeIntentos, bloqueaLaPieza, destinoFinal, devolverFilasAlBrief, paraLaPieza, guardarRespuesta, sondeoDelBanco, textoDeLaAlarma, type PuertoDelBanco, INTENTOS_POR_CORRECCION, leerRespuestaDelCreador, marcoDeLaCorreccion, PLAZO_DEL_CREADOR_MIN, repartirCorrecciones, type CreadorDeCorreccion } from '../correcciones'
 import type { Campana } from '../almacen'
 
 const AHORA = '2026-11-17T21:00:00.000Z'
@@ -147,7 +147,7 @@ describe('2 · el reparto de la vigía', () => {
     expect(al.correcciones[0]).toMatchObject({ estado: 'recibida', intentos: 1 })
   })
   it('🔴 el creador no responde en el plazo: se reintenta; al agotar los intentos queda respondida no_dicha y visible (no bloquea más)', async () => {
-    const al = await conUna()
+    const al = await conUna({ dura: false })
     await repartirCorrecciones(al, AHORA, { calendario: abre })
     await repartirCorrecciones(al, mas(PLAZO_DEL_CREADOR_MIN - 1), { calendario: abre })
     expect(al.correcciones[0].estado).toBe('en_manos_del_creador')
@@ -179,7 +179,7 @@ describe('3b · guardar la respuesta', () => {
     expect(al.correcciones[0].respuesta).toBe('tomada_en_parte')
   })
   it('🔴 no_dicha con intentos por delante vuelve a recibida (la vigía la reintenta); agotados, cierra no_dicha con el motivo', async () => {
-    const al = await enManos()
+    const al = await conUna({ dura: false }); await repartirCorrecciones(al, AHORA, { calendario: abre })
     expect((await guardarRespuesta(al, 'f-7:calendario', { respuesta: 'no_dicha', explicacion: null, motivo_no_dicha: 'sin línea' }, mas(5)))?.estado).toBe('recibida')
     await repartirCorrecciones(al, mas(6), { calendario: abre })
     expect(al.correcciones[0].intentos).toBe(2)
@@ -202,15 +202,70 @@ describe('4 · ¿la pieza vieja NO sale? (Lenovo 3 + 🟡 CC6 21:19: todo lo que
     expect(b({ respuesta: 'no_dicha', dura: false })).toBe(false)
     expect(b({ destino: 'banco', version_nueva: { filas_al_brief: [] } })).toBe(false)
   })
-  it('🔴 de punta a punta: una DURA que el creador no toma dos veces queda cerrada no_dicha y la bandeja la ve frenando', async () => {
+  it('🔴 19-nov · de punta a punta: una DURA que el creador no toma dos veces NO se cierra: vuelve a su creador; la pieza espera (no se publica)', async () => {
     const al = await conUna({ dura: true })
     const R = 'RESPUESTA A LA JEFATURA C1: no tomada: no me parece'
     await repartirCorrecciones(al, AHORA, { calendario: abre })
     await guardarRespuesta(al, 'f-7:calendario', leerRespuestaDelCreador(R, true), mas(5))
     await repartirCorrecciones(al, mas(6), { calendario: abre })
     await guardarRespuesta(al, 'f-7:calendario', leerRespuestaDelCreador(R, true), mas(7))
+    expect(al.correcciones[0]).toMatchObject({ estado: 'recibida', intentos: INTENTOS_POR_CORRECCION, respuesta: null })
+    expect(paraLaPieza(al.correcciones[0])).toBe('esperando')
+    expect(al.alarmasEnviadas).toEqual([])
+    // la vuelta siguiente: se entrega enseguida y el creador sabe por qué no quedó la vez anterior
+    const vistas: string[] = []
+    await repartirCorrecciones(al, mas(8), { calendario: async (_a, c) => { vistas.push(marcoDeLaCorreccion(c)); return { estado: 'entregada' } } })
+    expect(al.correcciones[0]).toMatchObject({ estado: 'en_manos_del_creador', intentos: INTENTOS_POR_CORRECCION + 1 })
+    expect(vistas[0]).toContain('Ya te llegó antes y no quedó tomada: es una regla dura (se toma sí o sí) y el creador dijo «no tomada»')
+  })
+  it('🔴 19-nov · el tope de vueltas de una regla dura es el firmado: 3 (el calendario gasta 2 intentos por vuelta; el banco, 1)', () => {
+    expect(VUELTAS_DE_REGLA_DURA).toBe(3)
+    expect(topeDeIntentos({ dura: true, destino: 'calendario' })).toBe(6)
+    expect(topeDeIntentos({ dura: true, destino: 'banco' })).toBe(3)
+    expect(topeDeIntentos({ dura: false, destino: 'calendario' })).toBe(2)
+    expect(topeDeIntentos({ dura: false, destino: 'banco' })).toBe(2)
+  })
+  it('🔴 19-nov · la dura agota sus VUELTAS: recién ahí queda cerrada no_dicha, la pieza NO se publica y sale UNA alarma que dice las vueltas', async () => {
+    const al = await conUna({ dura: true })
+    const R = 'RESPUESTA A LA JEFATURA C1: no tomada: no me parece'
+    for (let i = 1; i <= INTENTOS_POR_CORRECCION * VUELTAS_DE_REGLA_DURA; i++) {
+      expect(al.correcciones[0].estado, `intento ${i}`).toBe('recibida')
+      await repartirCorrecciones(al, mas(2 * i), { calendario: abre })
+      await guardarRespuesta(al, 'f-7:calendario', leerRespuestaDelCreador(R, true), mas(2 * i + 1))
+    }
+    expect(al.correcciones[0]).toMatchObject({ estado: 'respondida', respuesta: 'no_dicha', intentos: INTENTOS_POR_CORRECCION * VUELTAS_DE_REGLA_DURA, frena: true })
+    expect(paraLaPieza(al.correcciones[0])).toBe('frenada')
     const v = (await ACCIONES.correcciones.del_encargo(al, { encargo_id: 'enc-1' }, AHORA)).cuerpo.correcciones as Array<Record<string, unknown>>
     expect(v[0]).toMatchObject({ estado: 'respondida', respuesta: 'no_dicha', bloquea_la_pieza: true })
+    expect(al.alarmasEnviadas).toHaveLength(1)
+    expect(al.alarmasEnviadas[0]).toContain(`en ${VUELTAS_DE_REGLA_DURA} vueltas`)
+    expect(al.alarmasEnviadas[0]).toContain('Las demás piezas y la campaña siguen.')
+  })
+  it('🔴 19-nov · una DURA cuyo creador no responde en el plazo también vuelve (no se cierra al 2.º intento)', async () => {
+    const al = await conUna({ dura: true })
+    for (let i = 0; i < INTENTOS_POR_CORRECCION; i++) {
+      await repartirCorrecciones(al, mas(i * 3 * PLAZO_DEL_CREADOR_MIN), { calendario: abre })
+      await repartirCorrecciones(al, mas(i * 3 * PLAZO_DEL_CREADOR_MIN + PLAZO_DEL_CREADOR_MIN + 1), { calendario: abre })
+    }
+    expect(al.correcciones[0]).toMatchObject({ estado: 'recibida', intentos: INTENTOS_POR_CORRECCION, respuesta: null })
+  })
+  it('🔴 19-nov · el creador que no abre gasta su intento; agotadas las vueltas, el reparto cierra con frena y UNA alarma', async () => {
+    const al = await conUna({ dura: true })
+    const noAbre: CreadorDeCorreccion = async () => ({ estado: 'no_abre', motivo: 'la mesa no abrió' })
+    for (let i = 0; i < INTENTOS_POR_CORRECCION * VUELTAS_DE_REGLA_DURA; i++) await repartirCorrecciones(al, mas(i), { calendario: noAbre })
+    expect(al.correcciones[0]).toMatchObject({ estado: 'recibida', intentos: INTENTOS_POR_CORRECCION * VUELTAS_DE_REGLA_DURA })
+    expect(al.alarmasEnviadas).toEqual([])
+    await repartirCorrecciones(al, mas(50), { calendario: noAbre })
+    expect(al.correcciones[0]).toMatchObject({ estado: 'respondida', respuesta: 'no_dicha', frena: true })
+    expect(al.alarmasEnviadas).toHaveLength(1)
+  })
+  it('🔴 19-nov · una de CRITERIO no tomada no vuelve: cierra a los intentos de siempre', async () => {
+    const al = await conUna({ dura: false })
+    for (let i = 1; i <= INTENTOS_POR_CORRECCION; i++) {
+      await repartirCorrecciones(al, mas(2 * i), { calendario: abre })
+      await guardarRespuesta(al, 'f-7:calendario', { respuesta: 'no_dicha', explicacion: null, motivo_no_dicha: 'sin línea' }, mas(2 * i + 1))
+    }
+    expect(al.correcciones[0]).toMatchObject({ estado: 'respondida', respuesta: 'no_dicha', intentos: INTENTOS_POR_CORRECCION })
   })
 })
 
@@ -248,12 +303,14 @@ describe('5 · la hoja va al insumo de donde salió la línea (RESPUESTA-LENOVO 
 
 describe('6 · regla dura sin tomar: FRENA y deja UNA alarma (RESPUESTA-LENOVO 3)', () => {
   const NO = 'RESPUESTA A LA JEFATURA C1: no tomada: no me parece'
+  // 19-nov · la dura vuelve al creador: se cierra (y frena) recién al agotar las vueltas; el último cierre es en mas(2n + 1)
+  const ULTIMO_CIERRE = 2 * INTENTOS_POR_CORRECCION * VUELTAS_DE_REGLA_DURA + 1
   async function cerrarDura(al: AlmacenMemoria) {
     await recibir(al, pedido({ dura: true }))
-    await repartirCorrecciones(al, AHORA, { calendario: abre })
-    await guardarRespuesta(al, 'f-7:calendario', leerRespuestaDelCreador(NO, true), mas(5))
-    await repartirCorrecciones(al, mas(6), { calendario: abre })
-    await guardarRespuesta(al, 'f-7:calendario', leerRespuestaDelCreador(NO, true), mas(7))
+    for (let i = 1; i <= INTENTOS_POR_CORRECCION * VUELTAS_DE_REGLA_DURA; i++) {
+      await repartirCorrecciones(al, mas(2 * i), { calendario: abre })
+      await guardarRespuesta(al, 'f-7:calendario', leerRespuestaDelCreador(NO, true), mas(2 * i + 1))
+    }
   }
   it('🔴 una alarma, con la fila, la campaña y el motivo; la vigía no la repite', async () => {
     const al = almacen()
@@ -262,7 +319,7 @@ describe('6 · regla dura sin tomar: FRENA y deja UNA alarma (RESPUESTA-LENOVO 3
     expect(al.alarmasEnviadas[0]).toContain('fila f-7')
     expect(al.alarmasEnviadas[0]).toContain('NO se publica')
     expect(al.alarmasEnviadas[0]).toContain('la oferta está cerrada ese día')
-    expect(al.correcciones[0].alarma_en).toBe(mas(7))
+    expect(al.correcciones[0].alarma_en).toBe(mas(ULTIMO_CIERRE))
     await repartirCorrecciones(al, mas(60), { calendario: abre })
     await guardarRespuesta(al, 'f-7:calendario', { respuesta: 'no_dicha', explicacion: null }, mas(61))
     expect(al.alarmasEnviadas).toHaveLength(1)
@@ -334,17 +391,36 @@ describe('7 · el banco por el puerto de CC1 (CONTRATO-CC1 · se sondea en cada 
     await repartirCorrecciones(al, mas(100), {}, { banco: sondeoDelBanco(p.fn) })
     expect(p.llamadas).toHaveLength(3)
   })
-  it('🔴 no_dicha del puerto (p. ej. mesa apagada) cierra a la primera: el puerto ya reintentó; una dura así frena con UNA alarma', async () => {
+  it('🔴 no_dicha del puerto de una de CRITERIO cierra a la primera: el puerto ya reintentó', async () => {
     const al = almacen(); const p = puerto([{ respuesta: 'no_dicha', motivo: 'mesa apagada: la corrección del banco no está encendida' }])
-    await banco(al, { regla: 'D2' })
+    await banco(al, { dura: false })
     await repartirCorrecciones(al, AHORA, {}, { banco: sondeoDelBanco(p.fn) })
     expect(al.correcciones[0]).toMatchObject({ estado: 'respondida', respuesta: 'no_dicha', explicacion: 'mesa apagada: la corrección del banco no está encendida', intentos: 1 })
+    expect(al.alarmasEnviadas).toEqual([])
+  })
+  it('🔴 19-nov · una DURA que el puerto deja no_dicha vuelve al banco en la vuelta siguiente, cada vuelta con su llave; agotadas, frena con UNA alarma', async () => {
+    const al = almacen(); const p = puerto([{ respuesta: 'no_dicha', motivo: 'mesa apagada: la corrección del banco no está encendida' }])
+    await banco(al, { regla: 'D2' })
+    const llave = al.correcciones[0].llave
+    await repartirCorrecciones(al, AHORA, {}, { banco: sondeoDelBanco(p.fn) })
+    expect(al.correcciones[0]).toMatchObject({ estado: 'recibida', respuesta: null, intentos: 1 })
+    expect(paraLaPieza(al.correcciones[0])).toBe('esperando')
+    expect(al.alarmasEnviadas).toEqual([])
+    for (let i = 1; i < VUELTAS_DE_REGLA_DURA; i++) await repartirCorrecciones(al, mas(i), {}, { banco: sondeoDelBanco(p.fn) })
+    expect(p.llamadas.map((x) => x.c.correccion_id)).toEqual([llave, `${llave}~v2`, `${llave}~v3`])
+    expect(al.correcciones[0]).toMatchObject({ estado: 'respondida', respuesta: 'no_dicha', intentos: VUELTAS_DE_REGLA_DURA, frena: true })
     expect(bloqueaLaPieza(al.correcciones[0])).toBe(true)
     expect(al.alarmasEnviadas).toHaveLength(1)
+    await repartirCorrecciones(al, mas(9), {}, { banco: sondeoDelBanco(p.fn) })
+    expect(p.llamadas).toHaveLength(VUELTAS_DE_REGLA_DURA)
   })
   it('🔴 una dura que el puerto deja «no_tomada» cuenta como no dicha y frena; una de criterio «no_tomada» queda y no frena', async () => {
     const a = almacen(); await banco(a, { regla: 'D1' })
-    await repartirCorrecciones(a, AHORA, {}, { banco: sondeoDelBanco(puerto([{ respuesta: 'no_tomada', explicacion: 'no' }]).fn) })
+    const pa = puerto([{ respuesta: 'no_tomada', explicacion: 'no' }])
+    await repartirCorrecciones(a, AHORA, {}, { banco: sondeoDelBanco(pa.fn) })
+    // 19-nov · no se cierra: vuelve (la pieza espera, no se publica)
+    expect(a.correcciones[0]).toMatchObject({ estado: 'recibida', explicacion: 'es una regla dura y el banco dijo «no tomada»' }); expect(bloqueaLaPieza(a.correcciones[0])).toBe(true)
+    for (let i = 1; i < VUELTAS_DE_REGLA_DURA; i++) await repartirCorrecciones(a, mas(i), {}, { banco: sondeoDelBanco(pa.fn) })
     expect(a.correcciones[0]).toMatchObject({ respuesta: 'no_dicha' }); expect(bloqueaLaPieza(a.correcciones[0])).toBe(true)
     const b = almacen(); await banco(b, { dura: false })
     await repartirCorrecciones(b, AHORA, {}, { banco: sondeoDelBanco(puerto([{ respuesta: 'no_tomada', explicacion: 'no aplica a esta idea' }]).fn) })

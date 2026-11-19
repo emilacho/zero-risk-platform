@@ -328,16 +328,26 @@ describe('las medidas de CC7', () => {
     expect(m.M.llamadas.bandeja.length).toBe(bandejaAntes)
     expect(m.M.llamadas.salidas.length).toBe(salidasAntes)
   })
-  it('🔴 CC7 punto 3 · la misma fila ya tiene la corrección de OTRO encargo (`ya_estaba` y no está en la lectura de este): FRENA con UNA alarma, nunca espera para siempre', async () => {
+  it('🔴 19-nov · CC7 punto 3 · la misma fila ya tiene la corrección de OTRO encargo (`ya_estaba` y no está en la lectura de este): NO frena · se vuelve a mandar en cada vuelta, la pieza espera con UNA alarma y sigue la respuesta que le toque', async () => {
     const rec = receptor({ para: () => 'reemplazada' })
     // el encargo 1 de la fila dejó su corrección: el receptor la tiene con OTRO encargo_id
     rec.guardadas.set('F-0300:calendario', { llave: 'F-0300:calendario', destino: 'calendario', encargo_id: 'encargo-anterior' })
     const m = await correr({ rec })
-    expect(m.r.cuerpo).toMatchObject({ frenada: true, para_la_pieza: 'frenada', output_id: null, hitl_queue_id: null })
+    expect(m.r.cuerpo).toMatchObject({ resultado_para_la_sala: 'esperando_a_la_cadena', para_la_pieza: 'esperando', output_id: null, hitl_queue_id: null })
+    expect(m.r.cuerpo).not.toHaveProperty('frenada')
     await m.vigia(); await m.vigia()
+    // cada vuelta la vuelve a mandar (el receptor real la cubre o abre una nueva para este encargo)
+    expect(rec.llamadas.filter((c) => c.llave === 'F-0300:calendario')).toHaveLength(3)
     expect(m.M.llamadas.bandeja).toEqual([])
     expect(m.alertas().filter((a) => /de otro encargo/.test(a.texto))).toHaveLength(1)
+    expect(m.alertas().filter((a) => /Pieza frenada/.test(a.texto))).toEqual([])
+    expect(m.espera()!.pendiente).toBe(true)
+    // el receptor abre la corrección para ESTE encargo: la pieza sigue su respuesta (aquí, reemplazada) y deja de esperar
+    rec.guardadas.set('F-0300:calendario', { llave: 'F-0300:calendario', destino: 'calendario', encargo_id: m.id })
+    const v = await m.vigia()
+    expect(v.cuerpo).toMatchObject({ para_la_pieza: 'reemplazada' })
     expect(m.espera()!.pendiente).toBe(false)
+    expect(m.M.llamadas.bandeja).toEqual([])
   })
   it('🔴 mi propio reintento que vuelve `ya_estaba` SÍ está en la lectura: no es de otro encargo, se lee su `para_la_pieza`', async () => {
     const rec = receptor({ recibir: (_l, vez) => (vez === 1 ? { status: 500, cuerpo: { ok: false } } : null), para: () => 'sigue' })
