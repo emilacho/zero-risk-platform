@@ -5,6 +5,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { parsearBrief } from '@/lib/oficina/brief'
+import { duracionDeLaPieza } from '@/lib/oficina/video/duracion-de-la-pieza'
 import { CONVENCION_DE_LA_PIEZA, tareaDelRelleno } from '@/lib/oficina/mesa/pedidos'
 import { clienteA, contextoDe } from '../__fixtures__/clientes'
 import { leerBriefCreativo } from '../brief-creativo'
@@ -68,6 +69,14 @@ describe('duración · de la idea a la hoja, sin avisos', () => {
     expect(ideaDelBanco(c, 'C1-I01')!.duracion).toBe('45 s · tres momentos de la historia')
     expect(parsearBrief(hoja('45 s · tres momentos de la historia'), 'F1-reel')?.duracion).toBe('45 s · tres momentos de la historia')
     expect(parsearBrief(hoja('45 s · tres momentos de la historia'), 'F1-carrusel')?.duracion).toBeUndefined()
+  })
+  // 19-nov · CC5 · el último tramo: de la hoja a la duración con que abre el encargo (la de la idea; sin ella, la de por omisión EN SILENCIO)
+  it('🔴 de punta a punta: la idea dice 45 s y el encargo abre con 45 s; sin duración abre con la de por omisión, sin aviso', () => {
+    const pl = { limites: { video: { segundos_max: 120, duracion_por_omision_s: 15 } } } as never
+    expect(duracionDeLaPieza(parsearBrief(hoja('45 s · tres momentos de la historia'), 'F1-reel'), pl)).toEqual({ segundos: 45, porque: 'tres momentos de la historia', por_omision: false })
+    expect(duracionDeLaPieza(parsearBrief(hoja(), 'F1-reel'), pl)).toEqual({ segundos: 15, porque: '', por_omision: true })
+    expect(duracionDeLaPieza(parsearBrief(hoja('lo que pida el guion'), 'F1-reel'), pl)).toEqual({ segundos: 15, porque: '', por_omision: true })
+    expect(duracionDeLaPieza(parsearBrief(hoja('3 min · el día entero'), 'F1-reel'), pl).aviso).toBe('la idea pide 180 s y la cadena aguanta hasta 120 s (el render de la composición): se abre con 120 s')
   })
   it('🔴 sin el campo la hoja queda EXACTA como antes (ni una línea de duración)', () => {
     expect(hoja()).not.toMatch(/DURACIÓN/)

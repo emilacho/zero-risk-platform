@@ -1,9 +1,11 @@
 /**
  * 19-nov · G5b · LA DURACIÓN DE LA PIEZA DE VIDEO (A′ · GO Lenovo 03:41Z, con sus 2 cambios). Pura.
- * La razona y la declara quien escribe el brief: campo `DURACIÓN` de la hoja, «N s · porqué». Con ella se calculan los topes de ESE encargo
+ * 19-nov · firma de Emilio (GO Lenovo 15:05 Zúrich): la duración la define la GRAN IDEA, no el brief. Cada idea de video del banco trae su duración estimada con su
+ * porqué (`idea.duracion`, la pide CC1 en el banco); la hoja la copia tal cual en la línea `DURACIÓN` y aquí se lee de ahí. Con ella se calculan los topes de ESE encargo
  * (no los de la pieza más larga que admite la plantilla): un reel de 15 s reserva lo de 15 s; una miniserie de 2 min, lo de 2 min.
- * Sin ella (o ilegible) se usa la de por omisión de la plantilla (`limites.video.duracion_por_omision_s`; sin el dato, 15 s) Y SE AVISA: es una red, nunca la regla callada.
- * Nunca pasa del techo de la cadena (`TECHO_DE_LA_PIEZA_S`) ni del máximo de la plantilla; si el brief pide más, se usa el techo y se avisa.
+ * Sin ella (o ilegible) se usa la de por omisión de la plantilla (`limites.video.duracion_por_omision_s`; sin el dato, 15 s) EN SILENCIO: es solo una guarda técnica para que
+ * el encargo abra. La idea sin duración la ve la jefatura en la gran idea (ADENDA 1), no un aviso al dueño: «sin alertas innecesarias» (firma de Emilio).
+ * Nunca pasa del techo de la cadena (`TECHO_DE_LA_PIEZA_S`) ni del máximo de la plantilla; si la idea pide más, se usa el techo y se dice (es un tope real, no una omisión).
  */
 import type { Plantilla } from '../tipos'
 import { TECHO_DE_LA_PIEZA_S } from './techo-de-la-pieza'
@@ -13,11 +15,11 @@ export const DURACION_POR_OMISION_S = 15
 
 export interface DuracionDeLaPieza {
   segundos: number
-  /** el porqué que escribió el brief (vacío si no lo escribió) */
+  /** el porqué que trae la idea (vacío si no lo trae) */
   porque: string
-  /** true = nadie la declaró (o no se pudo leer): se usó la de por omisión */
+  /** true = la idea no la trae (o no se pudo leer): se usó la de por omisión, en silencio */
   por_omision: boolean
-  /** lo que se le dice al dueño y a la mesa cuando la duración no es la que pidió el brief tal cual */
+  /** solo cuando la idea pide más de lo que aguanta la cadena: se abre con el techo y se dice */
   aviso?: string
 }
 
@@ -51,16 +53,13 @@ export function leerDuracion(texto: string | undefined | null): { segundos: numb
   return { segundos: Math.round(segundos), porque }
 }
 
-/** la duración con que se abre el encargo · pura */
-export function duracionDeLaPieza(brief: { duracion?: string } | null | undefined, pl: Pick<Plantilla, 'limites'>): DuracionDeLaPieza {
+/** la duración con que se abre el encargo: la de la IDEA (la línea `DURACIÓN` que la hoja copia de `idea.duracion`) · pura */
+export function duracionDeLaPieza(hoja: { duracion?: string } | null | undefined, pl: Pick<Plantilla, 'limites'>): DuracionDeLaPieza {
   const max = maximoDeLaPlantilla(pl)
-  const leida = leerDuracion(brief?.duracion)
-  if (!leida) {
-    const s = duracionPorOmision(pl)
-    const que = brief?.duracion?.trim() ? `la duración del brief («${brief.duracion.trim().slice(0, 80)}») no se pudo leer` : 'el brief no declara la duración de la pieza'
-    return { segundos: s, porque: '', por_omision: true, aviso: `${que}: nadie la razonó y se usó la de por omisión, ${s} s. Quien escribe el brief debe declararla con su porqué` }
-  }
-  if (leida.segundos > max) return { segundos: max, porque: leida.porque, por_omision: false, aviso: `el brief pide ${leida.segundos} s y la cadena aguanta hasta ${max} s (el render de la composición): se abre con ${max} s` }
+  const leida = leerDuracion(hoja?.duracion)
+  // la idea no la trae (o no se lee): guarda técnica callada, sin aviso ni ficha; la falta la ve la jefatura en la gran idea
+  if (!leida) return { segundos: duracionPorOmision(pl), porque: '', por_omision: true }
+  if (leida.segundos > max) return { segundos: max, porque: leida.porque, por_omision: false, aviso: `la idea pide ${leida.segundos} s y la cadena aguanta hasta ${max} s (el render de la composición): se abre con ${max} s` }
   return { segundos: leida.segundos, porque: leida.porque, por_omision: false }
 }
 
@@ -77,7 +76,7 @@ export function topesPorSegundoDeVideo(pl: Pick<Plantilla, 'limites' | 'pasos'>)
 /**
  * los segundos con que se calculan los topes de ESTE encargo · pura:
  *  1 · si el guion pidió más y cupo en el tope de la campaña: lo recalculado (`pedido_video.duracion_s`);
- *  2 · si no, la que declaró el brief al abrir (`sala_ref._duracion.segundos`);
+ *  2 · si no, la de la idea con que se abrió (`sala_ref._duracion.segundos`);
  *  3 · un encargo sin dato (abierto antes de G5b): la de por omisión de la plantilla.
  * undefined si la plantilla no calcula topes por segundo de video (las demás familias no cambian).
  */
@@ -91,7 +90,7 @@ export function segundosDelEncargo(enc: { sala_ref?: Record<string, unknown> | n
   return Math.min(max, s ?? duracionPorOmision(pl))
 }
 
-/** la duración con que va ESTE encargo, si se guardó (la recalculada por el guion o la que abrió el brief) · null en un encargo abierto antes de G5b · pura */
+/** la duración con que va ESTE encargo, si se guardó (la recalculada por el guion o la de la idea con que se abrió) · null en un encargo abierto antes de G5b · pura */
 export function duracionAbierta(enc: { sala_ref?: Record<string, unknown> | null; estado_del_motor?: { artefactos?: Record<string, { datos?: Record<string, unknown> }> } | null }): number | null {
   const recalculada = entero(enc.estado_del_motor?.artefactos?.pedido_video?.datos?.duracion_s)
   if (recalculada) return recalculada

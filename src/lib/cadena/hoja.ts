@@ -322,7 +322,7 @@ function lineasDelBrief(ins: InsumosDeLaHoja, cab: { id: string; red: string; fo
   if (decidido.length) L.splice(L.findIndex((x) => x.startsWith('- VISUAL:')) + 1, 0, ...listaDe(CAMPO_LO_DECIDIDO, decidido))
   if (f.datos?.length && !esKit) L.push(campo('DATOS DEL CALENDARIO', datosEnTexto(f.datos)))
   // 19-nov · G5b (A′ · CC1 03:47Z) · la duración de una pieza de video la razona quien escribe la IDEA del banco («duración: N s · porqué»; el campo lo suma CC1 en
-  //   `conceptos.ts`). La hoja la copia tal cual; sin ella no escribe nada y la oficina abre con la de por omisión Y lo avisa (`oficina/video/duracion-de-la-pieza.ts`)
+  //   `conceptos.ts`). La hoja la copia tal cual; sin ella no escribe nada y la oficina abre con la de por omisión en silencio (`oficina/video/duracion-de-la-pieza.ts`)
   const duracionDeLaIdea = (idea as { duracion?: unknown } | null)?.duracion
   if (esFormatoDeVideo(cab.formato) && !esKit && typeof duracionDeLaIdea === 'string' && limpio(duracionDeLaIdea)) L.push(campo('DURACIÓN', limpio(duracionDeLaIdea)))
   if (extra.fila_ids) L.push(campo('FILAS', extra.fila_ids.join(', ')))
