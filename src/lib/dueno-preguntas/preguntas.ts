@@ -25,7 +25,8 @@ export const HORAS_DE_UNA_PREGUNTA_PENDIENTE = 72
 export const MAX_TEMA = TOPE_DEL_TEXTO_DEL_DUENO
 export const MAX_PREGUNTA = TOPE_DEL_TEXTO_DEL_DUENO
 export const MAX_RESPUESTA = TOPE_DEL_TEXTO_DEL_DUENO
-export const MAX_MOTIVO = 300
+// 18-nov · G2b «nada se recorta» (CC5): lo que escribe Emilio desde el tablero llega entero, hasta el tope único del texto del dueño (antes 300)
+export const MAX_MOTIVO = TOPE_DEL_TEXTO_DEL_DUENO
 export const TOPE_DE_LECTURA = 500
 
 type Fila = Record<string, unknown>

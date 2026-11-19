@@ -250,7 +250,8 @@ describe('el guion no lleva frases de trabajo del agente (se corrige en la instr
   const est = { tipo: 'video', directorio_congelado: [], direccion: 'creative-director-mesa', turnos: 0, integraciones: 0, devoluciones_por_citas: 0, libro_visto: 0, preguntas_del_traductor: 0, marcas: {}, fase: 'trabajando', cierre_forzado: null, pieza_texto: null, turno_abierto: null, condiciones: [] } as unknown as EstadoMesa
   const c = (tipo: 'video' | 'carrusel') => ({ cliente_nombre: 'Cliente', tipo, brief_id: 'F1-S1-ig-r1', brief_texto: '### F1-S1-ig-r1 · Instagram · reel\n- QUÉ ES: reel', manual_texto: 'manual', plan_texto: null, fotos: [], tope_usd: 10, gasto_usd: 0 })
   it('🔴 al integrar y al devolver citas, la dirección recibe la instrucción de empezar en «## Plano 1» sin notas de trabajo', () => {
-    for (const tipo of ['integrar', 'devolver_citas'] as const) {
+    // 18-nov · `devolver_citas` ya no entrega el guion (solo las citas que faltan): la instrucción va al turno que lo escribe
+    for (const tipo of ['integrar'] as const) {
       const t = armarTarea({ tipo, agente: 'creative-director-mesa', tarjeta: undefined, est, libro: [], c: c('video') } as never)
       expect(t).toContain(FRASE_SIN_NOTAS_DE_TRABAJO)
       expect(t.indexOf(FRASE_SIN_NOTAS_DE_TRABAJO)).toBeLessThan(t.indexOf('## Plano 1 · 0–3 s'))
