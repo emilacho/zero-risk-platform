@@ -170,8 +170,11 @@ export function ventanasDelFiltro(texto: string): string[] {
  * ADENDA 1: el pedido pasa ENTERO por el filtro de seguridad (el mismo del portero que recibe: modo estricto, sin clasificador · US$ 0).
  * Un filtro que falla rechaza (falla cerrado). Devuelve el primer campo que no pasó, o null.
  */
-export async function revisarElPedido(p: { para: string; huecos: Hueco[] }, filtro: Filtro = filtroReal): Promise<{ campo: string; capa: string; severidad: string } | null> {
-  for (const c of camposDelPedido(p)) {
+export async function revisarElPedido(p: { para: string; huecos: Hueco[]; pedido_por?: { oficina: string; agente: string }; ref_de_quien_pide?: string | null }, filtro: Filtro = filtroReal): Promise<{ campo: string; capa: string; severidad: string } | null> {
+  // quién pide también llega a la ficha archivada («a pedido de <oficina> (<agente>)»): pasa por el mismo filtro
+  const quien = p.pedido_por ? [{ campo: 'pedido_por.oficina', texto: p.pedido_por.oficina }, { campo: 'pedido_por.agente', texto: p.pedido_por.agente }] : []
+  const ref = p.ref_de_quien_pide ? [{ campo: 'ref_de_quien_pide', texto: p.ref_de_quien_pide }] : []
+  for (const c of [...camposDelPedido(p), ...quien, ...ref]) {
     for (const v of ventanasDelFiltro(normalizarParaElFiltro(c.texto))) {
       const d = await filtro(v).catch(() => ({ allow: false, capa: 'el filtro falló', severidad: 'desconocida' }))
       if (!d.allow) return { campo: c.campo, capa: d.capa ?? 'desconocida', severidad: d.severidad ?? 'desconocida' }
@@ -696,7 +699,7 @@ async function procesar(deps: DepsDePedido, p: PedidoNormalizado, c: ContextoDel
       const ficha: FichaDeBrazo = {
         brazo: 'pedido', alcance, client_id: p.client_id, ref: `brazo:pedido:${huella}`, atributo: `pedido:${slugDe(textoDelHueco(h, p.para)).slice(0, 40)}:${huella.slice(0, 8)}`, clase: 'dato_de_pedido',
         titulo: `Pedido de ${p.pedido_por.oficina} · ${v.resumen}`.slice(0, 160),
-        contenido: `${v.resumen}. Cita de la página: «${v.cita}». Fuente: ${v.url}. ${rotulo} Traído el ${iso.slice(0, 10)} a pedido de ${p.pedido_por.oficina} (${p.pedido_por.agente}) para: ${p.para}`.slice(0, 1500),
+        contenido: `${v.resumen}. Cita de la página: «${v.cita}». Fuente: ${v.url}. ${rotulo} Traído el ${iso.match(/^\d{4}-\d{2}-\d{2}/)?.[0] ?? iso} a pedido de ${p.pedido_por.oficina} (${p.pedido_por.agente}) para: ${p.para}`,
         origen: 'tercero', fuente_url: v.url, fecha_fuente: iso.slice(0, 10), observado_en: iso, vigente_hasta: new Date(ahora.getTime() + VIGENCIA_DE_LO_HALLADO_DIAS * DIA_MS).toISOString(), decision: 'suma',
         sobre: hostDe(v.url), datos: { pedido_id: p.pedido_id ?? null, oficina: p.pedido_por.oficina, agente: p.pedido_por.agente, hueco: h, cita: v.cita, url: v.url, filtro: sobre.estado },
       }

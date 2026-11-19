@@ -109,6 +109,18 @@ describe('ADENDA 1 · el filtro de seguridad revisa el pedido ENTERO', () => {
     const r = await rutaPedido(d, pedido({ para: `${largo(7780)}${INYECCION} ${largo(4000)}` }))
     expect(r).toMatchObject({ status: 400, body: { error: 'pedido_rechazado_por_seguridad' } })
   })
+  it.each([
+    ['pedido_por.oficina', { pedido_por: { oficina: `oficina-financiera ${INYECCION}`, agente: 'chief-financial-officer' } }],
+    ['pedido_por.agente', { pedido_por: { oficina: 'oficina-financiera', agente: `chief-financial-officer ${INYECCION}` } }],
+    ['ref_de_quien_pide', { ref_de_quien_pide: `pieza-7 ${INYECCION}` }],
+  ])('🔴 quién pide también pasa por el filtro (llega a la ficha archivada): una instrucción en «%s» se rechaza con su campo', async (campo, o) => {
+    const { t, d, mensajes } = armar()
+    const r = await rutaPedido(d, pedido(o))
+    expect(r).toMatchObject({ status: 400, body: { error: 'pedido_rechazado_por_seguridad' } })
+    expect(String((r.body as { detalle: string }).detalle)).toContain(`«${campo}»`)
+    expect(t.cerebro_pedidos.length).toBe(0)
+    expect(mensajes.length).toBe(0)
+  })
   it('🔴 un filtro que falla rechaza (falla cerrado)', async () => {
     const { d } = armar({ filtroDelPedido: async () => { throw new Error('filtro caído') } })
     expect(await rutaPedido(d, pedido())).toMatchObject({ status: 400, body: { error: 'pedido_rechazado_por_seguridad' } })
