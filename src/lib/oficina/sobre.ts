@@ -41,10 +41,12 @@ export function validarSobre(cuerpo: unknown): { ok: true; sobre: Sobre; ignorad
   // 19-nov · la campaña es una ETIQUETA del encargo, no una puerta: si no es un uuid se ignora (y se dice) y la pieza sigue igual
   const campanaValida = typeof b.campana_id === 'string' && RE_UUID.test(b.campana_id)
   const ignorados = [...['client_id', 'tenant_id'].filter((k) => k in b), ...(b.campana_id !== undefined && b.campana_id !== null && !campanaValida ? ['campana_id'] : [])]
-  return {
-    ok: true, ignorados,
-    sobre: { parte_id: b.parte_id as string, brief_id: b.brief_id as string, dry_run: b.dry_run, ...(b.tope_usd !== undefined ? { tope_usd: b.tope_usd as number } : {}), ...(b.familia !== undefined ? { familia: b.familia as string } : {}), ...(b.reabrir_causa_corregida !== undefined ? { reabrir_causa_corregida: (b.reabrir_causa_corregida as string).trim() } : {}), ...(b.cambios_del_dueno !== undefined ? { cambios_del_dueno: b.cambios_del_dueno as CambiosDelDueno } : {}), ...(b.fila_id !== undefined ? { fila_id: b.fila_id as string } : {}), ...(b.fecha !== undefined ? { fecha: b.fecha as string } : {}), ...(b.hora !== undefined ? { hora: (b.hora as string).slice(0, 5) } : {}), ...(campanaValida ? { campana_id: b.campana_id as string } : {}) },
+  const listo = {
+    ok: true as const, ignorados,
+    sobre: { parte_id: b.parte_id as string, brief_id: b.brief_id as string, dry_run: b.dry_run, ...(b.tope_usd !== undefined ? { tope_usd: b.tope_usd as number } : {}), ...(b.familia !== undefined ? { familia: b.familia as string } : {}), ...(b.reabrir_causa_corregida !== undefined ? { reabrir_causa_corregida: (b.reabrir_causa_corregida as string).trim() } : {}), ...(b.cambios_del_dueno !== undefined ? { cambios_del_dueno: b.cambios_del_dueno as CambiosDelDueno } : {}), ...(b.fila_id !== undefined ? { fila_id: b.fila_id as string } : {}), ...(b.fecha !== undefined ? { fecha: b.fecha as string } : {}), ...(b.hora !== undefined ? { hora: (b.hora as string).slice(0, 5) } : {}) },
   }
+  // 19-nov · la campaña va aparte para no mover la línea de arriba (lleva un corte viejo en la lista de G9)
+  return campanaValida ? { ...listo, sobre: { ...listo.sobre, campana_id: b.campana_id as string } } : listo
 }
 
 export interface ConfigDeOficina {

@@ -15,6 +15,8 @@ import { estadoInicial, type Plantilla } from './tipos'
 export type Db = { from(tabla: string): any }
 type Fila = Record<string, unknown>
 const DUPLICADO = '23505'
+/** la campaña pedida no existe en cadena_campanas (violación de FK) */
+const SIN_CAMPANA = '23503'
 
 function ok<T>(r: { data: T; error: { message: string; code?: string } | null }, que: string): T {
   if (r.error) throw new Error(`${que}: ${r.error.message}`)
@@ -96,7 +98,12 @@ export function almacenDeSupabase(db: Db): Almacen {
       // 19-nov · VARIAS CAMPAÑAS · de qué campaña es: la del sobre · si no viene, la de la versión anterior del mismo brief · si tampoco, la de su fila del calendario
       const campana = n.campana_id ?? (typeof mayor?.campana_id === 'string' ? mayor.campana_id : null) ?? (await campanaDeLaFila(db, salaRef))
       const fila = { client_id: n.client_id, ...(campana ? { campana_id: campana } : {}), parte_id: n.parte_id, brief_id: n.brief_id, tipo_de_grupo: n.tipo_de_grupo, familia: n.familia, version_encargo: version, estado: 'abierto', estado_del_motor: n.estado_del_motor, tope_usd: n.tope_usd, dry_run: n.dry_run, prueba: n.prueba, sala_ref: salaRef }
-      const r = await db.from('oficina_encargos').insert(fila).select('*').single()
+      let r = await db.from('oficina_encargos').insert(fila).select('*').single()
+      // 19-nov · 🟡 de CC7 en #1245: la campaña es una ETIQUETA, nunca frena una pieza · si la campaña no existe (FK, 23503) el encargo nace igual, sin campaña
+      if (r.error?.code === SIN_CAMPANA && campana) {
+        const { campana_id: _sin, ...sinCampana } = fila as Record<string, unknown>
+        r = await db.from('oficina_encargos').insert(sinCampana).select('*').single()
+      }
       if (!r.error) return { ok: true as const, encargo: aEncargo(r.data as Fila), nuevo: true }
       if (r.error.code === DUPLICADO) {
         const e = await db.from('oficina_encargos').select('*').eq('parte_id', n.parte_id).eq('brief_id', n.brief_id).eq('tipo_de_grupo', n.tipo_de_grupo).eq('version_encargo', version).limit(1)

@@ -61,6 +61,36 @@ describe('el almacén real guarda la campaña del encargo', () => {
     expect(r.ok && r.encargo.campana_id).toBe(CAMP)
     expect(db.tablas['oficina_encargos'][0].campana_id).toBe(CAMP)
   })
+  it('🔴 una campaña que NO existe (la FK da 23503): el encargo nace igual, sin campaña · otro error no se reintenta', async () => {
+    const NO_EXISTE = '3a1d48c0-0000-4000-8000-0000000000ff'
+    const conFK = (codigo: string) => {
+      const db = new DbFalsa(); const from = db.from.bind(db); const intentos: Array<Record<string, unknown>> = []
+      ;(db as unknown as { from: (t: string) => unknown }).from = (t: string) => {
+        const b = from(t) as unknown as { insert: (p: Record<string, unknown>) => unknown }
+        if (t !== 'oficina_encargos') return b
+        const insert = b.insert.bind(b)
+        b.insert = (p: Record<string, unknown>) => {
+          intentos.push(p)
+          if (p.campana_id === NO_EXISTE) return { select: () => ({ single: async () => ({ data: null, error: { message: 'violates foreign key constraint', code: codigo } }) }) }
+          return insert(p)
+        }
+        return b
+      }
+      return { db, intentos }
+    }
+    const { db, intentos } = conFK('23503')
+    const r = await almacenDeSupabase(db as never).crearEncargo(nuevo({ campana_id: NO_EXISTE }))
+    expect(r.ok).toBe(true)
+    expect(r.ok && r.encargo.campana_id).toBeUndefined()
+    expect(db.tablas['oficina_encargos']).toHaveLength(1)
+    expect('campana_id' in db.tablas['oficina_encargos'][0]).toBe(false)
+    expect(intentos.map((p) => p.campana_id ?? null)).toEqual([NO_EXISTE, null])
+    // otro error (no de FK) NO se reintenta sin campaña: se devuelve tal cual
+    const otro = conFK('42501')
+    const r2 = await almacenDeSupabase(otro.db as never).crearEncargo(nuevo({ campana_id: NO_EXISTE }))
+    expect(r2.ok).toBe(false)
+    expect(otro.intentos).toHaveLength(1)
+  })
   it('🔴 sin campaña en el sobre: la de su fila del calendario', async () => {
     const db = new DbFalsa(); db.semilla('cadena_calendario_filas', [{ id: FILA, campana_id: CAMP }, { id: 'fila-otra', campana_id: OTRA }])
     const r = await almacenDeSupabase(db as never).crearEncargo(nuevo({ sala_ref: { fila: { id: FILA, fecha: '2026-11-20' } } }))
