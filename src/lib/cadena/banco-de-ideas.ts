@@ -38,7 +38,7 @@ export const avisoDeLaVueltaPorElTablero = (ideaId: string) => `la idea «${idea
 export const motivoDePiezaVieja = (ideaId: string, accion: 'retirar' | 'editar' = 'retirar') => `reemplazada: la idea «${ideaId}» se ${accion === 'retirar' ? 'retiró del' : 'corrigió en el'} banco`
 
 /** lo que pasó con las piezas viejas: `error` = no se pudo leer o escribir, NADA se dio por archivado (se dice, no se calla) */
-export interface PiezasViejas { archivadas: string[]; ya_archivadas: string[]; no_archivadas: Array<{ fila_id: string; hitl_id: string | null; motivo: string; estado?: string }>; error?: string }
+export interface PiezasViejas { archivadas: string[]; ya_archivadas: string[]; no_archivadas: Array<{ fila_id: string; hitl_id: string | null; motivo: string; estado?: string }>; error?: string; alarma?: 'enviada' | 'no_salio' }
 /**
  * LA función de las dos puertas (tablero y receptor): archiva la pieza pendiente de cada fila. Quien llama elige las filas POR ESTADO (`lista_para_brief` con su marca),
  * así repetir no duplica ni se salta nada (la oficina cuenta lo ya archivado como `ya_archivadas`). Nunca lanza.
@@ -47,14 +47,24 @@ export async function archivarPiezasViejas(al: Almacen, campanaId: string, filaI
   const vacio: PiezasViejas = { archivadas: [], ya_archivadas: [], no_archivadas: [] }
   const ids = [...new Set(filaIds)]
   if (!ids.length) return vacio
-  if (!al.archivarPiezasDeFilas) return { ...vacio, error: 'esta cadena no tiene cómo archivar piezas: la pieza vieja sigue en la bandeja' }
-  try {
-    const r = await al.archivarPiezasDeFilas(campanaId, ids, motivo, ahora)
-    if (!r.ok) return { ...vacio, error: r.motivo }
-    return { archivadas: r.archivadas.map((a) => a.hitl_id), ya_archivadas: r.ya_archivadas, no_archivadas: r.no_archivadas.map((n) => ({ fila_id: n.fila_id, hitl_id: n.hitl_id, motivo: n.motivo, ...(n.estado ? { estado: n.estado } : {}) })) }
-  } catch (e) {
-    return { ...vacio, error: `la oficina no contestó: ${e instanceof Error ? e.message : String(e)}`.slice(0, 300) }
+  let error: string
+  if (!al.archivarPiezasDeFilas) error = 'esta cadena no tiene cómo archivar piezas'
+  else {
+    try {
+      const r = await al.archivarPiezasDeFilas(campanaId, ids, motivo, ahora)
+      if (r.ok) return { archivadas: r.archivadas.map((a) => a.hitl_id), ya_archivadas: r.ya_archivadas, no_archivadas: r.no_archivadas.map((n) => ({ fila_id: n.fila_id, hitl_id: n.hitl_id, motivo: n.motivo, ...(n.estado ? { estado: n.estado } : {}) })) }
+      error = r.motivo
+    } catch (e) {
+      error = `la oficina no contestó: ${e instanceof Error ? e.message : String(e)}`.slice(0, 300)
+    }
   }
+  // 🟡 CC3 01:31Z · «se dice» de verdad: UNA alarma en #alertas por incidente (después de esto la corrección se cierra y nadie vuelve a mirar); el campo queda igual
+  return { ...vacio, error, alarma: await alarmaDePiezaVieja(al, campanaId, ids, motivo, error) }
+}
+export const textoDeAlarmaDePiezaVieja = (campanaId: string, filaIds: readonly string[], motivo: string, error: string) =>
+  `⚠️ Pieza vieja sin archivar · campaña ${campanaId} · la(s) fila(s) ${filaIds.join(', ')} volvieron al brief (${motivo}), pero su pieza vieja puede seguir esperando en la bandeja: no la apruebes; archívala a mano. Motivo: ${error}.`
+async function alarmaDePiezaVieja(al: Almacen, campanaId: string, filaIds: readonly string[], motivo: string, error: string): Promise<'enviada' | 'no_salio'> {
+  try { return (await al.avisarAlarma(textoDeAlarmaDePiezaVieja(campanaId, filaIds, motivo, error))).ok ? 'enviada' : 'no_salio' } catch { return 'no_salio' }
 }
 
 export interface Reasignada { fila_id: string; idea_vieja: string; idea_nueva: string | null }

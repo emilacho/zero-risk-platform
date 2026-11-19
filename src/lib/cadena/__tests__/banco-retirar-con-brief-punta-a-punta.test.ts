@@ -13,7 +13,7 @@ import { relojDeLaCadena } from '../reloj'
 import { INTERRUPTOR_DEL_BANCO, recibirCorreccionDelBanco } from '../banco-correcciones'
 import { ACCIONES } from '../acciones'
 import { bloqueaLaPieza } from '../correcciones'
-import { bancoRetirar, motivoDePiezaVieja } from '../banco-de-ideas'
+import { bancoRetirar, motivoDePiezaVieja, textoDeAlarmaDePiezaVieja } from '../banco-de-ideas'
 
 const A = clienteA()
 const CAMP = '28de888e-b3f2-4aca-86b3-2c7f7bf6685a'
@@ -161,7 +161,33 @@ describe('19-nov · decisión A de Lenovo (🔴 de CC7): la pieza vieja de una f
     al.archivarPiezasDeFilas = async () => ({ ok: false, motivo: 'no se pudo leer la bandeja: caída' })
     const r = await bancoRetirar(al, { workflow_id: 'tablero', workflow_execution_id: 'tablero:banco:2', campana_id: CAMP, version: 4, idea_id: IDEA }, mas(1))
     expect(r.status).toBe(200)
-    expect(r.cuerpo.piezas_viejas).toEqual({ archivadas: [], ya_archivadas: [], no_archivadas: [], error: 'no se pudo leer la bandeja: caída' })
+    expect(r.cuerpo.piezas_viejas).toEqual({ archivadas: [], ya_archivadas: [], no_archivadas: [], error: 'no se pudo leer la bandeja: caída', alarma: 'enviada' })
     expect(filaDe(al, FILA).estado).toBe('lista_para_brief')
+    // «se dice» de verdad: UNA alarma con la campaña, las filas y el motivo
+    expect(al.alarmasEnviadas).toEqual([textoDeAlarmaDePiezaVieja(CAMP, [FILA], motivoDePiezaVieja(IDEA), 'no se pudo leer la bandeja: caída')])
+    expect(al.alarmasEnviadas[0]).toContain('no la apruebes')
+  })
+  it('🟡 CC3 01:31Z · por la CORRECCIÓN con la oficina caída: la corrección se cierra igual y sale UNA alarma (nadie lee el campo después de «respondida»)', async () => {
+    const { al, entrega } = almacen()
+    al.filasGuardadas.push(fila('s2-otra-con-brief', 'briefeada', IDEA, '2026-11-20'))
+    al.archivarPiezasDeFilas = async () => ({ ok: false, motivo: 'la oficina no contestó: caída' })
+    await devolver(al)
+    await relojDeLaCadena(al, VIGIA, T0)
+    await entrega(bloque({ respuesta: 'tomada', accion: 'retirar', explicacion: 'la idea vende Olón abierto en una fecha en que está cerrado' }), mas(5))
+    await relojDeLaCadena(al, VIGIA, mas(6))
+    const c = al.correcciones[0]
+    expect(c).toMatchObject({ estado: 'respondida', respuesta: 'tomada' })
+    expect((c.version_nueva as { piezas_viejas: unknown }).piezas_viejas).toMatchObject({ error: 'la oficina no contestó: caída', alarma: 'enviada' })
+    expect(al.alarmasEnviadas).toEqual([textoDeAlarmaDePiezaVieja(CAMP, ['s2-otra-con-brief'], motivoDePiezaVieja(IDEA), 'la oficina no contestó: caída')])
+    // otra vuelta del reloj no repite la alarma (la corrección ya está cerrada)
+    await relojDeLaCadena(al, VIGIA, mas(30))
+    expect(al.alarmasEnviadas).toHaveLength(1)
+  })
+  it('🟢 si la alarma tampoco sale, se anota «no_salio» (no se da por avisado)', async () => {
+    const { al } = almacen()
+    al.archivarPiezasDeFilas = async () => ({ ok: false, motivo: 'caída' })
+    al.falloDeAviso = 'slack caído'
+    const r = await bancoRetirar(al, { workflow_id: 'tablero', workflow_execution_id: 'tablero:banco:3', campana_id: CAMP, version: 4, idea_id: IDEA }, mas(1))
+    expect(r.cuerpo.piezas_viejas).toMatchObject({ error: 'caída', alarma: 'no_salio' })
   })
 })
