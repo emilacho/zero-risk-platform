@@ -107,12 +107,15 @@ export async function consultarLaCadena(P: Puertos, enc: Encargo, e: Estado): Pr
     unaVez('receptor_caido', `🛑 Sin receptor de la cadena · ${enc.brief_id}: la oficina no tiene cómo devolver sus correcciones. La pieza no sale.`)
     return fin('esperando')
   }
-  // la campaña por el PARTE (CC3 21:23Z · como `piezas-por-publicar.ts`): sin campaña no hay a quién corregir → frenada, UNA alarma
+  // la campaña por el PARTE (CC3 21:23Z · como `piezas-por-publicar.ts`)
+  //   19-nov · caso 3 (nada se frena): una revisión nueva ya no manda a la cadena las correcciones de una pieza sin campaña (van a su creador, `piezaSinCampana`).
+  //   Si aun así llegan aquí (un encargo de antes, o el parte no se pudo leer): la pieza ESPERA y no se publica, con UNA alarma; el vigía la vuelve a mirar
+  //   (si el parte aparece en una campaña, sigue el camino normal). Ya no queda frenada.
   const parte = enc.parte_id ? await P.parte(enc.parte_id, enc.client_id).catch(() => null) : null
   const campana = texto(parte?.campana_id)
   if (!campana) {
-    unaVez('sin_campana', `🛑 Pieza frenada · ${enc.brief_id}: su parte no está en ninguna campaña, así que sus correcciones no tienen a quién volver. No se publica.`)
-    return fin('frenada')
+    unaVez('sin_campana', `🔁 Pieza en corrección · ${enc.brief_id}: su parte no está en ninguna campaña, así que sus correcciones no tienen a quién volver en la cadena. No se publica mientras tanto; la campaña sigue.`)
+    return fin('esperando')
   }
 
   // 1 · el llamado: cada devolución UNA vez (6 · la que falló se reintenta en la vuelta siguiente; la llave no la duplica)
