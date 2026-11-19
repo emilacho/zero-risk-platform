@@ -28,7 +28,7 @@ describe('revision-resolver', () => {
     expect((await llamar('revision-resolver', db, { hitl_id: H, decision: 'rechazar' })).status).toBe(400)
     expect((await llamar('revision-resolver', db, { hitl_id: 'x', decision: 'aprobar' })).status).toBe(400)
     expect((await llamar('revision-resolver', db, { hitl_id: H, decision: 'quizá' })).status).toBe(400)
-    expect((await llamar('revision-resolver', db, { hitl_id: H, decision: 'aprobar', comentario: 'x'.repeat(1001) })).status).toBe(400)
+    expect((await llamar('revision-resolver', db, { hitl_id: H, decision: 'aprobar', comentario: 'x'.repeat(100_001) })).status).toBe(400) // G2b 18-nov: el tope es el único de 100 000 (antes 1000)
     expect(db.tablas['hitl_queue'][0].status).toBe('pending')
     expect((await llamar('revision-resolver', db, { hitl_id: H, decision: 'aprobar' })).status).toBe(200)
   })

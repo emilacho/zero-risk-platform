@@ -57,9 +57,10 @@ describe('por el motor real, el peor caso', () => {
   }
   it('🔴 concepto_mesa: la mesa corta en 1,2 × tope; con 5 (6,00) un encargo real terminado de 6,15 no entraba, con 7 (8,40) sí', () => {
     expect(techoDe(5)).toBeLessThan(6.15)
-    // 17-nov · Sprint 4 · D (ADENDA 4): el vigente sube a 10 (crítica + brief largo); 202611170900 sigue diciendo 7 (historia)
-    expect(TOPE_DE_LA_MESA_DE_CONCEPTO_USD).toBe(10)
-    expect(CONCEPTO_MESA.limites.tope_encargo_usd).toBe(10)
+    // 17-nov · Sprint 4 · D (ADENDA 4): el vigente subió a 10 (crítica + brief largo); 202611170900 sigue diciendo 7 (historia)
+    // 18-nov · 3 × lo medido: la gran idea real costó 5,93 → 17,79 (la fila la pone la 202611181700)
+    expect(TOPE_DE_LA_MESA_DE_CONCEPTO_USD).toBe(17.79)
+    expect(CONCEPTO_MESA.limites.tope_encargo_usd).toBe(TOPE_DE_LA_MESA_DE_CONCEPTO_USD)
     expect(TOPE_DE_LA_MESA_DE_CONCEPTO_USD).toBeGreaterThanOrEqual(6.15 + 2 * 0.79 + 0.07 + 0.6) // peor caso + reserva de un turno = 8,40
     expect(techoDe(7)).toBeGreaterThanOrEqual(6.15)
   })
@@ -101,14 +102,42 @@ describe('202611170900 · la migración', () => {
 describe('202611172200 · el tope de la gran idea 7 → 10 (Sprint 4 · D · ADENDA 4)', () => {
   const MIG10 = leer('migrations', '202611172200_oficina_tope_de_la_gran_idea.sql')
   const REV10 = leer('reversas', '202611172200_oficina_tope_de_la_gran_idea_REVERSA.sql')
-  it('🔴 la migración pone en la fila EXACTAMENTE el tope del código (columna y límite), exige el leído (7) y frena con una gran idea en curso', () => {
-    expect(MIG10).toContain(`SET tope_encargo_usd = ${TOPE_DE_LA_MESA_DE_CONCEPTO_USD},`)
-    expect(MIG10).toContain(`jsonb_build_object('tope_encargo_usd', ${TOPE_DE_LA_MESA_DE_CONCEPTO_USD})`)
+  it('🔴 la migración puso en la fila el tope de entonces, 10 (columna y límite; el de hoy lo pone la 202611181700), exige el leído (7) y frena con una gran idea en curso', () => {
+    expect(MIG10).toContain('SET tope_encargo_usd = 10,')
+    expect(MIG10).toContain("jsonb_build_object('tope_encargo_usd', 10)")
     expect(MIG10).toMatch(/g\.tope_encargo_usd = 7 AND \(g\.limites->>'tope_encargo_usd'\)::numeric = 7/)
     expect(MIG10).toMatch(/e\.estado IN \('abierto', 'en_paso'\) AND e\.familia = 'concepto_mesa'/)
   })
   it('la reversa vuelve a 7 en columna y límite', () => {
     expect(REV10).toContain('SET tope_encargo_usd = 7,')
     expect(REV10).toContain("jsonb_build_object('tope_encargo_usd', 7)")
+  })
+})
+
+describe('202611181700 · el tope de la gran idea al triple de lo medido (18-nov: 10 → 17,79)', () => {
+  const MIG_1700 = leer('migrations', '202611181700_oficina_topes_al_triple_de_lo_medido.sql')
+  const REV_1700 = leer('reversas', '202611181700_oficina_topes_al_triple_de_lo_medido_REVERSA.sql')
+  const MIG10 = leer('migrations', '202611172200_oficina_tope_de_la_gran_idea.sql')
+  it('🔴 la migración pone en la fila EXACTAMENTE el tope del código (columna y límite) y comprueba al final que quedó', () => {
+    const nuevo = /UPDATE public\.oficina_tipos_de_grupo g\nSET tope_encargo_usd = ([\d.]+), limites = g\.limites \|\| jsonb_build_object\('tope_encargo_usd', ([\d.]+)\), version = g\.version \+ 1\nWHERE g\.tipo = 'concepto_mesa';/.exec(MIG_1700)
+    expect(nuevo).not.toBeNull()
+    expect([Number(nuevo![1]), Number(nuevo![2])]).toEqual([TOPE_DE_LA_MESA_DE_CONCEPTO_USD, TOPE_DE_LA_MESA_DE_CONCEPTO_USD])
+    expect(MIG_1700).toMatch(new RegExp(`g\\.tipo = 'concepto_mesa' AND g\\.tope_encargo_usd = ${TOPE_DE_LA_MESA_DE_CONCEPTO_USD} AND \\(g\\.limites->>'tope_encargo_usd'\\)::numeric = ${TOPE_DE_LA_MESA_DE_CONCEPTO_USD}\\) THEN\\n\\s+RAISE EXCEPTION '202611181700: concepto_mesa no quedó`))
+    expect(MIG_1700).toMatch(/^BEGIN;$/m)
+    expect(MIG_1700).toMatch(/^COMMIT;$/m)
+  })
+  it('🔴 exige el leído (10, el que dejó la 202611172200) en columna y límite, y frena con un encargo vivo de las mesas', () => {
+    const leido = /g\.tipo = 'concepto_mesa' AND g\.tope_encargo_usd = ([\d.]+) AND \(g\.limites->>'tope_encargo_usd'\)::numeric = ([\d.]+)\) THEN\n\s+RAISE EXCEPTION '202611181700: el tope de concepto_mesa no es el leído/.exec(MIG_1700)
+    expect(leido).not.toBeNull()
+    expect([Number(leido![1]), Number(leido![2])]).toEqual([10, 10])
+    expect(MIG10).toContain(`SET tope_encargo_usd = ${leido![1]},`)
+    expect(MIG_1700).toMatch(/IF EXISTS \(SELECT 1 FROM public\.oficina_encargos e WHERE e\.estado IN \('abierto', 'en_paso'\) AND e\.familia IN \('brief_mesa', 'concepto_mesa', 'carrusel_mesa', 'kit_mesa', 'post_mesa'\)\) THEN\n\s+RAISE EXCEPTION '202611181700: hay un encargo vivo/)
+    // las guardas van ANTES de los cambios
+    expect(MIG_1700.indexOf('hay un encargo vivo')).toBeLessThan(MIG_1700.indexOf('UPDATE public.oficina_tipos_de_grupo'))
+  })
+  it('la reversa vuelve a 10 en columna y límite, exige el 17,79 que dejó la migración y se niega con encargos vivos', () => {
+    expect(REV_1700).toContain("SET tope_encargo_usd = 10, limites = g.limites || jsonb_build_object('tope_encargo_usd', 10), version = g.version + 1 WHERE g.tipo = 'concepto_mesa';")
+    expect(REV_1700).toContain(`g.tipo = 'concepto_mesa' AND g.tope_encargo_usd = ${TOPE_DE_LA_MESA_DE_CONCEPTO_USD})`)
+    expect(REV_1700).toMatch(/IF EXISTS \(SELECT 1 FROM public\.oficina_encargos e WHERE e\.estado IN \('abierto', 'en_paso'\) AND e\.familia IN \('brief_mesa', 'concepto_mesa', 'carrusel_mesa', 'kit_mesa', 'post_mesa'\)\) THEN\n\s+RAISE EXCEPTION 'reversa 202611181700: hay un encargo vivo/)
   })
 })

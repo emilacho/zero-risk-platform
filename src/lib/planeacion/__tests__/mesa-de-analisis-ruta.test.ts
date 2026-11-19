@@ -88,7 +88,7 @@ describe('la puerta de la mesa de análisis · candados antes de gastar', () => 
     const rs = await respuestas(await POST(sobre({ client_id: C, dry_run: true, ...firma, pedidos: [pedido('competencia')] })))
     expect(rs[0]).toMatchObject({ brazo: 'analisis', estado: 'sin_respuesta' })
     expect(String(rs[0].motivo)).toMatch(/fue un ensayo \(dry-run\).*no se llamó, no se gastó ni se archivó/)
-    expect(String(rs[0].fuente)).toMatch(/material: 2 ficha\(s\) \+ resumen vivo · tope US\$ 1\.00/)
+    expect(String(rs[0].fuente)).toMatch(/material: 2 ficha\(s\) \+ resumen vivo · tope US\$ 1\.08/)
     expect(base.escrituras.filter((e) => e.tabla === 'cerebro_consultas')).toHaveLength(1)
     expect(llamadas).toEqual([])
   })
@@ -120,7 +120,7 @@ describe('la puerta de la mesa de análisis · corrida real encendida', () => {
     expect([...(d.citas as string[])].sort()).toEqual([F1, F2])
     expect(String(d.informe).startsWith('[informe de análisis · competencia · PROPUESTA: no es dato del cliente]')).toBe(true)
     expect(llamadas.map((l) => l.url)).toEqual(['http://corredor.prueba/api/agents/run-sdk', 'http://corredor.prueba/api/brain/alimentar/informe'])
-    expect(llamadas[0].cuerpo).toMatchObject({ agent: 'competitive-intelligence-agent', client_id: C, workflow_id: firma.workflow_id, workflow_execution_id: '424242:analisis-competencia', dry_run: false, force_restart: true, max_budget_usd: 1 })
+    expect(llamadas[0].cuerpo).toMatchObject({ agent: 'competitive-intelligence-agent', client_id: C, workflow_id: firma.workflow_id, workflow_execution_id: '424242:analisis-competencia', dry_run: false, force_restart: true, max_budget_usd: 1.08 })
     const tarea = String(llamadas[0].cuerpo.task)
     expect(tarea).toMatch(/Idioma: español\. Trato: tú\./); expect(tarea).toContain(`[${F1}]`); expect(tarea).toContain('RESUMEN RESUMEN'); expect(tarea).toContain('Para qué sirve en el plan: saber el hueco')
     // «vos» aparece como VALOR del trato («tú, vos, usted u otro»): el voseo se busca por conjugación
@@ -157,15 +157,15 @@ describe('la puerta de la mesa de análisis · corrida real encendida', () => {
     expect(r2[0].estado).toBe('sin_dato'); expect(String(r2[0].motivo)).toMatch(/declaró «sin dato»/)
     expect(llamadas.filter((l) => l.url.endsWith('/informe'))).toEqual([])
   })
-  it('el tope de la mesa (US$ 5) deja entrar los 5 pedidos de la corrida y deja fuera al sexto sin llamarlo; los demás reciben su tope', async () => {
+  it('el tope de la mesa (US$ 5,40 desde el 18-nov) deja entrar los 5 pedidos de la corrida y deja fuera al sexto sin llamarlo; los demás reciben su tope', async () => {
     const tipos = ['competencia', 'mercado', 'retencion', 'competencia', 'retencion', 'mercado']
     const rs = await respuestas(await POST(sobre({ client_id: C, dry_run: false, ...firma, pedidos: tipos.map((t) => pedido(t)) })))
     expect(rs).toHaveLength(6)
-    expect(String(rs[5].motivo)).toMatch(/el tope de la mesa \(US\$ 5 por sobre\) no alcanza/)
+    expect(String(rs[5].motivo)).toMatch(/el tope de la mesa \(US\$ 5\.4 por sobre\) no alcanza/)
     expect(rs.slice(0, 5).every((r) => !/tope de la mesa/.test(String(r.motivo ?? '')))).toBe(true)
     const primeras = llamadas.filter((l) => l.url.endsWith('/run-sdk') && !String(l.cuerpo.paso).endsWith('-reintento'))
     expect(primeras).toHaveLength(5)
-    expect(primeras.every((l) => l.cuerpo.max_budget_usd === 1)).toBe(true)
+    expect(primeras.every((l) => l.cuerpo.max_budget_usd === 1.08)).toBe(true)
   })
   describe('05-nov · el analista que falla se reintenta una vez, y si vuelve a fallar se dice', () => {
     const SIRVE = () => new Response(JSON.stringify({ output: `- Repiten «lento» [${F1}]\n- Preguntan precios [${F2}]\n- Elogian el local [${F1}]`, cost_usd: 0.2 }), { status: 200 })
@@ -270,7 +270,8 @@ describe('la puerta de la mesa de análisis · corrida real encendida', () => {
       })
       await corrida(['competencia', 'competencia', 'competencia', 'competencia', 'competencia'])
       expect(corredor()).toHaveLength(6)
-      expect(Number(corredor()[5].cuerpo.max_budget_usd)).toBeCloseTo(0.6)
+      // 5,40 del sobre − 4 × 0,95 − 0,60 del que falló = 1,00 (menos que su tope de 1,08)
+      expect(Number(corredor()[5].cuerpo.max_budget_usd)).toBeCloseTo(1)
     })
     it('🔴 reparo de CC7: una sola cuenta por mesa: cada reintento ve lo que ya comprometieron los demás y lo que devolvieron', async () => {
       let n = 0
@@ -282,15 +283,15 @@ describe('la puerta de la mesa de análisis · corrida real encendida', () => {
         const falla = (costo: number) => new Response(JSON.stringify({ output: '- estimo sin cita', cost_usd: costo }), { status: 200 })
         if (n <= 3) return sirve(0.95)
         if (n === 4) { await new Promise((listo) => setTimeout(listo, 10)); return falla(0.5) }
-        if (n === 5) { await new Promise((listo) => setTimeout(listo, 60)); return falla(0.7) }
+        if (n === 5) { await new Promise((listo) => setTimeout(listo, 60)); return falla(0.95) }
         return sirve(0.1)
       })
       await corrida(['competencia', 'competencia', 'competencia', 'competencia', 'competencia'])
       expect(corredor()).toHaveLength(7)
-      // 5,00 firmados · 3 × 0,95 devuelven 0,15 · el 4.º costó 0,50 y devuelve 0,50: quedan 0,65 para su reintento
-      expect(Number(corredor()[5].cuerpo.max_budget_usd)).toBeCloseTo(0.65)
-      // ese reintento costó 0,10 de sus 0,65 (no de 1,00) y el 5.º costó 0,70: quedan 0,85
-      expect(Number(corredor()[6].cuerpo.max_budget_usd)).toBeCloseTo(0.85)
+      // 5,40 del sobre (18-nov) · 3 × 0,95 = 2,85 · el 4.º costó 0,50 · el 5.º sigue en vuelo con su tope 1,08: quedan 0,97 para el reintento del 4.º
+      expect(Number(corredor()[5].cuerpo.max_budget_usd)).toBeCloseTo(0.97)
+      // ese reintento costó 0,10 de sus 0,97 (no de 1,08) y el 5.º costó 0,95: quedan 5,40 − 2,85 − 0,50 − 0,10 − 0,95 = 1,00 (menos que el tope)
+      expect(Number(corredor()[6].cuerpo.max_budget_usd)).toBeCloseTo(1)
     })
     it('🔴 el límite que trae el pedido manda si es menor', async () => {
       vi.useFakeTimers()
@@ -311,7 +312,7 @@ describe('la puerta de la mesa de análisis · corrida real encendida', () => {
     it('🔴 el reintento recibe el tope del analista, sin pasar del tope firmado', async () => {
       respuestaDelCorredor = ROTO
       await corrida()
-      expect(corredor().map((l) => l.cuerpo.max_budget_usd)).toEqual([1, 1])
+      expect(corredor().map((l) => l.cuerpo.max_budget_usd)).toEqual([1.08, 1.08])
     })
   })
 })

@@ -9,6 +9,7 @@
  *  · eventos_locales      · eventos de las ciudades del cliente (fecha futura)                                      · clase `evento_local`               · alcance país
  *  · comentarios_ig_fb    · comentarios de Instagram y Facebook de la competencia, UNA vez por publicación         · clase `competidor_comentarios`     · alcance competidor
  *  · foros                · hilos y comentarios de Reddit sobre el rubro y el país                                  · clase `foro`                       · alcance mercado (voz del público)
+ *  · comentarios_industria · (18-nov · encargo 6) comentarios del público del RUBRO en TikTok, Instagram y YouTube, semanal · clase `comentarios_de_la_industria` · alcance mercado · APAGADO por omisión (ver `comentarios-de-la-industria.ts`)
  *
  * Reglas duras que viven aquí y se prueban:
  *  · nada de un tercero es dato del cliente: cada ficha lleva su alcance y el nombre de quien la origina; lo que no se puede atribuir se descarta y se CUENTA;
@@ -23,12 +24,14 @@ import { leerTodas } from './paginar'
 import { archivarFichasDeBrazos, type ResultadoDeArchivo } from './brazos/archivo'
 import { HOSTS_QUE_NO_SON_SITIO_PROPIO } from './brazos/competencia'
 import { DIA_EN_MS, slugDe, sinUsuarios, type FichaDeBrazo, type NombreDeBrazo } from './brazos/tipos'
+import type { RespuestaDeCredito } from '../apify/credito'
+import { DIAS_DE_TENDENCIA_QUE_SIRVEN, fichasDeLaIndustria, leerComentariosDeLaIndustria, type FilaGuardada, type FilaLeida, type RedDeLaIndustria } from './comentarios-de-la-industria'
 
 type Obj = Record<string, unknown>
 export type Db = { from(tabla: string): any }
 export type Ejecutar = (actor: string, input: Obj, maxUsd: number) => Promise<{ items: unknown[]; costo_usd: number }>
 
-export const FUENTES_NUEVAS = ['anuncios_google', 'busquedas_google', 'horas_de_mas_gente', 'eventos_locales', 'comentarios_ig_fb', 'foros'] as const
+export const FUENTES_NUEVAS = ['anuncios_google', 'busquedas_google', 'horas_de_mas_gente', 'eventos_locales', 'comentarios_ig_fb', 'foros', 'comentarios_industria'] as const
 export type FuenteNueva = (typeof FUENTES_NUEVAS)[number]
 export const esFuenteNueva = (v: unknown): v is FuenteNueva => typeof v === 'string' && (FUENTES_NUEVAS as readonly string[]).includes(v)
 
@@ -397,6 +400,9 @@ export interface EntradaDeFuente {
   ejecutar: Ejecutar
   /** para el paso de comentarios: lee y guarda los comentarios nuevos de Instagram y Facebook (la tabla de la competencia) y devuelve su costo */
   leerComentarios?: (cliente: Obj) => Promise<{ costo_usd: number; error?: string; resumen?: Record<string, unknown> }>
+  /** la puerta de crédito de Apify (los comentarios de la industria no raspan sin ella) */
+  credito?: () => Promise<RespuestaDeCredito>
+  env?: Record<string, string | undefined>
   workflowId?: string
   ejecucionId?: string
 }
@@ -482,9 +488,40 @@ export async function correrFuenteNueva(e: EntradaDeFuente): Promise<ResultadoDe
         if (l.error) errores.push(l.error)
         if (l.resumen) resumen.lectura_nueva = l.resumen
       }
-      const cm = await leerTodas(() => e.db.from('cerebro_comentarios_competencia').select('red, cuenta, post_ref, post_url, comentario_ref, texto, me_gusta, fecha_comentario').eq('client_id', e.clientId).order('comentario_ref', { ascending: true }))
+      // solo los de la COMPETENCIA: los de la industria viven en la misma tabla con `nivel='industria'` y tienen su propio paso
+      const cm = await leerTodas(() => e.db.from('cerebro_comentarios_competencia').select('red, cuenta, post_ref, post_url, comentario_ref, texto, me_gusta, fecha_comentario').eq('client_id', e.clientId).eq('nivel', 'competencia').order('comentario_ref', { ascending: true }))
       if (cm.error) errores.push(`cerebro_comentarios_competencia: ${String(cm.error.message).slice(0, 120)}`)
       else { const r = fichasDeComentarios(Array.isArray(cm.data) ? (cm.data as FilaDeComentario[]) : [], d, ctx); fichas.push(...r.fichas); resumen.comentarios_fichados = r.informe }
+    } else if (e.fuente === 'comentarios_industria') {
+      const propias = new Set(Object.values(obj(obj(obj(e.cliente.config).apify).own_handles)).map((h) => txt(h).toLowerCase().replace(/^@/, '')).filter(Boolean))
+      const l = await leerComentariosDeLaIndustria({
+        clientId: e.clientId, ahora: e.ahora, env: e.env, termino: d.termino, pais: d.pais, propias, ejecutar: e.ejecutar, credito: e.credito,
+        leerTendencias: async () => {
+          const desde = new Date(e.ahora.getTime() - DIAS_DE_TENDENCIA_QUE_SIRVEN * DIA_EN_MS).toISOString()
+          const t = await e.db.from('cerebro_tendencias').select('red, nivel, consulta, post_ref, url, autor, me_gusta, observado_en').eq('client_id', e.clientId).in('red', ['tiktok', 'instagram']).gte('observado_en', desde).order('me_gusta', { ascending: false }).limit(1000)
+          if (t.error) throw new Error(`cerebro_tendencias: ${String(t.error.message).slice(0, 120)}`)
+          return Array.isArray(t.data) ? t.data : []
+        },
+        leerLoYaLeido: async () => {
+          const r = await leerTodas(() => e.db.from('cerebro_comentarios_competencia').select('red, post_ref, observado_en').eq('client_id', e.clientId).eq('nivel', 'industria').order('observado_en', { ascending: false }))
+          if (r.error) throw new Error(`cerebro_comentarios_competencia: ${String(r.error.message).slice(0, 120)}`)
+          const publicaciones = new Set<string>(), ultima: Partial<Record<RedDeLaIndustria, string>> = {}
+          for (const f of (Array.isArray(r.data) ? r.data : []) as Obj[]) { const red = txt(f.red) as RedDeLaIndustria; publicaciones.add(`${red}|${txt(f.post_ref)}`); if (txt(f.observado_en) > (ultima[red] ?? '')) ultima[red] = txt(f.observado_en) }
+          return { publicaciones, ultima_por_red: ultima }
+        },
+        guardar: async (filas: FilaGuardada[]) => {
+          const w = await e.db.from('cerebro_comentarios_competencia').upsert(filas, { onConflict: 'client_id,red,comentario_ref', ignoreDuplicates: true })
+          return w.error ? { guardados: 0, error: `cerebro_comentarios_competencia: ${String(w.error.message).slice(0, 120)}` } : { guardados: filas.length }
+        },
+      })
+      gasto = redondea(gasto + l.costo_usd)
+      l.errores.forEach((x) => errores.push(x))
+      resumen.industria = { estado: l.estado, redes: l.redes, guardados: l.guardados, costo_usd: l.costo_usd, ...(l.mensaje ? { mensaje: l.mensaje } : {}), ...(l.credito ? { credito: l.credito } : {}) }
+      if (l.estado === 'corrida') {
+        const cm = await leerTodas(() => e.db.from('cerebro_comentarios_competencia').select('red, post_ref, post_url, texto, me_gusta, fecha_comentario, capa, via, vigente_hasta, observado_en').eq('client_id', e.clientId).eq('nivel', 'industria').order('comentario_ref', { ascending: true }))
+        if (cm.error) errores.push(`cerebro_comentarios_competencia: ${String(cm.error.message).slice(0, 120)}`)
+        else fichas.push(...fichasDeLaIndustria((Array.isArray(cm.data) ? cm.data : []) as FilaLeida[], e.clientId, e.ahora))
+      }
     }
     resumen.fichas_armadas = fichas.length
     if (fichas.length) {

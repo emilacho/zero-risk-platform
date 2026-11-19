@@ -234,7 +234,7 @@ describe('plan-aprobar', () => {
     const viejo = await llamar('plan-aprobar', new DbFalsa().semilla('client_historical_outputs', [plan({ provenance_tag: { superseded_por: P2 } })]), { plan_id: P1 })
     expect(viejo.status).toBe(409); expect(viejo.cuerpo.error).toBe('no_es_el_vigente')
     expect((await llamar('plan-aprobar', new DbFalsa(), { plan_id: 'x' })).status).toBe(400)
-    expect((await llamar('plan-aprobar', new DbFalsa().semilla('client_historical_outputs', [plan()]), { plan_id: P1, comentario: 'x'.repeat(1001) })).status).toBe(400)
+    expect((await llamar('plan-aprobar', new DbFalsa().semilla('client_historical_outputs', [plan()]), { plan_id: P1, comentario: 'x'.repeat(100_001) })).status).toBe(400) // G2b 18-nov: el tope es el único de 100 000 (antes 1000)
   })
 })
 

@@ -23,7 +23,9 @@ export const AGENTE_POR_PASO: Record<Paso, string> = {
 }
 
 export const MODELO_POR_DEFECTO = 'claude-opus-5-5'
-export const RAZONAMIENTO_POR_DEFECTO = 'low'
+/** 18-nov · firma de Emilio «nada se recorta» + respuesta 5 de Lenovo (G1 del barrido de topes · CC5): el razonamiento de la cadena va al MÁXIMO del modelo
+ *  (`maximo` ⇒ el corredor manda `max` en Opus 5.5). Antes era `low` (experimento del 30-sep por el techo de 32.000 tokens, que G1 sube a 128.000). */
+export const RAZONAMIENTO_POR_DEFECTO = 'maximo'
 export const DIAS_DE_CAMPANA = 90
 /** techo de cordura de la duración que se pida: un año. No es un límite creativo: ataja un entero enorme */
 export const DIAS_MAXIMOS_DE_CAMPANA = 366

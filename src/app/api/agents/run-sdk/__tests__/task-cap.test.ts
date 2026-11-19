@@ -26,8 +26,8 @@ describe('los DOS topes del camino · atados', () => {
   const delContrato = (contrato as { properties: { task: { maxLength: number } } }).properties.task
     .maxLength
 
-  it('el contrato (el que RECHAZA) también está en 600.000', () => {
-    expect(delContrato).toBe(600_000)
+  it('el contrato (el que RECHAZA) también está en 1.500.000 (18-nov · G1)', () => {
+    expect(delContrato).toBe(1_500_000)
   })
 
   it('contrato y route.ts coinciden · si alguien mueve uno, este test cae', () => {
@@ -45,8 +45,8 @@ const delContratoTask = (contrato as { properties: { task: { maxLength: number }
   .task.maxLength
 
 describe('TASK_MAX_CHARS · el tope del endpoint', () => {
-  it('es 600.000 · el límite real del modelo, bajo el 1 MB del corredor · cabe la corrección real del plan (125.108, corrida 210273)', () => {
-    expect(TASK_MAX_CHARS).toBe(600_000)
+  it('es 1.500.000 (18-nov · G1 «nada se recorta») · el límite real de los modelos de 1 M medido con count_tokens · cabe la corrección real del plan (125.108, corrida 210273)', () => {
+    expect(TASK_MAX_CHARS).toBe(1_500_000)
     expect(TASK_MAX_CHARS).toBeGreaterThan(125_108)
   })
 
@@ -61,9 +61,15 @@ describe('TASK_MAX_CHARS · el tope del endpoint', () => {
     expect(PEDIDO_REAL_132800).toBeLessThanOrEqual(TASK_MAX_CHARS)
   })
 
-  it('queda MUY por debajo del techo duro medido · el 1 MB del corredor', () => {
-    const TECHO_DURO_CORREDOR = 1_000_000 // medido: 977 KB → 200 · 1,17 MB → 413
-    expect(TASK_MAX_CHARS).toBeLessThan(TECHO_DURO_CORREDOR)
+  it('cabe en el transporte aunque cada carácter pese 2 bytes · el corredor recibe 4 MB (express.json) y Vercel rechazó 4,88 MB', async () => {
+    const fs = await import('node:fs')
+    const path = await import('node:path')
+    const indice = fs.readFileSync(path.resolve(__dirname, '../../../../../../services/agent-runner/src/index.ts'), 'utf8')
+    const mb = Number(/express\.json\(\{\s*limit:\s*'(\d+)mb'/.exec(indice)?.[1])
+    expect(mb).toBeGreaterThan(0)
+    const BYTES_POR_CARACTER_PEOR_CASO = 2 // tildes y eñes en UTF-8
+    expect(TASK_MAX_CHARS * BYTES_POR_CARACTER_PEOR_CASO).toBeLessThan(mb * 1024 * 1024)
+    expect(TASK_MAX_CHARS * BYTES_POR_CARACTER_PEOR_CASO).toBeLessThan(4_880_000)
   })
 
   it('deja lugar sobre los 7.900 con que el grafo ya recorta sus prompts', () => {

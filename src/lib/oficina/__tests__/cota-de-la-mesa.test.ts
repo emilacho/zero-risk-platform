@@ -131,7 +131,7 @@ describe('🔴 de punta a punta: turnos CAROS no cortan el encargo a medias', ()
     const mesa = () => M.encargos.get(id)!.estado_del_motor.artefactos.mesa.datos as unknown as EstadoMesa
     const r1 = await jugar(M, id, a, caro, 80)
     expect(r1.ultima.cuerpo.accion).toBe('esperar_dueno')
-    // la 1.ª pasada no pasó su cota (2,5) más lo que se reserva por un turno (la integración)
+    // la 1.ª pasada no pasó su cota (C: 9,54 desde el 18-nov) más lo que se reserva por un turno (la integración)
     expect(mesa().gasto_de_los_turnos_usd!).toBeLessThanOrEqual(C + COTAS.RESERVA_POR_TURNO_USD)
     // 🟡 CC6 #1129 (c4) · lo gastado por la mesa en la 1.ª pasada incluye TODOS sus turnos, la integración (y las citas) también: 0,5 cada uno
     const mesa1 = r1.turnos.filter((t) => t.paso.startsWith('mesa'))
@@ -151,7 +151,7 @@ describe('🔴 de punta a punta: turnos CAROS no cortan el encargo a medias', ()
     expect(JSON.stringify(fin.ultima.cuerpo.desacuerdos ?? [])).not.toMatch(/tope/)
     expect(M.encargos.get(id)!.estado_del_motor.gasto_usd).toBeLessThanOrEqual(tope)
   })
-  it('🔴 🟡 CC6 · el ORQUESTADOR le pasa la cota al planificador: con turnos de 2,0 la 1.ª pasada cierra con lo que hay al llegar a la cota (sin ella, la mesa seguiría conversando)', async () => {
+  it('🔴 🟡 CC6 · el ORQUESTADOR le pasa la cota al planificador: con turnos de 4,5 la 1.ª pasada cierra con lo que hay al llegar a la cota (sin ella, la mesa seguiría conversando)', async () => {
     const T = ['A', 'B', 'C']
     const prop = (i: number) => [`# Propuesta ${i + 1} · ${T[i]}`, `Concepto: c${i + 1} · Por qué: p${i + 1}`, seccionesDeLaminas(LAMINAS_OK.map(([rol, t, x, img], k) => [rol, k === 0 ? T[i] : t, x, img])), '## Pie', `Pie ${i + 1}.`, '## Etiquetas', '#x'].join('\n')
     const TRES = [prop(0), prop(1), prop(2), CITAS_COMPLETAS].join('\n')
@@ -160,11 +160,12 @@ describe('🔴 de punta a punta: turnos CAROS no cortan el encargo a medias', ()
     M.P.mesa = crearMesaEnMemoria(DIRECTORIO)
     const a = await abrirEncargo(M.P, { cuerpo: { parte_id: PARTE, brief_id: 'BRF-0100', dry_run: true, familia: 'carrusel_mesa', tope_usd: 100 }, client_id: CLIENTE, target_step_id: TARGET_STEP_PRODUCIR })
     const id = String(a.cuerpo.encargo_id)
-    const r1 = await jugar(M, id, a, (t: Turno) => ({ ...(t.tipo === 'integrar' || t.tipo === 'devolver_citas' ? { texto: TRES } : POR_OMISION(t)), costo_usd: 2 }), 80)
+    const r1 = await jugar(M, id, a, (t: Turno) => ({ ...(t.tipo === 'integrar' || t.tipo === 'devolver_citas' ? { texto: TRES } : POR_OMISION(t)), costo_usd: 4.5 }), 80)
     const mesa1 = r1.turnos.filter((t) => t.paso.startsWith('mesa'))
-    // con la cota 3,2: entran 2 turnos (0 + 0,6 y 2 + 0,6 caben; 4 + 0,6 no) y luego la integración por la reserva: 3 turnos
+    // con la cota 9,54 (18-nov; antes 3,2 con turnos de 2,0): entran 2 turnos (0 + 0,6 y 4,5 + 0,6 caben; 9 + 0,6 no) y luego la integración por la reserva: 3 turnos
+    expect(C).toBe(9.54)
     const gastoMesa = (M.encargos.get(id)!.estado_del_motor.artefactos.mesa.datos as unknown as EstadoMesa).gasto_de_los_turnos_usd!
     expect(mesa1.map((t) => t.tipo)).toEqual(['dirigir', expect.any(String), 'integrar'])
-    expect(gastoMesa).toBeCloseTo(6, 6)
+    expect(gastoMesa).toBeCloseTo(13.5, 6)
   })
 })

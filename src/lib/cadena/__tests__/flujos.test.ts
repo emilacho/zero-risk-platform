@@ -355,7 +355,7 @@ describe('COMPORTAMIENTO · la cadena en seco con agente simulado (ensayo por la
       const b = p.cuerpo as any
       expect(p.cabeceras['x-skip-editor-middleware']).toBe('1')
       expect(p.cabeceras['x-api-key']).toBe('k-int')
-      expect(b).toMatchObject({ agent: 'social-media-strategist', dry_run: true, force_restart: true, model_override: 'claude-opus-5-5', thinking_mode: 'low' })
+      expect(b).toMatchObject({ agent: 'social-media-strategist', dry_run: true, force_restart: true, model_override: 'claude-opus-5-5', thinking_mode: 'maximo' })
       expect(b.output_schema.type).toBe('object')
       expect(b.max_budget_usd).toBeGreaterThanOrEqual(1)
       expect(typeof b.workflow_id).toBe('string'); expect(typeof b.workflow_execution_id).toBe('string')

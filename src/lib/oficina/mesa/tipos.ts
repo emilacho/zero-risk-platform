@@ -1,3 +1,4 @@
+import type { FaltanCitas } from './libro'
 /**
  * LA MESA · oficina creativa fluida (28-oct, firma de Emilio). Diseño: raw/tasks/2026-10-28-PROPUESTA-CC1-oficina-creativa-fluida + REVISION-CC3 (7 condiciones).
  * Una pieza la hace un EQUIPO sobre un tablero compartido (el libro de aportes). El código ORQUESTA (turnos, gasto, quién aportó); no dicta campos, largos ni orden.
@@ -48,6 +49,19 @@ export const COTAS = {
   /** un turno muerto se reanuda como máximo esto */
   REINTENTOS_DE_TURNO: 3,
 } as const
+
+/**
+ * 18-nov · T7d (encargo de Lenovo, arreglo 1 · regla de Emilio: los límites técnicos al máximo sin preguntar). En la mesa de la GRAN IDEA (`concepto`) los conteos no son el freno.
+ * El director anotó 6 pedidos, el máximo por agente, y en su última integración el sistema le contestó con el tope. El freno de esa mesa es el DINERO: el tope de la pieza (10),
+ * la reserva por turno y el techo ×1,2 (`cotaAgotada` y `siguienteDeLaMesa`). Por eso los conteos suben a un valor que el dinero alcanza antes:
+ *  · 12 pedidos por agente: uno a cada especialista del equipo de la gran idea;
+ *  · profundidad 4: igual a las idas y vueltas por pareja (más profundidad no se puede usar);
+ *  · 48 turnos: con lo que reserva cada turno (0,60) y el tope de 10, el dinero corta mucho antes.
+ * Las demás mesas siguen con `COTAS`.
+ */
+export const COTAS_DE_LA_GRAN_IDEA = { MAX_PEDIDOS_POR_AGENTE: 12, MAX_PROFUNDIDAD: 4, MAX_TURNOS: 48 } as const
+export const profundidadMaximaDe = (tipo: TipoDePieza | undefined): number => (tipo === 'concepto' ? COTAS_DE_LA_GRAN_IDEA.MAX_PROFUNDIDAD : COTAS.MAX_PROFUNDIDAD)
+export const turnosMaximosDe = (tipo: TipoDePieza | undefined): number => (tipo === 'concepto' ? COTAS_DE_LA_GRAN_IDEA.MAX_TURNOS : COTAS.MAX_TURNOS)
 
 /** los 6 equipos del departamento de marketing (MAPA 01-nov · firma 01-nov 00:11Z) · claves estables de `oficina_equipos` (las mismas que usa el tablero) */
 export const CLAVES_DE_EQUIPO = ['direccion', 'estrategia', 'creativo', 'web', 'medios', 'relaciones'] as const
@@ -151,12 +165,12 @@ export interface EstadoMesa {
   imagen?: { propuestas: number }
   /** 17-nov · GO Lenovo (encendido de imagen) · lo que costaron los turnos de agente de esta mesa, en todas sus pasadas (la cota de la mesa se mide contra esto) */
   gasto_de_los_turnos_usd?: number
-  turno_abierto: { n: number; agente: string; tipo: 'dirigir' | 'aportar' | 'responder' | 'integrar' | 'devolver_citas' | 'redactar_prompts' | 'criticar' | 'traducir'; responde_a: string | null; /** lo que el cerebro entregó a este agente al abrirse el turno (se consulta UNA vez: la reentrega del turno muestra lo mismo) */ notas_del_dueno?: LecturaDeNotas } | null
+  turno_abierto: { n: number; agente: string; tipo: 'dirigir' | 'aportar' | 'responder' | 'integrar' | 'devolver_citas' | 'rellenar_banco' | 'redactar_prompts' | 'criticar' | 'traducir'; responde_a: string | null; /** lo que el cerebro entregó a este agente al abrirse el turno (se consulta UNA vez: la reentrega del turno muestra lo mismo) */ notas_del_dueno?: LecturaDeNotas; /** 18-nov · `devolver_citas`: lo que el código comprobó que falta (el director escribe solo esas líneas) */ faltan_citas?: FaltanCitas } | null
 }
 
 /** lo que decide el planificador */
 export type Accion =
-  | { accion: 'turno'; agente: string; tipo: 'dirigir' | 'aportar' | 'responder' | 'integrar' | 'devolver_citas' | 'redactar_prompts' | 'criticar'; responde_a: string | null; motivo: string }
+  | { accion: 'turno'; agente: string; tipo: 'dirigir' | 'aportar' | 'responder' | 'integrar' | 'devolver_citas' | 'rellenar_banco' | 'redactar_prompts' | 'criticar'; responde_a: string | null; motivo: string; faltan_citas?: FaltanCitas }
   | { accion: 'material'; pedido_id: string; que: string; para_que: string; de: string }
   | { accion: 'traducir' }
   | { accion: 'cierre_por_tope'; razon: 'techo_de_gasto' }

@@ -26,10 +26,10 @@ afterEach(() => {
 })
 
 describe('techo general · SALA_RUN_CAP_USD', () => {
-  it('sin variable: el general (5)', () => {
+  it('sin variable: el general (13,58 · 5 → 3 × lo medido, 18-nov)', () => {
     delete process.env.SALA_RUN_CAP_USD
     expect(resolveRunCapUsd()).toBe(RUN_CAP_DEFAULT_USD)
-    expect(RUN_CAP_DEFAULT_USD).toBe(5)
+    expect(RUN_CAP_DEFAULT_USD).toBe(13.58)
   })
   it('con variable válida manda; basura, cero o negativo vuelven al general', () => {
     process.env.SALA_RUN_CAP_USD = '30'
@@ -69,11 +69,11 @@ describe('evaluateRunCap · veredictos', () => {
   })
   it('encendida y bajo el techo general: pasa', () => {
     delete process.env.SALA_RUN_CAP_USD
-    expect(evaluateRunCap({ spent_usd: 4.99, enforce: true })).toEqual({ verdict: 'pass', reason: 'under_cap' })
+    expect(evaluateRunCap({ spent_usd: 13.57, enforce: true })).toEqual({ verdict: 'pass', reason: 'under_cap' })
   })
   it('encendida y en el techo (>=): bloquea con el techo y el gasto', () => {
     delete process.env.SALA_RUN_CAP_USD
-    expect(evaluateRunCap({ spent_usd: 5, enforce: true })).toEqual({ verdict: 'block', reason: 'over_cap', cap_usd: 5, spent_usd: 5 })
+    expect(evaluateRunCap({ spent_usd: RUN_CAP_DEFAULT_USD, enforce: true })).toEqual({ verdict: 'block', reason: 'over_cap', cap_usd: RUN_CAP_DEFAULT_USD, spent_usd: RUN_CAP_DEFAULT_USD })
   })
   it('el techo de la ficha pisa al general, hacia arriba y hacia abajo', () => {
     process.env.SALA_RUN_CAP_USD = '5'
@@ -90,7 +90,7 @@ describe('evaluateRunCap · veredictos', () => {
 describe('foto de configuración', () => {
   it('dice de dónde sale cada dato y no nombra a ningún cliente', () => {
     const f = getRunCapSnapshot()
-    expect(f).toMatchObject({ cap_env_var: 'SALA_RUN_CAP_USD', enforce_env_var: 'SALA_RUN_CAP_ENFORCE', cap_por_cliente: 'clients.config.spend_cap_usd', cap_usd_default: 5, daily_alert_usd: 10 })
+    expect(f).toMatchObject({ cap_env_var: 'SALA_RUN_CAP_USD', enforce_env_var: 'SALA_RUN_CAP_ENFORCE', cap_por_cliente: 'clients.config.spend_cap_usd', cap_usd_default: RUN_CAP_DEFAULT_USD, daily_alert_usd: 10 })
     expect(JSON.stringify(f)).not.toMatch(/naufrago|náufrago/i)
   })
 })

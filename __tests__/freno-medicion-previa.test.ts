@@ -7,6 +7,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { DEFAULT_RUN_SCOPED_CAP_USD, DEFAULT_RUN_SPEND_CAP_USD } from '../src/lib/run-sdk-spend-gate'
 
 const raiz = join(__dirname, '..')
 const leer = (p: string) => readFileSync(join(raiz, p), 'utf8')
@@ -50,7 +51,7 @@ describe('freno §150 · medición previa', () => {
     expect(r.blocked).toBe(false); expect(r.reason).toBe('under_cap'); expect(r.spent_usd).toBe(1)
   })
   it('y bloquea igual al llegar al techo por cliente/24 h (no hay hueco de gasto)', async () => {
-    filas = [{ cost_usd: 9, workflow_execution_id: 'x' }]
+    filas = [{ cost_usd: DEFAULT_RUN_SPEND_CAP_USD, workflow_execution_id: 'x' }] // justo en el techo (US$ 24,05)
     const { r, avisos } = await medir({ medicionPrevia: true })
     expect(r.blocked).toBe(true); expect(r.reason).toBe('over_cap')
     expect(avisos.filter((a) => a.kind === 'run_scoped_unidentified')).toHaveLength(0)
@@ -65,7 +66,7 @@ describe('freno §150 · medición previa', () => {
     expect(avisos.some((a) => a.kind === 'run_scoped_unidentified')).toBe(true)
   })
   it('con identificador de corrida todo sigue igual (la bandera no cambia la vara por corrida)', async () => {
-    filas = [{ cost_usd: 9, workflow_execution_id: 'R1' }]
+    filas = [{ cost_usd: DEFAULT_RUN_SCOPED_CAP_USD, workflow_execution_id: 'R1' }] // justo en la vara por corrida (US$ 13,58), bajo el techo por cliente: solo la vara corta
     const { r } = await medir({ runId: 'R1', medicionPrevia: true })
     expect(r.blocked).toBe(true); expect(r.reason).toBe('run_over_cap'); expect(r.run_unidentified).toBeUndefined()
   })

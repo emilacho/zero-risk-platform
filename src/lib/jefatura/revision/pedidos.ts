@@ -28,7 +28,8 @@ export interface PedidoDeAgente {
   esquema: string
   extra: { indicacion_jefatura: string; paso_de_la_jefatura: string; revision_id: string; dispatch_key: string }
   max_budget_usd: number
-  thinking_mode: 'disabled'
+  /** 18-nov · G1 «nada se recorta» + GO de Lenovo 17:05Z: los jefes razonan al máximo del modelo (antes `disabled`) · igual la mesa y la oficina */
+  thinking_mode: 'maximo'
   dry_run: boolean
   client_id: string
   workflow_hint: string
@@ -74,7 +75,7 @@ export function armarPedidoDeAgente(a: DatosDelPedido): PedidoDeAgente {
     agent_name: a.agente, task: a.task, images: (a.imagenes ?? []).map((url) => ({ url })), esquema: a.esquema,
     ...(a.trabajo ?? {}),
     extra: { indicacion_jefatura: a.indicacion, paso_de_la_jefatura: a.paso, revision_id: a.revision_id, dispatch_key: a.dispatch_key },
-    max_budget_usd: a.max_budget_usd, thinking_mode: 'disabled', dry_run: a.dry_run, client_id: a.client_id, workflow_hint: WORKFLOW_HINT,
+    max_budget_usd: a.max_budget_usd, thinking_mode: 'maximo', dry_run: a.dry_run, client_id: a.client_id, workflow_hint: WORKFLOW_HINT,
     force_restart: true, callback_mode: 'runner',
     // la cabecera va SIEMPRE: es inocua para un agente fuera de la lista y obligatoria para los de la lista (`content-creator`, `social-media-strategist`)
     headers_requeridos: { [CABECERA_SALTAR_EDITOR]: '1' },

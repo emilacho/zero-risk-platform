@@ -209,10 +209,12 @@ export function hechosComoDatos(ficha: FichaDeHechos): string {
 
 /** el nombre del chequeo en `jefatura_grading_policies.chequeos_previos`: con él, el tipo revisa cifras (es DATO; encenderlo es un GO aparte) */
 export const CHEQUEO_FICHA_DE_HECHOS = 'ficha_de_hechos'
-/** más que esto no se lista (un plan trae cientos de números): lo no listado se declara y el jefe igual ve la ficha */
-export const MAXIMO_DE_CIFRAS_LISTADAS = 60
-/** lo más que viaja de la ficha al jefe (medido 11-nov: la ficha real de Náufrago da ≈ 13.500 caracteres, ≈ 3.900 tokens). Lo que no cabe se DECLARA, nunca se calla */
-export const MAXIMO_DE_CARACTERES_DE_LA_FICHA = 20_000
+/** 19-nov · G6 · firma de Emilio «nada se recorta» (18-nov · GO Lenovo 15:52Z): se listan TODAS las cifras (antes 60; lo no listado se declaraba). Queda el nombre
+ *  para que el código que declara lo no listado siga en su sitio; con infinito no se dispara. El pedido entero lo topa `TOPE_REAL_DEL_PEDIDO` (con 400 que dice el motivo) */
+export const MAXIMO_DE_CIFRAS_LISTADAS = Number.POSITIVE_INFINITY
+/** lo más que viaja de la ficha al jefe (medido 11-nov: la ficha real de Náufrago da ≈ 13.500 caracteres, ≈ 3.900 tokens).
+ *  19-nov · G6 · «nada se recorta»: la ficha viaja ENTERA (antes 20.000, con aviso). Mismo criterio que arriba */
+export const MAXIMO_DE_CARACTERES_DE_LA_FICHA = Number.POSITIVE_INFINITY
 
 /** lo que viaja en la revisión (lo pone la jefatura al abrir; nunca el llamador) */
 export type FichaEnLaRevision = { ficha: FichaDeHechos } | { no_se_pudo_leer: string }

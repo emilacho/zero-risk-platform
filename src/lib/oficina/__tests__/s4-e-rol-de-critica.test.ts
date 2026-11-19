@@ -149,7 +149,8 @@ describe('E · lo que lee la crítica y lo que sabe la dirección', () => {
     expect(t).toContain(`«${PREFIJO_DE_LA_CRITICA}»`)
     expect(t).toMatch(/asesora, no aprueba ni rechaza/)
     const dev = armarTarea({ tipo: 'devolver_citas', agente: DIRECCION, tarjeta: DIR[0], est: est(), libro: l, c: C('carrusel'), faltanCitas: 'x' })
-    expect(dev).toContain('## La crítica de esta ronda')
+    // 18-nov · la devolución por citas no reescribe la pieza: la crítica ya quedó atendida en la integración y no se vuelve a pedir (ni dice «no llegó» en falso)
+    expect(dev).not.toContain('## La crítica de esta ronda')
   })
   it('si la crítica no llegó, la dirección lo sabe y lo declara', () => {
     const l = [...ronda1(), ...[1, 2, 3].map(() => A({ de: CRITICO, tipo: 'nota', texto: 'turno_fallido: x' }))]

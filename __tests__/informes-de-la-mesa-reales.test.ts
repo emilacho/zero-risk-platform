@@ -6,7 +6,7 @@
  */
 import { readFileSync } from 'node:fs'
 import { describe, expect, it, vi } from 'vitest'
-import { ANALISTAS, armarMaterial, crearCuentaDeLaMesa, cuerpoDelInforme, LIMITE_DE_LA_PUERTA_MS, leerInforme } from '../src/lib/planeacion/mesa-de-analisis'
+import { ANALISTAS, armarMaterial, crearCuentaDeLaMesa, cuerpoDelInforme, LIMITE_DE_LA_PUERTA_MS, leerInforme, TOPE_DE_LA_MESA_USD, TOPE_POR_ANALISTA_USD } from '../src/lib/planeacion/mesa-de-analisis'
 import { validarFormaDelPlan } from '../src/lib/planeacion/validador-plan'
 import { CODIGO_INFORMES_QUE_NO_LLEGARON, construirPlanInformesQueNoLlegaron } from '../scripts/ops/oficina-marketing/plan-informes-que-no-llegaron.mjs'
 import { brazoAnalisis } from '../src/lib/planeacion/brazos'
@@ -144,52 +144,55 @@ describe('el brazo: qué pasa con el segundo intento', () => {
 })
 
 describe('la cuenta del reintento: tiempo y tope firmado', () => {
-  const cinco = [1, 1, 1, 1, 1]
+  // cada analista compromete SU tope (US$ 1,08 desde el 18-nov) y los cinco llenan el tope de la mesa (5,40)
+  const T = TOPE_POR_ANALISTA_USD
+  const cinco = [T, T, T, T, T]
   it('🔴 con los 5 topes comprometidos y nadie terminado, no cabe', () => {
-    expect(crearCuentaDeLaMesa(cinco, () => 0).pedirReintento(1)).toMatchObject({ ok: false, motivo: expect.stringMatching(/cupo/) })
+    expect(cinco.reduce((x, y) => x + y, 0)).toBeCloseTo(TOPE_DE_LA_MESA_USD, 9)
+    expect(crearCuentaDeLaMesa(cinco, () => 0).pedirReintento(T)).toMatchObject({ ok: false, motivo: expect.stringMatching(/cupo/) })
   })
   it('🔴 lo que el que falló no gastó vuelve al cupo y alcanza para repetirlo', () => {
     const c = crearCuentaDeLaMesa(cinco, () => 0)
-    c.liquidar(1, 0)
-    expect(c.pedirReintento(1)).toEqual({ ok: true, tope: 1 })
+    c.liquidar(T, 0)
+    expect(c.pedirReintento(T)).toEqual({ ok: true, tope: T })
   })
   it('🔴 el reintento queda comprometido: dos no caben en el cupo de uno', () => {
     const c = crearCuentaDeLaMesa(cinco, () => 0)
-    c.liquidar(1, 0)
-    c.pedirReintento(1)
-    expect(c.pedirReintento(1).ok).toBe(false)
+    c.liquidar(T, 0)
+    c.pedirReintento(T)
+    expect(c.pedirReintento(T).ok).toBe(false)
   })
   it('🔴 nunca da más que el tope del analista ni más de lo que queda', () => {
     const c = crearCuentaDeLaMesa(cinco, () => 0)
-    for (let i = 0; i < 5; i++) c.liquidar(1, 0.2)
-    expect(c.pedirReintento(1)).toEqual({ ok: true, tope: 1 })
+    for (let i = 0; i < 5; i++) c.liquidar(T, 0.2)
+    expect(c.pedirReintento(T)).toEqual({ ok: true, tope: T })
     const d = crearCuentaDeLaMesa(cinco, () => 0)
-    d.liquidar(1, 0.3)
-    const dado = d.pedirReintento(1)
+    d.liquidar(T, 0.3)
+    const dado = d.pedirReintento(T)
     expect(dado.ok).toBe(true)
-    expect(dado.ok && dado.tope).toBeCloseTo(0.7)
+    expect(dado.ok && dado.tope).toBeCloseTo(T - 0.3)
   })
   it('🔴 con menos cupo que lo que cuesta un analista, no se reintenta para cortarlo a medias', () => {
     const c = crearCuentaDeLaMesa(cinco, () => 0)
-    c.liquidar(1, 0.6)
-    expect(c.pedirReintento(1).ok).toBe(false)
+    c.liquidar(T, 0.6)
+    expect(c.pedirReintento(T).ok).toBe(false)
   })
   it('🔴 sin tiempo en la puerta no se reintenta', () => {
     let reloj = 0
     const c = crearCuentaDeLaMesa(cinco, () => reloj)
-    c.liquidar(1, 0)
+    c.liquidar(T, 0)
     reloj = LIMITE_DE_LA_PUERTA_MS - 199_000
-    expect(c.pedirReintento(1)).toMatchObject({ ok: false, motivo: expect.stringMatching(/tiempo/) })
+    expect(c.pedirReintento(T)).toMatchObject({ ok: false, motivo: expect.stringMatching(/tiempo/) })
     reloj = LIMITE_DE_LA_PUERTA_MS - 200_000
-    expect(c.pedirReintento(1).ok).toBe(true)
+    expect(c.pedirReintento(T).ok).toBe(true)
     expect(c.hayTiempoParaLlamar()).toBe(true)
     reloj += 1
     expect(c.hayTiempoParaLlamar()).toBe(false)
   })
   it('🔴 un costo que no es número no devuelve cupo', () => {
     const c = crearCuentaDeLaMesa(cinco, () => 0)
-    c.liquidar(1, Number.NaN)
-    expect(c.pedirReintento(1).ok).toBe(false)
+    c.liquidar(T, Number.NaN)
+    expect(c.pedirReintento(T).ok).toBe(false)
   })
   it('🔴 la puerta termina antes de que la plataforma la corte', () => {
     expect(LIMITE_DE_LA_PUERTA_MS).toBeLessThan(800_000)

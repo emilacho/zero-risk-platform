@@ -24,9 +24,9 @@ const F2 = '5a749707-0000-4000-8000-000000000002'
 const RAIZ = join(__dirname, '..')
 
 describe('sin topes de tamaño arbitrarios', () => {
-  it('el tope único es el real: cabe de sobra lo medido y queda bajo el 1 MB del corredor', () => {
+  it('el tope único es el real: cabe de sobra lo medido y, aun a 2 bytes por carácter, entra en los 4 MB del corredor (18-nov · G1)', () => {
     expect(TOPE_REAL_DEL_PEDIDO).toBeGreaterThan(125_108 * 4)
-    expect(TOPE_REAL_DEL_PEDIDO).toBeLessThan(1_000_000)
+    expect(TOPE_REAL_DEL_PEDIDO * 2).toBeLessThan(4 * 1024 * 1024)
   })
   it('todas las puertas y recortes usan ese mismo tope', () => {
     for (const t of [PEDIDO_MAXIMO, TOPE_DE_CARACTERES_DEL_PLAN, TOPE_DEL_MATERIAL, TOPE_DEL_INFORME, MAX_TAREA_RUN_SDK]) expect(t).toBe(TOPE_REAL_DEL_PEDIDO)
