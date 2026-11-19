@@ -68,7 +68,7 @@ describe('entrada: lo que se exige', () => {
     expect((await rutaDueno(m.deps, respuesta(c, { canal: '' }))).status).toBe(400)
     expect((await rutaDueno(m.deps, respuesta(c, { respondido_en: 'ayer' }))).status).toBe(400)
     expect((await rutaDueno(m.deps, respuesta(c, { respuesta: '' }))).status).toBe(400)
-    expect((await rutaDueno(m.deps, respuesta(c, { respuesta: 'x'.repeat(2001) }))).status).toBe(400)
+    expect((await rutaDueno(m.deps, respuesta(c, { respuesta: 'x'.repeat(100_001) }) /* G2 18-nov: el tope es el del texto del dueño */)).status).toBe(400)
     expect((await rutaDueno(m.deps, respuesta(c, { client_id: 'ffffffff-ffff-4fff-8fff-ffffffffffff' }))).status).toBe(404)
     expect(m.t.cerebro_fichas).toHaveLength(0)
   })

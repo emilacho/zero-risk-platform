@@ -246,7 +246,7 @@ describe('④ el inventario de lo que SIGUE restringiendo al productor (fijado p
     for (const [que, re] of quedan) expect(t, que).toMatch(re)
     expect(n5.cuerpo.max_budget_usd).toBe(0.6) // tope de gasto por llamada
     expect(n5.cuerpo.mirar_afuera_limites).toMatchObject({ max_pedidos: 5 })
-    expect(n5.cuerpo.thinking_mode).toBe('disabled')
+    expect(n5.cuerpo.thinking_mode).toBe('maximo')
   })
   it('los chequeos que quedan son sólo AVISOS (lista fijada): ninguno detiene ni reescribe', async () => {
     const n5 = await real()

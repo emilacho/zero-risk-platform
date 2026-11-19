@@ -170,7 +170,7 @@ const armar = (prev: Record<string, unknown>, ficha: Record<string, unknown> = {
 describe('③ el cuerpo que se manda al nodo que paga', () => {
   it('🔴 lleva TODO lo que el canon exige: dry_run · runner · force_restart · thinking disabled · tope SIEMPRE · fotos en base64 · el workflow', async () => {
     const j = await armar(prevCuerpo())
-    expect(j.cuerpo).toMatchObject({ agent: 'campaign-brief-agent', client_id: CID, workflow_id: 'WF-PIEZA', workflow_execution_id: '999', callback_url: 'https://n8n.test/webhook-waiting/999', callback_mode: 'runner', force_restart: true, dry_run: false, max_budget_usd: 0.6, thinking_mode: 'disabled', images_mode: 'base64' })
+    expect(j.cuerpo).toMatchObject({ agent: 'campaign-brief-agent', client_id: CID, workflow_id: 'WF-PIEZA', workflow_execution_id: '999', callback_url: 'https://n8n.test/webhook-waiting/999', callback_mode: 'runner', force_restart: true, dry_run: false, max_budget_usd: 0.6, thinking_mode: 'maximo', images_mode: 'base64' })
     expect(j.cuerpo.images).toHaveLength(2)
   })
   it('🔴 «máximo 4 pedidos» y «sólo estas opciones» viajan como CAMPO para que el sistema los haga cumplir · y son exactamente lo que se le ofrece al agente (nunca los anuncios de pago)', async () => {
@@ -313,7 +313,7 @@ describe('⑦ el nodo de chequeos arma la fila · la pieza inválida no se da po
     expect(j).toMatchObject({ pieza_valida: true, chequeos_ok: true, motivo_invalido: null })
     expect(j.fila_pieza).toMatchObject({ output_type: 'campaign_piece', status: 'draft', producing_agent: 'campaign-brief-agent', client_id: CID })
     expect(j.fila_pieza.title).toMatch(/^Pieza · BRF-0006 · Meta Ads/)
-    expect(j.fila_pieza.provenance_tag).toMatchObject({ brief_id: 'BRF-0006', parte_id: PID, valida: true, prompt_imagen: BUENA.prompt_imagen, fuente_imagen: 'cliente', thinking_mode: 'disabled', tope_usd: 0.6, costo_usd: 0.31 })
+    expect(j.fila_pieza.provenance_tag).toMatchObject({ brief_id: 'BRF-0006', parte_id: PID, valida: true, prompt_imagen: BUENA.prompt_imagen, fuente_imagen: 'cliente', thinking_mode: 'maximo', tope_usd: 0.6, costo_usd: 0.31 })
     expect(j.fila_pieza.provenance_tag.brief.id).toBe('BRF-0006')
     expect(j.fila_pieza.content).toContain('LO QUE SE PIDIÓ ↔ LO QUE SALIÓ')
     expect(j.payload_cable).toMatchObject({ event_type: 'run_completed', worker_name: 'pieza', resultado: 'pieza_terminada', brief_id: 'BRF-0006' })

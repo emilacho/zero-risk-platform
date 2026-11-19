@@ -5,6 +5,7 @@ import { sanitizeString } from '@/lib/validation'
 import { capture } from '@/lib/posthog'
 import { validateObject } from '@/lib/input-validator'
 import { checkInternalOrAdmin } from '@/lib/internal-auth'
+import { TOPE_DEL_TEXTO_DEL_DUENO } from '@/lib/limites-de-tamano'
 
 /**
  * POST /api/hitl/resolve
@@ -41,7 +42,8 @@ export async function POST(request: Request) {
 
     const stepId = body.step_id || searchParams.get('step_id')
     const decision = body.decision as 'approved' | 'rejected' | 'edited'
-    const feedback = sanitizeString(body.feedback, 2000)
+    // 18-nov · G2 «nada se recorta» (CC5): lo que escribe Emilio llega entero, hasta el tope único del texto del dueño
+    const feedback = sanitizeString(body.feedback, TOPE_DEL_TEXTO_DEL_DUENO)
     const editedContent = body.edited_content
 
     if (!stepId || !decision) {

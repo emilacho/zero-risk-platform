@@ -5,6 +5,7 @@
  * La jefatura y la segunda mirada GPT no importan este módulo (el segundo cerebro es del productor).
  */
 import crypto from 'node:crypto'
+import { TOPE_DEL_TEXTO_DEL_DUENO } from '../../limites-de-tamano'
 
 export const TIPO_PIEZA = 'content_piece_review'
 export const ESPECIALIDADES = ['texto', 'diseno', 'imagen', 'direccion'] as const
@@ -151,9 +152,10 @@ const TIPO_DE_NOTA: Partial<Record<AccionDeEmilio, string>> = { aprobar: 'aproba
 async function espejoEnNotas(db: DbDeEventos, e: EventoDeEmilio, fila: Fila): Promise<NotaEspejada | null> {
   const tipo = TIPO_DE_NOTA[e.accion] as NotaEspejada['tipo'] | undefined
   if (!tipo || !fila.client_id) return null
-  const coment = typeof e.comentario === 'string' ? e.comentario.trim().slice(0, 2000) : ''
+  const coment = typeof e.comentario === 'string' ? e.comentario.trim().slice(0, TOPE_DEL_TEXTO_DEL_DUENO) : ''
   const laminas = (fila.laminas as number[]).length ? ` [láminas: ${(fila.laminas as number[]).join(', ')}]` : ''
-  const comentario = coment ? `${coment}${laminas}`.slice(0, 2000) : null
+  // 18-nov · G2 «nada se recorta» (CC5): lo que escribe Emilio llega entero, hasta el tope único del texto del dueño (antes 2000)
+  const comentario = coment ? `${coment}${laminas}` : null
   if (tipo === 'comentario' && !comentario) return null
   const nueva = {
     client_id: fila.client_id as string, alcance: 'cliente' as const, tipo, comentario, hitl_id: e.hitl_id, output_id: (fila.output_id as string | null) ?? null, pieza_titulo: (fila.pieza_titulo as string | null) ?? null,
