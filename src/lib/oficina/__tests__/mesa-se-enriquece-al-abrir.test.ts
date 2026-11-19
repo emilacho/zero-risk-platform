@@ -15,6 +15,7 @@ import type { Aporte, EstadoMesa } from '../mesa/tipos'
 import { armarTarea } from '../mesa/pedidos'
 import { siguienteDeLaMesa } from '../mesa/planificador'
 import { DIRECTORIO } from './mesa-memoria'
+import { pedidoDeHechos } from '../material'
 
 type Resp = Awaited<ReturnType<PuertoDelCerebro['pedir']>>
 const CON_HECHOS: Resp = { ok: true, body: { estado: 'completo', costo_usd: 0.08, huecos: [{ hueco: { objetivo: '¿Cuál es el plato del día?' }, estado: 'traido_y_archivado', hallazgos: [{ resumen: 'El plato del día es el encebollado', url: 'https://www.naufrago.ec/menu' }] }] } }
@@ -78,6 +79,33 @@ describe('al abrir: pedido al portero ANTES del primer turno y el material va al
     const enc = M.encargos.get(id)!
     await avanzarMesa(M.P, enc, M.plantilla!.plantilla as never, 0)
     expect(pedidos).toHaveLength(1)
+  })
+})
+
+describe('G8 4a · el pedido de apertura y el de hechos viajan ENTEROS (ADENDA CEREBRO 14:52Z: el portero rechaza con techo, nunca corta)', () => {
+  const PROTAGONISTA_LARGA = `${Array.from({ length: 30 }, (_, i) => `rasgo ${i + 1} del plato del día que el cerebro debe buscar`).join(', ')}. FIN-DE-LA-PROTAGONISTA`
+  it('puro · pedidoDeHechos no corta el «para», el objetivo ni el motivo', () => {
+    const que = `${'el precio vigente de cada plato del menú, sede por sede, '.repeat(20)}FIN-DEL-QUE`
+    const para_que = `${'para no inventar ningún número en la lámina, '.repeat(20)}FIN-DEL-MOTIVO`
+    const p = pedidoDeHechos({ client_id: CLIENTE, encargo_id: 'enc-1', n: 1, paso: 'mesa', necesidades: [{ que, para_que, bloquea: true }, { que: 'otro dato', bloquea: true }], avisar_a: 'https://x', dry_run: false })
+    expect(que.length).toBeGreaterThan(600)
+    expect(p.huecos[0]).toMatchObject({ objetivo: que, motivo: para_que })
+    expect(p.huecos[1]).toMatchObject({ objetivo: 'otro dato', motivo: 'lo necesita el paso para no inventar' })
+    expect(p.para).toBe(`Datos que le faltan al paso «mesa» de una pieza: ${que}; otro dato`)
+  })
+  it('al abrir con un brief largo, el portero recibe el pedido entero: el mismo texto que quedó en el tablero', async () => {
+    const M = crearMemoria({ parte: parteCon(BRIEF_CARRUSEL.replace('- PROTAGONISTA: El plato del día. UNO.', `- PROTAGONISTA: ${PROTAGONISTA_LARGA}`)), plantilla: CARRUSEL_MESA })
+    const MS = crearMesaEnMemoria()
+    M.P.mesa = MS
+    const pedidos: Array<{ para: string; huecos: Array<{ objetivo: string }> }> = []
+    M.P.cerebro = { avisarA: 'https://x/api/oficina/material-vuelta', pedir: async (p) => { pedidos.push(p as never); return CON_HECHOS }, leerPedido: async () => ({ ok: false, error: 'no se usa' }) }
+    await abrirEncargo(M.P, { cuerpo: { parte_id: PARTE, brief_id: 'BRF-0100', dry_run: false, familia: 'carrusel_mesa' }, client_id: CLIENTE, target_step_id: TARGET_STEP_PRODUCIR })
+    const pide = MS.filas.find((f) => f.tipo === 'pide')!
+    expect(pide.texto).toContain('FIN-DE-LA-PROTAGONISTA')
+    expect(pide.texto.length).toBeGreaterThan(1000)
+    expect(pedidos).toHaveLength(1)
+    expect(pedidos[0].huecos[0].objetivo).toBe(pide.texto)
+    expect(pedidos[0].para.endsWith(pide.texto)).toBe(true)
   })
 })
 

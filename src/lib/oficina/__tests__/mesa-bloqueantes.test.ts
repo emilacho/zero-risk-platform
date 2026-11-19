@@ -382,6 +382,29 @@ describe('O02 · el cupo de 3 pedidos de material al portero tiene tope', () => 
   })
 })
 
+describe('G8 4a · el pedido del equipo al cerebro viaja ENTERO (ADENDA CEREBRO 14:52Z: el portero rechaza con techo, nunca corta)', () => {
+  it('un pedido de más de 1200 caracteres llega al portero completo en el objetivo y en el «para», sin «…» ni corte', async () => {
+    const { M, MS, a, id } = await montar({ dry_run: false })
+    const pedidos: Array<{ para: string; huecos: Array<{ objetivo: string; motivo: string }> }> = []
+    M.P.cerebro = { avisarA: 'https://x/api/oficina/material-vuelta', pedir: async (p) => { pedidos.push(p as never); return { ok: true, body: { estado: 'completo', costo_usd: 0, huecos: [] } } }, leerPedido: async () => ({ ok: false, error: 'no se usa' }) }
+    const largo = `${Array.from({ length: 40 }, (_, i) => `dato ${i + 1}: el precio vigente del plato del día en la sede ${i + 1}`).join('; ')}; FIN-DEL-PEDIDO-LARGO`
+    expect(largo.length).toBeGreaterThan(1200)
+    let sembrado = false
+    await jugar(M, id, a, (t) => {
+      if (!sembrado && t.agente === 'content-creator' && t.tipo === 'aportar') {
+        sembrado = true
+        void MS.aportar({ encargo_id: id, de: 'content-creator', para: 'portero', tipo: 'pide', texto: largo, refs: [], responde_a: null, profundidad: 0, costo_usd: 0, workflow_execution_id: null })
+      }
+      return undefined
+    })
+    const delEquipo = pedidos.find((p) => p.huecos.some((h) => h.objetivo.includes('FIN-DEL-PEDIDO-LARGO')))
+    expect(delEquipo, JSON.stringify(pedidos).slice(0, 300)).toBeDefined()
+    expect(delEquipo!.huecos[0].objetivo).toBe(largo)
+    expect(delEquipo!.huecos[0].motivo).toBe('lo pidió content-creator para la pieza')
+    expect(delEquipo!.para.endsWith(`${largo}`)).toBe(true)
+  })
+})
+
 describe('O04 · una respuesta repetida o fuera de orden no duplica nada', () => {
   // 10-nov · costo de la mesa (GO de Lenovo 13:28Z): la respuesta repetida sigue SIN duplicar el aporte, pero si viene de OTRA ejecución (una copia del turno), esa llamada se pagó y su costo SE SUMA.
   // Antes esta prueba exigía que no sumara: eso dejaba ciego al tope (la gran idea v4 anotó 6,15 y gastó 10,39). La MISMA ejecución reenviada sigue sin sumar

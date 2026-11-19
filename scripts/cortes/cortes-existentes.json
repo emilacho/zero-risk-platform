@@ -21942,20 +21942,6 @@
   },
   {
    "archivo": "src/lib/oficina/material.ts",
-   "huella": "3adf075952b3d393",
-   "n": 102,
-   "veces": 1,
-   "clase": "por-revisar-en-G8"
-  },
-  {
-   "archivo": "src/lib/oficina/material.ts",
-   "huella": "ad9469b88814af5c",
-   "n": 103,
-   "veces": 1,
-   "clase": "por-revisar-en-G8"
-  },
-  {
-   "archivo": "src/lib/oficina/material.ts",
    "huella": "8e8b354e66c90e2d",
    "n": 196,
    "veces": 1,
@@ -22107,20 +22093,6 @@
    "n": 242,
    "veces": 1,
    "clase": "registro"
-  },
-  {
-   "archivo": "src/lib/oficina/mesa/orquestador.ts",
-   "huella": "4dc849888757e273",
-   "n": 302,
-   "veces": 1,
-   "clase": "por-revisar-en-G8"
-  },
-  {
-   "archivo": "src/lib/oficina/mesa/orquestador.ts",
-   "huella": "24922736fcf788eb",
-   "n": 373,
-   "veces": 1,
-   "clase": "por-revisar-en-G8"
   },
   {
    "archivo": "src/lib/oficina/mesa/orquestador.ts",

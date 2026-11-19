@@ -99,8 +99,8 @@ export function necesidadesQueBloquean(valor: unknown): NecesidadDeAgente[] {
 export function pedidoDeHechos(o: { client_id: string; encargo_id: string; n: number; paso: string; necesidades: NecesidadDeAgente[]; avisar_a: string; dry_run: boolean }): PedidoAlPortero {
   return {
     client_id: o.client_id, pedido_por: { oficina: OFICINA_QUE_PIDE, agente: o.paso },
-    para: `Datos que le faltan al paso «${o.paso}» de una pieza: ${o.necesidades.map((x) => x.que).join('; ')}`.slice(0, 600),
-    huecos: o.necesidades.map((x) => ({ objetivo: x.que.slice(0, 400), motivo: (x.para_que ?? 'lo necesita el paso para no inventar').slice(0, 400) })),
+    para: `Datos que le faltan al paso «${o.paso}» de una pieza: ${o.necesidades.map((x) => x.que).join('; ')}`, // 19-nov · G8 4a · entero: el portero rechaza con un techo (no corta) · ADENDA CEREBRO 14:52Z
+    huecos: o.necesidades.map((x) => ({ objetivo: x.que, motivo: x.para_que ?? 'lo necesita el paso para no inventar' })),
     pedido_id: idDelPedido(o.encargo_id, o.n, 'hecho'), avisar_a: o.avisar_a, ref_de_quien_pide: refDeQuienPide(o.encargo_id, o.n),
     dry_run: o.dry_run, workflow_id: FLUJO_QUE_PIDE, workflow_execution_id: `oficina:${o.encargo_id}:${o.n}`,
   }
