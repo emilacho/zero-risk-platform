@@ -137,6 +137,14 @@ describe('el perfil del público NO raspa: lee la voz del público solo del cere
     expect(r.voces_del_cerebro).toBe(60)
     expect(r.cortes).toContain('se leyeron 60 voces en 20 páginas y el cerebro tiene más: el perfil usa solo esas')
   })
+  it('🔴 CC7 g3 · con el tope de páginas agotado, lo que el cerebro declara que no junta igual llega a la fuente faltante', async () => {
+    h.pagina = 3
+    h.resultados = fichas('resenas', 70, 1)
+    h.noJunta = ['directorios']
+    const r = await correr()
+    expect(h.consultas).toHaveLength(20)
+    expect(r.publicos[0].fuentes_faltantes).toContain('directorios')
+  })
   it('🔴 la consulta al cerebro CAÍDA no se lee como «cerebro vacío»: la corrida falla diciendo por qué, sin redactar ni declarar fuentes faltantes falsas', async () => {
     h.estado = 503
     await expect(correr()).rejects.toThrow(/el portero no contestó la consulta \(503 portero_caido\)/)

@@ -411,6 +411,13 @@ describe('la voz se pide por tipo de público (#1167)', () => {
     await correrPerfil(d, { ...ENTRADA, dry_run: true })
     expect(vi.mocked(d.leerVoces).mock.calls.map((c) => c[0])).toEqual(['consumo', 'profesional'])
   })
+  it('🔴 CC7 g10 · con dos tipos, `voces_del_cerebro` es la SUMA de las dos lecturas (no la del último tipo)', async () => {
+    const delCerebro = [...voces(CAFE, 'cerebro:resenas', 10), ...voces(CAFE, 'cerebro:competidor_comentarios', 5, 100), ...voces(CAFE, 'cerebro:foro', 3, 200)]
+    const { d } = doble({ publicos: [PUBLICO_CAFE, PUBLICO_B2B], delCerebro })
+    const r = await correrPerfil(d, { ...ENTRADA, dry_run: true })
+    // consumo lee reseñas + comentarios en la competencia (15); profesional, reseñas + foros (13)
+    expect(r.voces_del_cerebro).toBe(28)
+  })
   it('🔴 dos públicos del mismo tipo: una sola lectura', async () => {
     const { d } = doble({ publicos: [PUBLICO_CAFE, { ...PUBLICO_CAFE, id: 'p-cafe-2', audience_segment: 'Turistas' }], delCerebro: MUESTRA_CAFE() })
     await correrPerfil(d, { ...ENTRADA, dry_run: true })
