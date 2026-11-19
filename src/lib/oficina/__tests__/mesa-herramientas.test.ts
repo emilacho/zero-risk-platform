@@ -95,12 +95,15 @@ describe('LA MESA · herramientas del tablero', () => {
     const enorme = 'x'.repeat(TOPE_DE_LO_ESCRITO + 1)
     for (const o of [{ herramienta: 'mesa_pedir', a: 'content-creator', que: enorme }, { herramienta: 'mesa_pedir', a: 'content-creator', que: 'tres titulares', para_que: enorme }, { herramienta: 'pedir_material', que: enorme }, { herramienta: 'pedir_material', que: 'el precio', para_que: enorme }]) {
       const r = await llamar(M, { ...o, encargo_id: id, de: turno.agente })
+      expect(r.status).toBe(200) // m5 de CC6: el rechazo llega al agente como respuesta legible, no como error
       expect(r.cuerpo).toMatchObject({ ok: false })
       expect(String(r.cuerpo.motivo)).toMatch(/no se recorta/)
     }
     expect(MS.filas.filter((f) => f.de === turno.agente)).toHaveLength(0)
     await MS.aportar({ encargo_id: id, de: 'content-creator', para: null, tipo: 'aporta', texto: 'tres titulares', refs: [], responde_a: null, profundidad: 0, costo_usd: 0, workflow_execution_id: null })
-    expect((await llamar(M, { herramienta: 'mesa_devolver', encargo_id: id, de: turno.agente, a: 'content-creator', comentarios: enorme })).cuerpo).toMatchObject({ ok: false })
+    const rd = await llamar(M, { herramienta: 'mesa_devolver', encargo_id: id, de: turno.agente, a: 'content-creator', comentarios: enorme })
+    expect(rd.status).toBe(200)
+    expect(rd.cuerpo).toMatchObject({ ok: false })
     expect(MS.filas.filter((f) => f.tipo === 'devuelve')).toHaveLength(0)
     // justo en el techo sí entra entero
     const justo = 'y'.repeat(TOPE_DE_LO_ESCRITO)
