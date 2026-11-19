@@ -6,9 +6,10 @@
  * Sin red, sin modelo, US$ 0.
  */
 import { describe, expect, it } from 'vitest'
-import { construirTarea, contextoDelEncargo, FUNCION_DEL_RESUMEN, type ContextoDePedido } from '../pedidos'
+import { construirTarea, contextoDelEncargo, FUNCION_DEL_RESUMEN, resumenParaElJefe, type ContextoDePedido } from '../pedidos'
 import { construirTareaLaminas, contextoDelRevisorLaminas, type ContextoLaminas } from '../pedidos-laminas'
 import { jugar, montar } from './mesa-arnes'
+import { TOPE_REAL_DEL_PEDIDO } from '../../limites-de-tamano'
 
 describe('ADENDA 1 · P2b · el resumen del encargo', () => {
   it('el documento lista red, formato, qué es, objetivo y llamado; lo que la hoja no dice, se dice', () => {
@@ -30,6 +31,14 @@ describe('ADENDA 1 · P2b · el resumen del encargo', () => {
     expect(c[0].texto).toMatch(/\n- objetivo: /)
     // los documentos de siempre siguen
     expect(c.map((x) => x.titulo)).toEqual(expect.arrayContaining(['Manual de marca del cliente', 'El brief de este entregable']))
+  })
+  // 19-nov · sabotaje c8 de CC6 (sobrevivía): sin la hoja del encargo no se inventa un resumen («(la hoja no lo dice)» en todo): no va
+  //   (en el camino real el encargo sin hoja se cae antes: la decisión es la función que usa el orquestador, `resumenParaElJefe`, y se prueba aquí directo)
+  it('🔴 si el encargo no trae la hoja, no hay resumen para el jefe; con la hoja, es el resumen de esa hoja', () => {
+    expect(resumenParaElJefe(null)).toEqual([])
+    expect(resumenParaElJefe(undefined)).toEqual([])
+    const hoja = { red: 'instagram', formato: 'post', objetivo: 'que reserven' } as unknown as Parameters<typeof resumenParaElJefe>[0]
+    expect(resumenParaElJefe(hoja)).toEqual([contextoDelEncargo({ red: 'instagram', formato: 'post', objetivo: 'que reserven' })])
   })
 })
 
@@ -57,6 +66,15 @@ describe('ADENDA 1 · P2b · el manual y el plan llegan ENTEROS a los pedidos de
     expect(t).toContain('FIN-DEL-MANUAL')
     expect(t).toContain('FIN-DEL-PLAN')
     expect(t).not.toContain('[… recortado')
+  })
+  // 19-nov · sabotaje c5 de CC6 (sobrevivía): si un documento pasara el techo del pedido, el aviso dice CUÁL se cortó (antes decía «el manual» también al cortar el plan)
+  it('🔴 sobre el techo, el aviso de recorte nombra el documento: «el plan» para el plan y «el manual» para el manual', () => {
+    const largo = (x: string) => x.repeat(TOPE_REAL_DEL_PEDIDO + 5)
+    const f2 = { ...fuentes, manual_texto: largo('m'), plan_texto: largo('p') }
+    for (const t of [construirTarea('direccion_visual', { ...post, fuentes: f2 } as unknown as ContextoDePedido).task, construirTareaLaminas('direccion_visual', { ...laminas, fuentes: f2 } as unknown as ContextoLaminas).task]) {
+      expect(t).toContain('\n[… recortado: 5 caracteres más en el plan]')
+      expect(t).toContain('\n[… recortado: 5 caracteres más en el manual]')
+    }
   })
   it('🔴 el revisor de láminas lee el manual y el plan enteros', () => {
     const c = contextoDelRevisorLaminas(laminas).contexto

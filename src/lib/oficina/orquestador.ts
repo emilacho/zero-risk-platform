@@ -39,7 +39,7 @@ import { seccionDeCambiosDelDueno } from './cambios-del-dueno'
 import { antesDeLasFotos, despuesDeUnAgente, pedirLoQueElAgenteNecesita, seccionDeMaterialParaElAgente } from './material-orquestador'
 import { duenoDeLaFicha, registrarPaso, siguientePaso, type ResultadoDePaso } from './motor'
 import { contextoDeHechos } from './hechos-del-negocio'
-import { construirTarea, contextoDelEncargo, contextoDelRevisor, CONTRATOS_EN_TEXTO, resumenDelEncargo, type ContextoDePedido } from './pedidos'
+import { construirTarea, contextoDelRevisor, CONTRATOS_EN_TEXTO, resumenParaElJefe, type ContextoDePedido } from './pedidos'
 import { seccionDeAutorevision, validarAutorevision, type NotaVista } from '../notas-del-dueno/autorevision'
 import type { Cambios, Encargo, FuentesCompletas, Puertos, TurnoRegistrado } from './puertos'
 import { chequearPrompts, citasExisten, derivarDecision, elegirVersion, veredictoDeImagenes, type ObservacionDeImagen, type ReglasDeImagen } from './reglas-de-imagen'
@@ -264,7 +264,7 @@ export async function avanzar(P: Puertos, encargoId: string): Promise<Respuesta>
         const ficha = contextoDeLaFicha(fichaDeLaHoja(briefDe(e)?.texto))
         // 19-nov · ADENDA 1 · P2b: el resumen del encargo (red, formato, objetivo, llamado) va al jefe como un documento más, en las tres familias
         const hoja = briefDe(e)
-        const resumen = hoja ? [contextoDelEncargo(resumenDelEncargo(hoja))] : []
+        const resumen = resumenParaElJefe(hoja)
         const sobre = sobreDeLaRevision(enc, pl, e, { pieza: material.pieza, imagenes: material.imagenes, contexto: [...resumen, ...material.contexto, ...carpeta, hechos, ...(ficha ? [ficha] : [])] })
         const ap = P.jefatura ? await P.jefatura(sobre) : ({ estado: 'error', motivo: 'el puerto de la jefatura no está configurado' } as const)
         if (ap.estado === 'esperando') {

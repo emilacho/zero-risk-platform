@@ -161,3 +161,6 @@ export function contextoDelEncargo(r: ResumenDelEncargo): ContextoDelRevisor {
   const l = (k: string, v: string | undefined) => `- ${k}: ${(v ?? '').trim() || '(la hoja no lo dice)'}`
   return { titulo: 'El resumen del encargo', funcion: FUNCION_DEL_RESUMEN, texto: [l('red', r.red), l('formato', r.formato), l('qué es', r.que_es), l('objetivo', r.objetivo), l('llamado', r.llamado), ...(r.publico ? [l('público', r.publico)] : [])].join('\n') }
 }
+
+/** 19-nov · ADENDA 1 · P2b: el resumen va al jefe SOLO si el encargo trae la hoja; sin ella no se inventa uno («(la hoja no lo dice)» en todo) */
+export const resumenParaElJefe = (hoja: ContextoDePedido['brief'] | null | undefined): ContextoDelRevisor[] => (hoja ? [contextoDelEncargo(resumenDelEncargo(hoja))] : [])
