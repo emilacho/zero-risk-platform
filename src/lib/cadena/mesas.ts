@@ -117,6 +117,13 @@ async function esperaLaVueltaSiguiente(al: Almacen, campana: Campana, mesa: 'bri
   })
   return true
 }
+/**
+ * 🟡 1 de CC7 (19-nov 09:00Z) · la marca es de UN incidente: cuando la mesa entrega (brief con texto · gran idea `lista`), se borra. Sin esto, una marca vieja de otro
+ * episodio hacía que el tope siguiente abriera en el mismo tramo y sin alarma. Solo borra la marca de ESA mesa (la del grupo A u otra mesa no se tocan)
+ */
+async function borrarMarcaDeMesa(al: Almacen, campana: Campana, mesa: 'brief' | 'concepto'): Promise<void> {
+  if (tramoDeLaMarca(campana.estado_motivo, mesa) !== null) await al.actualizarCampana(campana.id, { estado_motivo: null })
+}
 /** la respuesta de la mesa que espera: 200 «ya_hecha» para el flujo de la puerta (no hay nada que llevar a la oficina en esta vuelta), con el porqué */
 const respuestaEnReintento = (mesa: 'brief' | 'concepto', version: number, que: string): Respuesta =>
   ({ status: 200, cuerpo: { ya_hecha: true, en_reintento: true, mesa, version, nota: `${que}; se reabre en la vuelta siguiente` } })
@@ -444,6 +451,7 @@ export async function recibirBrief(al: Almacen, p: EntregaDeBrief, ahora: string
   const estado = bloquea.length ? 'devuelta' : 'validada'
   await al.actualizarBriefCreativo(campana.id, p.version, { ...base, estado, texto_md: textoDelBrief, leido: leido as unknown as Record<string, unknown>, devolucion_texto: bloquea.length ? bloquea.map((b) => `- ${b}`).join('\n') : null })
   // 19-nov · grupo D: devuelto por código a la segunda ya no para: la próxima apertura deja vigente la mejor versión, con sus bloqueos como avisos
+  await borrarMarcaDeMesa(al, campana, 'brief')
   return { ok: true, estado, ...(await siguienteDespuesDe(al, campana.id)) }
 }
 
@@ -571,6 +579,7 @@ export async function recibirConcepto(al: Almacen, p: EntregaDeConcepto, ahora: 
   const leido = leerConcepto(p.texto as string, await insumosDelConcepto(al, campana))
   if (leido.estado === 'sin_concepto') return sinMesa(`sin_concepto: ${leido.bloqueos.join(' · ')}`)
   await al.actualizarConcepto(campana.id, p.version, { ...base, estado: 'lista', aprobacion: 'pendiente', texto_md: p.texto, leido: leido as unknown as Record<string, unknown> })
+  await borrarMarcaDeMesa(al, campana, 'concepto')
   await abrirAprobacionDelConcepto(al, campana, p.version, leido, p.costo_usd, todos, ahora, ctx?.nombreDelNegocio ?? null)
   return { ok: true, estado: 'lista' }
 }
@@ -596,6 +605,7 @@ async function cerrarBriefDeRegistro(al: Almacen, campana: Campana, version: num
   await resolverEsperas(al, campana.id, TIPO_DE_ESPERA_DE_JEFATURA, objetoDeRegistro('brief', version))
   await al.actualizarBriefCreativo(campana.id, version, { estado, texto_md: textoFinal, leido: l as unknown as Record<string, unknown>, devolucion_texto: bloquea.length ? bloquea.map((b) => `- ${b}`).join('\n') : null })
   // 19-nov · grupo D: devuelto por código a la segunda ya no para (la próxima apertura deja vigente la mejor versión)
+  await borrarMarcaDeMesa(al, campana, 'brief')
   return { ok: true, estado, ...(await siguienteDespuesDe(al, campana.id)) }
 }
 
@@ -605,6 +615,7 @@ async function cerrarConceptoDeRegistro(al: Almacen, campana: Campana, version: 
   if (leido.estado === 'sin_concepto') return conceptoSinMesa(al, campana, version, todos, { motivo: `sin_concepto: ${leido.bloqueos.join(' · ')}`, texto_md: textoFinal }, ahora)
   const l = conAvisos(leido, avisos)
   await al.actualizarConcepto(campana.id, version, { estado: 'lista', aprobacion: 'pendiente', texto_md: textoFinal, leido: l as unknown as Record<string, unknown> })
+  await borrarMarcaDeMesa(al, campana, 'concepto')
   const ctx = await al.cargarContexto(campana.client_id, campana.plan_id)
   await abrirAprobacionDelConcepto(al, campana, version, l, todos.find((x) => x.version === version)?.costo_usd ?? null, todos, ahora, ctx?.nombreDelNegocio ?? null)
   return { ok: true, estado: 'lista' }

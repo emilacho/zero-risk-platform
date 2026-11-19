@@ -296,6 +296,38 @@ describe('grupo 2 · la mesa que no entregó texto se reabre en la vuelta siguie
     expect((await conceptoAbrir(al, wf(), TRAMO_2)).cuerpo).toMatchObject({ version: 3 })
     expect(al.campanas[0].estado).toBe('calendario')
   })
+  it('🔴 🟡 1 de CC7 · la marca es de un incidente: la gran idea que entrega la borra, y el tope siguiente vuelve a esperar su tramo y a avisar', async () => {
+    const al = almacen()
+    await briefAbrir(al, wf(), AHORA)
+    await recibirBrief(al, entrega(1, BRIEF_BUENO), AHORA)
+    for (const v of [1, 2]) {
+      await conceptoAbrir(al, wf(), AHORA)
+      await recibirConcepto(al, entrega(v, null, { motivo: 'venció la mesa' }), AHORA)
+    }
+    expect((await conceptoAbrir(al, wf(), AHORA)).cuerpo).toMatchObject({ en_reintento: true })
+    expect((await conceptoAbrir(al, wf(), TRAMO_2)).cuerpo.version).toBe(3)
+    // episodio 1 cerrado: la v3 entrega y la marca se borra
+    expect(await recibirConcepto(al, entrega(3, CONCEPTO_BUENO), TRAMO_2)).toMatchObject({ estado: 'lista' })
+    expect(al.campanas[0].estado_motivo).toBeNull()
+    // episodio 2: Emilio pide cambios, la v4 no entrega → el tope en el TRAMO_3 espera (no abre la v5 en el acto) y avisa otra vez
+    expect((await conceptoDecidir(al, wf({ decision: 'cambios', apunta_a: 'concepto', nota: 'más barrio, menos mesa' }), TRAMO_2)).status).toBe(200)
+    expect((await conceptoAbrir(al, wf({ nota: 'más barrio, menos mesa' }), TRAMO_2)).cuerpo.version).toBe(4)
+    await recibirConcepto(al, entrega(4, null, { motivo: 'venció la mesa' }), TRAMO_3)
+    expect((await conceptoAbrir(al, wf(), TRAMO_3)).cuerpo).toMatchObject({ ya_hecha: true, en_reintento: true, version: 4 })
+    expect(al.conceptos).toHaveLength(4)
+    expect(al.avisosAlBuzon.filter((a) => a.clave.startsWith('cadena:mesa-en-reintento:concepto:')).map((a) => a.clave)).toEqual([
+      `cadena:mesa-en-reintento:concepto:${CAMP}:v2`, `cadena:mesa-en-reintento:concepto:${CAMP}:v4`,
+    ])
+  })
+  it('🔴 el brief que entrega borra solo su marca: la de la gran idea y la del grupo A se quedan', async () => {
+    for (const [motivo, queda] of [[marcaDeMesaEnReintento('brief', '2026-10-01am'), false], [marcaDeMesaEnReintento('concepto', '2026-10-01am'), true], ['reintento automático · estrategia · la bolsa', true]] as const) {
+      const al = almacen()
+      al.campanas[0].estado_motivo = motivo
+      await briefAbrir(al, wf(), AHORA)
+      await recibirBrief(al, entrega(1, UN_BLOQUEO), AHORA) // con texto (aunque devuelto): la mesa entregó
+      expect(al.campanas[0].estado_motivo, motivo).toBe(queda ? motivo : null)
+    }
+  })
   it('las marcas del brief y de la gran idea no se confunden', () => {
     expect(tramoDeLaMarca(marcaDeMesaEnReintento('brief', '2026-10-09pm'), 'brief')).toBe('2026-10-09pm')
     expect(tramoDeLaMarca(marcaDeMesaEnReintento('brief', '2026-10-09pm'), 'concepto')).toBeNull()
