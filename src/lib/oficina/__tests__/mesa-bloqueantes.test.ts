@@ -128,6 +128,27 @@ describe('BLOQUEANTE 1 · el tablero y las citas llegan a la jefatura', () => {
     expect(t).toMatch(/A9 \(NO EXISTE en el tablero\)/)
     expect(t).toMatch(/citas a aportes que no existen: A9/)
   })
+  // 19-nov · el t6 de CC7 en #1223: sacar un tipo del filtro sobrevivía. Cada tipo que la jefatura debe ver sale en el tablero; los pedidos y las notas, no
+  it('el tablero muestra los cinco tipos que cuentan (dirige, aporta, responde, material, integra) y deja fuera pedidos y notas', () => {
+    contador = 0
+    const l = [
+      A({ de: DIRECCION, tipo: 'dirige', texto: 'Idea rectora: el plato del día' }),
+      A({ de: 'content-creator', tipo: 'pide', para: 'portero', texto: 'el precio vigente del plato' }),
+      A({ de: 'portero', tipo: 'material', para: 'content-creator', texto: 'Precio vigente del plato del día: 8,50 USD (ficha del cerebro)' }),
+      A({ de: 'content-creator', tipo: 'aporta', texto: 'Tres titulares con el precio' }),
+      A({ de: 'carousel-designer', tipo: 'responde', para: 'content-creator', texto: 'El ritmo de cinco láminas' }),
+      A({ de: 'content-creator', tipo: 'nota', texto: 'turno_fallido: respuesta vacía' }),
+      A({ de: DIRECCION, tipo: 'integra', texto: '## Citas\nA3 usé: el precio del cerebro\nA4 usé: el titular' }),
+    ]
+    const t = tablero(l)
+    expect(t).toContain('A1 · ' + DIRECCION + ' · dirige: Idea rectora: el plato del día')
+    expect(t).toContain('A3 · portero · material: Precio vigente del plato del día: 8,50 USD (ficha del cerebro)')
+    expect(t).toContain('A4 · content-creator · aporta: Tres titulares con el precio')
+    expect(t).toContain('A5 · carousel-designer · responde: El ritmo de cinco láminas')
+    expect(t).toMatch(/A7 · [^\n]* · integra: ## Citas/)
+    expect(t).not.toMatch(/A2 · content-creator · pide/)
+    expect(t).not.toMatch(/turno_fallido/)
+  })
   // 19-nov · G8 (3) · GO Lenovo 10:36 · «nada se recorta»: antes cada aporte llegaba a 600 y el tablero entero a 7000
   it('cada aporte llega ENTERO a la jefatura, y un tablero de más de 7000 también (sin aviso de recorte)', () => {
     contador = 0
