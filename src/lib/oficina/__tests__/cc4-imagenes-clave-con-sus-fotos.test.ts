@@ -90,7 +90,7 @@ describe('2 · la imagen clave de cada plano lleva sus fotos reales, en orden, y
     expect(conHoja).not.toMatch(/photographic|realistic/i)
   })
   it('19-nov · la mesa del video escribe el «Prompt de imagen» con el estilo que fija el manual para producir con IA', () => {
-    for (const propuestas of [1, 3]) expect(convencionDelGuion({ ...VIDEO_POR_OMISION, propuestas })).toContain('Prompt de imagen: … (en inglés: el cuadro clave del plano, con el tipo de imagen y el estilo que fija el manual del cliente para producir con IA, sin texto en la imagen)')
+    for (const propuestas of [1, 3]) expect(convencionDelGuion({ ...VIDEO_POR_OMISION, propuestas })).toContain('Prompt de imagen: … (en inglés: el cuadro clave del plano, con el tipo de imagen y el estilo que fija el manual del cliente para producir con IA (si el manual no trae esa sección, su DIRECCIÓN DE FOTOGRAFÍA), sin texto en la imagen)')
   })
   it('el plano de siempre (sin personajes ni extras) no cambia: sin «Reference images», sin otras fotos', () => {
     const p1 = pedidos().find((x) => x.n === 1)!
