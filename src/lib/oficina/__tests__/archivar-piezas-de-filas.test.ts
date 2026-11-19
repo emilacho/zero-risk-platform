@@ -111,6 +111,16 @@ describe('archivarPiezasDeFilas · la pieza vieja que espera a Emilio se archiva
     expect(t.bandeja[0].archivada_en).toBe(antes)
     expect(t.encargos[0]).toMatchObject({ archivada_en: antes, archivo_motivo: MOTIVO })
   })
+  it('🔴 j5 de CC7 · al completar, NUNCA se pisa la hora ni el motivo de otro archivo: el encargo que Emilio archivó a mano antes queda como estaba', async () => {
+    const aMano = '2026-11-18T10:00:00Z', dePieza = '2026-11-19T01:00:00Z'
+    const { db, t } = base({
+      encargos: [encargo('e1', 'fila-a', 'h1', { archivada_en: aMano, archivo_motivo: 'fuera de uso (Emilio)' }), encargo('e2', 'fila-a', 'h1')],
+      bandeja: [pieza('h1', 'pending', { archivada_en: dePieza, archivo_motivo: MOTIVO })],
+    })
+    expect(await archivarPiezasDeFilas(db, P, AHORA)).toEqual({ ok: true, archivadas: [], ya_archivadas: ['h1'], no_archivadas: [] })
+    expect(t.encargos[0]).toMatchObject({ archivada_en: aMano, archivo_motivo: 'fuera de uso (Emilio)' })
+    expect(t.encargos[1]).toMatchObject({ archivada_en: dePieza, archivo_motivo: MOTIVO })
+  })
   it('🔴 varios encargos de la misma pieza (rondas de cambios) se archivan juntos; dos piezas de la misma fila, las dos', async () => {
     const { db, t } = base({ encargos: [encargo('e1', 'fila-a', 'h1'), encargo('e1b', 'fila-a', 'h1'), encargo('e2', 'fila-a', 'h2')], bandeja: [pieza('h1', 'pending'), pieza('h2', 'pending')] })
     const r = await archivarPiezasDeFilas(db, P, AHORA)
