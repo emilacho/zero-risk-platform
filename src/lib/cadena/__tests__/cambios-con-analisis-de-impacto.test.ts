@@ -249,13 +249,15 @@ describe('10-nov · CC7 (a): el pedido de Emilio sigue vivo UNA vez si el brief 
     expect(marco(r)).toContain(NOTA)
     expect(marco(r)).toContain('# EL BRIEF ANTERIOR (versión 2)')
   })
-  it('🔴 UNA vez: si el código devuelve también esa versión, ya no hay nota y la campaña va a revisión humana', async () => {
+  it('🔴 UNA vez: si el código devuelve también esa versión, ya no hay nota y (grupo D, 19-nov) queda la mejor de las devueltas por el código, nunca la que Emilio mandó a cambiar', async () => {
     const al = await devueltoPorElCodigoTrasCambios()
     await briefAbrir(al, wf(), AHORA)
     expect(await recibirBrief(al, entrega(3, SIN_DOS), AHORA)).toMatchObject({ estado: 'devuelta' })
     const r = await briefAbrir(al, wf(), AHORA)
-    expect(r.status).toBe(409)
-    expect(r.cuerpo).toMatchObject({ error: 'brief_agotado', necesita_humano: true })
+    expect(r.status).toBe(200)
+    expect(r.cuerpo).toMatchObject({ ya_hecha: true })
+    expect((r.cuerpo.mejor_version as { de: number }).de).toBeGreaterThan(1)
+    expect(al.campanas[0].estado).not.toBe('necesita_humano')
   })
   it('sin cambios de Emilio no cambia nada: un brief devuelto por el código no hereda nota ni base', () => {
     const v = (version: number, estado: 'devuelta' | 'validada', motivo: string | null) => ({ version, estado, motivo, devolucion_texto: motivo ? NOTA : 'falta el público', texto_md: BRIEF })
@@ -280,12 +282,14 @@ it('🔴 en el camino real: si la versión tras los cambios sale VALIDADA, abrir
   expect((await briefAbrir(al, wf(), AHORA)).cuerpo).toMatchObject({ ya_hecha: true, version: 2 })
 })
 
-it('🔴 en el camino real: tras «Pedir cambios», si la mesa del brief no entrega (DESCARTADA), abrir otra vez no hereda la nota: brief agotado', async () => {
+it('🔴 en el camino real: tras «Pedir cambios», si la mesa del brief no entrega (DESCARTADA), abrir otra vez no hereda la nota: (grupo D) la versión que Emilio rechazó no vuelve; la mesa espera la vuelta siguiente', async () => {
   const al = await conConceptoListo()
   await conceptoDecidir(al, wf({ decision: 'cambios', apunta_a: 'brief', nota: NOTA }), AHORA)
   expect((await briefAbrir(al, wf(), AHORA)).cuerpo).toMatchObject({ version: 2 })
   await al.actualizarBriefCreativo(CAMP, 2, { estado: 'descartada' })
   const r = await briefAbrir(al, wf(), AHORA)
-  expect(r.status).toBe(409)
-  expect(r.cuerpo).toMatchObject({ error: 'brief_agotado', necesita_humano: true })
+  expect(r.status).toBe(200)
+  expect(r.cuerpo).toMatchObject({ ya_hecha: true, en_reintento: true, mesa: 'brief' })
+  expect(al.briefsCreativos.map((b) => b.estado)).toEqual(['devuelta', 'descartada'])
+  expect(al.campanas[0].estado).not.toBe('necesita_humano')
 })

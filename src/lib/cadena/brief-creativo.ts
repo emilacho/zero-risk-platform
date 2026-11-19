@@ -18,6 +18,14 @@ import { formasDeOtroRegistro, nombreDelRegistro, type RegistroDelCliente } from
 export { CONTRATO_BRIEF_CREATIVO }
 
 export interface ObjetivoPorRed { red: string; objetivo: string; llamado: string }
+/**
+ * 19-nov · grupo D (condición de Lenovo 08:00Z): la marca de los avisos del brief que quedó vigente al tope con bloqueos sin arreglar. Vive aquí (y no en `mesas.ts`)
+ * porque la usan la mesa que lo valida y la hoja que la copia en cada pieza, y la hoja no puede importar la mesa.
+ */
+export const PREFIJO_AVISO_DE_LA_MEJOR_VERSION = 'el brief quedó vigente con lo que la mesa no pudo arreglar: '
+/** el campo de cada pieza de la hoja con esos avisos: llega a la jefatura dentro de «El brief de este entregable» */
+export const CAMPO_AVISOS_DEL_BRIEF_CREATIVO = 'AVISOS DEL BRIEF CREATIVO (el revisor mira justo estos puntos)'
+
 export interface BriefCreativoLeido {
   contrato: typeof CONTRATO_BRIEF_CREATIVO
   de_que_parte_del_plan: string

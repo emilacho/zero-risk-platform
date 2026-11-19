@@ -233,7 +233,7 @@ describe('ENSAYO · tramo 3 · brief → gran idea → tarjeta, y SE DETIENE', (
 })
 
 describe('ENSAYO · un brief que rebasa el tope (cerrado_por_tope) no deja a la campaña en limbo', () => {
-  it('entrega parcial por tope: se devuelve, la puerta reabre UNA vez (v2) y una segunda entrega mala deja la campaña en necesita_humano con aviso', async () => {
+  it('entrega parcial por tope: se devuelve, la puerta reabre UNA vez (v2) y con la segunda mala (grupo D, 19-nov) queda vigente la mejor versión con sus avisos, sin necesita_humano', async () => {
     const m = mundo()
     await puertaRecibe(m)
     const parcial = BRIEF.split('\n').slice(0, 6).join('\n') // el brief se cortó a la mitad
@@ -247,11 +247,13 @@ describe('ENSAYO · un brief que rebasa el tope (cerrado_por_tope) no deja a la 
     // la versión 2 también llega cortada: ya no hay otra reapertura
     const r2 = await recibirBrief(m.al, { campana_id: CAMPANA, version: 2, encargo_id: 'enc-2', texto: parcial, costo_usd: 1.6, motivo: 'cerrado_por_tope' }, AHORA)
     expect(r2).toMatchObject({ ok: true })
-    const c = await puertaRecibe(m, 'tanda_siguiente').catch((e) => ({ error: String(e) }))
-    const estadoCampana = m.al.campanas[0].estado
-    expect(estadoCampana).toBe('necesita_humano')
-    expect(m.al.briefsCreativos).toHaveLength(2) // nunca una tercera versión
-    expect(m.al.conceptos).toHaveLength(0) // y nunca se abrió la gran idea sobre un brief sin validar
+    const c = await puertaRecibe(m, 'tanda_siguiente')
+    expect(c.item).toMatchObject({ resultado: 'cadena_abierta' }) // el flujo no se detiene ni pide a una persona
+    expect(m.al.campanas[0].estado).toBe('calendario')
+    expect(m.al.briefsCreativos).toHaveLength(2) // nunca una tercera mesa
+    expect(m.al.briefsCreativos[1]).toMatchObject({ estado: 'validada', motivo: 'mejor_version_al_tope' })
+    expect(((m.al.briefsCreativos[1].leido as any).avisos as string[]).some((a) => a.startsWith('el brief quedó vigente con lo que la mesa no pudo arreglar: '))).toBe(true)
+    expect(m.al.conceptos).toHaveLength(0) // en esta vuelta la puerta no abre la gran idea: la abre la vuelta siguiente
   })
 })
 
