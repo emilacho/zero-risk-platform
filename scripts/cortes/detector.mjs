@@ -28,10 +28,21 @@ export const EXCLUIDAS = [
 
 export const excluida = (archivo) => EXCLUIDAS.some((e) => e.re.test(archivo))
 
-/** Los archivos que se miran: los guardados en git (lo ignorado no cuenta), con extensión de código y fuera de lo excluido. */
+/** Los flujos de n8n (Lenovo 09:03Z, la (a) acotada): de los `.json` se mira SOLO el código de los nodos en las carpetas `nuevo/`, que es lo que se aplica a n8n.
+ *  Los demás `.json` quedan fuera con esta razón. */
+export const FLUJOS_DE_N8N = {
+  re: /(^|\/)nuevo\/[^/]+\.json$/,
+  razon: 'aplicado/ y respaldos/ son historia, como las migraciones; las fotos de worker-staging copian lo vivo, y lo vivo cambia solo por nuevo/ · firma Lenovo 2026-11-19 · papel raw/tasks/2026-11-19-DISENO-CC5-G9-alarma-contra-recortes-nuevos.md',
+}
+/** Los campos de un nodo que llevan código. */
+const CAMPOS_DE_CODIGO = ['jsCode', 'functionCode']
+
+const esFlujo = (archivo) => FLUJOS_DE_N8N.re.test(archivo)
+
+/** Los archivos que se miran: los guardados en git (lo ignorado no cuenta), con extensión de código o flujos de `nuevo/`, y fuera de lo excluido. */
 export function archivosAMirar(raiz) {
   const salida = execFileSync('git', ['ls-files', '-z'], { cwd: raiz, encoding: 'utf8', maxBuffer: 1 << 28 })
-  return salida.split('\0').filter((a) => a && EXTENSIONES.test(a) && !excluida(a)).sort()
+  return salida.split('\0').filter((a) => a && (EXTENSIONES.test(a) || esFlujo(a)) && !excluida(a)).sort()
 }
 
 export const normalizar = (linea) => linea.replace(/\s+/g, ' ').trim()
@@ -40,7 +51,14 @@ export const normalizar = (linea) => linea.replace(/\s+/g, ' ').trim()
 // corte: la huella es un prefijo fijo de un hash, no texto de nadie · firma CC5 2026-11-19
 export const huella = (linea) => createHash('sha256').update(normalizar(linea)).digest('hex').slice(0, 16)
 
-const esComentario =(l) => /^\s*(\/\/|\/\*|\*)/.test(l)
+/** Una línea es comentario si empieza con `//`, o con `/*` o `*` y no sigue código después del cierre `*\/` (cierra el truco `/**\/ x = a.slice(0, 300)`, punto 3 de CC6). */
+const esComentario = (l) => {
+  const t = l.trim()
+  if (t.startsWith('//')) return true
+  if (!t.startsWith('/*') && !t.startsWith('*')) return false
+  const fin = t.indexOf('*/')
+  return fin === -1 || t.substring(fin + 2).trim() === '' || t.substring(fin + 2).trim().startsWith('//')
+}
 
 /** La marca: en la misma línea o en la de arriba.
  *  `// corte: <razón> · firma <quién> <AAAA-MM-DD>`
@@ -87,8 +105,21 @@ export function cortesDelArchivo(archivo, texto) {
   return out
 }
 
+/** Los cortes de un flujo de n8n: el código de cada nodo, con el nodo en el nombre (`ruta › nodo`). Un `.json` que no se puede leer rompe: no se salta. */
+export function cortesDelFlujo(archivo, texto) {
+  const flujo = JSON.parse(texto)
+  const nodos = Array.isArray(flujo) ? flujo : flujo.nodes
+  if (!Array.isArray(nodos)) throw new Error(`${archivo}: no es un flujo de n8n (no tiene nodes)`)
+  return nodos.flatMap((nodo) =>
+    CAMPOS_DE_CODIGO.filter((c) => typeof nodo?.parameters?.[c] === 'string').flatMap((c) => cortesDelArchivo(`${archivo} › ${nodo.name}`, nodo.parameters[c])),
+  )
+}
+
 export function todosLosCortes(raiz) {
-  return archivosAMirar(raiz).flatMap((a) => cortesDelArchivo(a, readFileSync(path.join(raiz, a), 'utf8')))
+  return archivosAMirar(raiz).flatMap((a) => {
+    const texto = readFileSync(path.join(raiz, a), 'utf8')
+    return esFlujo(a) ? cortesDelFlujo(a, texto) : cortesDelArchivo(a, texto)
+  })
 }
 
 export const CLASES = ['registro', 'fecha-o-id', 'foto-de-n8n', 'por-revisar-en-G8']
@@ -157,7 +188,7 @@ export function revisar({ cortes, lista, listaBase }) {
 
 /** Solo para congelar la lista el 19-nov (no se vuelve a usar para agregar): pone a cada corte existente su clase. */
 export function claseParaCongelar(c) {
-  if (c.archivo.startsWith('scripts/worker-staging/')) return 'foto-de-n8n'
+  if (c.archivo.startsWith('scripts/worker-staging/') || c.archivo.includes(' › ')) return 'foto-de-n8n'
   const l = c.linea
   // si la línea nombra algo que lee un agente o un documento, va a G8 aunque también tenga un error o una fecha
   const tocaLoQueSeLee = /contenido|content|texto|prompt|mensajes?\b|brief|manual|\bplan\b|resumen|documento|pedido|tarea|instruc/i.test(l)

@@ -138,6 +138,46 @@ describe("G9 · el detector (casos chicos)", () => {
     for (const c of [sinRazon, sinFirma, sinFecha]) expect(D.revisar({ cortes: c, lista: vacia, listaBase: null }).marcasMalas).toHaveLength(1)
   })
 
+  // 19-nov · Lenovo 09:03Z (la (a) acotada + punto 3 de CC6): los flujos de nuevo/ y el truco del /**/
+  it("lee el código de cada nodo en un flujo de nuevo/, con el nodo en el nombre, y respeta su marca", () => {
+    const flujo = JSON.stringify({
+      nodes: [
+        { name: "Armar pedido", parameters: { jsCode: "const a = $json.texto\nreturn [{ json: { t: a.slice(0, 300) } }]" } },
+        { name: "Viejo", parameters: { functionCode: "x = y.substring(0, 5) // corte: el código postal tiene 5 dígitos · firma CC5 2026-11-19" } },
+        { name: "Sin código", parameters: { url: "https://x" } },
+      ],
+    })
+    const c = D.cortesDelFlujo("scripts/ops/x/nuevo/F1.json", flujo) as Corte[]
+    expect(c.map((x) => [x.archivo, x.n, !!x.marca])).toEqual([
+      ["scripts/ops/x/nuevo/F1.json › Armar pedido", 2, false],
+      ["scripts/ops/x/nuevo/F1.json › Viejo", 1, true],
+    ])
+  })
+
+  it("un .json que no es un flujo rompe (no se salta en silencio)", () => {
+    expect(() => D.cortesDelFlujo("scripts/ops/x/nuevo/raro.json", '{"hola": 1}')).toThrow(/no es un flujo de n8n/)
+  })
+
+  it("de los .json solo mira los de nuevo/; aplicado/, respaldos/ y las fotos quedan fuera con la firma de Lenovo", () => {
+    for (const a of ["scripts/ops/oficina-marketing/nuevo/F.json", "scripts/worker-staging/g1b-techos/nuevo/F.json"]) expect(D.FLUJOS_DE_N8N.re.test(a), a).toBe(true)
+    for (const a of ["scripts/ops/oficina-marketing/aplicado/F.json", "scripts/ops/oficina-marketing/respaldos/F.json", "scripts/worker-staging/X9F0zp6LQ2xGEYVS/F.json", "scripts/ops/nuevo-flujo.json"])
+      expect(D.FLUJOS_DE_N8N.re.test(a), a).toBe(false)
+    expect(D.FLUJOS_DE_N8N.razon).toMatch(/firma Lenovo 2026-11-19 · papel raw\/\S+\.md$/)
+  })
+
+  it("los flujos de nuevo/ guardados en git sí se miran", () => {
+    const mirados: string[] = D.archivosAMirar(RAIZ)
+    expect(mirados.filter((a) => a.endsWith(".json")).length).toBeGreaterThan(0)
+    expect(mirados.filter((a) => a.endsWith(".json")).every((a) => D.FLUJOS_DE_N8N.re.test(a))).toBe(true)
+  })
+
+  it("punto 3 · un comentario cerrado no esconde el código que sigue: «/**/ x = a.slice(0, 300)» cuenta", () => {
+    expect(de("/**/ x = a.slice(0, 300)")).toHaveLength(1)
+    expect(de(" * x */ y = a.slice(0, 300)")).toHaveLength(1)
+    expect(de("/* a.slice(0, 3) */")).toEqual([])
+    expect(de("/* a.slice(0, 3) */ // nada")).toEqual([])
+  })
+
   // 19-nov · 🟡 de CC6 (k1, k2, k3, k4, k9): la forma exacta de la marca, fijada caso por caso
   it("k1 · la marca de arriba vale solo si esa línea es un comentario: un corte marcado al final de una línea no tapa el de la siguiente", () => {
     const c = de("x = a.slice(0, 3) // corte: el código postal tiene 3 dígitos · firma CC5 2026-11-19\ny = b.slice(0, 300)")
