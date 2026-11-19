@@ -109,6 +109,8 @@ describe('la mesa del brief', () => {
     // 19-nov · G4 (CC5): el plan viaja ENTERO en su campo propio; el marco marca su lugar y no lo repite
     expect(sobre.plan_texto).toBe(A.planTexto)
     expect(sobre.marco_texto).toContain(PLAN_EN_SU_LUGAR)
+    // 19-nov · h1 de CC6: el aviso del marco tiene que NOMBRAR dónde está el plan (texto escrito aquí, no la constante: un aviso vacío también «está contenido»)
+    expect(sobre.marco_texto).toContain('# PLAN\n(el plan de la campaña va ENTERO más abajo, en «## 3 · El plan de trabajo»')
     expect(sobre.marco_texto).not.toContain(A.planTexto)
     expect(sobre.marco_texto).toContain('- barato')
     expect(sobre.marco_texto).not.toContain('DEVOLUCIÓN')

@@ -282,6 +282,11 @@ describe('la mesa del BRIEF de punta a punta', () => {
     const { turnos } = await jugar(m)
     expect(turnos[0].task).toContain('Plan de 90 días: serie de posts de producto antes de la pauta.')
   })
+  it('🔴 G4 · h2 de CC6 · un plan en blanco del sobre NO pisa el de las fuentes', async () => {
+    const m = await montar('brief', { extra: { plan_texto: '   ' } })
+    const { turnos } = await jugar(m)
+    expect(turnos[0].task).toContain('Plan de 90 días: serie de posts de producto antes de la pauta.')
+  })
   it('🔴 G4 · la puerta de la oficina guarda el plan del sobre y rechaza un plan que no es texto', () => {
     const valido = { ...sobre('brief'), client_id: '11111111-1111-4111-8111-111111111111' } // la puerta exige uuid; CLIENTE de la memoria no lo es
     expect(validarSobreDeLaCadena(valido).ok).toBe(true)
@@ -290,6 +295,12 @@ describe('la mesa del BRIEF de punta a punta', () => {
     expect(validarSobreDeLaCadena({ ...valido, plan_texto: 42 })).toMatchObject({ ok: false })
     const sin = validarSobreDeLaCadena(valido)
     expect(sin.ok && 'plan_texto' in sin.sobre).toBe(false)
+    // h3 de CC6: un plan_texto null (sin plan) se acepta y no se guarda; uno en blanco tampoco se guarda
+    const nulo = validarSobreDeLaCadena({ ...valido, plan_texto: null })
+    expect(nulo.ok).toBe(true)
+    expect(nulo.ok && 'plan_texto' in nulo.sobre).toBe(false)
+    const blanco = validarSobreDeLaCadena({ ...valido, plan_texto: '  ' })
+    expect(blanco.ok && 'plan_texto' in blanco.sobre).toBe(false)
   })
 
   it('el manual y el plan llegan COMPLETOS al brief (dieta de la cadena) y la dieta de las piezas sigue siendo la de hoy', () => {

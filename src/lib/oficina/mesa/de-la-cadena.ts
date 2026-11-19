@@ -98,7 +98,8 @@ export async function abrirMesaDeLaCadena(P: Puertos, s: SobreDeLaCadena, avanza
   if (!P.mesa) return r(409, { error: 'mesa_sin_puerto', detalle: 'la mesa no tiene su puerto (libro y directorio) configurado' })
   const fu = await P.fuentes(s.client_id)
   if ('error' in fu) return r(409, { error: 'sin_fuentes', detalle: fu.error })
-  const marco: MarcoDeLaCadena = { tipo_de_mesa: s.tipo_de_mesa, campana_id: s.campana_id, version: s.version, cliente_nombre: fu.cliente_nombre, manual_texto: fu.manual_texto, plan_texto: s.plan_texto ?? fu.plan_texto, marco_texto: s.marco_texto, condiciones: s.condiciones, fotos: fu.fotos, ...(s.insumos_del_banco ? { insumos_del_banco: s.insumos_del_banco } : {}) }
+  // 19-nov · h2 de CC6: un plan en blanco del sobre no pisa el de las fuentes
+  const marco: MarcoDeLaCadena = { tipo_de_mesa: s.tipo_de_mesa, campana_id: s.campana_id, version: s.version, cliente_nombre: fu.cliente_nombre, manual_texto: fu.manual_texto, plan_texto: s.plan_texto?.trim() ? s.plan_texto : fu.plan_texto, marco_texto: s.marco_texto, condiciones: s.condiciones, fotos: fu.fotos, ...(s.insumos_del_banco ? { insumos_del_banco: s.insumos_del_banco } : {}) }
   const e0: Estado = estadoInicial()
   const estado: Estado = { ...e0, artefactos: { ...e0.artefactos, [ARTEFACTO_MARCO]: { version: 1, version_consumida: 0, datos: marco as unknown as Record<string, unknown> } } }
   const topeDeLaPlantilla = pl.plantilla.limites.tope_encargo_usd ?? TOPE_POR_OMISION_USD[s.tipo_de_mesa]
