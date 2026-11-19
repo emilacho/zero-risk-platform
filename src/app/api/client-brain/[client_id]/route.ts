@@ -79,7 +79,9 @@ export async function GET(
       const { data, error } =
         section === 'client_brand_books'
           ? await base.order('version', { ascending: false }).limit(1)
-          : await base.limit(20)
+          : section === 'client_icp_documents'
+            ? await base.is('fusionado_en', null).limit(20) // 19-nov · juntar públicos: solo los VIGENTES
+            : await base.limit(20)
 
       if (error) {
         result[section] = { error: error.message }
