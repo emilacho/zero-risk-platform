@@ -89,6 +89,66 @@ describe('G7 · el texto del sitio y el perfil llegan enteros hasta el techo del
   })
 })
 
+// 19-nov · 🟡 de CC6 (05:31Z): el sitio y el perfil van en UNA tarea al descubridor. Se corre el nodo del sitio, el del perfil y la expresión REAL de la tarea del nodo
+// «Call Onboarding Specialist: Auto-Discovery Dispatch»; la tarea entera tiene que caber en TOPE_REAL_DEL_PEDIDO y, si el perfil no cabe, llevar el aviso con los dos números.
+describe('G7 · el sitio y el perfil comparten la tarea del descubridor: entra en el techo y avisa', () => {
+  const NUEVO = leer('nuevo')
+  const DISPATCH = 'Call Onboarding Specialist: Auto-Discovery Dispatch (fire+forget)'
+  const largo = (marca: string, n: number) => `${marca}-INICIO ${'x'.repeat(n)} ${marca}-FINAL`
+  const TRATO = { client_id: 'c-1', client_name: 'Cliente de prueba', industry: 'servicios', location: 'Quito · Ecuador', website: 'https://ejemplo.ec', _entrada: { cuentas: { instagram: 'cliente.prueba' } } }
+  /** la tarea tal como la arma n8n: se evalúa la expresión `"task": {{ … }}` del cuerpo del nodo con un `$` falso */
+  const tareaDelDescubridor = (nodos: Record<string, unknown>) => {
+    const cuerpo = String(NUEVO.nodes.find((n) => n.name === DISPATCH)!.parameters!.jsonBody)
+    const i = cuerpo.indexOf('"task": {{') + '"task": {{'.length
+    const j = cuerpo.indexOf('}},\n  "workflow_id"', i)
+    expect(i).toBeGreaterThan(20)
+    expect(j).toBeGreaterThan(i)
+    const $ = (n: string) => ({ first: () => ({ json: nodos[n] }), item: { json: nodos[n] } })
+    return JSON.parse(new Function('$', '$workflow', '$execution', `return (${cuerpo.slice(i, j)})`)($, { id: ID }, { id: 'e1' })) as string
+  }
+  const correr = (sitio: string, perfil: string, trato: Record<string, unknown> = TRATO) => {
+    const nodos: Record<string, unknown> = { 'Validate Deal Data': trato }
+    nodos['El texto del sitio, o el hueco'] = correrNodo(NUEVO, 'El texto del sitio, o el hueco', nodos, { ok: true, datos: sitio })[0].json
+    nodos['El perfil de la red, o el hueco'] = correrNodo(NUEVO, 'El perfil de la red, o el hueco', nodos, { ok: true, datos: perfil })[0].json
+    return { nodos, tarea: tareaDelDescubridor(nodos) }
+  }
+  it('🔴 un sitio de 1,4 M y un perfil de 200 000 (juntos no caben): la tarea queda dentro del techo, el sitio llega entero y el perfil lleva el aviso con los dos números', () => {
+    const { nodos, tarea } = correr(largo('S', 1_400_000), largo('P', 200_000))
+    expect((nodos['El texto del sitio, o el hueco'] as Record<string, unknown>).sitio_estado).toBe('trajo')
+    expect((nodos['El perfil de la red, o el hueco'] as Record<string, unknown>).perfil_estado).toBe('trajo')
+    expect(tarea.length).toBeLessThanOrEqual(TOPE_REAL_DEL_PEDIDO)
+    expect(tarea).toContain('S-FINAL')
+    expect(tarea).toContain('P-INICIO')
+    expect(tarea).not.toContain('P-FINAL')
+    expect(tarea).toMatch(/\[…recortado: llegan \d+ de 200017 caracteres del perfil; la tarea al descubridor tiene un techo y el texto del sitio va primero\]/)
+  })
+  it('🔴 un sitio que llena su techo: el perfil recibe solo lo que queda (pocos miles), AVISADO con los dos números, y la tarea sigue dentro del techo', () => {
+    const { tarea } = correr(largo('S', TECHO), largo('P', 50_000))
+    expect(tarea.length).toBeLessThanOrEqual(TOPE_REAL_DEL_PEDIDO)
+    const m = /\[…recortado: llegan (\d+) de 50017 caracteres del perfil;/.exec(tarea)
+    expect(m, 'aviso del perfil').not.toBeNull()
+    expect(Number(m![1])).toBeLessThan(10_000)
+    expect(tarea).not.toContain('P-FINAL')
+  })
+  it('🔴 los datos del trato también ocupan la tarea: con un rubro de 40 000 caracteres, el perfil recibe menos y la tarea sigue dentro del techo', () => {
+    const { tarea } = correr(largo('S', 1_400_000), largo('P', 200_000), { ...TRATO, industry: 'r'.repeat(40_000) })
+    expect(tarea).toContain('r'.repeat(40_000))
+    expect(tarea.length).toBeLessThanOrEqual(TOPE_REAL_DEL_PEDIDO)
+    expect(tarea).toMatch(/\[…recortado: llegan \d+ de 200017 caracteres del perfil;/)
+  })
+  it('lo que cabe llega entero, sin aviso (un sitio de 300 000 y un perfil de 50 000)', () => {
+    const { tarea } = correr(largo('S', 300_000), largo('P', 50_000))
+    for (const m of ['S-INICIO', 'S-FINAL', 'P-INICIO', 'P-FINAL']) expect(tarea).toContain(m)
+    expect(tarea).not.toContain('recortado')
+  })
+  it('🔴 el vivo daba un perfil de 8 000 (la prueba distingue el vivo)', () => {
+    const vivo = leer('vivo')
+    const nodos: Record<string, unknown> = { 'Validate Deal Data': TRATO }
+    const p = correrNodo(vivo, 'El perfil de la red, o el hueco', nodos, { ok: true, datos: largo('P', 50_000) })[0].json
+    expect(String(p.perfil_texto)).not.toContain('P-FINAL')
+  })
+})
+
 describe('G7 · la materia de la jefatura', () => {
   const nodo = '[JEFATURA] Transform discovery→package'
   it('🔴 el sitio y el Instagram propio usan el techo del pedido (antes 200.000 y 100.000), con el aviso si se pasa', () => {
@@ -107,7 +167,7 @@ describe('G7 · los recortes de datos y diagnósticos que quedan fuera', () => {
       '[APIFY-WIRE] Discovery Parser · dynamic targets (lazo)': ['.slice(0, 8)'], // 8 competidores a raspar: gasto, pregunta a Lenovo
       '[JEFATURA] Transform discovery→package': ['.slice(0, 10)', `.slice(0, ${TECHO})`, `.slice(0, ${TECHO})`, `.slice(0, ${TECHO})`], // fecha AAAA-MM-DD · el techo del pedido, con aviso
       'El texto del sitio, o el hueco': ['.slice(0, 3)', '.slice(0, TOPE)'], // señales del bloque compartido · el techo, con aviso
-      'El perfil de la red, o el hueco': ['.slice(0, 3)', '.slice(0, TOPE)'],
+      'El perfil de la red, o el hueco': ['.slice(0, 3)', '.slice(0, ESPACIO)'],
       'Veredicto perdido · parar ruidoso': ['.slice(0, 8)'], // el id corto del cliente en el mensaje
       'Re-gate perdido · parar ruidoso': ['.slice(0, 8)'],
       '[FUENTES] Armar las llamadas': ['.slice(0, 80)'], // la etiqueta target_label (un identificador)

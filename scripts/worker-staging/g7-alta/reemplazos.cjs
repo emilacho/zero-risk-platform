@@ -20,6 +20,9 @@ const ID = 'LyVoKcrypS5uLyuu'
 const FIRMA = '19-nov · G7 · firma de Emilio «nada se recorta» (18-nov)'
 /** el techo real: el pedido entero (`TOPE_REAL_DEL_PEDIDO` = 1.500.000) con el mismo margen de 10.000 que G1b */
 const TECHO = 1490000
+/** el techo de la tarea entera (`TOPE_REAL_DEL_PEDIDO`) y lo que ocupa el texto fijo de la tarea del descubridor (medido ~5 500, con margen) */
+const TOPE_DEL_PEDIDO = 1500000
+const PARTE_FIJA_DEL_DESCUBRIDOR = 8000
 
 // [nodo (o '*' = cualquier nodo de código), texto exacto del vivo, reemplazo, apariciones esperadas en total]
 const REEMPLAZOS = [
@@ -47,6 +50,15 @@ const PAIS_DE_LOS_ANUNCIOS = paisDeLosAnuncios(dealData);
   ['El texto del sitio, o el hueco', 'const TOPE = 60000; // el endpoint del empleado corta en 120.000 · esto deja sitio de sobra',
     `const TOPE = ${TECHO}; // ${FIRMA}: antes 60.000 («el endpoint corta en 120.000» ya no es así). Ahora el techo real del pedido (TOPE_REAL_DEL_PEDIDO menos 10.000), con el aviso de siempre si se pasa`, 1],
   ['El perfil de la red, o el hueco', 'const TOPE = 8000;', `const TOPE = ${TECHO}; // ${FIRMA}: antes 8.000. El techo real del pedido, con el aviso de siempre si se pasa`, 1],
+  // 2b · 🟡 de CC6 (05:31Z): el sitio y el perfil van en UNA tarea al descubridor, y el corredor rechaza la tarea entera si pasa TOPE_REAL_DEL_PEDIDO (400, sin aviso).
+  //      El sitio va primero y entero; el perfil usa lo que QUEDA del pedido (descontando la parte fija y los datos del trato), con el aviso de recorte y los dos números.
+  ['El perfil de la red, o el hueco',
+    "      texto = datos.length > TOPE ? datos.slice(0, TOPE) + String.fromCharCode(10) + String.fromCharCode(10) + '[…recortado en ' + TOPE + ' caracteres]' : datos;",
+    `      // ${FIRMA} · 🟡 de CC6 #1206: el sitio y el perfil comparten UNA tarea al descubridor (techo ${TOPE_DEL_PEDIDO}); el sitio va entero y el perfil usa lo que queda
+      const _sitio = $('El texto del sitio, o el hueco').first().json || {};
+      const _ocupaSitio = _sitio.sitio_estado === 'trajo' ? String(_sitio.sitio_texto || '').length : String(_sitio.sitio_motivo || '').length;
+      const ESPACIO = Math.max(0, Math.min(TOPE, ${TOPE_DEL_PEDIDO} - ${PARTE_FIJA_DEL_DESCUBRIDOR} - JSON.stringify(_val).length - _ocupaSitio));
+      texto = datos.length > ESPACIO ? datos.slice(0, ESPACIO) + String.fromCharCode(10) + String.fromCharCode(10) + '[…recortado: llegan ' + ESPACIO + ' de ' + datos.length + ' caracteres del perfil; la tarea al descubridor tiene un techo y el texto del sitio va primero]' : datos;`, 1],
 
   // 3 · la materia que lleva la jefatura: hasta el techo del pedido (antes 200.000 el sitio y 100.000 el Instagram), con el aviso de siempre
   ['[JEFATURA] Transform discovery→package', "m.sitio_texto = _t.length > 200000 ? _t.slice(0, 200000) + '\\n[recortado por la cabeza: se leyeron 200000 de '",
@@ -104,4 +116,4 @@ if (require.main === module) {
   fs.writeFileSync(path.join(DIR, 'nuevo', ID + '.json'), JSON.stringify(w, null, 2))
   console.log(informe.join('\n'))
 }
-module.exports = { REEMPLAZOS, construir, ID, TECHO }
+module.exports = { REEMPLAZOS, construir, ID, TECHO, TOPE_DEL_PEDIDO, PARTE_FIJA_DEL_DESCUBRIDOR }
