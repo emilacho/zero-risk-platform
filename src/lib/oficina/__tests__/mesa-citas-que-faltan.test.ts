@@ -116,4 +116,25 @@ describe('punta a punta en la mesa (ensayo)', () => {
     expect(estadoDeLaMesa(M.encargos.get(id)!.estado_del_motor)!.pieza_texto).toBe(integras[1].texto)
   })
 
+  // 19-nov · k7 de CC6: la mesa le pasa al pegado las citas a aportes que NO existen (no solo `pegarCitas` suelta)
+  it('una cita a un aporte que no existe se quita de la pieza al pegar (la mesa le pasa las inexistentes)', async () => {
+    const { M, MS, a, id } = await montar()
+    const original = pieza(LAMINAS_OK, '## Citas\nA2 usé: los titulares\nA99 usé: un aporte que no existe en el tablero')
+    let tareaDev = ''
+    await jugar(M, id, a, (t) => {
+      if (t.tipo === 'integrar') return { texto: original }
+      if (t.tipo === 'devolver_citas') {
+        tareaDev = t.task
+        return { texto: MS.filas.filter((f) => f.tipo === 'aporta' && f.n !== 2).map((f) => `A${f.n} usé: lo que propuso ${f.de} para el carrusel`).join('\n') }
+      }
+      return undefined
+    })
+    expect(tareaDev).toContain('A99')
+    const integras = MS.filas.filter((f) => f.tipo === 'integra')
+    expect(integras).toHaveLength(2)
+    expect(integras[0].texto).toContain('A99 usé')
+    expect(integras[1].texto).not.toContain('A99')
+    expect(integras[1].texto).toContain('A2 usé: los titulares')
+    expect(estadoDeLaMesa(M.encargos.get(id)!.estado_del_motor)!.pieza_texto).not.toContain('A99')
+  })
 })
