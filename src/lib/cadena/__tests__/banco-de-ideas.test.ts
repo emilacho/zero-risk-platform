@@ -12,7 +12,7 @@ import type { Fila } from '../tipos'
 import { ACCIONES } from '../acciones'
 import { ideaDelBanco, ideasDelTexto, resumenDeLaVersionAnterior, resumenDelBanco, type ConceptoLeido, type IdeaDelBanco } from '../conceptos'
 import { conceptoParaElCalendario } from '../mesas'
-import { avisoDeLaVueltaPorElTablero, bancoEditar, bancoRetirar, ideaDeReemplazo, lineaDeIdea, lineaSeLeeIgual, LARGO_MAXIMO_DE_CAMPO, PREFIJO_AVISO_DE_REASIGNACION, textoConIdea } from '../banco-de-ideas'
+import { avisoDeLaVueltaPorElTablero, bancoEditar, bancoRetirar, ideaDeReemplazo, lineaDeIdea, lineaSeLeeIgual, LARGO_MAXIMO_DE_CAMPO, PREFIJO_AVISO_DE_REASIGNACION, retirarDelBanco, textoConIdea } from '../banco-de-ideas'
 
 const A = clienteA()
 const CAMP = '28de888e-b3f2-4aca-86b3-2c7f7bf6685a'
@@ -400,6 +400,22 @@ describe('19-nov · firma de Emilio: al retirar, las filas CON BRIEF (sin aproba
     filaDe(al, F).avisos = [`${PREFIJO_AVISO_DE_REASIGNACION}la idea «C1-I16» se retiró del banco; la fila realiza ahora «C1-I01» (mismo capítulo)`]
     const r = await bancoRetirar(al, tablero({ idea_id: 'C1-I16' }), AHORA)
     expect(r.cuerpo).toMatchObject({ ok: true, con_brief_sin_tocar: [F], con_brief_reasignadas: [F] })
+  })
+  it('🔴 i2 de CC7 · el rescate por aviso nombra la idea ENTERA: el aviso de «C1-I070» no rescata nada al retirar «C1-I07»', async () => {
+    const al = almacen()
+    filaDe(al, F).avisos = [`${PREFIJO_AVISO_DE_REASIGNACION}la idea «C1-I070» se retiró del banco; la fila realiza ahora «C1-I16» (mismo capítulo)`]
+    const r = await bancoRetirar(al, tablero({ idea_id: 'C1-I07' }), AHORA)
+    expect(r.cuerpo).toMatchObject({ ok: true, con_brief_sin_tocar: [], con_brief_reasignadas: [] })
+    expect(filaDe(al, F)).toMatchObject({ estado: 'briefeada', idea_ref: 'C1-I16' })
+  })
+  it('🔴 i7 de CC7 · al repetir un retiro cortado por la corrección, la fila ya reasignada entra en «con_brief_reasignadas» y en la historia', async () => {
+    const al = almacen()
+    // el corte: la fila con brief ya recibió «C1-I01» y su aviso; el concepto no se escribió (la idea sigue en el banco)
+    Object.assign(filaDe(al, F), { idea_ref: 'C1-I01', avisos: [`${PREFIJO_AVISO_DE_REASIGNACION}la idea «C1-I16» se retiró del banco; la fila realiza ahora «C1-I01» (mismo capítulo)`] })
+    const r = await retirarDelBanco(al, { campana_id: CAMP, version: 4, autor: 'jefatura' }, 'C1-I16', AHORA)
+    expect(r.cuerpo).toMatchObject({ ok: true, con_brief_sin_tocar: [F], con_brief_reasignadas: [F] })
+    expect(historialDe(al).at(-1)).toMatchObject({ accion: 'retirar', idea_id: 'C1-I16', con_brief_sin_tocar: [F], con_brief_reasignadas: [F] })
+    expect(filaDe(al, F)).toMatchObject({ estado: 'briefeada', idea_ref: 'C1-I01' })
   })
   it('🟢 las filas sin brief siguen como antes (validada pasa a otra idea sin cambiar de estado)', async () => {
     const al = almacen()
