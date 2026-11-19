@@ -197,11 +197,11 @@ describe('🟡 CC6 · los 4 caminos sin prueba', () => {
     const fusion = { mismo_que: P1, porque: 'mismo público' }
     const r = validateDiscoveryShape({ client_id: CLIENTE, own_handles: {}, competitors: [], icp: [{ audience_segment: 'A', fusion }, { audience_segment: 'B' }] }, CLIENTE)
     expect(r.kind).toBe('ok')
-    const icp = (r as { value: { icp: Array<Record<string, unknown>> } }).value.icp
+    const icp = (r as unknown as { value: { icp: Array<Record<string, unknown>> } }).value.icp
     expect(icp[0].fusion).toEqual(fusion)
     expect(icp[1]).not.toHaveProperty('fusion')
     const uno = validateDiscoveryShape({ client_id: CLIENTE, own_handles: {}, competitors: [], icp: { audience_segment: 'C', fusion: { nuevo: true } } }, CLIENTE)
-    expect((uno as { value: { icp: Record<string, unknown> } }).value.icp.fusion).toEqual({ nuevo: true })
+    expect((uno as unknown as { value: { icp: Record<string, unknown> } }).value.icp.fusion).toEqual({ nuevo: true })
   })
 
   it('m17 · un público que no se guarda deja `icp_<nombre>: …` en errors y no se indexa', async () => {
