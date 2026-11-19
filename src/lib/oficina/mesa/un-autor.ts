@@ -109,6 +109,21 @@ export function tareaDelAutor(o: { tipo: 'dirigir' | 'aportar' | 'integrar'; age
   if (integras === 0) {
     return ['## Tu turno · AUTOR: escribe ' + lasN, `Desarrolla los conceptos que elegiste (míralos en el tablero) en ${lasN} completa${n > 1 ? 's' : ''}. ${SIN_PEDIDOS}`, 'Todavía nadie revisó: en «Citas» no hay nada que citar; puedes dejar la sección vacía.', GANCHO_DEL_AUTOR, o.convencion].join('\n')
   }
+  // la vuelta (CC6 🟡 punto 2): el autor ya contestó lo que se le devolvió después de su última integración → integra ESA respuesta; no es la corrección de los revisores
+  const ultima = [...libro].reverse().find((a) => a.tipo === 'integra')!
+  const respuestas = libro.filter((a) => a.tipo === 'responde' && a.de === agente && a.n > ultima.n)
+  if (respuestas.length) {
+    const porId = new Map(libro.map((a) => [a.id, a] as const))
+    const devueltos = respuestas.map((r) => (r.responde_a ? porId.get(r.responde_a) : undefined)).filter((d): d is Aporte => !!d)
+    return [
+      `## Tu turno · AUTOR: integra lo que contestaste a la devolución`,
+      `Te devolvieron ${lasN} (${devueltos.length ? devueltos.map((d) => `A${d.n}`).join(', ') : 'mira el tablero'}) y ya contestaste (${respuestas.map((r) => `A${r.n}`).join(', ')}). Reescribe ${lasN} COMPLETA${n > 1 ? 'S' : ''} con lo que contestaste; lo que nadie pidió cambiar se queda como estaba.`,
+      'En «Citas» deja la cita de cada revisión (A<n> usé/descarté, como en tu integración anterior) y agrega la de la devolución: `A<n> usé: <qué cambiaste por ella>`.',
+      '',
+      GANCHO_DEL_AUTOR,
+      o.convencion,
+    ].join('\n')
+  }
   const { sin_plano } = objecionesSinPlano(libro)
   return [
     `## Tu turno · AUTOR: corrige ${lasN} (una sola vuelta)`,

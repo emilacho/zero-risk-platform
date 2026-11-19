@@ -121,6 +121,14 @@ describe('los turnos del autor y los revisores', () => {
     expect(siguienteDeLaMesa(deUnAutor(), libro, ctx)).toMatchObject({ accion: 'turno', agente: AUTOR, tipo: 'responder', responde_a: vuelta.id })
     libro.push(ap(AUTOR, 'responde', 'cambio el plano 1 de la propuesta 2', { responde_a: vuelta.id }))
     expect(siguienteDeLaMesa(deUnAutor(), libro, ctx)).toMatchObject({ accion: 'turno', agente: AUTOR, tipo: 'integrar', motivo: 'hay aportes nuevos' })
+    // (CC6 c5) integrada la respuesta, esa respuesta ya no es nueva: lo siguiente NO es otro integrar (sin lazo hasta el tope)
+    libro.push(ap(AUTOR, 'integra', `${PROPUESTAS}\n${citas.join('\n')}\nA${vuelta.n} usé: cambié el plano 1 de la propuesta 2`))
+    expect(siguienteDeLaMesa(deUnAutor(), libro, ctx)).toEqual({ accion: 'traducir' })
+  })
+  it('(CC6 c9) «sin objeciones» a mitad del texto no apaga las objeciones de arriba', () => {
+    const libro = [...hastaLasPropuestas(), ...revisiones((r) => (r === 'video-editor' ? 'Propuesta 1 · Plano 2 · el plano dura poco · por qué: no entra la acción\n(por lo demás, sin objeciones)' : 'Sin objeciones: bien.'))]
+    expect(siguienteDeLaMesa(deUnAutor(), libro, ctx)).toMatchObject({ accion: 'turno', agente: AUTOR, tipo: 'integrar', motivo: 'el autor corrige una vuelta con las objeciones' })
+    expect(objecionesSinPlano(libro).total).toBe(1)
   })
   it('los topes son los de la mesa: sin dinero para otro turno, el autor cierra con lo que hay', () => {
     n = 0
@@ -188,6 +196,27 @@ describe('las tareas', () => {
   it('apagada: las tareas de siempre', () => {
     expect(tarea(est(), 'dirigir')).not.toContain('unos 20 conceptos')
     expect(tarea(est(), 'aportar', [], 'video-editor')).toContain('Tu aporte es obligatorio')
+  })
+  it('(CC6 c7) por armarTarea, con el modo: integrar escribe, luego corrige y, tras la vuelta, integra la respuesta; apagada, ninguna', () => {
+    const conObjecion = [...hastaLasPropuestas(), ap('video-editor', 'aporta', 'Propuesta 1 · Plano 2 · corto · por qué: x')]
+    const escribe = tarea(deUnAutor(), 'integrar', hastaLasPropuestas().slice(0, 1))
+    const corrige = tarea(deUnAutor(), 'integrar', conObjecion)
+    expect(escribe).toContain('AUTOR: escribe las 3 propuestas')
+    expect(corrige).toContain('AUTOR: corrige las 3 propuestas (una sola vuelta)')
+    for (const t of [escribe, corrige]) expect(t).toContain('# Propuesta 1')
+    // (CC6 punto 2) la vuelta: integra lo que contestó, sin «única vuelta de corrección»
+    const devuelto = ap('oficina-creativa', 'devuelve', 'la jefatura devolvió la propuesta 2', { para: AUTOR })
+    const conVuelta = [...conObjecion, ap(AUTOR, 'integra', PROPUESTAS), devuelto, ap(AUTOR, 'responde', 'cambio el plano 1', { responde_a: devuelto.id })]
+    const vuelta = tarea(deUnAutor(), 'integrar', conVuelta)
+    expect(vuelta).toContain('AUTOR: integra lo que contestaste a la devolución')
+    expect(vuelta).toContain(`Te devolvieron las 3 propuestas (A${devuelto.n}) y ya contestaste (A${conVuelta[conVuelta.length - 1].n})`)
+    expect(vuelta).not.toContain('única vuelta de corrección')
+    for (const l of [hastaLasPropuestas().slice(0, 1), conObjecion, conVuelta]) {
+      const apagada = tarea(est(), 'integrar', l)
+      expect(apagada).not.toContain('AUTOR: escribe')
+      expect(apagada).not.toContain('AUTOR: corrige')
+      expect(apagada).not.toContain('AUTOR: integra lo que contestaste')
+    }
   })
   it('las propuestas y la corrección llevan la convención del guion; la corrección lista las objeciones sin plano', () => {
     expect(tarea(deUnAutor(), 'integrar', hastaLasPropuestas().slice(0, 1))).toContain('# Propuesta 1')
