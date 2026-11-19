@@ -166,12 +166,12 @@ export interface EstadoMesa {
   imagen?: { propuestas: number }
   /** 17-nov · GO Lenovo (encendido de imagen) · lo que costaron los turnos de agente de esta mesa, en todas sus pasadas (la cota de la mesa se mide contra esto) */
   gasto_de_los_turnos_usd?: number
-  turno_abierto: { n: number; agente: string; tipo: 'dirigir' | 'aportar' | 'responder' | 'integrar' | 'devolver_citas' | 'redactar_prompts' | 'criticar' | 'traducir'; responde_a: string | null; /** lo que el cerebro entregó a este agente al abrirse el turno (se consulta UNA vez: la reentrega del turno muestra lo mismo) */ notas_del_dueno?: LecturaDeNotas } | null
+  turno_abierto: { n: number; agente: string; tipo: 'dirigir' | 'aportar' | 'responder' | 'integrar' | 'devolver_citas' | 'rellenar_banco' | 'redactar_prompts' | 'criticar' | 'traducir'; responde_a: string | null; /** lo que el cerebro entregó a este agente al abrirse el turno (se consulta UNA vez: la reentrega del turno muestra lo mismo) */ notas_del_dueno?: LecturaDeNotas } | null
 }
 
 /** lo que decide el planificador */
 export type Accion =
-  | { accion: 'turno'; agente: string; tipo: 'dirigir' | 'aportar' | 'responder' | 'integrar' | 'devolver_citas' | 'redactar_prompts' | 'criticar'; responde_a: string | null; motivo: string }
+  | { accion: 'turno'; agente: string; tipo: 'dirigir' | 'aportar' | 'responder' | 'integrar' | 'devolver_citas' | 'rellenar_banco' | 'redactar_prompts' | 'criticar'; responde_a: string | null; motivo: string }
   | { accion: 'material'; pedido_id: string; que: string; para_que: string; de: string }
   | { accion: 'traducir' }
   | { accion: 'cierre_por_tope'; razon: 'techo_de_gasto' }
