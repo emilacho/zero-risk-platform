@@ -76,7 +76,7 @@ describe('la pieza manda su HOJA completa, sin casillas (hoja REAL de Olón, 571
   it('la hoja va entera (brief + plan) y el pedido no trae sede, oferta, tema, canal ni para_que', () => {
     const pieza = piezaParaElCerebro({ encargo_id: HOJA.encargo_id, fila: HOJA.fila, brief_texto: HOJA.brief.texto, plan_texto: 'El plan de la campaña: semana 4.' })
     const p = pedidoDelIndice({ client_id: HOJA.client_id, agente: 'oficina-creativa', pieza })
-    expect(p).toEqual({ cliente: HOJA.client_id, agente: 'oficina-creativa', pieza: { encargo_id: HOJA.encargo_id, fila: { id: 's4-d5-vie_reel_olon', hora: '09:00', fecha: '2026-11-27' }, hoja: pieza.hoja } })
+    expect(p).toEqual({ cliente: HOJA.client_id, agente: 'oficina-creativa', pieza: { encargo_id: HOJA.encargo_id, fila: 's4-d5-vie_reel_olon', hoja: pieza.hoja } })
     expect(pieza.hoja.startsWith(HOJA.brief.texto.trim())).toBe(true)
     expect(pieza.hoja).toContain('- OFERTA: olon')
     expect(pieza.hoja).toContain('## El plan de trabajo\nEl plan de la campaña: semana 4.')

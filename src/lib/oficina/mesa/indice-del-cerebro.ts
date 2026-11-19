@@ -27,7 +27,7 @@ export interface IndiceDeLaMesa {
 }
 
 /** la pieza tal como la ve el cerebro: su encargo, su fila y su hoja COMPLETA (solo para el rastro y para que el agente razone) */
-export interface PiezaParaElCerebro { encargo_id: string; fila?: unknown; hoja: string }
+export interface PiezaParaElCerebro { encargo_id: string; fila?: string; hoja: string }
 
 export interface PedidoDelIndice { cliente: string; agente: string; turno?: string; pieza: PiezaParaElCerebro }
 
@@ -42,9 +42,21 @@ export function hojaDeLaPieza(brief_texto: string | null | undefined, plan_texto
   return [brief || '(sin hoja)', ...(plan ? ['', '## El plan de trabajo', plan] : [])].join('\n')
 }
 
+/**
+ * 19-nov · CC6 🔴 sobre #1185: el cerebro exige `pieza.fila` como TEXTO (`segun-la-pieza.ts:37`) y en producción la fila del encargo es un objeto
+ * `{id, hora, fecha}` (11 de 11). La mesa manda su IDENTIFICADOR como texto; si no hay id legible, no manda fila (nunca el objeto).
+ */
+export function filaParaElCerebro(fila: unknown): string | undefined {
+  if (typeof fila === 'string') return fila.trim() || undefined
+  if (typeof fila === 'number' && Number.isFinite(fila)) return String(fila)
+  if (fila && typeof fila === 'object') { const id = (fila as { id?: unknown }).id; if ((typeof id === 'string' && id.trim()) || (typeof id === 'number' && Number.isFinite(id))) return String(id).trim() }
+  return undefined
+}
+
 /** la pieza para el cerebro: encargo, fila (si la hay) y la hoja completa */
 export function piezaParaElCerebro(o: { encargo_id: string; fila?: unknown; brief_texto: string | null | undefined; plan_texto: string | null | undefined }): PiezaParaElCerebro {
-  return { encargo_id: o.encargo_id, ...(o.fila !== undefined && o.fila !== null ? { fila: o.fila } : {}), hoja: hojaDeLaPieza(o.brief_texto, o.plan_texto) }
+  const fila = filaParaElCerebro(o.fila)
+  return { encargo_id: o.encargo_id, ...(fila !== undefined ? { fila } : {}), hoja: hojaDeLaPieza(o.brief_texto, o.plan_texto) }
 }
 
 /** el pedido del índice al abrir la mesa: sin casillas. El cerebro responde 400 si llega `sede`, `oferta`, `tema`, `canal` o `para_que` */
