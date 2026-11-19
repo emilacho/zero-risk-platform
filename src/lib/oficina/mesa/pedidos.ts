@@ -34,6 +34,8 @@ export interface ContextoDeTurno {
   gasto_usd: number
   /** Sprint 2 · S2-1 · solo video: la duración y las propuestas que dice la plantilla (dato) */
   video?: ParametrosDelVideo
+  /** 19-nov · ADENDA 1 · P2b (CC5): el bloque del perfil del público (el mismo que leen la jefatura y los pedidos de la oficina) · ausente/vacío = sin sección */
+  perfil_texto?: string
 }
 
 /** UNA sola función de recorte: nunca corta callado (ADENDAS 5 y 6 de la ORDEN del 31-oct). Sin nombre del documento conserva el aviso corto de siempre. */
@@ -377,6 +379,8 @@ export function armarTarea(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarj
     '## 3 · El plan de trabajo',
     c.plan_texto ? documento('el plan de trabajo', recorta(c.plan_texto, DIETA[c.tipo].plan, 'el plan')) : '(sin plan)',
     '',
+    // 19-nov · ADENDA 1 · P2b: el perfil del público, entero, como un documento más (antes la mesa no lo recibía)
+    ...(c.perfil_texto ? ['## El perfil del público', documento('el perfil del público', c.perfil_texto), ''] : []),
     '## Fotos propias del cliente (ids para `Imagen: foto:<id>`)',
     LISTA_DE_FOTOS(c.fotos, new Set(fotosALaVista(c.fotos).map((f) => f.id))),
     '',
