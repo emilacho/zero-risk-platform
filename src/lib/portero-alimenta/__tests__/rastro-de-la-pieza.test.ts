@@ -26,6 +26,12 @@ describe('el registrador real del rastro', () => {
     expect(await registrarEnLaBase({})).toEqual({ error: 'cerebro_consultas: column "ruta" does not exist' })
     respuesta = { data: [{ id: 'c-123' }], error: null }
   })
+  it('el error de la base llega ENTERO (sin recorte: G9 · sin-cortes-nuevos)', async () => {
+    const largo = 'x'.repeat(500)
+    respuesta = { data: null, error: { message: largo } }
+    expect(await registrarEnLaBase({})).toEqual({ error: `cerebro_consultas: ${largo}` })
+    respuesta = { data: [{ id: 'c-123' }], error: null }
+  })
 })
 
 describe('las dos rutas pasan el registrador real', () => {
