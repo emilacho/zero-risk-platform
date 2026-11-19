@@ -8,7 +8,8 @@
 import { describe, expect, it } from 'vitest'
 import { traducirGuion } from '../video/guion'
 import { MAX_FOTOS_POR_IMAGEN as MAX_IMG, bajarOtrasFotos, cuerpoDeEdicion, promptDeEdicionConVarias } from '../../imagen-sobre-foto'
-import { fotosDelPlano, pedidosDeImagenClave, type PlanoDeLaHoja } from '../video/imagen-clave'
+import { fotosDelPlano, pedidosDeImagenClave, promptDeImagenClave, type PlanoDeLaHoja } from '../video/imagen-clave'
+import { VIDEO_POR_OMISION, convencionDelGuion } from '../mesa/pedidos'
 
 const URL = (id: string) => `https://x.supabase.co/storage/v1/object/public/fotos/${id}.jpg`
 const PROPIAS = ['a7512c1c', '8abc6e54', '3b215a19', 'f00dcafe'].map((id) => ({ id, url: URL(id) }))
@@ -80,7 +81,16 @@ describe('2 · la imagen clave de cada plano lleva sus fotos reales, en orden, y
   })
   it('segunda opinión de GPT: el envoltorio fijo no lleva «premium» (ni otro adjetivo de marca) en ningún prompt', () => {
     for (const p of pedidos()) { expect(p.prompt).not.toMatch(/premium/i); expect(p.prompt_cierre ?? '').not.toMatch(/premium/i) }
-    expect(pedidos()[0].prompt).toContain('Photographic and realistic. A pose or moment that can continue in motion.')
+    expect(pedidos()[0].prompt).toContain('A pose or moment that can continue in motion.')
+  })
+  it('19-nov · el envoltorio fijo no impone estilo: ni «photographic» ni «realistic»; el estilo lo trae la hoja (manual del cliente)', () => {
+    for (const p of pedidos()) { expect(p.prompt).not.toMatch(/photographic|realistic/i); expect(p.prompt_cierre ?? '').not.toMatch(/photographic|realistic/i) }
+    const conHoja = promptDeImagenClave({ n: 1, prompt_imagen: 'Flat pastel illustration of a ceviche bowl, as the brand manual sets' } as never, { total: 1, proporcion: '9:16' })
+    expect(conHoja).toContain('Flat pastel illustration of a ceviche bowl, as the brand manual sets')
+    expect(conHoja).not.toMatch(/photographic|realistic/i)
+  })
+  it('19-nov · la mesa del video escribe el «Prompt de imagen» con el estilo que fija el manual para producir con IA', () => {
+    for (const propuestas of [1, 3]) expect(convencionDelGuion({ ...VIDEO_POR_OMISION, propuestas })).toContain('Prompt de imagen: … (en inglés: el cuadro clave del plano, con el tipo de imagen y el estilo que fija el manual del cliente para producir con IA, sin texto en la imagen)')
   })
   it('el plano de siempre (sin personajes ni extras) no cambia: sin «Reference images», sin otras fotos', () => {
     const p1 = pedidos().find((x) => x.n === 1)!

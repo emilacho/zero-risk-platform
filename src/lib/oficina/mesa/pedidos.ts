@@ -192,7 +192,7 @@ const PLANO_DE_LA_HOJA = (n: number, tiempos: string, extra = '') => [
   'Texto en pantalla: … (solo si lo lleva; literal, corto: se compone en edición, la IA no lo escribe)',
   'Foto: foto:<id de una foto propia>, foto:<id> · <por qué la elegiste, en una frase> | ninguna   (en todo plano que muestre un elemento real del cliente: producto o plato, el local, un uniforme, un empaque; la 1.ª es el cuadro, las demás van de referencia)',
   'Personajes: <los nombres de «## Personajes» que salen en este plano> | ninguno   (solo si la pieza tiene personajes; un personaje de la marca que sale en cuadro va aquí)',
-  'Prompt de imagen: … (en inglés: el cuadro clave del plano, sin texto en la imagen)',
+  'Prompt de imagen: … (en inglés: el cuadro clave del plano, con el tipo de imagen y el estilo que fija el manual del cliente para producir con IA, sin texto en la imagen)',
   'Prompt de video: … (en inglés: solo el movimiento y la cámara desde ese cuadro, el proceso de la acción y cómo termina)',
 ].join('\n')
 
