@@ -8,7 +8,7 @@ import { abrirEncargo, recibirDecisionDelDueno } from '../orquestador'
 import { cotaAgotada } from '../mesa/planificador'
 import { cotaDeLaMesaEnCurso } from '../mesa/orquestador'
 import { CARRUSEL_MESA } from '../plantillas/mesa'
-import { conPropuestasDeImagen, CARRUSEL_MESA_CON_PROPUESTAS, COTA_DE_LA_MESA_CON_PROPUESTAS_USD, KIT_MESA_CON_PROPUESTAS, POST_MESA_CON_PROPUESTAS } from '../plantillas/imagen-propuestas'
+import { conPropuestasDeImagen, reservaDeUnaVueltaDeLaJefatura, CARRUSEL_MESA_CON_PROPUESTAS, COTA_DE_LA_MESA_CON_PROPUESTAS_USD, KIT_MESA_CON_PROPUESTAS, POST_MESA_CON_PROPUESTAS } from '../plantillas/imagen-propuestas'
 import { coberturaDelTope, costoDeVolver, cotaDeLaMesa, loQueSigueDeLaMesa, pasadasDeLaMesa, reservaPorPasadaDeLaMesa } from '../topes-por-duracion'
 import { TARGET_STEP_PRODUCIR } from '../sobre'
 import { COTAS, type EstadoMesa } from '../mesa/tipos'
@@ -110,7 +110,8 @@ describe('🔴 la cuenta del tope reserva la COTA por cada pasada de la mesa', (
   it('las plantillas: el tope sale de la cuenta (redondeado hacia arriba), nunca menos que el de hoy × 3', () => {
     for (const pl of [KIT_MESA_CON_PROPUESTAS, CARRUSEL_MESA_CON_PROPUESTAS, POST_MESA_CON_PROPUESTAS]) {
       const sinTope = { ...pl, limites: { ...pl.limites, tope_encargo_usd: 0 } } as Plantilla
-      expect(pl.limites.tope_encargo_usd).toBe(Math.max(15, Math.ceil(coberturaDelTope(sinTope, 0).requerido)))
+      // 18-nov · más UNA vuelta de la jefatura (ya no se reserva al abrir, pero el tope le deja lugar: `reservaDeUnaVueltaDeLaJefatura`)
+      expect(pl.limites.tope_encargo_usd).toBe(Math.max(15, Math.ceil(coberturaDelTope(sinTope, 0).requerido + reservaDeUnaVueltaDeLaJefatura(sinTope))))
     }
   })
 })

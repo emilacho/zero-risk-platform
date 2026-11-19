@@ -159,9 +159,9 @@ describe('con ficha · cada hallazgo a su destino', () => {
 describe('firma de Emilio · tras la vuelta, el creador ya respondió', () => {
   const S1 = { id: 'S1', texto: `[S1] sentido · pieza: dice que ya atiende en persona — ficha: «${LINEA_NO}»`, dura: false }
   const S2 = { id: 'S2', texto: '[S2] sentido · pieza: el precio «$9,90» no está (regla dura: se toma sí o sí)', dura: true }
-  const tras = (desacuerdos: string[], respuestas: string[], pieza = '', enviadas = [S1]) => {
+  const tras = (desacuerdos: string[], respuestas: string[], pieza = '', enviadas = [S1], puede = true) => {
     const e = estado()
-    const res = aplicarSalidaDeJefatura(PL, e, salida(desacuerdos), { reImagen: () => ({ re_imagen: false }), puedeVolverALaMesa: () => true, sentido: { ...sentido(BRIEF_CON_FICHA, pieza), exactos: chequeosExactos, previas: { enviadas, lineasDeRespuesta: respuestas } } })
+    const res = aplicarSalidaDeJefatura(PL, e, salida(desacuerdos), { reImagen: () => ({ re_imagen: false }), puedeVolverALaMesa: () => puede, sentido: { ...sentido(BRIEF_CON_FICHA, pieza), exactos: chequeosExactos, previas: { enviadas, lineasDeRespuesta: respuestas } } })
     e.fichas = res.fichas ?? []
     e.artefactos = { respuesta_imagen: { version: 1, datos: res.artefacto } } as never
     return { e, res, prefijo: prefijoDeLaBandeja(e), j: datosDeLaJefatura(e)! }
@@ -193,8 +193,26 @@ describe('firma de Emilio · tras la vuelta, el creador ya respondió', () => {
     expect(prefijo).toContain('⚠️ CORRECCIÓN SIN RESPUESTA · ')
   })
 
-  it('regla dura · si el código la vuelve a encontrar aunque el creador diga «no tomada»: NO TOMADA (frena la pieza · RESPUESTA-LENOVO punto 3), sin «una persona decide»', () => {
-    const { j, e, res } = tras([], ['RESPUESTA A LA JEFATURA S2: no tomada: me gusta más así'], 'El principal a $9,90', [S2])
+  it('18-nov · GO Lenovo 13:52Z · regla dura que el código vuelve a encontrar tras la vuelta y CABE otra vuelta: la pieza VUELVE a su creador solo con la regla dura (nada «en corrección» todavía)', () => {
+    const { j, e, res } = tras(mismo, ['RESPUESTA A LA JEFATURA S2: no tomada: me gusta más así'], 'El principal a $9,90', [S2], true)
+    expect(j.sentido!.respuestas_del_creador![0]).toMatchObject({ respuesta: 'no_tomada', dura: true })
+    expect(j.sentido!.duras_no_tomadas).toBeUndefined()
+    expect(reglasDurasNoTomadas(e)).toEqual([])
+    const a = res.artefacto as { vuelve_a_la_mesa?: boolean; aviso_a_la_mesa?: string }
+    expect(a.vuelve_a_la_mesa).toBe(true)
+    // viaja SOLO la regla dura, numerada de nuevo para la próxima respuesta; lo de criterio (que ya tuvo su vuelta) no reabre
+    expect(a.aviso_a_la_mesa).toMatch(/estas REGLAS DURAS siguen rotas/)
+    expect(a.aviso_a_la_mesa).toContain('[S1] ')
+    expect(a.aviso_a_la_mesa).toContain('D3 · el precio «$9,90»')
+    expect(a.aviso_a_la_mesa).not.toMatch(/atiende en persona/)
+    expect(a.aviso_a_la_mesa).toMatch(/RESPUESTA A LA JEFATURA S1/)
+    expect(j.sentido!.enviadas).toEqual([expect.objectContaining({ id: 'S1', dura: true })])
+    expect(j.sentido!.vueltas_por_regla_dura).toBe(1)
+    expect(e.fichas).toEqual([])
+  })
+
+  it('regla dura · si el código la vuelve a encontrar y YA NO cabe otra vuelta (dinero, pasos o vueltas): queda EN CORRECCIÓN (ni salida ni bandeja), sin «una persona decide»', () => {
+    const { j, e, res } = tras([], ['RESPUESTA A LA JEFATURA S2: no tomada: me gusta más así'], 'El principal a $9,90', [S2], false)
     expect(j.sentido!.respuestas_del_creador![0]).toMatchObject({ respuesta: 'no_tomada', dura: true, declarado: expect.stringMatching(/regla dura/) })
     expect(j.sentido!.duras_no_tomadas).toEqual([expect.objectContaining({ destino: 'pieza', que: expect.stringMatching(/^D3 · /) })])
     expect(reglasDurasNoTomadas(e)).toHaveLength(1)
