@@ -531,7 +531,7 @@ const MCP_ALLOWED_TOOLS_BY_SERVER: Record<string, readonly string[]> = {
   // ninguna llamada"*. Montarla sin este renglón es montarla muda.
   'mirar-afuera': ['mcp__mirar-afuera__mirar_afuera'],
   // LA MESA (28-oct) · las tres herramientas del tablero compartido. Una herramienta montada y no listada aquí queda MUDA sin error (el agente la ve y se niega): la prueba de cierre es ver en el rastro real que se llamó.
-  mesa: ['mcp__mesa__mesa_pedir', 'mcp__mesa__mesa_devolver', 'mcp__mesa__pedir_material'],
+  mesa: ['mcp__mesa__mesa_pedir', 'mcp__mesa__mesa_devolver', 'mcp__mesa__pedir_material', 'mcp__mesa__pedir_fichas'],
 }
 
 /** Brand Book · nombres del tool_use de emit_brand_section (namespace + bare). */
