@@ -133,7 +133,8 @@ const CONVENCION_DEL_CONCEPTO = [
   'A5 descarté: <por qué no lo usaste>',
   '```',
   'El BANCO DE IDEAS lo escriben los miembros en sus aportes de la ronda 2, una línea por idea, EXACTAMENTE así:',
-  '- C<fase>-I<nn> · <red> · <formato o cualquiera> · <idea en una línea> · mensaje: <UNA frase propia de esta idea, al servicio del mensaje de campaña> · gancho: <lo que detiene el scroll> · protagonista: <uno> · serie: S1 · cuadros: <cuántas pantallas pide la idea: una historia o un post = 1; «swipe a…» o una secuencia = una por pantalla> · foto:<id>|ninguna',
+  '- C<fase>-I<nn> · <red> · <formato o cualquiera> · <idea en una línea> · mensaje: <UNA frase propia de esta idea, al servicio del mensaje de campaña> · gancho: <lo que detiene el scroll> · protagonista: <uno> · serie: S1 · cuadros: <cuántas pantallas pide la idea: una historia o un post = 1; «swipe a…» o una secuencia = una por pantalla> · duración: <SOLO si la idea es video (reel, short, tiktok, video): cuánto dura y por qué, p. ej. «20 s · porque…»> · foto:<id>|ninguna',
+  'Cada idea de video trae SIEMPRE su duración estimada con su porqué: es parte del cómo de la idea, como su formato (el brief no la decide). El guion puede ajustarla después.',
   'Cada idea con mensaje y gancho PROPIOS (distintos entre ideas); cubre cada red de la estrategia en cada capítulo. Las ideas NO llevan datos con valor (precios, horarios, cifras): el estratega los pone con su referencia. La integración lista cuáles ideas quedan y cuáles salen.',
 ].join('\n')
 
@@ -354,7 +355,7 @@ export function tareaDelRelleno(r: RellenoPendiente | undefined): string {
     ...r.redes.map((x) => `- ${x.red}: faltan ${x.faltan} (la cuota es ${x.esperadas})`),
     '',
     `Escribe SOLO las ideas que faltan, una por línea, con el formato del banco y numeradas desde **C${r.prefijo}-I${String(r.desde).padStart(2, '0')}**:`,
-    `- C${r.prefijo}-I${String(r.desde).padStart(2, '0')} · <red> · <formato> · <idea> · mensaje: <mensaje propio> · gancho: <gancho>`,
+    `- C${r.prefijo}-I${String(r.desde).padStart(2, '0')} · <red> · <formato> · <idea> · mensaje: <mensaje propio> · gancho: <gancho> · duración: <solo si es video: «N s · porqué»>`,
     'Cada idea cuenta lo que dice el capítulo en tu gran idea, con un mensaje y un gancho que no repiten los de las ideas que ya están. No inventes datos del cliente: usa lo que está en el tablero y en el marco.',
     ...(r.ya_estan.length ? ['', '## Ya están en el banco de este capítulo (no las repitas)', ...r.ya_estan.map((i) => `- ${i.id} · ${i.red} · ${i.mensaje}`)] : []),
   ].join('\n')

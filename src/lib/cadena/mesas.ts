@@ -296,7 +296,9 @@ export function marcoDelConcepto(a: { ctx: ContextoDelCliente; estrategia: Estra
     '## Gran idea · «- nombre: …» y «- frase: …» · ## Por qué funciona · ## Cómo se ve (cita fotos propias como `foto:<id>`) · ## Cómo suena',
     '«## Cómo se ve» decide UNA vez para toda la campaña, con estas cuatro líneas (cada pieza las recibe como FIJO, no las reinventa): «- luz: … · porqué: …» · «- encuadre: … · porqué: …» · «- fotos propias: … · porqué: …» · «- nunca se muestra: … · porqué: …»; debajo, la dirección visual libre.',
     '## Capítulo <clave de fase> · qué cuenta · «- serie: S1 · nombre · qué cuenta · redes» · y debajo «### Banco de ideas» con UNA idea por línea:',
-    '`- C<fase>-I<nn> · red · formato · idea · mensaje: … · gancho: … · protagonista: … · serie: S1 · cuadros: <n> · foto:<id>|ninguna`',
+    '`- C<fase>-I<nn> · red · formato · idea · mensaje: … · gancho: … · protagonista: … · serie: S1 · cuadros: <n> · duración: <solo si es video: N s · porqué> · foto:<id>|ninguna`',
+    // 19-nov · GO Lenovo (firma de Emilio 15:01-15:03): la duración es del cómo y la define la gran idea, no el brief
+    '`duración` = en cada idea de VIDEO (reel, short, tiktok, video), cuánto dura y por qué, p. ej. «20 s · porque muestra tres momentos». Siempre la trae; el guion puede ajustarla después.',
     '`cuadros` = cuántas pantallas pide la idea tal como la imaginas (una historia o un post = 1; «swipe a…» o una secuencia = una por pantalla). La cadena lo compara con los elementos del kit y avisa si no cuadran.',
     // 17-nov · Sprint 4 · D · sin la orden «mínimo = huecos del patrón × semanas» (la mesa crea ideas, no relleno de calendario) ni «sin datos con valor» (llegan por la ficha, con su fuente)
     'Cada idea trae mensaje y gancho propios y distintos; ids únicos.',
