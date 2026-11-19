@@ -10,7 +10,7 @@ import { ACCIONES } from '../acciones'
 import type { Campana, EstrategiaGuardada } from '../almacen'
 import { HORAS_DE_REARME } from '../esperas'
 import { escritorDeBrief } from '../../colaterales/escritores'
-import { briefAbrir, CAP_DE_VUELTAS_DE_CAMBIOS, cerrarMesasVencidas, conceptoAbrir, MOTIVO_RETOQUE_DE_COLATERALES, MOTIVO_RESERVADO_EN_LA_MESA, versionesDeMesaHasta, conceptoDecidir, condicionesDe, HOLGURA_DE_MESA_MIN, PLAZO_DE_MESA_MIN, puertoDeLaCadena, recibirBrief, recibirConcepto, TIPO_DE_ESPERA_DE_CONCEPTO } from '../mesas'
+import { PLAN_EN_SU_LUGAR, briefAbrir, CAP_DE_VUELTAS_DE_CAMBIOS, cerrarMesasVencidas, conceptoAbrir, MOTIVO_RETOQUE_DE_COLATERALES, MOTIVO_RESERVADO_EN_LA_MESA, versionesDeMesaHasta, conceptoDecidir, condicionesDe, HOLGURA_DE_MESA_MIN, PLAZO_DE_MESA_MIN, puertoDeLaCadena, recibirBrief, recibirConcepto, TIPO_DE_ESPERA_DE_CONCEPTO } from '../mesas'
 
 const A = clienteA()
 const CAMP = 'camp-1'
@@ -106,12 +106,18 @@ describe('la mesa del brief', () => {
     const sobre = r.cuerpo.sobre as Record<string, unknown>
     expect(sobre).toMatchObject({ tipo_de_mesa: 'brief', client_id: A.clientId, campana_id: CAMP, version: 1, dry_run: true, condiciones: ['si_instagram'] })
     expect(sobre.marco_texto).toContain('# PLAN')
-    expect(sobre.marco_texto).toContain(A.planTexto)
+    // 19-nov · G4 (CC5): el plan viaja ENTERO en su campo propio; el marco marca su lugar y no lo repite
+    expect(sobre.plan_texto).toBe(A.planTexto)
+    expect(sobre.marco_texto).toContain(PLAN_EN_SU_LUGAR)
+    expect(sobre.marco_texto).not.toContain(A.planTexto)
     expect(sobre.marco_texto).toContain('- barato')
     expect(sobre.marco_texto).not.toContain('DEVOLUCIÓN')
     expect(al.briefsCreativos).toEqual([expect.objectContaining({ campana_id: CAMP, version: 1, estado: 'borrador', seco: true })])
     // abrir otra vez con la mesa abierta: no duplica
-    expect((await briefAbrir(al, wf(), AHORA)).cuerpo).toMatchObject({ ya_abierta: true, version: 1 })
+    const otra = await briefAbrir(al, wf(), AHORA)
+    expect(otra.cuerpo).toMatchObject({ ya_abierta: true, version: 1 })
+    // 19-nov · G4 (CC5): el sobre de rescate (la mesa abierta cuyo sobre no llegó) también lleva el plan entero en su campo propio
+    expect((otra.cuerpo.sobre as Record<string, unknown>).plan_texto).toBe(A.planTexto)
     expect(al.briefsCreativos).toHaveLength(1)
   })
   it('la entrega buena queda validada con lo leído · la segunda entrega sobre la misma versión contesta ya_cerrada · abrir después dice ya_hecha', async () => {
