@@ -72,7 +72,7 @@ describe('T4 · el tablero decide la gran idea con workflow_id «tablero»', () 
     const al = await conTarjeta()
     const r = await conceptoDecidir(al, tablero({ decision: 'cambios', apunta_a: 'concepto', nota: 'más barrio, menos producto' }), AHORA)
     expect(r.status, JSON.stringify(r.cuerpo)).toBe(200)
-    expect(r.cuerpo).toMatchObject({ decision: 'cambios', version: 1, apunta_a: 'concepto', vueltas_restantes: 1 })
+    expect(r.cuerpo).toMatchObject({ decision: 'cambios', version: 1, apunta_a: 'concepto', vueltas_restantes: 2 }) // 19-nov · grupo D: tope 3
     expect(al.conceptos.map((c) => [c.version, c.estado, c.aprobacion, c.apunta_a, c.nota_de_emilio])).toEqual([[1, 'lista', 'cambios', 'concepto', 'más barrio, menos producto']])
     expect(al.tarjetas[0]).toMatchObject({ status: 'rejected', decision: { accion: 'pedir_cambios', apunta_a: 'concepto' } })
     expect(al.eventosDeEmilio[0]).toMatchObject({ accion: 'pedir_cambios', comentario: 'más barrio, menos producto' })

@@ -209,7 +209,10 @@ describe('el reloj y la gran idea', () => {
     expect((await conceptoAbrir(al, wf({ campana_id: id }), horas(AHORA, 3))).cuerpo.version).toBe(2)
     await relojDeLaCadena(al, VIG, horas(AHORA, 6))
     expect(al.conceptos[1].estado).toBe('sin_mesa')
-    expect(al.campanas[0].estado).toBe('necesita_humano')
+    // 19-nov · grupo D: la segunda ya no detiene; la apertura siguiente espera la vuelta siguiente del vigía
+    expect(al.campanas[0].estado).toBe('calendario')
+    expect((await conceptoAbrir(al, wf({ campana_id: id }), horas(AHORA, 6))).cuerpo).toMatchObject({ ya_hecha: true, en_reintento: true, mesa: 'concepto' })
+    expect(al.conceptos).toHaveLength(2)
   })
 })
 
@@ -281,7 +284,7 @@ describe('con qué sobre vuelve a entrar la puerta (respuesta a CC2 · 31-oct)',
     expect((a3.cuerpo.sobre as { marco_texto: string }).marco_texto).toContain('# LA VERSIÓN ANTERIOR (v2)')
     expect(al.campanas[0].estado).not.toBe('necesita_humano')
   })
-  it('la mesa que falla también devuelve con qué volver: brief devuelto por código (v1) ⇒ abrir-brief-v2 · concepto sin_mesa (v1) ⇒ abrir-concepto-v2 · a la segunda (necesita_humano) ya no hay sobre', async () => {
+  it('la mesa que falla también devuelve con qué volver: brief devuelto por código (v1) ⇒ abrir-brief-v2 · concepto sin_mesa (v1) ⇒ abrir-concepto-v2 · a la segunda (grupo D) también, y esa apertura espera la vuelta siguiente', async () => {
     const al = almacen(true)
     const id = await conEstrategia(al)
     await briefAbrir(al, wf({ campana_id: id }), AHORA)
@@ -293,10 +296,12 @@ describe('con qué sobre vuelve a entrar la puerta (respuesta a CC2 · 31-oct)',
     expect(await recibirConcepto(al, { ...entrega(id, 1, ''), texto: null }, AHORA)).toMatchObject({ ok: true, estado: 'sin_mesa', siguiente: { sobre: { idempotency_key: clave(id, 'abrir-concepto-v2') } } })
     await conceptoAbrir(al, wf({ campana_id: id }), AHORA)
     const segunda = await recibirConcepto(al, { ...entrega(id, 2, ''), texto: null }, AHORA)
-    expect(segunda).toMatchObject({ ok: true, estado: 'sin_mesa' })
-    expect((segunda as { siguiente?: unknown }).siguiente).toBeUndefined()
-    expect(al.campanas[0].estado).toBe('necesita_humano')
-    expect((await calendarioSiguiente(al, { ...VIG, campana_id: id }, AHORA)).cuerpo).toMatchObject({ tanda: null })
+    expect(segunda).toMatchObject({ ok: true, estado: 'sin_mesa', siguiente: { sobre: { idempotency_key: clave(id, 'abrir-concepto-v3') } } })
+    expect(al.campanas[0].estado).toBe('calendario')
+    expect((await conceptoAbrir(al, wf({ campana_id: id }), AHORA)).cuerpo).toMatchObject({ ya_hecha: true, en_reintento: true })
+    expect(al.conceptos).toHaveLength(2)
+    // el vigía vuelve a pedir la gran idea cada medio día (la clave lleva el tramo): en este tramo la apertura espera; en el siguiente, abre la v3
+    expect((await calendarioSiguiente(al, { ...VIG, campana_id: id }, AHORA)).cuerpo).toMatchObject({ tanda: 1, etapa: 'abrir-concepto-v3:2026-10-09pm' })
   })
   it('hueco 1 de CC3: una mesa abierta cuyo sobre no llegó se rescata · abrir otra vez devuelve ya_abierta CON el mismo sobre (brief y concepto) · y el brief tiene red de seguridad: pasado su plazo el reloj lo deja descartada y la campaña reabre; a la segunda, necesita_humano', async () => {
     const al = almacen(true)
@@ -315,7 +320,7 @@ describe('con qué sobre vuelve a entrar la puerta (respuesta a CC2 · 31-oct)',
     expect(a2.cuerpo.version).toBe(2)
     await relojDeLaCadena(al, VIG, horas(AHORA, 2.3))
     expect(al.briefsCreativos[1].estado).toBe('descartada')
-    expect(al.campanas[0].estado).toBe('necesita_humano')
+    expect(al.campanas[0].estado).toBe('calendario') // 19-nov · grupo D: la segunda ya no detiene
     // el concepto: el mismo rescate (sobre otra vez con la nota persistida)
     const al2 = almacen(true)
     const id2 = await conEstrategia(al2)

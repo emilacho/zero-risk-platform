@@ -9,7 +9,7 @@
  */
 import type { ConceptoDeLaFila, DatoDeterminado, Fila, FormatosPorRed } from './tipos'
 import { PROPORCION_POR_FORMATO, proporcionDe, proporcionDeLaTabla } from './proporciones'
-import type { BriefCreativoLeido } from './brief-creativo'
+import { CAMPO_AVISOS_DEL_BRIEF_CREATIVO, PREFIJO_AVISO_DE_LA_MEJOR_VERSION, type BriefCreativoLeido } from './brief-creativo'
 import { comoSeVeSinPartes, decisionDeLaParte, ideaDelBanco, PARTES_DE_COMO_SE_VE, type CapituloDelConcepto, type ConceptoLeido, type IdeaDelBanco } from './conceptos'
 import { comoSeCompraParaLaRed, datosSinFuente, fichaDeLaOferta, fichaEnLineas, fichasConHechos, ofertaCerradaOInexistenteEn, type DatoDeFicha, type FichaDeOferta, type HechoDelNegocioPorOferta } from './ficha-de-oferta'
 
@@ -328,6 +328,10 @@ function lineasDelBrief(ins: InsumosDeLaHoja, cab: { id: string; red: string; fo
   if (extra.fila_ids) L.push(campo('FILAS', extra.fila_ids.join(', ')))
   if (extra.elementos) L.push(...listaDe('ELEMENTOS', extra.elementos))
   if (extra.cuadros?.length) L.push(...listaDe('CUADROS QUE PIDE LA IDEA', extra.cuadros.map((x) => `${x.cuando} (${x.fila_id}): ${x.cuadros} cuadros · idea ${x.idea}`)))
+  // 19-nov · grupo D (condición de Lenovo 08:00Z): el brief que quedó vigente al tope con bloqueos los trae como avisos; van en CADA pieza, y así la jefatura los recibe
+  //   en «El brief de este entregable» y mira justo esos puntos. Sin ellos (lo de siempre) la hoja no cambia
+  const delBrief = (ins.brief.avisos ?? []).filter((a) => typeof a === 'string' && a.startsWith(PREFIJO_AVISO_DE_LA_MEJOR_VERSION)).map((a) => a.slice(PREFIJO_AVISO_DE_LA_MEJOR_VERSION.length))
+  if (delBrief.length) L.push(...listaDe(CAMPO_AVISOS_DEL_BRIEF_CREATIVO, delBrief))
   return L
 }
 
