@@ -18,7 +18,7 @@ import { especialistasPertinentes, direccionDe, ingenieroDePrompts } from './dir
 import { aporteDePrompts, esAporteDePrompts } from './prompts'
 import { criticaPendiente } from './critica'
 import { esRellenoDelBanco, type RellenoPendiente } from './de-la-cadena'
-import { idasYVueltas, participacion, pedidosSinContestar, verificarCitas } from './libro'
+import { faltanCitasDe, idasYVueltas, participacion, pedidosSinContestar, verificarCitas } from './libro'
 import { COTAS, profundidadMaximaDe, turnosMaximosDe, type Accion, type Aporte, type EstadoMesa, type TipoDePieza } from './tipos'
 
 export interface ContextoDeLaMesa { gasto_usd: number; tope_usd: number; hayImagenGenerada: boolean; /** 18-nov · relleno del banco (CC1): el capítulo de la gran idea que no llega a su cuota (null/ausente = nada que rellenar) */ relleno_del_banco?: RellenoPendiente | null; /** 17-nov · GO Lenovo · la cota de la mesa (dato de la plantilla): lo gastado por sus turnos y lo permitido (cota × pasadas) */ cota_de_la_mesa?: { gastado: number; permitido: number }; /** 17-nov · T7b · lo que sigue es EXACTO (sale de los pasos de la plantilla, como en el video): la integración final tampoco pasa del TOPE (el motor frena en el tope, no en el techo; pasarlo cortaría el encargo después) */ techo_es_el_tope?: boolean; /** lo que queda por gastar DESPUÉS de la mesa; el calendario no dibuja ni pasa por la jefatura de la pieza: 0 */ reserva_posterior_usd?: number; /** 31-oct · la mesa de concepto: cuántas integraciones mínimas (rondas) antes de dar por buena la pieza; por omisión 1 (las demás mesas) */ rondas_minimas?: number; /** T8 · el tipo de pieza (el video reserva lo del brazo); sin él, carrusel/kit */ tipo?: TipoDePieza; /** 17-nov · «creativos en cada paso» · cuántas RONDAS de aportes tiene la mesa (dato `limites.rondas_de_la_mesa`): hechas esas integraciones, los especialistas ya no aportan ni contestan pedidos; la dirección sí cierra (citas, prompts, pregunta del traductor). Sin él, sin límite de rondas (lo de siempre) */ rondas_max?: number }
@@ -131,7 +131,7 @@ export function siguienteDeLaMesa(est: EstadoMesa, libro: Aporte[], ctx: Context
   const pertinentes = especialistasPertinentes(est.directorio_congelado, est.tipo, ctx.hayImagenGenerada, est.condiciones ?? [])
   const v = verificarCitas(ult.texto, libro, pertinentes)
   if (!v.ok && est.devoluciones_por_citas < COTAS.MAX_DEVOLUCIONES_POR_CITAS && fallosDe(libro, dir.agente) < COTAS.REINTENTOS_DE_TURNO) {
-    return { accion: 'turno', agente: dir.agente, tipo: 'devolver_citas', responde_a: ult.id, motivo: 'faltan citas de aportes usados o descartados' }
+    return { accion: 'turno', agente: dir.agente, tipo: 'devolver_citas', responde_a: ult.id, motivo: 'faltan citas de aportes usados o descartados', faltan_citas: faltanCitasDe(v, libro) }
   }
 
   // 7b · 18-nov · relleno del banco (CC1 · la (b) de Lenovo): con la gran idea integrada y sus citas al día, la dirección completa UN capítulo que no llega a la cuota del plan.

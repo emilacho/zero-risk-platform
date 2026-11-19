@@ -126,6 +126,8 @@ describe('🟡 j8 (CC7): la convención de la mesa del brief NO tiene reglas pro
     expect(CONVENCION_DE_LA_PIEZA('brief').split('\n')).toEqual([REMISION, ...TITULOS_DEL_BRIEF.map((t) => `- ## ${t}`), OBLIGATORIAS])
   })
   it('y es lo que llega a la dirección en los turnos que entregan el brief', () => {
-    for (const t of ['integrar', 'devolver_citas'] as TipoDeTurno[]) expect(tarea(t)).toContain([REMISION, ...TITULOS_DEL_BRIEF.map((x) => `- ## ${x}`), OBLIGATORIAS].join('\n'))
+    // 18-nov · `devolver_citas` ya no entrega el brief (solo las citas que faltan): la convención va solo al turno que lo entrega
+    expect(tarea('devolver_citas')).not.toContain(REMISION)
+    for (const t of ['integrar'] as TipoDeTurno[]) expect(tarea(t)).toContain([REMISION, ...TITULOS_DEL_BRIEF.map((x) => `- ## ${x}`), OBLIGATORIAS].join('\n'))
   })
 })

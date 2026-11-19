@@ -432,9 +432,12 @@ export function armarTarea(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarj
     ].join('\n'),
     devolver_citas: [
       '## Tu turno · DIRECCIÓN CREATIVA: completa las citas',
-      `Tu integración anterior no citó a: ${o.faltanCitas ?? '(ver abajo)'}. Entrega la pieza completa otra vez (la misma convención) y, en “Citas”, di qué usaste y qué descartaste —con motivo— de cada aporte del tablero.`,
-      CONVENCION_DE_LA_PIEZA(c.tipo, c.video),
-      ...(laCritica ? ['', laCritica] : []),
+      // 18-nov · la devolución NO reescribe la pieza (Emilio 14:00, Lenovo 13:08Z opción 1): el director escribe solo las citas que faltan y el código las pega
+      'Tu integración anterior queda guardada y **no se reescribe**. Al revisar sus citas, el código encontró esto:',
+      o.faltanCitas ?? '- algunas especialidades del equipo no están citadas (revisa cada aporte del tablero)',
+      '',
+      '**Escribe SOLO las líneas de cita que faltan**, una por línea, con el formato de siempre: `A<n> usé: <por qué>` o `A<n> descarté: <por qué>`. Tú decides, con criterio, si cada aporte lo usaste o lo descartaste; el motivo dice algo concreto.',
+      'No repitas la pieza ni agregues nada más: el código pega tus líneas dentro de «## Citas» de tu integración, y una línea nueva de un A<n> reemplaza la que ya tenía.',
     ].join('\n'),
     rellenar_banco: tareaDelRelleno(o.relleno),
     redactar_prompts: tareaDelIngeniero(o.imagenesARedactar ?? []),
