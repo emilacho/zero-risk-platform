@@ -5,6 +5,7 @@ import { CARRUSEL_MESA } from '../plantillas/mesa'
 import { TARGET_STEP_PRODUCIR } from '../sobre'
 import { CLIENTE, PARTE, crearMemoria } from './memoria'
 import { crearMesaEnMemoria } from './mesa-memoria'
+import { TOPE_DE_LO_ESCRITO } from '../../limites-de-tamano'
 
 const BRIEF = `### BRF-0100 · Instagram · carrusel
 - QUÉ ES: Carrusel de 5 láminas
@@ -62,6 +63,76 @@ describe('LA MESA · herramientas del tablero', () => {
     expect((await llamar(M, { herramienta: 'mesa_devolver', encargo_id: id, de: turno.agente, a: 'content-creator', comentarios: 'ajusta el tono' })).cuerpo).toMatchObject({ ok: false })
     for (let i = 0; i < MAX_PEDIDOS_POR_AGENTE + 2; i++) await llamar(M, { herramienta: 'mesa_pedir', encargo_id: id, de: turno.agente, a: ['content-creator', 'carousel-designer'][i % 2], que: `pedido distinto número ${i}` })
     expect(MS.filas.filter((f) => f.de === turno.agente)).toHaveLength(MAX_PEDIDOS_POR_AGENTE)
+  })
+
+  // 19-nov · G8 (2) · GO Lenovo 10:36 · «nada se recorta»: antes el pedido llegaba a 600/800, el «para qué» a 300 y los comentarios a 1500, cortados en silencio
+  const largo = (fin: string, n: number) => `${'Necesito el dato exacto del precio vigente y la foto del plato tal como se sirve hoy en la sede. '.repeat(n)}${fin}`
+  it('mesa_pedir anota el pedido y el «para qué» ENTEROS, también el final de uno largo', async () => {
+    const { M, MS, id, turno } = await preparado()
+    const que = largo('FIN-DEL-PEDIDO', 12), paraQue = largo('FIN-DEL-PARA-QUE', 5)
+    expect(que.length).toBeGreaterThan(800)
+    expect(paraQue.length).toBeGreaterThan(300)
+    expect((await llamar(M, { herramienta: 'mesa_pedir', encargo_id: id, de: turno.agente, a: 'content-creator', que, para_que: paraQue })).cuerpo).toMatchObject({ ok: true })
+    expect(MS.filas.at(-1)!.texto).toBe(`${que} (para: ${paraQue})`)
+  })
+  it('pedir_material le lleva al portero el pedido y el «para qué» ENTEROS', async () => {
+    const { M, MS, id, turno } = await preparado()
+    const que = largo('FIN-DEL-MATERIAL', 8), paraQue = largo('FIN-DEL-PARA-QUE', 4)
+    expect(que.length).toBeGreaterThan(600)
+    expect((await llamar(M, { herramienta: 'pedir_material', encargo_id: id, de: turno.agente, que, para_que: paraQue })).cuerpo).toMatchObject({ ok: true, para: 'portero' })
+    expect(MS.filas.at(-1)!.texto).toBe(`${que} (para: ${paraQue})`)
+  })
+  it('mesa_devolver anota los comentarios ENTEROS', async () => {
+    const { M, MS, id, turno } = await preparado()
+    await MS.aportar({ encargo_id: id, de: 'content-creator', para: null, tipo: 'aporta', texto: 'tres titulares', refs: [], responde_a: null, profundidad: 0, costo_usd: 0, workflow_execution_id: null })
+    const comentarios = largo('FIN-DE-LOS-COMENTARIOS', 18)
+    expect(comentarios.length).toBeGreaterThan(1500)
+    expect((await llamar(M, { herramienta: 'mesa_devolver', encargo_id: id, de: turno.agente, a: 'content-creator', comentarios })).cuerpo).toMatchObject({ ok: true })
+    expect(MS.filas.at(-1)).toMatchObject({ tipo: 'devuelve', texto: comentarios })
+  })
+  it('encima del techo de lo escrito NO se recorta: ok:false con el motivo y no se anota nada', async () => {
+    const { M, MS, id, turno } = await preparado()
+    const enorme = 'x'.repeat(TOPE_DE_LO_ESCRITO + 1)
+    for (const o of [{ herramienta: 'mesa_pedir', a: 'content-creator', que: enorme }, { herramienta: 'mesa_pedir', a: 'content-creator', que: 'tres titulares', para_que: enorme }, { herramienta: 'pedir_material', que: enorme }, { herramienta: 'pedir_material', que: 'el precio', para_que: enorme }]) {
+      const r = await llamar(M, { ...o, encargo_id: id, de: turno.agente })
+      expect(r.status).toBe(200) // m5 de CC6: el rechazo llega al agente como respuesta legible, no como error
+      expect(r.cuerpo).toMatchObject({ ok: false })
+      expect(String(r.cuerpo.motivo)).toMatch(/no se recorta/)
+    }
+    expect(MS.filas.filter((f) => f.de === turno.agente)).toHaveLength(0)
+    await MS.aportar({ encargo_id: id, de: 'content-creator', para: null, tipo: 'aporta', texto: 'tres titulares', refs: [], responde_a: null, profundidad: 0, costo_usd: 0, workflow_execution_id: null })
+    const rd = await llamar(M, { herramienta: 'mesa_devolver', encargo_id: id, de: turno.agente, a: 'content-creator', comentarios: enorme })
+    expect(rd.status).toBe(200)
+    expect(rd.cuerpo).toMatchObject({ ok: false })
+    expect(MS.filas.filter((f) => f.tipo === 'devuelve')).toHaveLength(0)
+    // justo en el techo sí entra entero
+    const justo = 'y'.repeat(TOPE_DE_LO_ESCRITO)
+    expect((await llamar(M, { herramienta: 'mesa_devolver', encargo_id: id, de: turno.agente, a: 'content-creator', comentarios: justo })).cuerpo).toMatchObject({ ok: true })
+    expect(MS.filas.at(-1)!.texto).toBe(justo)
+  })
+
+  // 19-nov · las 3 pruebas que pidió CC6 en #1222 (sus sabotajes m1, m4 y m7 sobrevivían)
+  it('m1 · un pedido de puros espacios no se anota, por ninguno de los dos caminos', async () => {
+    const { M, MS, id, turno } = await preparado()
+    const r1 = await llamar(M, { herramienta: 'mesa_pedir', encargo_id: id, de: turno.agente, a: 'content-creator', que: '     ' })
+    expect(r1.cuerpo).toMatchObject({ ok: false, motivo: 'di qué le pides' })
+    const r2 = await llamar(M, { herramienta: 'pedir_material', encargo_id: id, de: turno.agente, que: '     ' })
+    expect(r2.cuerpo).toMatchObject({ ok: false, motivo: 'di qué material necesitas' })
+    expect(MS.filas).toHaveLength(0)
+  })
+  it('m4 · mesa_pedir sin «para qué» anota exactamente el pedido, sin « (para: )»', async () => {
+    const { M, MS, id, turno } = await preparado()
+    expect((await llamar(M, { herramienta: 'mesa_pedir', encargo_id: id, de: turno.agente, a: 'content-creator', que: '  tres titulares para el hook  ' })).cuerpo).toMatchObject({ ok: true })
+    expect(MS.filas.at(-1)!.texto).toBe('tres titulares para el hook')
+    expect((await llamar(M, { herramienta: 'mesa_pedir', encargo_id: id, de: turno.agente, a: 'carousel-designer', que: 'el ritmo de las láminas', para_que: '   ' })).cuerpo).toMatchObject({ ok: true })
+    expect(MS.filas.at(-1)!.texto).toBe('el ritmo de las láminas')
+  })
+  it('m7 · el motivo del rechazo dice cuánto mide el texto y cuál es el tope (para que el agente sepa cuánto acortar)', async () => {
+    const { M, id, turno } = await preparado()
+    const r = await llamar(M, { herramienta: 'mesa_pedir', encargo_id: id, de: turno.agente, a: 'content-creator', que: 'x'.repeat(TOPE_DE_LO_ESCRITO + 1) })
+    expect(String(r.cuerpo.motivo)).toContain(String(TOPE_DE_LO_ESCRITO + 1))
+    expect(String(r.cuerpo.motivo)).toContain(`el tope es ${TOPE_DE_LO_ESCRITO}`)
+    expect(String(r.cuerpo.motivo)).toContain('«que»')
   })
 
   it('un encargo de la oficina de siempre (familia v1) no tiene tablero: 409', async () => {

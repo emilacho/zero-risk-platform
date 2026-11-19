@@ -9,6 +9,7 @@ import type { Puertos } from '../puertos'
 import { porteroDe } from './directorio'
 import { huellaDePedido, idasYVueltas } from './libro'
 import { COTAS, COTAS_DE_LA_GRAN_IDEA, esFamiliaMesa, profundidadMaximaDe, type EstadoMesa, type TipoDeAporte } from './tipos'
+import { TOPE_DE_LO_ESCRITO } from '../../limites-de-tamano'
 
 const r = (status: number, cuerpo: Record<string, unknown>): Respuesta => ({ status, cuerpo })
 const HERRAMIENTAS = ['mesa_pedir', 'mesa_devolver', 'pedir_material'] as const
@@ -16,6 +17,14 @@ type Herramienta = (typeof HERRAMIENTAS)[number]
 /** máximo de pedidos/devoluciones que un mismo agente puede anotar en una pieza (el planificador además acota por pareja y profundidad) */
 export const MAX_PEDIDOS_POR_AGENTE = 6
 const corto = (x: unknown, n: number): string => (typeof x === 'string' ? x.trim().slice(0, n) : '')
+/**
+ * 19-nov · G8 (2) · GO Lenovo 10:36 · firma de Emilio «nada se recorta»: lo que el agente PIDE o DEVUELVE (`que`, `para_que`, `comentarios`) va ENTERO al tablero.
+ * Antes, 600/800 el pedido, 300 el «para qué» y 1500 los comentarios, cortados en silencio: el compañero leía un pedido sin su final.
+ * Encima del techo de lo escrito no se corta: el agente recibe `ok:false` con el motivo y decide (la cuenta, en `limites-de-tamano.ts`).
+ */
+const entero = (x: unknown): string => (typeof x === 'string' ? x.trim() : '')
+const demasiadoLargo = (campo: string, t: string): Respuesta | null =>
+  t.length > TOPE_DE_LO_ESCRITO ? r(200, { ok: false, motivo: `«${campo}» tiene ${t.length} caracteres y el tope es ${TOPE_DE_LO_ESCRITO}: dilo más corto (no se recorta: no se anotó nada)` }) : null
 
 /** devuelve 200 con `ok:false` + `motivo` cuando el pedido no procede (el conector lo entrega al agente como error legible); 4xx solo para llamadas mal formadas o ajenas */
 export async function registrarHerramienta(P: Puertos, cuerpo: unknown): Promise<Respuesta> {
@@ -48,8 +57,10 @@ export async function registrarHerramienta(P: Puertos, cuerpo: unknown): Promise
   if (herramienta === 'pedir_material') {
     if (!portero) return r(200, { ok: false, motivo: 'esta pieza no tiene portero del cerebro disponible' })
     para = portero.agente; tipo = 'pide'
-    const que = corto(b.que, 600); if (que.length < 3) return r(200, { ok: false, motivo: 'di qué material necesitas' })
-    texto = que + (corto(b.para_que, 300) ? ` (para: ${corto(b.para_que, 300)})` : '')
+    const que = entero(b.que); if (que.length < 3) return r(200, { ok: false, motivo: 'di qué material necesitas' })
+    const paraQue = entero(b.para_que)
+    const largo = demasiadoLargo('que', que) ?? demasiadoLargo('para_que', paraQue); if (largo) return largo
+    texto = que + (paraQue ? ` (para: ${paraQue})` : '')
   } else {
     para = corto(b.a, 120)
     const t = est.directorio_congelado.find((x) => x.agente === para && x.activo)
@@ -59,12 +70,15 @@ export async function registrarHerramienta(P: Puertos, cuerpo: unknown): Promise
     if (idasYVueltas(libro, de, para) >= COTAS.MAX_IDAS_VUELTAS_POR_PAREJA) return r(200, { ok: false, motivo: `ya hubo ${COTAS.MAX_IDAS_VUELTAS_POR_PAREJA} idas y vueltas con ${para}: decide con lo que hay` })
     if (herramienta === 'mesa_devolver') {
       if (!libro.some((a) => a.de === para && (a.tipo === 'aporta' || a.tipo === 'responde' || a.tipo === 'dirige'))) return r(200, { ok: false, motivo: `${para} todavía no tiene un aporte que devolver` })
-      tipo = 'devuelve'; texto = corto(b.comentarios, 1500)
+      tipo = 'devuelve'; texto = entero(b.comentarios)
       if (texto.length < 3) return r(200, { ok: false, motivo: 'di qué debe cambiar' })
+      const largo = demasiadoLargo('comentarios', texto); if (largo) return largo
     } else {
-      tipo = 'pide'; const que = corto(b.que, 800)
+      tipo = 'pide'; const que = entero(b.que)
       if (que.length < 3) return r(200, { ok: false, motivo: 'di qué le pides' })
-      texto = que + (corto(b.para_que, 300) ? ` (para: ${corto(b.para_que, 300)})` : '')
+      const paraQue = entero(b.para_que)
+      const largo = demasiadoLargo('que', que) ?? demasiadoLargo('para_que', paraQue); if (largo) return largo
+      texto = que + (paraQue ? ` (para: ${paraQue})` : '')
     }
   }
   const huella = huellaDePedido(de, para, texto)
