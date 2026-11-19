@@ -97,7 +97,7 @@ export function tareaDeFichas(p: PedidoDeFichas): string {
     '',
     `# HECHOS DEL NEGOCIO (del cerebro)\n${p.hechosDelCerebro === null ? '(hechos del negocio: aún no disponibles)' : p.hechosDelCerebro.length ? p.hechosDelCerebro.map((h) => `- ${h}`).join('\n') : '(el cerebro no tiene hechos de este negocio: no consta)'}`,
     '',
-    `# REFERENCIAS (ids que puedes citar en \`fuente\`)\n${referencias(p.ctx)}`,
+    `# REFERENCIAS (ids que puedes citar en \`fuente\`)\n${referencias(p.ctx, { plan: true, manual: true })}`,
     '',
     `# PLAN\n${documentoDeLaCadena('el plan', p.ctx.planTexto)}`,
     '',
@@ -139,7 +139,7 @@ export function tareaDeEstrategia(p: PedidoDeEstrategia): string {
     '',
     lineaDeLlavesDeFechas(p.llavesDeFechas),
     '',
-    `# REFERENCIAS (ids que puedes citar en \`ref\`)\n${referencias(p.ctx)}`,
+    `# REFERENCIAS (ids que puedes citar en \`ref\`)\n${referencias(p.ctx, { plan: true, manual: true })}`,
     '',
     `# PLAN\n${documentoDeLaCadena('el plan', p.ctx.planTexto)}`,
     '',
@@ -282,7 +282,7 @@ export function tareaDeCalendario(p: PedidoDeCalendario): string {
     ...seccionDeOfertas(p),
     seccionDeFechas(p),
     '',
-    `# REFERENCIAS (ids que puedes citar en \`ref\`)\n${referencias(p.ctx)}`,
+    `# REFERENCIAS (ids que puedes citar en \`ref\`)\n${referencias(p.ctx, { plan: true, manual: false })}`,
     p.filasPrevias.length ? `\n# Piezas de tandas anteriores (para no repetir temas)\n${p.filasPrevias.map((f) => `- ${f.id}: ${f.tema ?? ''}`).join('\n')}` : '',
     '',
     `# PLAN\n${documentoDeLaCadena('el plan', p.ctx.planTexto)}`,
@@ -341,11 +341,15 @@ export function tareaDeFechas(p: PedidoDeFechas): string {
   ].join('\n')
 }
 
-function referencias(ctx: ContextoDelCliente): string {
+function referencias(ctx: ContextoDelCliente, arriba: { plan: boolean; manual: boolean }): string {
   if (!ctx.referencias.length) return '(no hay referencias: no escribas datos concretos)'
+  // 19-nov · ADENDA 1 · P2b (CC5): si el pedido ya trae el plan o el manual ENTEROS en su <documento> (# PLAN · # MANUAL DE MARCA), aquí queda su id para citarlo,
+  // sin repetir el texto; el que el pedido no trae arriba (el calendario no trae el manual) sigue entero aquí
+  const texto = (r: ContextoDelCliente['referencias'][number]) =>
+    r.origen === 'plan' && arriba.plan ? '(el plan entero: está en «# PLAN»)' : r.origen === 'manual' && arriba.manual ? '(el manual entero: está en «# MANUAL DE MARCA»)' : r.texto.replace(/\s+/g, ' ')
   return ctx.referencias
     .filter((r) => r.origen !== 'trozo' || r.confianza === 'system_trusted' || r.confianza === 'tenant_trusted')
-    .map((r) => `- ${r.id} [${r.origen}${r.firmada ? ', firmada' : ''}${r.fuente ? `, ${r.fuente}` : ''}${r.sede ? `, sede ${r.sede}` : ''}]: ${r.texto.replace(/\s+/g, ' ')}`)
+    .map((r) => `- ${r.id} [${r.origen}${r.firmada ? ', firmada' : ''}${r.fuente ? `, ${r.fuente}` : ''}${r.sede ? `, sede ${r.sede}` : ''}]: ${texto(r)}`)
     .join('\n')
 }
 

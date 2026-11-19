@@ -6,7 +6,8 @@ import { contextoDe, clienteA } from '../__fixtures__/clientes'
 describe('las referencias llegan enteras al agente', () => {
   const base = contextoDe(clienteA())
   const pedido = (referencias: typeof base.referencias) => tareaDeEstrategia({ ctx: { ...base, referencias }, formatosPermitidos: {}, version: 1 })
-  const ref = base.referencias[0]
+  // 19-nov · ADENDA 1 · P2b: una ficha (el plan y el manual ya van enteros en su <documento> y aquí solo se nombran)
+  const ref = base.referencias.find((r) => r.origen === 'ficha')!
   it('🔴 un texto largo no se corta', () => {
     const largo = 'x'.repeat(3000) + 'FINAL'
     expect(pedido([{ ...ref, texto: largo }])).toContain('FINAL')
