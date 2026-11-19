@@ -10,7 +10,8 @@ import { describe, expect, it } from 'vitest'
 import { parsearBrief } from '../brief'
 import { validarPlantilla } from '../plantilla'
 import { TOPE_MAXIMO_DEL_SOBRE_USD } from '../sobre'
-import { abrirEncargo, plantillaDe } from '../orquestador'
+import { abrirEncargo, avanzar, plantillaDe } from '../orquestador'
+import { techoDe } from '../mesa/planificador'
 import { ejecutarCodigoV } from '../orquestador-video'
 import { recibirResultadoMesa } from '../mesa/orquestador'
 import type { Tarjeta } from '../mesa/tipos'
@@ -159,6 +160,15 @@ describe('G5b · 🔴 de CC7 (04:13Z) · la mesa y la jefatura frenan contra el 
     const r = await recibirResultadoMesa(M.P, id, n, { texto: 'Idea rectora: el local en un gesto. Pido el guion a video-editor.', costo_usd: 0 } as never)
     const turno = r.cuerpo.turno as { paso?: string } | undefined
     expect(String(turno?.paso ?? ''), JSON.stringify(r.cuerpo).slice(0, 400)).not.toMatch(/^mesa:/)
+  })
+  it('🔴 al re-entregar el turno abierto, su reserva es lo que le queda a la pieza bajo su techo, no al sobre', async () => {
+    const { M, id, t15 } = await abrirReel()
+    const enc = M.encargos.get(id)!
+    enc.estado_del_motor = { ...enc.estado_del_motor, gasto_usd: +(techoDe(t15) - 0.2).toFixed(6) }
+    const r = await avanzar(M.P, id)
+    const reserva = (r.cuerpo.turno as { pedido?: { max_budget_usd?: number } } | undefined)?.pedido?.max_budget_usd
+    expect(r.cuerpo.reentrega, JSON.stringify(r.cuerpo).slice(0, 300)).toBe(true)
+    expect(reserva).toBe(0.2)
   })
   it('🔴 la jefatura recibe lo que le queda a la pieza, no al sobre', () => {
     const pl = topesA(15)
