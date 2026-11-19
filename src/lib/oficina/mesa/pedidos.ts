@@ -369,13 +369,13 @@ export function armarTarea(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarj
     seccionDelDirectorio(est.directorio_congelado, agente),
     '',
     '## 1 · Manual de marca (léelo PRIMERO)',
-    recorta(c.manual_texto || '(sin manual)', DIETA[c.tipo].manual, 'el manual de marca'),
+    documento('el manual de marca', recorta(c.manual_texto || '(sin manual)', DIETA[c.tipo].manual, 'el manual de marca')),
     '',
     c.tipo === 'brief' ? '## 2 · El marco de la campaña (estrategia, fases, canales, hitos, sedes y fechas)' : c.tipo === 'concepto' ? '## 2 · El brief de la campaña y las fases de la estrategia' : `## 2 · El brief de este entregable (${BRIEF_GUIA_NO_REGLA})`,
-    recorta(c.brief_texto, DIETA[c.tipo].marco, 'el marco'),
+    documento(c.tipo === 'brief' ? 'el marco de la campaña' : c.tipo === 'concepto' ? 'el brief de la campaña' : 'el brief de este entregable', recorta(c.brief_texto, DIETA[c.tipo].marco, 'el marco')),
     '',
     '## 3 · El plan de trabajo',
-    c.plan_texto ? recorta(c.plan_texto, DIETA[c.tipo].plan, 'el plan') : '(sin plan)',
+    c.plan_texto ? documento('el plan de trabajo', recorta(c.plan_texto, DIETA[c.tipo].plan, 'el plan')) : '(sin plan)',
     '',
     '## Fotos propias del cliente (ids para `Imagen: foto:<id>`)',
     LISTA_DE_FOTOS(c.fotos, new Set(fotosALaVista(c.fotos).map((f) => f.id))),
@@ -441,7 +441,46 @@ export function armarTarea(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarj
     redactar_prompts: tareaDelIngeniero(o.imagenesARedactar ?? []),
     criticar: tareaDeLaCritica(agente),
   }
-  return cab + seccionDeIndicacion(o.tarjeta, agente) + (o.metodo ? o.metodo + '\n\n' : '') + tu[tipo]
+  return cab + seccionDeIndicacion(o.tarjeta, agente) + (o.metodo ? o.metodo + '\n\n' : '') + antesDeEscribir(tipo) + tu[tipo]
+}
+
+/**
+ * 19-nov · ADENDA 1 · P1 · EL MOLDE COMÚN DEL PEDIDO (CC5 · GO Lenovo 05:17Z · firma de Emilio 18-nov, Lenovo 15:32Z):
+ *   (b) los documentos van ARRIBA, cada uno en `<documento fuente="…">`; la instrucción y las notas del dueño van al final;
+ *   (c) antes de escribir, el agente COPIA textual lo que los originales dicen del alcance (zona, canal, público, oferta);
+ *   (d) el pedido dice qué se conserva tal cual;
+ *   (e) el pedido CIERRA reescribiendo el objetivo (`cierreConElObjetivo`, que el orquestador pega detrás de las notas del dueño).
+ * El bloque «Alcance (copiado):» va solo en los turnos que escriben en el TABLERO (dirigir, aportar, responder): en los que entregan algo que el código lee
+ * (la integración, el relleno, los prompts, la crítica) no se agrega nada a la salida; la devolución de citas no lleva molde (solo escribe líneas de cita).
+ */
+export const documento = (fuente: string, texto: string): string => `<documento fuente="${fuente}">\n${texto}\n</documento>`
+export const ALCANCE_COPIADO = 'Alcance (copiado):'
+const TURNOS_DEL_TABLERO: ReadonlySet<TipoDeTurno> = new Set(['dirigir', 'aportar', 'responder'])
+export const LO_QUE_SE_CONSERVA =
+  'Conserva TAL CUAL lo que viene de los documentos: cifras, precios, horarios, direcciones, sedes, nombres propios, cuentas y canales del cliente, lo prohibido del manual y lo que esté marcado como pendiente (un pendiente nunca se afirma como hecho: se dice que falta).'
+export function antesDeEscribir(tipo: TipoDeTurno): string {
+  if (tipo === 'devolver_citas') return ''
+  return [
+    '## Antes de escribir',
+    ...(TURNOS_DEL_TABLERO.has(tipo)
+      ? [`Empieza tu respuesta con **«${ALCANCE_COPIADO}»**: copia TEXTUAL de los documentos de arriba lo que dicen de la **zona** (ciudad, sede o barrio), el **canal** (red y formato), el **público** y la **oferta**, cada uno con su fuente entre paréntesis. Si los documentos no lo dicen, escribe «no lo dicen»; no lo completes tú. Después, tu aporte (si te toca abrir la pieza, el «Objetivo de la pieza:» va justo debajo del alcance).`]
+      : ['Antes de entregar, revisa tu trabajo contra el alcance que el equipo copió en el tablero («Alcance (copiado):»): zona, canal, público y oferta. No agregues ese bloque a tu entrega.']),
+    LO_QUE_SE_CONSERVA,
+    '',
+    '',
+  ].join('\n')
+}
+const OBJETIVO_DE_LA_HOJA = /^- OBJETIVO: (.+)$/m
+/** (e) la última sección del pedido: el objetivo, reescrito (va DETRÁS de las notas y los cambios del dueño) */
+export function cierreConElObjetivo(c: Pick<ContextoDeTurno, 'tipo' | 'brief_texto'>, tipo: TipoDeTurno): string {
+  // la devolución de citas no lleva molde; reubicación, fallidos y banco tienen su propio armador (su molde va aparte)
+  if (tipo === 'devolver_citas' || c.tipo === 'reubicacion' || c.tipo === 'fallidos' || c.tipo === 'banco') return ''
+  const objetivo = c.tipo === 'brief'
+    ? 'un brief creativo fiel al plan y al manual, con UN solo mensaje que la campaña tiene que comunicar'
+    : c.tipo === 'concepto'
+    ? 'una gran idea que sirva a todo el plan de la campaña y sea fiel a su brief'
+    : (() => { const m = OBJETIVO_DE_LA_HOJA.exec(c.brief_texto); return m ? `que esta pieza logre su objetivo: «${m[1].trim()}»` : 'que esta pieza logre el objetivo de su brief (el brief no lo declara: decláralo tú y dilo)' })()
+  return `\n\n## Lo que importa\nEl objetivo: ${objetivo}. Todo lo que escribas en este turno sirve a eso.`
 }
 
 /**
