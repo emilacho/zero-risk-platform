@@ -62,17 +62,16 @@ describe('G5b · la duración con que se abre', () => {
   it('🔴 la declarada, con su porqué y sin aviso', () => {
     expect(duracionDeLaPieza({ duracion: '45 s · tres momentos' }, conRango())).toEqual({ segundos: 45, porque: 'tres momentos', por_omision: false })
   })
-  it('🔴 sin declarar: la de por omisión de la plantilla, marcada y CON aviso', () => {
-    const d = duracionDeLaPieza({}, conRango(120, 20))
-    expect(d).toMatchObject({ segundos: 20, por_omision: true })
-    expect(d.aviso).toMatch(/no declara la duración.*20 s/)
-    expect(duracionDeLaPieza(null, conRango(120, undefined))).toMatchObject({ segundos: 15, por_omision: true })
-    expect(duracionDeLaPieza({ duracion: 'larga' }, conRango()).aviso).toMatch(/no se pudo leer/)
+  // 19-nov · firma de Emilio (GO Lenovo 15:05 Zúrich): la duración es de la IDEA; sin ella, la de por omisión es una guarda CALLADA (la falta la ve la jefatura)
+  it('🔴 la idea sin duración: la de por omisión de la plantilla, marcada y SIN aviso (guarda técnica callada)', () => {
+    expect(duracionDeLaPieza({}, conRango(120, 20))).toEqual({ segundos: 20, porque: '', por_omision: true })
+    expect(duracionDeLaPieza(null, conRango(120, undefined))).toEqual({ segundos: 15, porque: '', por_omision: true })
+    expect(duracionDeLaPieza({ duracion: 'larga' }, conRango())).toEqual({ segundos: 15, porque: '', por_omision: true })
   })
-  it('🔴 lo que pasa del máximo se abre con el máximo, con aviso', () => {
+  it('🔴 lo que pasa del máximo se abre con el máximo, con aviso (es un tope real, no una omisión)', () => {
     const d = duracionDeLaPieza({ duracion: '3 min · todo' }, conRango())
     expect(d).toMatchObject({ segundos: TECHO_DE_LA_PIEZA_S, por_omision: false })
-    expect(d.aviso).toMatch(/pide 180 s.*hasta 120 s/)
+    expect(d.aviso).toBe('la idea pide 180 s y la cadena aguanta hasta 120 s (el render de la composición): se abre con 120 s')
     expect(duracionDeLaPieza({ duracion: '40 s' }, conRango(30)).segundos).toBe(30)
   })
 })
@@ -120,11 +119,10 @@ describe('G5b · por la oficina (memoria, en seco)', () => {
     const { enc } = await abrir(parteCon('20 s · corto'), conRango(), 300)
     expect(enc!.tope_usd).toBe(300)
   })
-  it('🔴 sin DURACIÓN: 15 s por omisión, guardado con su aviso (la ficha lo muestra)', async () => {
+  it('🔴 sin DURACIÓN (la idea no la trajo): 15 s por omisión, guardado SIN aviso', async () => {
     const { M, enc } = await abrir(parteCon())
-    const d = enc!.sala_ref?.[CLAVE_DE_LA_DURACION] as { segundos: number; por_omision: boolean; aviso: string }
-    expect(d).toMatchObject({ segundos: 15, por_omision: true })
-    expect(d.aviso).toMatch(/nadie la razonó/)
+    const d = enc!.sala_ref?.[CLAVE_DE_LA_DURACION] as { segundos: number; por_omision: boolean; aviso?: string }
+    expect(d).toEqual({ segundos: 15, porque: '', por_omision: true })
     expect((await plantillaDe(M.P, enc!)).pasos.find((p) => p.funcion === 'video')!.tope_usd).toBe(topesA(15).pasos.find((p) => p.funcion === 'video')!.tope_usd)
   })
   it('🔴 la cobertura se mide con la duración declarada: un sobre que cubre 15 s pero no 120 abre', async () => {
@@ -205,7 +203,7 @@ describe('G5b · cambio 2 de Lenovo · el guion pide más: nada se recorta', () 
     const a = s.res.artefacto as Record<string, unknown>
     expect(a.vuelve_a_la_mesa).toBe(false)
     expect(a.duracion_s).toBe(30)
-    expect(String(a.aviso_duracion)).toMatch(/dura 30 s y el brief abrió 15 s/)
+    expect(String(a.aviso_duracion)).toMatch(/dura 30 s y la pieza se abrió con 15 s/)
     // desde aquí el motor ve los topes de 30 s
     const despues = { ...enc, estado_del_motor: { ...enc.estado_del_motor, artefactos: { ...enc.estado_del_motor.artefactos, pedido_video: { version: 1, version_consumida: 0, datos: a } } } } as Encargo
     const M = crearMemoria({ plantilla: conRango() })
@@ -218,7 +216,7 @@ describe('G5b · cambio 2 de Lenovo · el guion pide más: nada se recorta', () 
     const a = s.res.artefacto as Record<string, unknown>
     expect(a.vuelve_a_la_mesa).toBe(true)
     expect(a.pedido).toBeUndefined()
-    expect(String(a.aviso_a_la_mesa)).toMatch(/dura 30 s.*abrió 15 s.*Rehaz el guion dentro de 15 s/)
+    expect(String(a.aviso_a_la_mesa)).toMatch(/dura 30 s y la pieza se abrió con 15 s.*Rehaz el guion dentro de 15 s/)
   })
   it('🔴 no cabe y ya volvió: no se recorta y no se pide; queda para decidir', async () => {
     const tope = Math.floor(topesA(15).limites.tope_encargo_usd) + 1
@@ -226,16 +224,26 @@ describe('G5b · cambio 2 de Lenovo · el guion pide más: nada se recorta', () 
     expect(s.fallido).toMatch(/No se recorta/)
     expect(s.res.artefacto).toBeUndefined()
   })
-  it('🔴 la revisión del video muestra al dueño la duración por omisión y la que subió el guion (fichas visibles, nunca calladas)', async () => {
+  // 19-nov · firma de Emilio: el dueño ve la duración solo cuando hay algo que decir (la idea pasó el techo o el guion la subió); la omisión ya no se muestra
+  const fichasDeLaRevision = async (duracion: Record<string, unknown>) => {
     const enc = armar(15, 3, 10, 400)
-    const conAvisos = { ...enc, sala_ref: { [CLAVE_DE_LA_DURACION]: { segundos: 15, porque: '', por_omision: true, aviso: 'el brief no declara la duración de la pieza: se usó 15 s' } },
-      estado_del_motor: { ...enc.estado_del_motor, artefactos: { ...enc.estado_del_motor.artefactos, copy_video: { version: 1, version_consumida: 0, datos: { pie_de_foto: 'Ven hoy.', hashtags: ['#local'] } }, pedido_video: { version: 1, version_consumida: 0, datos: { aviso_duracion: 'el guion dura 30 s y el brief abrió 15 s' } } } } } as Encargo
+    const conAvisos = { ...enc, sala_ref: { [CLAVE_DE_LA_DURACION]: duracion },
+      estado_del_motor: { ...enc.estado_del_motor, artefactos: { ...enc.estado_del_motor.artefactos, copy_video: { version: 1, version_consumida: 0, datos: { pie_de_foto: 'Ven hoy.', hashtags: ['#local'] } }, pedido_video: { version: 1, version_consumida: 0, datos: { aviso_duracion: 'el guion dura 30 s y la pieza se abrió con 15 s' } } } } } as Encargo
     const M = crearMemoria({ plantilla: conRango() })
     const pl = await plantillaDe(M.P, conAvisos)
     const s = await ejecutarCodigoV(M.P, conAvisos, pl, pl.pasos.find((p) => p.funcion === 'chequeos_video')!)
-    const textos = (s.res.fichas ?? []).map((f) => f.que)
-    expect(textos).toContain('el brief no declara la duración de la pieza: se usó 15 s')
-    expect(textos).toContain('el guion dura 30 s y el brief abrió 15 s')
+    return (s.res.fichas ?? []).map((f) => ({ que: f.que, contra_que: f.contra_que }))
+  }
+  it('🔴 la revisión del video muestra la idea que pasó el techo y la que subió el guion (fichas visibles)', async () => {
+    const f = await fichasDeLaRevision({ segundos: 120, porque: 'todo', por_omision: false, aviso: 'la idea pide 180 s y la cadena aguanta hasta 120 s (el render de la composición): se abre con 120 s' })
+    expect(f).toContainEqual(expect.objectContaining({ que: 'la idea pide 180 s y la cadena aguanta hasta 120 s (el render de la composición): se abre con 120 s', contra_que: 'duración de la idea' }))
+    expect(f.map((x) => x.que)).toContain('el guion dura 30 s y la pieza se abrió con 15 s')
+  })
+  it('🔴 la de por omisión NO da ficha, ni siquiera en un encargo viejo que guardó el aviso (`por_omision` manda)', async () => {
+    const f = await fichasDeLaRevision({ segundos: 15, porque: '', por_omision: true, aviso: 'el brief no declara la duración de la pieza: nadie la razonó y se usó la de por omisión, 15 s' })
+    expect(f.map((x) => x.que).filter((q) => /por omisión|no declara|nadie la razonó/.test(String(q)))).toEqual([])
+    expect(f.filter((x) => /duración de la idea|duración del brief/.test(String(x.contra_que)))).toEqual([])
+    expect(f.map((x) => x.que)).toContain('el guion dura 30 s y la pieza se abrió con 15 s')
   })
   it('🔴 un guion dentro de lo abierto sigue como antes (sin aviso ni recálculo)', async () => {
     const s = await correr(armar(45, 3, 10, 400))
