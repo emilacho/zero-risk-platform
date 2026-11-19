@@ -45,7 +45,7 @@ interface Consulta extends PromiseLike<Lectura> {
 export type Db = { from(tabla: string): Consulta }
 
 export type ResultadoDeGuardar =
-  | { ok: true; id: string; vigente: boolean; aplicada: DecisionDeFusion; aviso: string | null }
+  | { ok: true; id: string; vigente: boolean; aplicada: DecisionDeFusion | null; aviso: string | null } // aplicada null = sin decisión: las marcas no se tocaron
   | { ok: false; motivo: string }
 
 const TABLA = 'client_icp_documents'
@@ -60,49 +60,59 @@ export async function guardarPublico(
   p: { client_id: string; fila: Record<string, unknown>; decision?: unknown; modo: 'upsert' | 'insert' },
 ): Promise<ResultadoDeGuardar> {
   const nombre = typeof p.fila.audience_segment === 'string' ? p.fila.audience_segment : ''
-  let aviso: string | null = null
-  let d: DecisionDeFusion = { tipo: 'nuevo', porque: null }
-  if (p.decision !== undefined && p.decision !== null) {
-    const leida = leerDecision(p.decision)
-    if (leida) d = leida
-    else aviso = 'la decisión de fusión no se pudo leer; entró como nuevo'
-  }
+  const avisos: string[] = []
+  const sinTocar = (motivo: string, tipo?: string) => { avisos.push(`${motivo}; se guardó sin tocar sus marcas${tipo ? ` (decía ${tipo})` : ''}`); return null }
+  // 19-nov · 🟡 CC6 #1211 opción (b): SIN decisión (ausente, ilegible o que no cuadra) NO se tocan las marcas: «no decir nada» no borra lo que alguien decidió.
+  // Solo una decisión explícita y verificada (incluido `{ nuevo: true }`) las cambia.
+  let d: DecisionDeFusion | null = null
+  if (p.decision !== undefined && p.decision !== null) d = leerDecision(p.decision) ?? sinTocar('la decisión de fusión no se pudo leer')
   try {
-    if (d.tipo !== 'nuevo') {
+    if (d && d.tipo !== 'nuevo') {
       const r = await db.from(TABLA).select('id, client_id, audience_segment, fusionado_en').eq('id', d.id).maybeSingle()
       const o = (r.data ?? null) as { client_id?: unknown; audience_segment?: unknown; fusionado_en?: unknown } | null
       const motivo = r.error ? `no se pudo leer el público ${d.id}: ${r.error.message}`
         : !o ? `el público ${d.id} no existe`
         : o.client_id !== p.client_id ? `el público ${d.id} es de otro cliente`
         : o.fusionado_en ? `el público ${d.id} ya no está vigente`
-        : p.modo === 'upsert' && o.audience_segment === nombre ? null // es la MISMA fila por nombre: el upsert ya la refresca, no se marca contra sí misma
+        : p.modo === 'upsert' && o.audience_segment === nombre ? null // es la MISMA fila por nombre: el upsert la refresca, no se marca contra sí misma
         : undefined
-      if (motivo === null) d = { tipo: 'nuevo', porque: d.porque }
-      else if (motivo !== undefined) { aviso = `${motivo}; entró como nuevo (decía ${d.tipo})`; d = { tipo: 'nuevo', porque: d.porque } }
+      if (motivo === null) d = null
+      else if (motivo !== undefined) d = sinTocar(motivo, d.tipo)
     }
-    // 19-nov · entrega 2 (condición 2 de CC6): por el upsert, «mismo_que» sobre un nombre que YA existe (otra fila, vigente e indexada) sería un UPDATE de fusión
-    // que deja sus trozos viejos en el cerebro y dispara el re-embebido. No se absorbe: queda en duda (los dos vigentes) y se dice.
-    if (d.tipo === 'mismo_que' && p.modo === 'upsert') {
-      const r = await db.from(TABLA).select('id').eq('client_id', p.client_id).eq('audience_segment', nombre).maybeSingle()
-      if (r.error) { aviso = `no se pudo ver si el público «${nombre}» ya existe: ${r.error.message}; entró como nuevo (decía mismo_que)`; d = { tipo: 'nuevo', porque: d.porque } }
-      else if (r.data) { aviso = `el público «${nombre}» ya existe; no se absorbe al actualizarlo: queda como posible duplicado de ${d.id}`; d = { tipo: 'posible_duplicado_de', id: d.id, porque: d.porque } }
+    // por el upsert, una decisión explícita mira primero la fila del MISMO nombre de ESTE cliente (🟡 n8: nunca la de otro cliente)
+    if (d && p.modo === 'upsert') {
+      const r = await db.from(TABLA).select('id, fusionado_en').eq('client_id', p.client_id).eq('audience_segment', nombre).maybeSingle()
+      const ya = (r.data ?? null) as { id?: unknown; fusionado_en?: unknown } | null
+      if (r.error) d = sinTocar(`no se pudo ver si el público «${nombre}» ya existe: ${r.error.message}`, d.tipo)
+      else if (ya) {
+        // condición 2 de CC6 (#1208): «mismo_que» sobre otra fila ya existente sería un UPDATE de fusión (trozos viejos en el cerebro + re-embebido) → queda en duda
+        if (d.tipo === 'mismo_que') {
+          avisos.push(`el público «${nombre}» ya existe; no se absorbe al actualizarlo: queda como posible duplicado de ${d.id}`)
+          d = { tipo: 'posible_duplicado_de', id: d.id, porque: d.porque }
+        }
+        // 🟡 CC6 #1211: deshacer una fusión decidida se DICE
+        if (typeof ya.fusionado_en === 'string') avisos.push(`se deshizo la fusión de «${nombre}» (estaba absorbido en ${ya.fusionado_en})`)
+      }
     }
-    // 19-nov · entrega 2 (condición 3 de CC6): las 3 marcas y el porqué van SIEMPRE (null cuando no aplican): un público que vuelve a entrar no hereda marcas viejas.
-    // Requiere la migración 202611190700 aplicada (CC7, 19-nov 06:53Z).
-    const marcas: Record<string, unknown> = {
-      fusionado_en: d.tipo === 'mismo_que' ? d.id : null,
-      segmento_de: d.tipo === 'dentro_de' ? d.id : null,
-      posible_duplicado_de: d.tipo === 'posible_duplicado_de' ? d.id : null,
-      fusion_porque: d.tipo === 'nuevo' ? null : d.porque,
-    }
+    // con decisión explícita van las 3 marcas y el porqué (null cuando no aplican: un público que vuelve no hereda marcas viejas). Requiere 202611190700 (aplicada 19-nov 06:53Z).
+    const marcas: Record<string, unknown> = d
+      ? {
+          fusionado_en: d.tipo === 'mismo_que' ? d.id : null,
+          segmento_de: d.tipo === 'dentro_de' ? d.id : null,
+          posible_duplicado_de: d.tipo === 'posible_duplicado_de' ? d.id : null,
+          fusion_porque: d.tipo === 'nuevo' ? null : d.porque,
+        }
+      : {}
     const fila = { ...p.fila, client_id: p.client_id, ...marcas }
     const w = p.modo === 'upsert'
-      ? await db.from(TABLA).upsert(fila, { onConflict: 'client_id,audience_segment' }).select('id').maybeSingle()
-      : await db.from(TABLA).insert(fila).select('id').single()
+      ? await db.from(TABLA).upsert(fila, { onConflict: 'client_id,audience_segment' }).select('id, fusionado_en').maybeSingle()
+      : await db.from(TABLA).insert(fila).select('id, fusionado_en').single()
     if (w.error) return { ok: false, motivo: `no se pudo guardar el público «${nombre}»: ${w.error.message}`.slice(0, 300) }
-    const id = (w.data as { id?: unknown } | null)?.id
+    const guardada = (w.data ?? null) as { id?: unknown; fusionado_en?: unknown } | null
+    const id = guardada?.id
     if (typeof id !== 'string') return { ok: false, motivo: `no se pudo guardar el público «${nombre}»: la base no devolvió el id` }
-    return { ok: true, id, vigente: d.tipo !== 'mismo_que', aplicada: d, aviso }
+    // vigente = lo que la base DE VERDAD tiene tras escribir (un absorbido que vuelve sin decisión sigue absorbido y no se indexa)
+    return { ok: true, id, vigente: !guardada?.fusionado_en, aplicada: d, aviso: avisos.length ? avisos.join(' · ') : null }
   } catch (e) {
     return { ok: false, motivo: `no se pudo guardar el público «${nombre}»: ${msj(e)}` }
   }
