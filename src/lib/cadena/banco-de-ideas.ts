@@ -22,7 +22,15 @@ export const INTENTOS_DE_ESCRITURA = 3
 /** las filas que todavía no tienen brief: se reasignan al retirar; las de brief en adelante conservan su idea (cuidado 3 de CC6 · propuesta CC1, decisión final de Lenovo/Emilio) */
 export const ESTADOS_SIN_BRIEF: readonly Fila['estado'][] = ['esquema', 'propuesta', 'validada', 'en_investigacion', 'lista_para_brief']
 export const ESTADOS_CON_BRIEF: readonly Fila['estado'][] = ['briefeada', 'en_oficina', 'aprobada', 'espera_video']
+/**
+ * 19-nov · firma de Emilio (23:25 Zúrich, vía Lenovo 22:30Z): al retirar una idea, las filas CON BRIEF todavía sin aprobar también reciben otra idea del mismo
+ * capítulo y su brief se rehace. `aprobada` y `espera_video` no se tocan aquí (la aprobada vuelve solo con regla dura, y eso lo decide el receptor de CC3).
+ * La VUELTA al brief (`→ lista_para_brief`): por una corrección la escribe solo el receptor (con su marca · `devolverFilasAlBrief`); desde el tablero, este núcleo.
+ */
+export const ESTADOS_CON_BRIEF_QUE_CAMBIAN: readonly Fila['estado'][] = ['briefeada', 'en_oficina']
+export const ESTADOS_QUE_CAMBIAN_DE_IDEA: readonly Fila['estado'][] = [...ESTADOS_SIN_BRIEF, ...ESTADOS_CON_BRIEF_QUE_CAMBIAN]
 export const PREFIJO_AVISO_DE_REASIGNACION = 'idea reasignada: '
+export const avisoDeLaVueltaPorElTablero = (ideaId: string) => `la idea «${ideaId}» se retiró del banco desde el tablero: el brief se rehace con la idea nueva y la pieza vieja queda reemplazada`
 
 export interface Reasignada { fila_id: string; idea_vieja: string; idea_nueva: string | null }
 export interface EntradaDelHistorial {
@@ -36,6 +44,8 @@ export interface EntradaDelHistorial {
   cuando: string
   reasignadas?: Reasignada[]
   con_brief_sin_tocar?: string[]
+  /** 19-nov · las filas con brief (sin aprobar) que recibieron otra idea */
+  con_brief_reasignadas?: string[]
 }
 type IdeaRetirada = IdeaDelBanco & { retirada_en: string; retirada_por: string }
 
@@ -193,12 +203,14 @@ export async function bancoRetirar(al: Almacen, cuerpo: Record<string, unknown>,
   if (!p.ok) return p.r
   const ideaId = cadena(cuerpo.idea_id)
   if (!ideaId) return fallo(400, 'E-CAMPOS', 'falta idea_id')
-  return retirarDelBanco(al, p.ctx, ideaId, ahora)
+  // desde el tablero no hay receptor: este mismo núcleo devuelve al brief las filas con brief (sin aprobar) que cambian de idea
+  return retirarDelBanco(al, p.ctx, ideaId, ahora, undefined, { devolverAlBrief: true })
 }
 
 /** 17-nov · el NÚCLEO de retirar (sin la puerta): reasigna las filas sin brief y saca la idea; lo usan el tablero y el puerto de correcciones */
 /** `esperada` (solo el puerto de correcciones): la `linea` que la idea debe tener antes de tocar filas Y en cada intento de escritura; si cambió → 409 E-IDEA-CAMBIADA */
-export async function retirarDelBanco(al: Almacen, ctx: ContextoDelBanco, ideaId: string, ahora: string, esperada?: string): Promise<Respuesta> {
+/** `o.devolverAlBrief` (solo el tablero): antes de la idea nueva, la fila con brief vuelve a `lista_para_brief`. Por una corrección NO: la vuelta es del receptor (lleva su marca). */
+export async function retirarDelBanco(al: Almacen, ctx: ContextoDelBanco, ideaId: string, ahora: string, esperada?: string, o: { devolverAlBrief?: boolean } = {}): Promise<Respuesta> {
   const p = { ctx }
   const v0 = await leerVigente(al, p.ctx)
   if (!v0.ok) return v0.r
@@ -212,18 +224,28 @@ export async function retirarDelBanco(al: Almacen, ctx: ContextoDelBanco, ideaId
   const calVersion = await al.ultimaVersionDeCalendario(p.ctx.campana_id)
   const filas = calVersion ? await al.filas(p.ctx.campana_id, calVersion) : []
   const citan = filas.filter((f) => f.idea_ref === ideaId).sort((a, b) => (a.fecha ?? '').localeCompare(b.fecha ?? '') || a.id.localeCompare(b.id))
-  const con_brief_sin_tocar = citan.filter((f) => ESTADOS_CON_BRIEF.includes(f.estado)).map((f) => f.id)
+  // 🔴 condición de CC3 (19-nov 00:21Z): si un retiro anterior se cortó DESPUÉS de reasignar y ANTES del historial, las filas con brief ya no citan la idea;
+  // se recuperan por el aviso de reasignación de ESTA idea, así la repetición las vuelve a listar y el receptor las devuelve al brief
+  const marcaDeEstaIdea = `${PREFIJO_AVISO_DE_REASIGNACION}la idea «${ideaId}» se retiró del banco`
+  const yaReasignadasConBrief = filas.filter((f) => f.idea_ref !== ideaId && ESTADOS_CON_BRIEF.includes(f.estado) && f.avisos.some((a) => a.startsWith(marcaDeEstaIdea))).map((f) => f.id)
+  const con_brief_sin_tocar = [...citan.filter((f) => ESTADOS_CON_BRIEF.includes(f.estado)).map((f) => f.id), ...yaReasignadasConBrief]
   const usos = new Map<string, number>()
   for (const f of filas) if (f.idea_ref) usos.set(f.idea_ref, (usos.get(f.idea_ref) ?? 0) + 1)
   const banco = v0.banco.filter((i) => i.id !== ideaId)
   const reasignadas: Reasignada[] = []
-  for (const f of citan.filter((x) => ESTADOS_SIN_BRIEF.includes(x.estado))) {
+  const con_brief_reasignadas: string[] = [...yaReasignadasConBrief]
+  for (const f of citan.filter((x) => ESTADOS_QUE_CAMBIAN_DE_IDEA.includes(x.estado))) {
+    const conBrief = ESTADOS_CON_BRIEF_QUE_CAMBIAN.includes(f.estado)
+    // desde el tablero: PRIMERO la vuelta al brief y DESPUÉS la idea. Si se corta en el medio, la fila ya está sin brief y repetir el retiro la reasigna como a las demás
+    // si la vuelta no se pudo escribir (la fila cambió de estado entre medio), NO se le cambia la idea: una fila con brief viejo e idea nueva no debe existir
+    if (conBrief && o.devolverAlBrief && calVersion && !(await al.reubicarFila(p.ctx.campana_id, calVersion, f.id, { estado: 'lista_para_brief' }, avisoDeLaVueltaPorElTablero(ideaId), ESTADOS_CON_BRIEF_QUE_CAMBIAN))) continue
     const nueva = ideaDeReemplazo(banco, retirada, usos)
     const aviso = nueva
       ? `${PREFIJO_AVISO_DE_REASIGNACION}la idea «${ideaId}» se retiró del banco; la fila realiza ahora «${nueva.id}» (mismo capítulo)`
       : `${PREFIJO_AVISO_DE_REASIGNACION}la idea «${ideaId}» se retiró del banco y su capítulo no tiene otra: la fila queda sin idea`
-    if (await al.reasignarIdeaDeFila(p.ctx.campana_id, calVersion, f.id, ideaId, nueva?.id ?? null, aviso, ESTADOS_SIN_BRIEF)) {
+    if (await al.reasignarIdeaDeFila(p.ctx.campana_id, calVersion, f.id, ideaId, nueva?.id ?? null, aviso, ESTADOS_QUE_CAMBIAN_DE_IDEA)) {
       reasignadas.push({ fila_id: f.id, idea_vieja: ideaId, idea_nueva: nueva?.id ?? null })
+      if (conBrief) con_brief_reasignadas.push(f.id)
       if (nueva) usos.set(nueva.id, (usos.get(nueva.id) ?? 0) + 1)
     }
   }
@@ -235,7 +257,7 @@ export async function retirarDelBanco(al: Almacen, ctx: ContextoDelBanco, ideaId
     const k = v.banco.findIndex((i) => i.id === ideaId)
     if (k < 0 && !reasignadas.length) return fallo(409, 'E-IDEA-RETIRADA', 'esa idea ya se retiró del banco', { idea_id: ideaId })
     if (esperada !== undefined && (k < 0 || v.banco[k].linea !== esperada)) return fallo(409, 'E-IDEA-CAMBIADA', 'la idea cambió desde que se armó la corrección: no se pisa', { idea_id: ideaId, reasignadas })
-    const entrada: EntradaDelHistorial = { accion: 'retirar', idea_id: ideaId, version: p.ctx.version, antes: { ...retirada }, despues: null, quien: p.ctx.autor, cuando: ahora, reasignadas, con_brief_sin_tocar }
+    const entrada: EntradaDelHistorial = { accion: 'retirar', idea_id: ideaId, version: p.ctx.version, antes: { ...retirada }, despues: null, quien: p.ctx.autor, cuando: ahora, reasignadas, con_brief_sin_tocar, con_brief_reasignadas }
     const leido: Record<string, unknown> = { ...v.leido, historial_del_banco: [...v.historial, entrada] }
     let md = v.c.texto_md
     if (k >= 0) {
@@ -245,7 +267,7 @@ export async function retirarDelBanco(al: Almacen, ctx: ContextoDelBanco, ideaId
       if (md !== null) md = textoConIdea(md, ideaId, null).md
     }
     if (await al.actualizarConceptoSiSello(p.ctx.campana_id, p.ctx.version, v.sello, { leido, texto_md: md })) {
-      return { status: 200, cuerpo: { ok: true, version: p.ctx.version, ideas: [retirada], historial: [entrada], reasignadas, con_brief_sin_tocar, ...(k < 0 ? { ya_retirada: true } : {}) } }
+      return { status: 200, cuerpo: { ok: true, version: p.ctx.version, ideas: [retirada], historial: [entrada], reasignadas, con_brief_sin_tocar, con_brief_reasignadas, ...(k < 0 ? { ya_retirada: true } : {}) } }
     }
   }
   return fallo(409, 'E-CONCURRENTE', 'otra edición del banco se guardó al mismo tiempo y no se pudo retirar la idea: vuelve a abrir la gran idea', { reasignadas })
