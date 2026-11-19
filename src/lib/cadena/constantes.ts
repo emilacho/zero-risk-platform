@@ -51,6 +51,13 @@ export function medidaDeCampana(c?: { fecha_inicio?: string | null; fecha_fin?: 
 /** semanas con fecha desde el día 1 (el panorama): se arma por código, sin modelo */
 export const SEMANAS_DE_PANORAMA = 12
 export const MAXIMO_DE_INTENTOS = 3
+/** 19-nov · grupo C: rondas de corrección por paso (hoy era UNA; el triple, firma de Emilio). Tras la última: la tanda saca la fila bloqueada; la estrategia deja vigente su mejor versión. */
+export const RONDAS_DE_CORRECCION = 3
+/**
+ * El tope de vueltas de los sub-flujos de n8n (`cadena-estrategia` y `cadena-calendario`, nodo «④ ¿Y ahora?»): el peor caso legítimo es (1 pasada + las rondas) × los intentos de cada una.
+ * Una prueba lo ata al `vuelta >= N` de los dos JSON: si alguien sube las rondas sin subir el tope, vuelve el error en vez de la salida (CC1, 19-nov).
+ */
+export const TOPE_DE_VUELTAS_DEL_SUBFLUJO = (1 + RONDAS_DE_CORRECCION) * MAXIMO_DE_INTENTOS
 /**
  * Plazo de una llamada a un agente. 🔴 #464 C4 (CC#3): el nodo HTTP de los flujos espera 290 s; con un plazo de 15 min una llamada perdida dejaba la corrida «en curso» 15 min
  * (y el resultado se perdía). El plazo alcanza al nodo + margen: 6 min. Los flujos además cierran la corrida como fallida AL INSTANTE si el nodo falla (ver el flujo de #466).

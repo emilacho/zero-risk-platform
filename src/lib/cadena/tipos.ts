@@ -89,7 +89,13 @@ export interface TandaAgente { piezas: PiezaAgente[]; ajustes_al_patron: Ajuste[
 
 export type EstadoFila =
   | 'esquema' | 'propuesta' | 'validada' | 'en_investigacion' | 'lista_para_brief' | 'briefeada' | 'en_oficina' | 'aprobada'
-  | 'cancelada' | 'espera_video' | 'vencida_sin_brazo' | 'perdio_su_fecha' | 'descartada_sin_fuente'
+  | 'cancelada' | 'espera_video' | 'vencida_sin_brazo' | 'perdio_su_fecha' | 'descartada_sin_fuente' | 'descartada_por_bloqueo'
+
+/**
+ * 19-nov · grupo C (GO Lenovo 04:29Z · firma de Emilio, ADENDA 17:22Z): las filas que SALIERON en la cadena. `descartada_sin_fuente` (dato sin fuente tras la corrección)
+ * y `descartada_por_bloqueo` (siguió bloqueada tras la última ronda de corrección). Cada lista que excluye la primera excluye también la segunda: es la misma clase.
+ */
+export const SALIERON_EN_LA_CADENA: ReadonlySet<EstadoFila> = new Set<EstadoFila>(['descartada_sin_fuente', 'descartada_por_bloqueo'])
 
 /** La fila fechada por el CÓDIGO: la unidad de todo lo que sigue. */
 export interface Fila {

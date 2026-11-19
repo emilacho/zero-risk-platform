@@ -810,7 +810,7 @@ export async function avisoDePrimeraSemana(al: Almacen, campana: Pick<Campana, '
 }
 
 // ───────────────────────────────────────────────────────── LA HOJA DE PRODUCCIÓN por código (hoja.v1) · `POST /api/cadena/hojas {accion: 'escribir'}`
-const ESTADOS_QUE_NO_VAN_A_LA_HOJA = new Set(['esquema', 'cancelada', 'espera_video', 'vencida_sin_brazo', 'perdio_su_fecha', 'descartada_sin_fuente'])
+const ESTADOS_QUE_NO_VAN_A_LA_HOJA = new Set(['esquema', 'cancelada', 'espera_video', 'vencida_sin_brazo', 'perdio_su_fecha', 'descartada_sin_fuente', 'descartada_por_bloqueo'])
 /** la hoja de un lote de filas (por `fila_ids` o por `semana`): brief creativo validado + gran idea aprobada + filas con su `idea_ref` → el texto que la oficina ya lee (`parsearBrief`). No llama a nadie ni gasta. */
 /** 17-nov · Sprint 4 · A entrega 2: las fichas que escribió el lector de ESTA campaña (brief, gran idea y hoja leen las mismas) · sin ellas, cada bloque lo DICE */
 async function fichasDeLaCampana(al: Almacen, campanaId: string): Promise<FichaDeOferta[] | null> {

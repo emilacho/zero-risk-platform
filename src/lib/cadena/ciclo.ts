@@ -36,6 +36,12 @@ export interface Resolucion {
   fichasPendientes: Ficha[]
 }
 
+/** 19-nov · grupo C · el motivo del slot que queda omitido cuando una fila SALE en la cadena (por cada uno de los estados de `SALIERON_EN_LA_CADENA`) */
+export const MOTIVO_DE_SALIDA = {
+  descartada_sin_fuente: 'la fila salió: dato sin fuente tras la corrección',
+  descartada_por_bloqueo: 'la fila salió: siguió bloqueada tras la última ronda de corrección',
+} as const
+
 export function slotDe(id: string): string {
   return id.replace(/^s\d+-d\d+-/, '')
 }
@@ -52,7 +58,7 @@ export function resolverTrasCorreccion(hs: Hallazgo[], semanaDe: (filaId: string
   return {
     estado: 'filas_salen',
     filasQueSalen: ids,
-    ajustes: ids.map((id) => ({ semana: semanaDe(id), slot: slotDe(id), accion: 'omitir' as const, motivo: 'la fila salió: dato sin fuente tras la corrección' })),
+    ajustes: ids.map((id) => ({ semana: semanaDe(id), slot: slotDe(id), accion: 'omitir' as const, motivo: MOTIVO_DE_SALIDA.descartada_sin_fuente })),
     fichasPendientes: faltantes.map((x) => x.ficha),
   }
 }

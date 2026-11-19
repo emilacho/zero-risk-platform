@@ -87,7 +87,7 @@ export function claseDeFormato(formato: string): 'feed' | 'historias' | 'anuncio
 
 const DIAS: Record<string, number> = { lunes: 1, martes: 2, miercoles: 3, jueves: 4, viernes: 5, sabado: 6, domingo: 7 }
 
-const activa = (f: Fila) => f.estado !== 'cancelada' && f.estado !== 'descartada_sin_fuente'
+const activa = (f: Fila) => f.estado !== 'cancelada' && f.estado !== 'descartada_sin_fuente' && f.estado !== 'descartada_por_bloqueo'
 const materializada = (f: Fila) => f.estado !== 'esquema'
 /** lo que se valida: materializada y viva (una fila que salió o se canceló ya no se juzga) */
 const validable = (f: Fila) => materializada(f) && activa(f)

@@ -8,7 +8,7 @@ import { activarYArrancar, type ResultadoDelArranque } from './arranque'
 import { autorizarLlamada, cadena, compuerta, err, type Respuesta } from './autorizar'
 import { AGENTE_POR_PASO, CABECERA_SALTAR_EDITOR, MAXIMO_DE_INTENTOS, modeloDeLaCadena, RAZONAMIENTO_POR_DEFECTO, medidaDeCampana, SEMANAS_DE_PANORAMA, TOTAL_DE_TANDAS, topeDelPaso, type MedidaDeCampana, type Paso } from './constantes'
 import { bajarFaltantesDeCantidad, leerV08, sinFaltantesSiCorrige } from './cantidad'
-import { planDeCorreccion, resolverTrasCorreccion, slotDe } from './ciclo'
+import { MOTIVO_DE_SALIDA, planDeCorreccion, resolverTrasCorreccion, slotDe } from './ciclo'
 import { ESQUEMA_CALENDARIO_TANDA, ESQUEMA_CALENDARIO_TANDA_V5, ESQUEMA_ESTRATEGIA, ESQUEMA_FICHAS_DE_OFERTA } from './esquemas'
 import { fichasConHechos, hechoEnTexto, leerFichasDelLector, type HechoDelNegocioPorOferta } from './ficha-de-oferta'
 import { CODIGO_CAMPANA_PAUSADA, conceptoParaElCalendario, empujarDesdeElTablero, EN_REVISION_DE_REGISTRO, etapaDeReentrada, nuevoOrdenEncendido, origenesDelCliente, recibirVueltaDeRegistro, siguienteDespuesDe, tramoDeReemision } from './mesas'
@@ -24,7 +24,7 @@ import { abrirEsperaDe, ponerNecesitaHumano, prepararCorrida, resolverEsperas, s
 import { validarEsquemaDeSalida } from '@/lib/salida-estructurada'
 import { diasEntre, fechaDeFila } from './fechas'
 import { diaUnoDelPlan } from './fechas-en-texto'
-import type { Ajuste, Estrategia, Fila, FormatosPorRed, Hallazgo, TandaAgente } from './tipos'
+import { SALIERON_EN_LA_CADENA, type Ajuste, type Estrategia, type Fila, type FormatosPorRed, type Hallazgo, type TandaAgente } from './tipos'
 import { type LexicoAfirmaciones } from './afirmaciones'
 import { lexicoDelCliente } from './lexico-por-rubro'
 import { problemasDeEsquema, normalizarPilares, validarEstrategia } from './validador-estrategia'
@@ -413,7 +413,7 @@ export async function cerrarTanda(al: Almacen, p: { campana: Campana; formatos: 
   // GO de Lenovo 10-nov 14:59Z: lo que cae antes de hoy (zona del cliente) + el plazo de producción de su formato no se programa; queda `perdio_su_fecha` con la razón escrita
   const hoy = hoyEnZona(ahora, campana.zona_horaria)
   const finales: Fila[] = filas.map((f) => {
-    if (f.estado === 'descartada_sin_fuente') return f
+    if (SALIERON_EN_LA_CADENA.has(f.estado)) return f
     const fuera = fueraDePlazoDeProduccion(f, hoy, formatos)
     if (fuera) return { ...f, estado: 'perdio_su_fecha', avisos: [...f.avisos.filter((a) => esNotaDeDependencias(a) || esNotaDeIdea(a)), fuera] }
     if (f.estado === 'espera_video') return f
@@ -532,8 +532,9 @@ export async function retomarPorCantidades(al: Almacen, campana: Campana, ahora:
   const semanas = semanasDeTanda(tanda, medidaDeCampana(campana))
   const previas = todas.filter((f) => f.tanda < tanda && f.estado !== 'esquema')
   const filas = todas.filter((f) => f.tanda === tanda && f.estado !== 'esquema')
-  const salen = filas.filter((f) => f.estado === 'descartada_sin_fuente').map((f) => f.id)
-  const ajustes: Ajuste[] = [...omitidosImplicitos(estr, semanas, filas), ...salen.map((id) => ({ semana: semanaDeId(id), slot: slotDe(id), accion: 'omitir' as const, motivo: 'la fila salió: dato sin fuente tras la corrección' }))]
+  const quienesSalen = filas.filter((f) => SALIERON_EN_LA_CADENA.has(f.estado))
+  const salen = quienesSalen.map((f) => f.id)
+  const ajustes: Ajuste[] = [...omitidosImplicitos(estr, semanas, filas), ...quienesSalen.map(ajusteDeSalida)]
   const hs = bajarFaltantesDeCantidad(validarTodo(insumosDe(campana, ctx, estr, formatos, tanda, semanas, filas, previas, ajustes, await fechasDeclaradas(al, ctx, estr, campana), ahora, lexico)))
   if (hs.some((h) => h.severidad === 'bloquea')) return no('al re-validar queda algún bloqueo que no es de cantidad')
   await al.guardarValidaciones(campana.id, 'calendario', version, tanda, 2, hs, campana.seco)
@@ -556,7 +557,10 @@ export async function retomarPorCantidades(al: Almacen, campana: Campana, ahora:
  */
 type CierreDeTanda = Parameters<typeof cerrarTanda>[1]
 /** los estados de una tanda guardada que todavía no se cerró (cerrarTanda los lleva a validada · en_investigacion · perdio_su_fecha) */
-const ESTADOS_SIN_CERRAR: ReadonlySet<Fila['estado']> = new Set(['propuesta', 'espera_video', 'descartada_sin_fuente'])
+/** 19-nov · grupo C · el slot de una fila que SALIÓ queda omitido, con el motivo de su estado */
+const ajusteDeSalida = (f: Fila): Ajuste => ({ semana: semanaDeId(f.id), slot: slotDe(f.id), accion: 'omitir', motivo: f.estado === 'descartada_por_bloqueo' ? MOTIVO_DE_SALIDA.descartada_por_bloqueo : MOTIVO_DE_SALIDA.descartada_sin_fuente })
+
+const ESTADOS_SIN_CERRAR: ReadonlySet<Fila['estado']> = new Set(['propuesta', 'espera_video', 'descartada_sin_fuente', 'descartada_por_bloqueo'])
 
 const avisoDeFila = (filaId: string, que: string): Hallazgo => ({
   chequeo: 'V15', severidad: 'aviso', fila_id: filaId, alcance: 'fila',
@@ -605,8 +609,9 @@ async function cerrarTandaDeRegistro(al: Almacen, campana: Campana, tanda: numbe
   const semanas = semanasDeTanda(tanda, medidaDeCampana(campana))
   const previas = todas.filter((f) => f.tanda < tanda && f.estado !== 'esquema')
   const originales = todas.filter((f) => f.tanda === tanda && f.estado !== 'esquema')
-  const salen = originales.filter((f) => f.estado === 'descartada_sin_fuente').map((f) => f.id)
-  const ajustes: Ajuste[] = [...omitidosImplicitos(estr, semanas, originales), ...salen.map((id) => ({ semana: semanaDeId(id), slot: slotDe(id), accion: 'omitir' as const, motivo: 'la fila salió: dato sin fuente tras la corrección' }))]
+  const quienesSalen = originales.filter((f) => SALIERON_EN_LA_CADENA.has(f.estado))
+  const salen = quienesSalen.map((f) => f.id)
+  const ajustes: Ajuste[] = [...omitidosImplicitos(estr, semanas, originales), ...quienesSalen.map(ajusteDeSalida)]
   const fechas = await fechasDeclaradas(al, ctx, estr, campana)
   const validar = (fs: Fila[]) => bajarFaltantesDeCantidad(validarTodo(insumosDe(campana, ctx, estr, formatos, tanda, semanas, fs, previas, ajustes, fechas, ahora, lexico, true)))
   /** los chequeos que BLOQUEAN, por fila (o `tanda` si son del conjunto) */

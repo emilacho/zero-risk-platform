@@ -16,7 +16,7 @@ import type { Fila, FormatosPorRed, SedeInfo } from './tipos'
 /** los estados de una fila que todavía esperan producirse (los mismos que toma el reparto en lotes) */
 export const ESTADOS_SIN_PRODUCIR: readonly Fila['estado'][] = ['validada', 'lista_para_brief']
 /** los estados que ya no cuentan para el máximo por día ni para las dependencias */
-const ESTADOS_FUERA: readonly Fila['estado'][] = ['cancelada', 'perdio_su_fecha', 'descartada_sin_fuente', 'vencida_sin_brazo']
+const ESTADOS_FUERA: readonly Fila['estado'][] = ['cancelada', 'perdio_su_fecha', 'descartada_sin_fuente', 'descartada_por_bloqueo', 'vencida_sin_brazo']
 /** el tope de intentos de una misma decisión (misma huella): después, un solo aviso y nada más (sin bucle) */
 export const MAX_INTENTOS_DE_REUBICACION = 2
 export const PREFIJO_REUBICACION = 'reubicación: '
