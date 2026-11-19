@@ -189,3 +189,53 @@ describe('el descubrimiento usa la función única · un absorbido no se indexa 
     vi.doUnmock('@/lib/brain/persist-chunks')
   })
 })
+
+// 19-nov · 🟡 de CC6 (#1208): 4 caminos reales que ningún sabotaje hacía caer
+describe('🟡 CC6 · los 4 caminos sin prueba', () => {
+  it('m13 · la entrada del descubrimiento entrega `fusion` tal cual al segmento (si no, la decisión nunca llega)', async () => {
+    const { validateDiscoveryShape } = await import('../parse')
+    const fusion = { mismo_que: P1, porque: 'mismo público' }
+    const r = validateDiscoveryShape({ client_id: CLIENTE, own_handles: {}, competitors: [], icp: [{ audience_segment: 'A', fusion }, { audience_segment: 'B' }] }, CLIENTE)
+    expect(r.kind).toBe('ok')
+    const icp = (r as { value: { icp: Array<Record<string, unknown>> } }).value.icp
+    expect(icp[0].fusion).toEqual(fusion)
+    expect(icp[1]).not.toHaveProperty('fusion')
+    const uno = validateDiscoveryShape({ client_id: CLIENTE, own_handles: {}, competitors: [], icp: { audience_segment: 'C', fusion: { nuevo: true } } }, CLIENTE)
+    expect((uno as { value: { icp: Record<string, unknown> } }).value.icp.fusion).toEqual({ nuevo: true })
+  })
+
+  it('m17 · un público que no se guarda deja `icp_<nombre>: …` en errors y no se indexa', async () => {
+    vi.resetModules()
+    const indexados: string[] = []
+    vi.doMock('@/lib/brain/persist-chunks', () => ({ persistChunks: async (_s: unknown, a: { sourceId: string }) => { indexados.push(a.sourceId); return { ok: true, chunks_upserted: 1 } } }))
+    const { persistDiscoveryToBrain } = await import('../persist-brain')
+    const { db } = base({ fallaEscribir: 'duplicate key' })
+    const out = await persistDiscoveryToBrain({ supabase: db as never, enabled: true, discovery: { client_id: CLIENTE, own_handles: {}, competitors: [], icp: [{ audience_segment: 'Perdido', pain_points: ['x'] }] } as never })
+    expect(out.errors).toContain('icp_Perdido: no se pudo guardar el público «Perdido»: duplicate key')
+    expect(out.icp_document_rows).toBe(0)
+    expect(indexados).toEqual([])
+    vi.doUnmock('@/lib/brain/persist-chunks')
+  })
+
+  it('m9 · el analizador de marca cuenta solo los públicos que se guardaron', async () => {
+    const { BrandAnalyzer } = await import('@/lib/brand-analyzer')
+    let n = 0
+    const db = {
+      from: () => ({
+        insert: () => ({ select: () => ({ single: async () => (++n === 2 ? { data: null, error: { message: 'caída' } } : { data: { id: `id-${n}` }, error: null }) }) }),
+      }),
+    }
+    const seg = (nombre: string) => ({ audience_segment: nombre, segment_priority: 1, job_titles: [], company_size: null, industries: [], geography: null, goals: [], pain_points: [], jobs_to_be_done: [], objections: [], preferred_channels: [], buying_process: null, recommended_tone: '', messaging_angle: '' })
+    const a = new BrandAnalyzer(db as never)
+    expect(await a.writeICPsToDB(CLIENTE, { segments: [seg('A'), seg('B'), seg('C')] })).toBe(2)
+  })
+
+  for (const data of [null, {}, { id: 7 }]) {
+    it(`m10 · si la base no devuelve el id (${JSON.stringify(data)}), el público NO se da por guardado`, async () => {
+      const db = { from: () => ({ upsert: () => ({ select: () => ({ maybeSingle: async () => ({ data, error: null }) }) }), insert: () => ({ select: () => ({ single: async () => ({ data, error: null }) }) }) }) }
+      for (const modo of ['upsert', 'insert'] as const) {
+        expect(await guardarPublico(db as never, { client_id: CLIENTE, fila: publico('B'), modo })).toEqual({ ok: false, motivo: 'no se pudo guardar el público «B»: la base no devolvió el id' })
+      }
+    })
+  }
+})
