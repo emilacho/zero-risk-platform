@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest'
 import { A, crearBaseFalsa, tablasDeLaBase } from '../../__tests__/casos'
 import { armarIndice } from '../indice'
 import { entregarContenido } from '../entregar'
-import { CASILLAS_QUE_YA_NO_VAN, filaDeRastro, leerPieza, type Registrar } from '../segun-la-pieza'
+import { CASILLAS_QUE_YA_NO_VAN, dejarRastro, filaDeRastro, leerFila, leerPieza, type Registrar } from '../segun-la-pieza'
 
 const AHORA = new Date('2026-11-18T12:00:00Z')
 const REAL = JSON.parse(fs.readFileSync(new URL('./pieza-olon-real.json', import.meta.url), 'utf-8')) as { fichas: Array<Record<string, unknown>> }
@@ -34,6 +34,8 @@ const registrador = () => {
   return { filas, registrar }
 }
 const HOJA = '## Brief\nReel de Olón para el fin de semana: horario y la historia del nombre.\n\n## Plan\n1. gancho con el encebollado\n2. horario de Olón\n3. la leyenda del pergamino'
+/** la fila REAL del reel de Olón tal como la manda la mesa (la `fila` de la sala del encargo 57101e2a, SELECT del 19-nov) */
+const FILA_OLON = { id: 's4-d5-vie_reel_olon', hora: '09:00', fecha: '2026-11-27' }
 const PIEZA = { cliente: A, agente: 'content-creator', turno: 'turno-7', pieza: { encargo_id: '57101e2a-reel-olon', fila: 'fila-1', hoja: HOJA } }
 const indice = async (cuerpo: unknown, o: { conLarga?: boolean; registrar?: Registrar } = {}) =>
   armarIndice(crearBaseFalsa(tablas(o.conLarga)).consulta, cuerpo, { ahora: AHORA, registrar: o.registrar, reloj: () => 1000 })
@@ -196,11 +198,13 @@ describe('las piezas sueltas del contrato', () => {
     const p = leerPieza({ ...PIEZA, pieza: { ...PIEZA.pieza, hoja } })
     expect(p.ok && p.pieza.hoja).toBe(hoja)
   })
-  it('la fila del rastro solo lleva columnas de cerebro_consultas (las de hoy + las de 202611181800)', () => {
-    const p = leerPieza(PIEZA)
+  it('la fila del rastro solo lleva columnas de cerebro_consultas (las de hoy + las de 202611181800 + fila_objeto de 202611191500)', () => {
+    const p = leerPieza({ ...PIEZA, pieza: { ...PIEZA.pieza, fila: FILA_OLON } })
     if (!p.ok) throw new Error('pieza')
     const fila = filaDeRastro({ cliente: A, pieza: p.pieza, ruta: 'entregar', entregadas: [HORARIO], noConstan: [9], ms: 12.6 })
     const mig = fs.readFileSync(new URL('../../../../../supabase/migrations/202611181800_cerebro_consultas_rastro_de_la_pieza.sql', import.meta.url), 'utf-8')
+      + fs.readFileSync(new URL('../../../../../supabase/migrations/202611191500_cerebro_consultas_fila_objeto.sql', import.meta.url), 'utf-8')
+    expect(fila).toHaveProperty('fila_objeto')
     const deHoy = ['client_id', 'oficina', 'agente', 'que', 'atributo', 'sede_clave', 'resultados', 'sin_dato', 'ms']
     for (const k of Object.keys(fila)) expect(deHoy.includes(k) || new RegExp(`add column if not exists ${k} `).test(mig), k).toBe(true)
     expect(fila.ms).toBe(13)
@@ -225,5 +229,71 @@ describe('la migración 202611181800 y su reversa', () => {
     expect(mig).toMatch(/ruta in \('indice', 'entregar'\)/)
     expect(rev).toMatch(/drop constraint if exists cerebro_consultas_ruta_check/)
     expect(rev).toMatch(/drop index if exists public\.cerebro_consultas_pieza/)
+  })
+})
+
+describe('pieza.fila llega como texto o como el objeto real del calendario (DECISION-CEREBRO 19-nov punto 2)', () => {
+  it('con la fila real de Olón (objeto): el índice responde, el rastro guarda su id en `fila` y el objeto entero en `fila_objeto`', async () => {
+    const r = registrador()
+    const res = await indice({ ...PIEZA, pieza: { ...PIEZA.pieza, fila: FILA_OLON } }, { registrar: r.registrar })
+    expect(res.status).toBe(200)
+    const c = res.cuerpo as Cuerpo
+    expect(c.pieza).toEqual({ encargo_id: '57101e2a-reel-olon', fila: 's4-d5-vie_reel_olon', turno: 'turno-7' })
+    expect(r.filas).toHaveLength(1)
+    expect(r.filas[0].fila).toBe('s4-d5-vie_reel_olon')
+    expect(r.filas[0].fila_objeto).toEqual(FILA_OLON)
+  })
+  it('con la fila real de Olón (objeto): la entrega también la guarda en el rastro', async () => {
+    const c = (await indice(PIEZA)).cuerpo as Cuerpo
+    const num = c.lista.find((l: Cuerpo) => l.ref === HORARIO).numero
+    const r = registrador()
+    const res = await entregar({ ...PIEZA, pieza: { ...PIEZA.pieza, fila: FILA_OLON }, numeros: [num], huella: c.huella }, { registrar: r.registrar })
+    expect(res.status).toBe(200)
+    expect(r.filas[0]).toMatchObject({ ruta: 'entregar', fila: 's4-d5-vie_reel_olon', fila_objeto: FILA_OLON })
+  })
+  it('con la fila en texto: `fila` es ese texto y `fila_objeto` va vacío', async () => {
+    const r = registrador()
+    expect((await indice({ ...PIEZA, pieza: { ...PIEZA.pieza, fila: 's4-d5-vie_reel_olon' } }, { registrar: r.registrar })).status).toBe(200)
+    expect(r.filas[0].fila).toBe('s4-d5-vie_reel_olon')
+    expect(r.filas[0].fila_objeto).toBeNull()
+  })
+  it('sin fila: las dos columnas van vacías', async () => {
+    const r = registrador()
+    expect((await indice({ ...PIEZA, pieza: { encargo_id: PIEZA.pieza.encargo_id, hoja: HOJA } }, { registrar: r.registrar })).status).toBe(200)
+    expect(r.filas[0].fila).toBeNull()
+    expect(r.filas[0].fila_objeto).toBeNull()
+  })
+  it('un objeto sin id no se rechaza ni se pierde: `fila` vacía y el objeto entero en `fila_objeto`', () => {
+    expect(leerFila({ hora: '09:00', fecha: '2026-11-27' })).toEqual({ ok: true, fila: null, objeto: { hora: '09:00', fecha: '2026-11-27' } })
+    expect(leerFila({ id: '   ', hora: '09:00' })).toEqual({ ok: true, fila: null, objeto: { id: '   ', hora: '09:00' } })
+  })
+  it('un id numérico va como texto; nunca «[object Object]»', () => {
+    expect(leerFila({ id: 7 })).toEqual({ ok: true, fila: '7', objeto: { id: 7 } })
+    const p = leerPieza({ ...PIEZA, pieza: { ...PIEZA.pieza, fila: { id: { x: 1 } } } })
+    expect(p.ok && p.pieza.fila).toBeNull()
+  })
+  it('otra forma (lista, número suelto, booleano) se rechaza y se dice por qué', async () => {
+    for (const fila of [['s4'], 7, true]) {
+      const res = await indice({ ...PIEZA, pieza: { ...PIEZA.pieza, fila } })
+      expect(res.status, JSON.stringify(fila)).toBe(400)
+      expect(JSON.stringify(res.cuerpo)).toContain('`pieza.fila` debe ser texto o el objeto de la fila')
+    }
+  })
+  it('la migración 202611191500 solo agrega `fila_objeto jsonb` y su reversa solo la quita', () => {
+    const mig = fs.readFileSync(new URL('../../../../../supabase/migrations/202611191500_cerebro_consultas_fila_objeto.sql', import.meta.url), 'utf-8')
+    const rev = fs.readFileSync(new URL('../../../../../supabase/reversas/202611191500_cerebro_consultas_fila_objeto_REVERSA.sql', import.meta.url), 'utf-8')
+    const sinComentarios = (x: string) => x.split(/\r?\n/).filter((l) => !l.trim().startsWith('--')).join(' ')
+    expect(sinComentarios(mig)).not.toMatch(/\bdrop\b|\bdelete\b|\bupdate\b|\btruncate\b/i)
+    expect((mig.match(/add column if not exists/g) ?? []).length).toBe(1)
+    expect(mig).toMatch(/add column if not exists fila_objeto jsonb/)
+    expect((rev.match(/drop column if exists/g) ?? []).length).toBe(1)
+    expect(rev).toMatch(/drop column if exists fila_objeto;/)
+  })
+})
+
+describe('el rastro sin dónde escribir (🟡 c6 de CC6)', () => {
+  it('sin registrador, el rastro NO se da por registrado y lo dice', async () => {
+    const r = await dejarRastro(undefined, { client_id: A })
+    expect(r).toEqual({ registrado: false, consulta_id: null, error: 'la ruta no recibió dónde escribir el rastro' })
   })
 })

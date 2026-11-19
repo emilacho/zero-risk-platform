@@ -9,6 +9,7 @@ import { abrirEncargo, recibirResultado } from '../orquestador'
 import { CLAVE_DE_LA_PALANCA } from '../mesa/con-mesa'
 import { datosDeLaJefatura } from '../paso-jefatura'
 import { KIT_MESA } from '../plantillas/mesa'
+import { VUELTAS_POR_REGLA_DURA, conVueltaPorReglaDura } from '../plantillas/vuelta-por-regla-dura'
 import { KIT_HISTORIAS_CON_JEFATURA } from '../plantillas/con-jefatura'
 import { TARGET_STEP_PRODUCIR } from '../sobre'
 import { datos } from '../ayudas'
@@ -41,8 +42,8 @@ const salida = (desacuerdos: string[]): SalidaDeRevision => ({ revision_id: 'rev
 
 const HALLAZGO = `texto: sentido · pieza: da a entender que ya atiende en persona — ficha: «${LINEA_NO}»`
 
-async function correr(desacuerdos: string[][], piezas: string[], o: { hechos?: HechoDelNegocioPorOferta[]; fecha?: string; real?: boolean; brief?: string; cerebroCaido?: boolean } = {}) {
-  const pl: Plantilla = JSON.parse(JSON.stringify(KIT_MESA))
+async function correr(desacuerdos: string[][], piezas: string[], o: { hechos?: HechoDelNegocioPorOferta[]; fecha?: string; real?: boolean; brief?: string; cerebroCaido?: boolean; plantilla?: Plantilla } = {}) {
+  const pl: Plantilla = JSON.parse(JSON.stringify(o.plantilla ?? KIT_MESA))
   const M = crearMemoria({ parte: parteCon(o.brief ?? BRIEF), plantilla: pl, config: { familias_activas: ['kit_historias'] } })
   const plantillas: Record<string, { plantilla: Plantilla; activo: boolean }> = { kit_historias: { plantilla: KIT_HISTORIAS_CON_JEFATURA, activo: true }, kit_mesa: { plantilla: pl, activo: true } }
   M.P.almacen.leerPlantilla = async (f) => plantillas[f] ?? null
@@ -56,19 +57,21 @@ async function correr(desacuerdos: string[][], piezas: string[], o: { hechos?: H
   const id = String(r.cuerpo.encargo_id)
   // la fila del calendario que guarda el encargo (`sala_ref.fila`): de ahí sale la fecha con que se miden los hechos vivos
   if (o.fecha) M.encargos.get(id)!.sala_ref = { fila: { id: 'F-0300', fecha: o.fecha } }
-  for (let i = 0; i < 40 && r.cuerpo.accion === 'esperar'; i++) {
+  for (let i = 0; i < 160 && r.cuerpo.accion === 'esperar'; i++) {
     const t = r.cuerpo.turno as { n: number; paso: string; agente: string }
     const [, tipo] = t.paso.split(':')
     let texto = `(${t.agente}) aporte breve`
     if (t.agente === 'creative-director-mesa' && tipo !== 'dirige') {
       const citas = MS.filas.filter((f) => f.encargo_id === id && f.tipo === 'aporta').map((f) => `A${f.n} usé: el titular`).join('\n')
       // antes de la vuelta escribe la 1.ª pieza; después de la devolución de la jefatura, la 2.ª (con su respuesta)
-      const volvio = MS.filas.some((f) => f.encargo_id === id && f.tipo === 'devuelve' && f.de === 'oficina-creativa')
-      texto = `${piezas[volvio ? 1 : 0]}\n## Citas\n${citas}`
+      // 18-nov · puede haber varias vueltas (la regla dura vuelve las veces que haga falta): la pieza n.º «vueltas»
+      const vueltas = MS.filas.filter((f) => f.encargo_id === id && f.tipo === 'devuelve' && f.de === 'oficina-creativa').length
+      texto = `${piezas[Math.min(vueltas, piezas.length - 1)]}\n## Citas\n${citas}`
     }
     r = await recibirResultado(M.P, id, t.n, { texto, costo_usd: 0, workflow_execution_id: `t-${t.n}` })
   }
-  const enc = M.encargos.get(id)!
+  const enc = M.encargos.get(id)
+  if (!enc) throw new Error(`el encargo no se abrió: ${JSON.stringify(r.cuerpo)}`)
   return { r, revisiones, avisos: MS.filas.filter((f) => f.encargo_id === id && f.tipo === 'devuelve' && f.de === 'oficina-creativa').map((f) => f.texto), e: enc.estado_del_motor, llamadas: M.llamadas, lecturasDelCerebro }
 }
 
@@ -123,11 +126,45 @@ describe('firma de Emilio · la vuelta con respuesta del creador, de punta a pun
     const j = datosDeLaJefatura(m.e)!
     expect(j.sentido!.duras_no_tomadas).toEqual([expect.objectContaining({ destino: 'pieza', origen: 'codigo', que: expect.stringMatching(/^D3 · el precio «\$9,90»/) })])
     const ficha = m.e.fichas.find((f) => f.gravedad === 'bloquea' && f.estado === 'no_tomada' && /D3 · el precio/.test(f.que ?? ''))!
-    expect(ficha.propuesta).toMatch(/regla dura no tomada tras la vuelta: la pieza no se publica/)
+    expect(ficha.propuesta).toMatch(/regla dura pendiente: la pieza queda en corrección, sin publicarse ni ir a la bandeja/)
     const alarmas = m.llamadas.avisos.filter((a) => a.canal === 'alertas')
     expect(alarmas).toHaveLength(1)
-    expect(alarmas[0].texto).toMatch(/^🛑 Pieza frenada · BRF-0300: regla dura no tomada tras la vuelta — pieza: D3 · el precio «\$9,90»/)
+    // 18-nov · GO Lenovo 13:52Z · ya no «frenada»: «en corrección» (esta plantilla tiene UNA vuelta: no cabe otra)
+    expect(m.r.cuerpo).toMatchObject({ en_correccion: true })
+    expect(alarmas[0].texto).toMatch(/^🔁 Pieza en corrección · BRF-0300: regla dura pendiente — pieza: D3 · el precio «\$9,90»/)
+    expect(alarmas[0].texto).toMatch(/Las demás piezas siguen\.$/)
+    expect(alarmas[0].texto).not.toMatch(/frenada/)
     expect(JSON.stringify({ e: m.e, a: m.llamadas.avisos })).not.toMatch(/una persona decide|decide una persona|a_humano/)
+  })
+
+  describe('18-nov · GO Lenovo 13:52Z · con la vuelta por regla dura (202611181530), la regla dura vuelve al creador las veces que haga falta', () => {
+    const CON_VUELTAS = conVueltaPorReglaDura(KIT_MESA)
+    const mal = PIEZA.replace('Texto: Pídelo desde casa.', 'Texto: Pídelo desde casa a $9,90.')
+    const bien = PIEZA.replace('Texto: Pídelo desde casa.', 'Texto: Pídelo desde casa a $7.')
+    it('🔑 rota en la 1.ª y en la 2.ª, corregida en la 3.ª: vuelve DOS veces (la 2.ª solo con la regla dura) y sale limpia a la bandeja', async () => {
+      const m = await correr([[HALLAZGO], [HALLAZGO], [HALLAZGO]], [mal, `${mal}\nRESPUESTA A LA JEFATURA S1: no tomada: prefiero ese precio`, `${bien}\nRESPUESTA A LA JEFATURA S1: tomada`], { plantilla: CON_VUELTAS, real: true })
+      expect(m.e.vueltas.jefatura).toBe(2)
+      expect(m.avisos).toHaveLength(2)
+      expect(m.avisos[0]).toMatch(/D3 · el precio «\$9,90».*regla dura: se toma sí o sí/)
+      // la 2.ª vuelta lleva SOLO la regla dura: lo de criterio (el mismo hallazgo de sentido) ya tuvo su vuelta y no reabre
+      expect(m.avisos[1]).toMatch(/estas REGLAS DURAS siguen rotas/)
+      expect(m.avisos[1]).toMatch(/\[S1\] .*D3 · el precio «\$9,90»/)
+      expect(m.avisos[1]).not.toMatch(/atiende en persona/)
+      expect(datosDeLaJefatura(m.e)!.sentido!.duras_no_tomadas).toBeUndefined()
+      expect(m.r.cuerpo).not.toHaveProperty('en_correccion')
+      expect(m.llamadas.bandeja).toHaveLength(1)
+      expect(m.llamadas.avisos.filter((a) => /Pieza en corrección|Pieza frenada/.test(a.texto))).toEqual([])
+    })
+    it('🔴 rota siempre: vuelve mientras cabe y, al no caber otra (red de 6 vueltas, pasos o dinero), queda EN CORRECCIÓN · ni salida ni bandeja, UNA alarma', async () => {
+      const m = await correr([[]], [mal], { plantilla: CON_VUELTAS, real: true })
+      expect(m.e.vueltas.jefatura).toBeGreaterThanOrEqual(2)
+      expect(m.e.vueltas.jefatura).toBeLessThanOrEqual(VUELTAS_POR_REGLA_DURA)
+      expect(m.r.cuerpo).toMatchObject({ accion: 'cerrado', en_correccion: true, output_id: null, hitl_queue_id: null })
+      expect(m.llamadas.salidas).toEqual([])
+      expect(m.llamadas.bandeja).toEqual([])
+      expect(m.llamadas.avisos.filter((a) => a.canal === 'alertas')).toEqual([expect.objectContaining({ texto: expect.stringMatching(/^🔁 Pieza en corrección · BRF-0300: regla dura pendiente/) })])
+      expect(datosDeLaJefatura(m.e)!.sentido!.vueltas_por_regla_dura).toBe(m.e.vueltas.jefatura - 1)
+    })
   })
 
   it('la regla dura que el creador SÍ corrigió (aunque no lo diga) no frena: manda la medición del código, no la respuesta', async () => {
@@ -190,5 +227,21 @@ describe('#1147 · D1 en la jefatura: manda el cerebro de hoy, en los dos sentid
   it('una sola lectura del cerebro por revisión, aunque la hoja ya traiga el cierre', async () => {
     const m = await correr([[]], [PIEZA], { brief: CERRADA, hechos: [CIERRE()], fecha: '2026-11-20' })
     expect(m.lecturasDelCerebro).toBe(1)
+  })
+})
+
+describe('18-nov · GO Lenovo «lo exacto se autocorrige» · en la mesa, antes de traducir (lo que se DIBUJA sale corregido)', () => {
+  it('🔴 un teléfono y un @ ajenos en el texto de la mesa: las láminas y su copy llevan los del cliente, se declara, y la pieza va a la bandeja sin vuelta', async () => {
+    const p = PIEZA.replace('Texto: Pídelo desde casa.', 'Texto: Pídelo al 0988 111 222.').replace('Llamado: la web', 'Llamado: escribe a @otra_marca')
+    const m = await correr([[], []], [p, p])
+    expect(datos(m.e, 'copy_kit')?.elementos).toEqual([expect.objectContaining({ body: 'Pídelo al +593 997 744 288.', cta: 'escribe a @naufrago.ec' })])
+    expect(JSON.stringify(datos(m.e, 'laminas_armadas'))).not.toMatch(/0988 111 222|@otra_marca/)
+    expect(m.revisiones[0]).not.toMatch(/0988 111 222|@otra_marca/)
+    expect(datos(m.e, 'mesa')?.autocorregido).toEqual([
+      'se corrigió solo: el teléfono 0988 111 222 → +593 997 744 288 (el del cliente)',
+      'se corrigió solo: el usuario @otra_marca → @naufrago.ec (el del cliente)',
+    ])
+    expect(m.e.vueltas.jefatura ?? 0).toBe(0)
+    expect(m.r.cuerpo).toMatchObject({ resultado_para_la_sala: 'encargo_en_bandeja', con_desacuerdo: false })
   })
 })
