@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { TOPE_DE_LO_ESCRITO } from '../../limites-de-tamano'
-import { consultaDerivada, MAX_LARGO_DE_UNA_CONSULTA, normalizarPedido, rutaPedido, ventanasDelFiltro, type DepsDePedido } from '../pedidos'
+import { consultaDerivada, MAX_CONSULTAS_POR_HUECO, MAX_LARGO_DE_UNA_CONSULTA, normalizarPedido, rutaPedido, ventanasDelFiltro, type DepsDePedido } from '../pedidos'
 import { crearBaseFalsa } from './base-falsa'
 
 const CL = '0a2ffbd4-957c-4315-a37f-b9e4fbbbb312'
@@ -76,6 +76,18 @@ describe('ADENDA 1 · techo que rechaza, nunca corta', () => {
     expect(normalizarPedido({ client_id: CL, dry_run: true, pedido_por: { oficina: 'x', agente: 'y' }, para: 'p'.repeat(TOPE_DE_LO_ESCRITO + 1) })).toMatchObject({ status: 400, body: { error: 'pedido_demasiado_largo' } })
     expect(normalizarPedido({ client_id: CL, dry_run: true, pedido_por: { oficina: 'x', agente: 'y' }, para: 'z', ref_de_quien_pide: 'r'.repeat(TOPE_DE_LO_ESCRITO + 1) })).toMatchObject({ status: 400, body: { error: 'pedido_demasiado_largo' } })
   })
+  it.each(['oficina', 'agente'] as const)('🔴 p07 de CC6 · quién pide también tiene techo: «pedido_por.%s» de más del tope se rechaza con su nombre', (k) => {
+    const quien = { oficina: 'x', agente: 'y', [k]: 'q'.repeat(TOPE_DE_LO_ESCRITO + 1) }
+    const r = normalizarPedido({ client_id: CL, dry_run: true, pedido_por: quien, para: 'z' })
+    expect(r).toMatchObject({ status: 400, body: { error: 'pedido_demasiado_largo' } })
+    expect(String((r as unknown as { body: { detalle: string } }).body.detalle)).toContain(`«pedido_por.${k}»`)
+  })
+  it('🔴 p18 de CC6 · la alarma suena SOLO por largo: un pedido mal armado por otra cosa (pedido_id que no es uuid) no avisa', async () => {
+    const { d, alarmas } = armar()
+    const r = await rutaPedido(d, pedido({ pedido_id: 'no-es-un-uuid' }))
+    expect(r).toMatchObject({ status: 400, body: { error: 'entrada_invalida' } })
+    expect(alarmas.length).toBe(0)
+  })
   it('🔴 el rechazo por largo avisa UNA vez (clave por oficina y día), no registra nada ni llama al modelo', async () => {
     const { t, d, mensajes, alarmas } = armar()
     const r = await rutaPedido(d, pedido({ para: 'p'.repeat(TOPE_DE_LO_ESCRITO + 1) }))
@@ -125,6 +137,12 @@ describe('ADENDA 1 · el filtro de seguridad revisa el pedido ENTERO', () => {
     const { d } = armar({ filtroDelPedido: async () => { throw new Error('filtro caído') } })
     expect(await rutaPedido(d, pedido())).toMatchObject({ status: 400, body: { error: 'pedido_rechazado_por_seguridad' } })
   })
+  it('p14 de CC6 · un pedido limpio con emojis compuestos (U+FE0F, U+200D) pasa el filtro y se atiende', async () => {
+    const { t, d } = armar()
+    const r = await rutaPedido(d, pedido({ para: 'campaña para familias 👨‍👩‍👧 y parejas ❤️ en Olón' }))
+    expect(r.status).toBe(200)
+    expect(t.cerebro_pedidos.length).toBe(1)
+  })
   it('un pedido largo y limpio pasa y se atiende', async () => {
     const { t, d } = armar()
     const r = await rutaPedido(d, pedido({ huecos: [{ objetivo: largo(20000) }] }))
@@ -144,6 +162,12 @@ describe('ADENDA 1 · el filtro de seguridad revisa el pedido ENTERO', () => {
 })
 
 describe('ADENDA 1 · buscar no es guardar', () => {
+  it(`🔴 p25 de CC6 · cada hueco busca a lo sumo ${MAX_CONSULTAS_POR_HUECO} consultas aunque el modelo proponga más (cada búsqueda se paga)`, async () => {
+    const { d, buscadas } = armar({ razonar: async () => ({ texto: JSON.stringify({ decision: 'web', fichas: [], cita: '', funcion: '', consultas: ['primera búsqueda', 'segunda búsqueda', 'tercera búsqueda', 'cuarta búsqueda'], razon: 'buscar' }), costo_usd: 0.01, tokens_entrada: 1, tokens_salida: 1 }) })
+    await rutaPedido(d, pedido())
+    expect(MAX_CONSULTAS_POR_HUECO).toBe(2)
+    expect(buscadas).toEqual(['primera búsqueda', 'segunda búsqueda'])
+  })
   it('un pedido corto se busca tal cual (como antes)', () => {
     expect(consultaDerivada('precios de la competencia en Olón')).toBe('precios de la competencia en Olón')
   })
