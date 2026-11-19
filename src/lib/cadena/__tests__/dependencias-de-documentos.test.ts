@@ -13,7 +13,7 @@ describe('qué lee cada documento (sacado del código que lo arma)', () => {
       estrategia: ['plan', 'manual'],
       brief: ['plan', 'manual', 'estrategia'],
       gran_idea: ['brief', 'estrategia', 'manual'],
-      calendario: ['gran_idea', 'estrategia', 'manual', 'plan'],
+      calendario: ['brief', 'gran_idea', 'estrategia', 'manual', 'plan'], // 19-nov · ADENDA 1 · P2b: lee del brief el público y los hechos de las ofertas
       pieza: ['calendario', 'gran_idea', 'brief', 'manual', 'plan'],
     })
   })
@@ -44,8 +44,8 @@ describe('corrección 2 de CC7 · el mapa no es una fila', () => {
   it('el manual lo leen DIRECTO el plan, la estrategia, el brief, la gran idea, el calendario y las piezas', () => {
     expect(loLeenDirecto('manual')).toEqual(['plan', 'estrategia', 'brief', 'gran_idea', 'calendario', 'pieza'])
   })
-  it('el brief lo leen directo la gran idea y las piezas (no el calendario)', () => {
-    expect(loLeenDirecto('brief')).toEqual(['gran_idea', 'pieza'])
+  it('el brief lo leen directo la gran idea, el calendario (19-nov · ADENDA 1 · P2b: público y hechos de las ofertas) y las piezas', () => {
+    expect(loLeenDirecto('brief')).toEqual(['gran_idea', 'calendario', 'pieza'])
   })
   it('las piezas no las lee nadie', () => {
     expect(loLeenDirecto('pieza')).toEqual([])

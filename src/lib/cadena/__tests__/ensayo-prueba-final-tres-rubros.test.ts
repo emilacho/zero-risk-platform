@@ -332,3 +332,16 @@ describe('R5 · 4 · D1 en el doble (sede cerrada SOLO en los hechos de práctic
     expect(String(t.find((x) => x.paso === 'hojas')!.cuerpo.hoja)).not.toContain(CAMPO_OFERTA_CERRADA)
   })
 })
+
+describe('ADENDA 1 · P2b · el calendario lee del brief validado el público y los hechos de las ofertas', () => {
+  it('🔴 la tarea real del calendario (con la gran idea aprobada) trae el «Público» del brief, entero y en su <documento>', async () => {
+    const c = restaurante()
+    const t = await recorrer(c, doble(c))
+    const tarea = String(((t.find((x) => x.paso === 'calendario·preparar')!.cuerpo.run_sdk as { task: string }).task))
+    expect(tarea).toContain('# EL BRIEF DE LA CAMPAÑA (lo que dice del público y de las ofertas)\n<documento fuente="el brief de la campaña">\n## Público\nLas personas que el plan nombra (del plan).')
+    // el brief de práctica no trae «Hechos de las ofertas»: la tarea lo dice, no lo inventa
+    expect(tarea).toContain('## Hechos de las ofertas\n(el brief no trae esta sección)\n</documento>')
+    // y va con los documentos, ARRIBA de la instrucción
+    expect(tarea.indexOf('# EL BRIEF DE LA CAMPAÑA')).toBeLessThan(tarea.indexOf('# Qué te pido'))
+  })
+})

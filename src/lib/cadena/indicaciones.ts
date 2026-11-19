@@ -190,6 +190,16 @@ export interface PedidoDeCalendario {
   /** 18-nov (DECISIÓN DE EMILIO · día 1 = apertura): el primer y el último día de la campaña. Si una semana de la tanda tiene días fuera de la campaña, la tarea lo dice; ausente = la tarea de antes, byte a byte */
   fechaInicio?: string | null
   fechaFin?: string | null
+  /** 19-nov · ADENDA 1 · P2b (CC5): del brief VALIDADO, «Público» y «Hechos de las ofertas», enteros · solo con `concepto` (el nuevo orden); ausente = la tarea de siempre */
+  brief?: { publico: string; hechos_de_las_ofertas: string } | null
+}
+
+/** el brief que lee el calendario: un <documento> con las dos secciones; la que falta se dice */
+function seccionDelBrief(p: PedidoDeCalendario): string[] {
+  if (!p.concepto || !p.brief) return []
+  const s = (titulo: string, x: string) => `## ${titulo}\n${x.trim() || '(el brief no trae esta sección)'}`
+  const cuerpo = [s('Público', p.brief.publico), s('Hechos de las ofertas', p.brief.hechos_de_las_ofertas)].join('\n\n')
+  return [`# EL BRIEF DE LA CAMPAÑA (lo que dice del público y de las ofertas)\n${documentoDeLaCadena('el brief de la campaña', cuerpo)}`, '']
 }
 
 /** 18-nov · el día 1 ya no es lunes (es el día de apertura): la semana 1 y la última pueden tener días fuera de la campaña. La línea los nombra solo si la tanda los toca; si no, vacía */
@@ -268,6 +278,7 @@ export function tareaDeCalendario(p: PedidoDeCalendario): string {
     '',
     `# SEDES y horarios\n${p.ctx.sedes.length ? p.ctx.sedes.map((s) => `- ${s.clave}: ${s.horario ? JSON.stringify(s.horario) : '(sin horario conocido)'}${contextoDeEstado(s.estado) ? ` · ${contextoDeEstado(s.estado)}` : ''}`).join('\n') : '(sin sedes)'}`,
     '',
+    ...seccionDelBrief(p),
     ...seccionDeOfertas(p),
     seccionDeFechas(p),
     '',
