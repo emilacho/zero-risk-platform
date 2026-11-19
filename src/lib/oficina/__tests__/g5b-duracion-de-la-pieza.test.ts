@@ -21,7 +21,7 @@ import { estadoInicial, type Plantilla } from '../tipos'
 import { aplicarTopesPorDuracion } from '../topes-por-duracion'
 import { CLAVE_DE_LA_DURACION, duracionAbierta, duracionDeLaPieza, leerDuracion, segundosDelEncargo } from '../video/duracion-de-la-pieza'
 import { TECHO_DE_LA_PIEZA_S } from '../video/techo-de-la-pieza'
-import { CLIENTE, PARTE, crearMemoria } from './memoria'
+import { CLIENTE, FUENTES, PARTE, crearMemoria } from './memoria'
 
 const copia = <T>(x: T): T => JSON.parse(JSON.stringify(x)) as T
 /** la plantilla viva que deja G5b: rango hasta 120 s, 15 s por omisión */
@@ -140,7 +140,7 @@ describe('G5b · cambio 2 de Lenovo · el guion pide más: nada se recorta', () 
     if (!t.ok) throw new Error(t.motivo)
     const brief = parsearBrief(parteCon(`${segAbierta} s · corto`), 'BRF-G5B')!
     const e = { ...estadoInicial(), vueltas: { [PASO.clave]: vueltas }, artefactos: {
-      encargo: { version: 1, version_consumida: 1, datos: { brief, proporcion: '9:16', F: { fotos: [] }, familia: 'video', plataforma: 'instagram', elementos: [], formato_video: 'reel' } },
+      encargo: { version: 1, version_consumida: 1, datos: { brief, proporcion: '9:16', F: FUENTES, familia: 'video', plataforma: 'instagram', elementos: [], formato_video: 'reel' } },
       guion: { version: 1, version_consumida: 0, datos: { ...t, texto: 'guion' } },
     } }
     return { id: 'enc-g5b', client_id: CLIENTE, parte_id: PARTE, brief_id: 'BRF-G5B', familia: conRango().familia, tope_usd: tope, dry_run: true, sala_ref: { [CLAVE_DE_LA_DURACION]: { segundos: segAbierta, porque: 'corto', por_omision: false } }, estado_del_motor: e } as unknown as Encargo
@@ -177,6 +177,17 @@ describe('G5b · cambio 2 de Lenovo · el guion pide más: nada se recorta', () 
     const s = await correr(armar(15, 3, 10, tope, 9))
     expect(s.fallido).toMatch(/No se recorta/)
     expect(s.res.artefacto).toBeUndefined()
+  })
+  it('🔴 la revisión del video muestra al dueño la duración por omisión y la que subió el guion (fichas visibles, nunca calladas)', async () => {
+    const enc = armar(15, 3, 10, 400)
+    const conAvisos = { ...enc, sala_ref: { [CLAVE_DE_LA_DURACION]: { segundos: 15, porque: '', por_omision: true, aviso: 'el brief no declara la duración de la pieza: se usó 15 s' } },
+      estado_del_motor: { ...enc.estado_del_motor, artefactos: { ...enc.estado_del_motor.artefactos, copy_video: { version: 1, version_consumida: 0, datos: { pie_de_foto: 'Ven hoy.', hashtags: ['#local'] } }, pedido_video: { version: 1, version_consumida: 0, datos: { aviso_duracion: 'el guion dura 30 s y el brief abrió 15 s' } } } } } as Encargo
+    const M = crearMemoria({ plantilla: conRango() })
+    const pl = await plantillaDe(M.P, conAvisos)
+    const s = await ejecutarCodigoV(M.P, conAvisos, pl, pl.pasos.find((p) => p.funcion === 'chequeos_video')!)
+    const textos = (s.res.fichas ?? []).map((f) => f.que)
+    expect(textos).toContain('el brief no declara la duración de la pieza: se usó 15 s')
+    expect(textos).toContain('el guion dura 30 s y el brief abrió 15 s')
   })
   it('🔴 un guion dentro de lo abierto sigue como antes (sin aviso ni recálculo)', async () => {
     const s = await correr(armar(45, 3, 10, 400))
