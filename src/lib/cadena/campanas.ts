@@ -35,6 +35,12 @@ export async function abrirCampana(al: Almacen, cuerpo: Record<string, unknown>,
   const dias = cuerpo.dias_de_campana ?? DIAS_DE_CAMPANA, semanasDeTanda = cuerpo.semanas_de_tanda ?? SEMANAS_DE_TANDA
   if (!Number.isInteger(dias) || (dias as number) < 1 || (dias as number) > DIAS_MAXIMOS_DE_CAMPANA) return err(400, 'E-DIAS-DE-CAMPANA', `dias_de_campana debe ser un entero entre 1 y ${DIAS_MAXIMOS_DE_CAMPANA}`)
   if (!Number.isInteger(semanasDeTanda) || (semanasDeTanda as number) < 1) return err(400, 'E-SEMANAS-DE-TANDA', 'semanas_de_tanda debe ser un entero mayor que 0')
+  // 19-nov · VARIAS CAMPAÑAS POR CLIENTE (firma de Emilio 21:16 Zúrich): `campana_id` = retomar ESA campaña; `llave_de_campana` = abrir una campaña NUEVA e independiente
+  //    (o contestar «ya abierta» si esa llave ya existe). Sin ninguno de los dos, lo de siempre: la campaña nace del plan. Con los dos, manda `campana_id`.
+  const campanaPedida = cuerpo.campana_id === undefined || cuerpo.campana_id === null || cuerpo.campana_id === '' ? null : cadena(cuerpo.campana_id)
+  if (campanaPedida === null && !(cuerpo.campana_id === undefined || cuerpo.campana_id === null || cuerpo.campana_id === '')) return err(400, 'E-CAMPANA-ID', 'campana_id debe ser un texto')
+  const llavePedida = campanaPedida ? null : leerLlaveDeCampana(cuerpo.llave_de_campana)
+  if (llavePedida === false) return err(400, 'E-LLAVE-DE-CAMPANA', `llave_de_campana debe ser un texto de 1 a ${LARGO_DE_LLAVE} letras, números, «-», «_», «.» o «:»`)
   const noAut = await autorizarLlamada(al, cuerpo, clientId)
   if (noAut) return noAut
   const cerrada = await compuerta(al, clientId, s.seco)
@@ -45,7 +51,13 @@ export async function abrirCampana(al: Almacen, cuerpo: Record<string, unknown>,
   if (!plan) return { status: 409, cuerpo: { error: 'plan_no_coincide', resultado: 'plan_no_coincide', code: 'E-PLAN-NO-COINCIDE', detalle: 'el plan no existe, no es un plan de 90 días o es de otro cliente: no se escribió nada' } }
 
   // idempotencia: el mismo sobre dos veces no abre dos campañas
-  const ya = await al.campanaPorPlan(clientId, plan.plan_id, s.seco)
+  //    · con `campana_id`: ESA campaña, que tiene que ser de este cliente, de este plan y del mismo seco (si no, no se escribe nada)
+  //    · con llave: la campaña de esa llave · sin nada: la que nació de este plan (solo las sin llave)
+  let ya: Campana | null
+  if (campanaPedida) {
+    ya = await al.campana(campanaPedida)
+    if (!ya || ya.client_id !== clientId || ya.plan_id !== plan.plan_id || ya.seco !== s.seco) return err(409, 'E-CAMPANA-NO-COINCIDE', 'la campaña pedida no existe o no es de este cliente, de este plan o de este modo (seco): no se escribió nada')
+  } else ya = llavePedida ? await al.campanaPorLlave(clientId, llavePedida, s.seco) : await al.campanaPorPlan(clientId, plan.plan_id, s.seco)
   // 🔴 #464 C5a (CC#3): reenviar el sobre de un plan YA REEMPLAZADO no «tiene éxito»: lo dice, y no abre ni revive nada
   if (ya && ya.estado === 'reemplazada') return err(409, 'E-PLAN-REEMPLAZADO', 'este plan ya fue reemplazado por uno más nuevo: no se abre nada', { campana: ya })
   if (ya) {
@@ -67,7 +79,8 @@ export async function abrirCampana(al: Almacen, cuerpo: Record<string, unknown>,
   if (!ctx) return err(409, 'E-CONTEXTO', 'no se pudo armar el contexto del cliente (plan o manual ilegibles)')
 
   // 🔴 condición 6 (CC#3): un plan NUEVO del mismo cliente reemplaza a la campaña anterior; el sobre nuevo no cae como «duplicado»
-  const viva = await al.campanaViva(clientId, s.seco)
+  // 19-nov · solo entre campañas SIN llave: una campaña con llave nace al lado de las demás y no reemplaza a ninguna (cada campaña es independiente)
+  const viva = llavePedida ? null : await al.campanaViva(clientId, s.seco)
   let reemplaza: string | null = null
   if (viva) {
     await al.actualizarCampana(viva.id, { estado: 'reemplazada', estado_motivo: `reemplazada por el plan ${plan.plan_id}` })
@@ -91,9 +104,10 @@ export async function abrirCampana(al: Almacen, cuerpo: Record<string, unknown>,
     presupuesto_planificacion_usd: bolsaDePlanificacion(medidaDeCampana({ fecha_inicio: ventana.fecha_inicio, fecha_fin: ventana.fecha_fin, semanas_de_tanda: semanasDeTanda as number }).totalTandas), ventana_parte_dias: 10, sustituir_video_por: 'ninguna', autoproducir: (await al.leerConfig('autoproducir_por_omision')) === true,
     ...(topeInicial !== null ? { tope_gasto_usd: topeInicial } : {}),
     sala_ref: typeof cuerpo.sala_ref === 'object' && cuerpo.sala_ref ? (cuerpo.sala_ref as Record<string, unknown>) : {}, reemplaza_a: reemplaza, seco: s.seco,
+    ...(llavePedida ? { llave_de_campana: llavePedida } : {}),
   }) } catch (e) {
     const duplicado = (e as { code?: string })?.code === '23505' || /23505|duplicate key|un_plan/i.test(String((e as Error)?.message ?? ''))
-    const ganadora = duplicado ? await al.campanaPorPlan(clientId, plan.plan_id, s.seco) : null
+    const ganadora = duplicado ? (llavePedida ? await al.campanaPorLlave(clientId, llavePedida, s.seco) : await al.campanaPorPlan(clientId, plan.plan_id, s.seco)) : null
     // si OTRO sobre igual ganó la carrera, ÉL ya reemplazó a la anterior: no se la devuelve a la vida (habría dos vivas)
     if (ganadora) return { status: 200, cuerpo: { ya_abierta: true, campana: ganadora } }
     await devolverLaViva()
@@ -103,6 +117,15 @@ export async function abrirCampana(al: Almacen, cuerpo: Record<string, unknown>,
   if (viva) await cancelarEsperasDeCampana(al, viva.id)
   // 18-nov · sin «fecha propuesta»: el día 1 es hoy, no hay un día anterior en que tenga que quedar firme
   return { status: 201, cuerpo: { campana: nueva, aviso_fecha_inicio: null, ventana_origen: ventana.origen, reemplaza_a: reemplaza } }
+}
+
+/** 19-nov · la llave de una campaña nueva: sin valor = null (la campaña nace del plan) · válida = el texto sin espacios a los lados · inválida = false */
+export const LARGO_DE_LLAVE = 120
+export function leerLlaveDeCampana(v: unknown): string | null | false {
+  if (v === undefined || v === null || v === '') return null
+  if (typeof v !== 'string') return false
+  const t = v.trim()
+  return t.length >= 1 && t.length <= LARGO_DE_LLAVE && /^[A-Za-z0-9._:-]+$/.test(t) ? t : false
 }
 
 /**
