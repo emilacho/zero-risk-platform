@@ -8,7 +8,7 @@
 import { describe, expect, it } from 'vitest'
 import { traducirGuion } from '../video/guion'
 import { MAX_FOTOS_POR_IMAGEN as MAX_IMG, bajarOtrasFotos, cuerpoDeEdicion, promptDeEdicionConVarias } from '../../imagen-sobre-foto'
-import { fotosDelPlano, pedidosDeImagenClave, promptDeImagenClave, type PlanoDeLaHoja } from '../video/imagen-clave'
+import { fotosDelPlano, pedidosDeImagenClave, promptDeImagenClave, promptDelCierre, type PlanoDeLaHoja } from '../video/imagen-clave'
 import { VIDEO_POR_OMISION, convencionDelGuion } from '../mesa/pedidos'
 
 const URL = (id: string) => `https://x.supabase.co/storage/v1/object/public/fotos/${id}.jpg`
@@ -88,6 +88,33 @@ describe('2 · la imagen clave de cada plano lleva sus fotos reales, en orden, y
     const conHoja = promptDeImagenClave({ n: 1, prompt_imagen: 'Flat pastel illustration of a ceviche bowl, as the brand manual sets' } as never, { total: 1, proporcion: '9:16' })
     expect(conHoja).toContain('Flat pastel illustration of a ceviche bowl, as the brand manual sets')
     expect(conHoja).not.toMatch(/photographic|realistic/i)
+  })
+  // 19-nov · 🟡 CC6 (#1232 d03): una lista de palabras prohibidas deja pasar otro estilo fijo («Cinematic lighting»). Se fija el envoltorio ENTERO, línea por línea:
+  //   lo único que el código agrega alrededor del prompt de la hoja es la línea de forma y las dos funcionales (movimiento y sin texto). Ningún adjetivo de estilo.
+  it('19-nov · el envoltorio fijo es exactamente: la línea de forma + el prompt de la hoja + movimiento + sin texto (nada más)', () => {
+    const CUERPO = 'Flat pastel illustration of a ceviche bowl, as the brand manual sets'
+    const MOVIMIENTO = 'A pose or moment that can continue in motion.'
+    const SIN_TEXTO = 'No text, letters, captions, logos or watermarks in the image: any text is added later in editing.'
+    const forma = { total: 3, proporcion: '9:16' }
+    expect(promptDeImagenClave({ n: 2, prompt_imagen: CUERPO } as never, forma).split('\n')).toEqual([
+      'Key frame for shot 2 of 3 of a short vertical video (9:16). It will be the first frame of the clip of this shot.',
+      CUERPO, MOVIMIENTO, SIN_TEXTO,
+    ])
+    expect(promptDeImagenClave({ n: 1, prompt_imagen: CUERPO, rol: 'gancho' } as never, forma).split('\n')).toEqual([
+      'Key frame for shot 1 of 3 of a short vertical video (9:16). It will be the first frame of the clip of this shot. Narrative role of the shot: gancho.',
+      CUERPO, MOVIMIENTO, SIN_TEXTO,
+    ])
+    // sin prompt de la hoja: el cuerpo se compone solo con lo que la hoja sabe del plano (rótulos funcionales, sin estilo)
+    expect(promptDeImagenClave({ n: 1, se_ve: 'un bowl', luz: 'la del manual' } as never, forma).split('\n')).toEqual([
+      'Key frame for shot 1 of 3 of a short vertical video (9:16). It will be the first frame of the clip of this shot.',
+      'Scene: un bowl', 'Light: la del manual', MOVIMIENTO, SIN_TEXTO,
+    ])
+    // el cuadro de cierre: el mismo envoltorio (con «LAST frame») + la línea funcional de congelar el final
+    expect(promptDelCierre({ n: 2, prompt_imagen: CUERPO, estado_final: 'el bowl servido' } as never, forma).split('\n')).toEqual([
+      'Key frame for shot 2 of 3 of a short vertical video (9:16). It will be the LAST frame of the clip of this shot.',
+      CUERPO, MOVIMIENTO, SIN_TEXTO,
+      'Freeze the END of the shot, not its start: el bowl servido. Same scene, same subject, same product, same light and same framing style as the first frame of this shot.',
+    ])
   })
   it('19-nov · la mesa del video escribe el «Prompt de imagen» con el estilo que fija el manual para producir con IA', () => {
     for (const propuestas of [1, 3]) expect(convencionDelGuion({ ...VIDEO_POR_OMISION, propuestas })).toContain('Prompt de imagen: … (en inglés: el cuadro clave del plano, con el tipo de imagen y el estilo que fija el manual del cliente para producir con IA (si el manual no trae esa sección, su DIRECCIÓN DE FOTOGRAFÍA), sin texto en la imagen)')
