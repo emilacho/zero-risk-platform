@@ -267,6 +267,19 @@ describe('🔴 thinking_mode · opt-in puro', () => {
     expect(opcionDeRazonamiento('high')).toEqual({ effort: 'high' })
     expect(opcionDeRazonamiento('max')).toEqual({ effort: 'max' })
   })
+  it('🔴 19-nov · ajuste de precisión de G1: Opus 4.5 sí acepta effort (hasta high) · Haiku 5.5 sí deja apagar el razonamiento', () => {
+    // Opus 4.5: low/medium/high tal cual; xhigh, max y maximo bajan a high (no existen en ese modelo); disabled lo apaga
+    for (const n of ['low', 'medium', 'high'] as const) expect(opcionDeRazonamiento(n, 'claude-opus-4-5-20251101'), n).toEqual({ effort: n })
+    for (const n of ['xhigh', 'max', 'maximo'] as const) expect(opcionDeRazonamiento(n, 'claude-opus-4-5-20251101'), n).toEqual({ effort: 'high' })
+    expect(opcionDeRazonamiento('disabled', 'claude-opus-4-5-20251101')).toEqual({ thinking: { type: 'disabled' } })
+    // Haiku 5.5: disabled lo apaga de verdad (con su effort por omisión, high, que lo admite); los niveles van tal cual
+    expect(opcionDeRazonamiento('disabled', 'claude-haiku-5-5')).toEqual({ thinking: { type: 'disabled' } })
+    expect(opcionDeRazonamiento('maximo', 'claude-haiku-5-5')).toEqual({ effort: 'max' })
+    expect(opcionDeRazonamiento('xhigh', 'claude-haiku-5-5')).toEqual({ effort: 'xhigh' })
+    // sin cambio en los vecinos: Opus 4.6 sigue con max y sin xhigh; Opus 4.1 sigue sin effort
+    expect(opcionDeRazonamiento('maximo', 'claude-opus-4-6')).toEqual({ effort: 'max' })
+    expect(opcionDeRazonamiento('maximo', 'claude-opus-4-1')).toEqual({})
+  })
   it('opcionDeRazonamiento: disabled ⇒ thinking desactivado · low/medium ⇒ effort · sin modo ⇒ vacío', () => {
     expect(opcionDeRazonamiento('disabled')).toEqual({ thinking: { type: 'disabled' } })
     expect(opcionDeRazonamiento('low')).toEqual({ effort: 'low' })
