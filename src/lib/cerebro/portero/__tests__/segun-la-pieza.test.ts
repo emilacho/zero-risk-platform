@@ -34,7 +34,7 @@ const registrador = () => {
   return { filas, registrar }
 }
 const HOJA = '## Brief\nReel de Olón para el fin de semana: horario y la historia del nombre.\n\n## Plan\n1. gancho con el encebollado\n2. horario de Olón\n3. la leyenda del pergamino'
-/** la fila REAL del reel de Olón tal como la manda la mesa (`oficina_encargos.sala_ref.fila` de 57101e2a, SELECT del 19-nov) */
+/** la fila REAL del reel de Olón tal como la manda la mesa (la `fila` de la sala del encargo 57101e2a, SELECT del 19-nov) */
 const FILA_OLON = { id: 's4-d5-vie_reel_olon', hora: '09:00', fecha: '2026-11-27' }
 const PIEZA = { cliente: A, agente: 'content-creator', turno: 'turno-7', pieza: { encargo_id: '57101e2a-reel-olon', fila: 'fila-1', hoja: HOJA } }
 const indice = async (cuerpo: unknown, o: { conLarga?: boolean; registrar?: Registrar } = {}) =>
