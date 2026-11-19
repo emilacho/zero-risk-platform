@@ -395,8 +395,9 @@ export function almacenDeSupabase(): Almacen {
     },
 
     async campana(id) { return uno<Campana>(db.from('cadena_campanas').select('*').eq('id', id).maybeSingle()) },
-    async campanaPorPlan(clientId, planId, seco) { return uno<Campana>(db.from('cadena_campanas').select('*').eq('client_id', clientId).eq('plan_id', planId).eq('seco', seco).maybeSingle()) },
-    async campanaViva(clientId, seco) { return (await lista<Campana>(db.from('cadena_campanas').select('*').eq('client_id', clientId).eq('seco', seco).not('estado', 'in', '(cerrada,reemplazada)').limit(1)))[0] ?? null },
+    async campanaPorPlan(clientId, planId, seco) { return uno<Campana>(db.from('cadena_campanas').select('*').eq('client_id', clientId).eq('plan_id', planId).eq('seco', seco).is('llave_de_campana', null).maybeSingle()) },
+    async campanaPorLlave(clientId, llave, seco) { return uno<Campana>(db.from('cadena_campanas').select('*').eq('client_id', clientId).eq('llave_de_campana', llave).eq('seco', seco).maybeSingle()) },
+    async campanaViva(clientId, seco) { return (await lista<Campana>(db.from('cadena_campanas').select('*').eq('client_id', clientId).eq('seco', seco).is('llave_de_campana', null).not('estado', 'in', '(cerrada,reemplazada)').limit(1)))[0] ?? null },
     async insertarCampana(c) { const { data, error } = await db.from('cadena_campanas').insert(c).select().single(); if (error) fallo(error); return data as Campana },
     async actualizarCampana(id, patch) { const { data, error } = await db.from('cadena_campanas').update({ ...patch, actualizada_en: new Date().toISOString() }).eq('id', id).select().single(); if (error) fallo(error); return data as Campana },
     async actualizarCampanaSi(id, estado, patch) { const { data, error } = await db.from('cadena_campanas').update({ ...patch, actualizada_en: new Date().toISOString() }).eq('id', id).eq('estado', estado).select(); if (error) fallo(error); return ((data as Campana[] | null) ?? [])[0] ?? null },

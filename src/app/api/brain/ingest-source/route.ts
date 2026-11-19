@@ -20,6 +20,11 @@ import { runIngressFilter, type ProvenanceTag } from "@/lib/ingress-filter";
 import { buildBrainProvenanceTag } from "@/lib/client-brain";
 import { recordEmbedCost } from "@/lib/brain/embed-cost-ledger";
 import { brainEnforceEnabled, brainRoutePolicy, quarantineChunk } from "@/lib/brain/portero";
+import { sacarTrozosViejos } from "@/lib/brain/persist-chunks";
+import { baseDeEtiqueta, basesConRechazo, seccionesEnTrozos } from "@/lib/brain/trozos";
+
+/** ENCARGO 11: el tope de UN trozo en el índice; una sección más larga va ENTERA en trozos parejos numerados (antes se cortaba a 8000) */
+const MAX_POR_TROZO_DEL_INGRESO = 8000;
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -170,7 +175,7 @@ export async function POST(request: Request) {
   }
 
   // Sanitize sections · filter empty texts + cap section_label length
-  const valid = sections
+  const enteras = sections
     .filter((s) => s && typeof s.section_label === "string" && typeof s.text === "string")
     .map((s) => ({
       section_label: s.section_label.trim().slice(0, 200),
@@ -178,6 +183,15 @@ export async function POST(request: Request) {
       ...(s.metadata && typeof s.metadata === "object" && !Array.isArray(s.metadata) ? { metadata: s.metadata } : {}),
     }))
     .filter((s) => s.section_label.length > 0 && s.text.length > 10);
+  // ENCARGO 11 · paso 2b: nada se recorta. Cada sección va ENTERA: si pasa el tope, en trozos parejos y seguidos de la misma fuente, con su número
+  // en la etiqueta («X · trozo 2 de 3») y en metadata. La búsqueda los une al leer.
+  const valid = enteras.flatMap((s) =>
+    seccionesEnTrozos(s.section_label, s.text, MAX_POR_TROZO_DEL_INGRESO, s.metadata as Record<string, unknown> | undefined).map((x) => ({
+      section_label: x.section_label,
+      text: x.text,
+      ...(x.metadata ? { metadata: x.metadata } : {}),
+    })),
+  );
 
   if (valid.length === 0) {
     return NextResponse.json(
@@ -216,7 +230,9 @@ export async function POST(request: Request) {
 
   // Partición · en shadow allow es siempre true (rejected vacío) · en enforce
   // allow=false para bloqueos ≥ HIGH → esas secciones NO se escriben · cuarentena.
-  const accepted = valid.filter((_, i) => filterDecisions[i].allow);
+  // TODO O NADA por sección original: si el filtro rechaza un trozo, ningún trozo de esa sección se escribe (el índice nunca guarda media sección)
+  const fueraDeLaBase = basesConRechazo(valid.map((s) => s.section_label), (i) => !filterDecisions[i].allow);
+  const accepted = valid.filter((s) => !fueraDeLaBase.has(baseDeEtiqueta(s.section_label)));
   const rejectedPairs = valid
     .map((s, i) => ({ s, d: filterDecisions[i] }))
     .filter((x) => !x.d.allow);
@@ -254,6 +270,8 @@ export async function POST(request: Request) {
     sections_shadow_flagged: shadowFlagged.length,
     sections_rejected: rejected.length,
     quarantined: rejected.length,
+    /** trozos aceptados que NO se escriben porque otro trozo de su misma sección fue rechazado (todo o nada) */
+    sections_withheld: valid.length - accepted.length - rejected.length,
     ...(rejected.length > 0 ? { rejected } : {}),
     ...(shadowFlagged.length > 0 ? { flagged: shadowFlagged } : {}),
   };
@@ -308,7 +326,7 @@ export async function POST(request: Request) {
     source_table: sourceTable,
     source_id: sourceId,
     section_label: s.section_label,
-    chunk_text: s.text.slice(0, 8000),
+    chunk_text: s.text, // encargo 11: cada trozo ya cabe en el tope (antes se cortaba a 8000)
     embedding: embed.embeddings[i],
     provenance_tag: provenanceTag,
     metadata: {
@@ -343,6 +361,9 @@ export async function POST(request: Request) {
       { status: 502 },
     );
   }
+
+  // los trozos de una partición vieja de las mismas secciones salen (el índice no guarda dos versiones de una sección)
+  await sacarTrozosViejos(supabase, { clientId, sourceTable, sourceId, escritas: accepted.map((s) => s.section_label) });
 
   // D1 · el costo del embebido se REGISTRA · antes sólo viajaba en la respuesta y
   // el vigía de $8/día no lo veía. Nunca rompe el ingreso (ver embed-cost-ledger).

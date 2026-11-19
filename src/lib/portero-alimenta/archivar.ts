@@ -46,7 +46,7 @@ export interface FichaNueva {
 }
 export interface RetiroDeFicha { id: string; reemplazada_por: string; motivo_retirada: string }
 export interface UnidadVista { client_id: string; fuente: string; unidad_ref: string; huella: string; veredicto: string; ficha_id: string | null; ultima_vez: string }
-export interface SeccionDelPuente { section_label: string; text: string }
+export interface SeccionDelPuente { section_label: string; text: string; /** encargo 11 · solo cuando la ficha va en varios trozos: su número y cuántos son */ metadata?: { trozo: number; trozos: number } }
 export interface PuenteDeIndice { source_table: 'cerebro_fichas'; source_id: string; client_id: string; sections: SeccionDelPuente[]; metadata: Record<string, unknown>; source: string }
 export interface PlanDeArchivo {
   fichas: FichaNueva[]

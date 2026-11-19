@@ -76,7 +76,12 @@ export function puenteAlIndice(o: { origen: string; llaveInterna: string; db: Db
         // 03-nov: el filtro de entrada puede rechazar el texto y aun así contestar 200 (`sections_rejected`, 0 trozos): eso NO es «escrito», es un HUECO que se marca en la ficha (con el porqué) y se declara
         const j = (typeof r.json === 'function' ? await r.json().catch(() => null) : null) as { chunks_upserted?: number; chunks_inserted?: number; chunks_updated?: number; sections_rejected?: number; ingress_filter?: { rejected?: Array<{ reason?: string }> } } | null
         const entraron = (j?.chunks_upserted ?? 0) + (j?.chunks_inserted ?? 0) + (j?.chunks_updated ?? 0)
-        if (j && (j.sections_rejected ?? 0) > 0 && entraron === 0) {
+        // encargo 11 · una ficha larga va en varios trozos: si el filtro rechaza CUALQUIERA, la ficha es un hueco entero (todo o nada) y los trozos que sí entraron salen (el índice nunca guarda media ficha)
+        if (j && (j.sections_rejected ?? 0) > 0 && entraron > 0) {
+          const d = await o.db.from('client_brain_chunks').delete().eq('client_id', x.client_id).eq('source_table', 'cerebro_fichas').eq('source_id', x.source_id)
+          if (d.error) errores.push(`sacar la media ficha ${x.source_id}: ${d.error.message}`)
+        }
+        if (j && (j.sections_rejected ?? 0) > 0) {
           const razon = String(j.ingress_filter?.rejected?.[0]?.reason ?? 'rechazado por el filtro').slice(0, 120)
           rechazados.push({ source_id: x.source_id, razon })
           const m = await o.db.from('cerebro_fichas').update({ indice_rechazado_en: new Date().toISOString(), indice_rechazo: razon }).eq('id', x.source_id).eq('client_id', x.client_id)
