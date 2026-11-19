@@ -31,6 +31,22 @@ const reglasComunes = (registro: RegistroDelCliente | undefined, idioma?: string
 }
 const lineas = (xs: string[]) => xs.map((x) => `- ${x}`).join('\n')
 
+/**
+ * 19-nov · ADENDA 1 · P1c · el molde común en la cadena (CC5 · GO Lenovo 05:17Z · firma de Emilio, Lenovo 15:32Z):
+ *   (b) los documentos ARRIBA (el plan y el manual en `<documento fuente>`), la instrucción después;
+ *   (c) ubicar en los documentos el alcance (zona, canal, público, oferta) antes de escribir; (d) qué se conserva; (e) el cierre con el objetivo.
+ * La salida de la cadena es un objeto con esquema: el alcance NO se escribe en la salida; se usa para escribir.
+ */
+export const documentoDeLaCadena = (fuente: string, texto: string): string => `<documento fuente="${fuente}">\n${texto}\n</documento>`
+export const MOLDE_DE_LA_CADENA = [
+  '# Antes de escribir',
+  lineas([
+    'Ubica en los documentos de arriba lo que dicen de la zona (ciudad, sede o barrio), el canal (red y formato), el público y la oferta, y escribe con eso, copiado tal cual. Si no lo dicen, no lo completes: va como pendiente.',
+    'Conserva TAL CUAL lo que viene de los documentos: cifras, precios, horarios, direcciones, sedes, nombres propios, cuentas y canales del cliente, y lo prohibido del manual. Un pendiente se declara como pendiente: no se afirma.',
+  ]),
+].join('\n')
+export const cierreDeLaCadena = (objetivo: string): string => `\n# Lo que importa\nEl objetivo: ${objetivo}.`
+
 export interface PedidoDeEstrategia { ctx: ContextoDelCliente; formatosPermitidos: Record<string, string[]>; version: number; diasDeCampana?: number; correccion?: Ficha[]
   /** 09-nov (GO Lenovo · B): el día 1 y el último día de la campaña (`YYYY-MM-DD`). Con ellos la tarea dice desde cuándo se cuentan los días; sin ellos, la tarea de siempre */
   fechaInicio?: string | null; fechaFin?: string | null
@@ -75,6 +91,19 @@ export interface PedidoDeFichas {
 }
 export function tareaDeFichas(p: PedidoDeFichas): string {
   return [
+    // 19-nov · ADENDA 1 · P1c (CC5): los documentos ARRIBA; la instrucción, el alcance, lo que se conserva y el objetivo AL FINAL
+    `# Hoy\n${p.hoy} (lo que ya venció a esta fecha o todavía no empieza se escribe igual, con sus fechas: el sistema lo marca)`,
+    '',
+    `# SEDES del negocio\n${p.ctx.sedes.length ? p.ctx.sedes.map((s) => `- ${s.clave}${s.nombre ? ` (${s.nombre})` : ''}${contextoDeEstado(s.estado) ? ` · ${contextoDeEstado(s.estado)}` : ''}`).join('\n') : '(el negocio no tiene sedes registradas)'}`,
+    '',
+    `# HECHOS DEL NEGOCIO (del cerebro)\n${p.hechosDelCerebro === null ? '(hechos del negocio: aún no disponibles)' : p.hechosDelCerebro.length ? p.hechosDelCerebro.map((h) => `- ${h}`).join('\n') : '(el cerebro no tiene hechos de este negocio: no consta)'}`,
+    '',
+    `# REFERENCIAS (ids que puedes citar en \`fuente\`)\n${referencias(p.ctx)}`,
+    '',
+    `# PLAN\n${documentoDeLaCadena('el plan', p.ctx.planTexto)}`,
+    '',
+    `# MANUAL DE MARCA\n${documentoDeLaCadena('el manual de marca', p.ctx.manualTexto)}`,
+    '',
     '# Qué te pido',
     'Eres quien junta los HECHOS de lo que vende este negocio, antes de que los creativos escriban. Lee el PLAN, el MANUAL de marca y las REFERENCIAS, y devuelve UNA ficha por cada OFERTA: lo que una pieza puede vender (un lugar, un producto, un plan, un servicio, una línea o un evento).',
     'No escribes piezas, ideas, mensajes ni llamados: solo datos, cada uno con su fuente.',
@@ -93,18 +122,9 @@ export function tareaDeFichas(p: PedidoDeFichas): string {
       'Los HECHOS DEL NEGOCIO (del cerebro) mandan: no los contradigas ni los repitas con otras palabras; el sistema los suma a la ficha.',
     ]),
     '',
-    `# Hoy\n${p.hoy} (lo que ya venció a esta fecha o todavía no empieza se escribe igual, con sus fechas: el sistema lo marca)`,
-    '',
-    `# SEDES del negocio\n${p.ctx.sedes.length ? p.ctx.sedes.map((s) => `- ${s.clave}${s.nombre ? ` (${s.nombre})` : ''}${contextoDeEstado(s.estado) ? ` · ${contextoDeEstado(s.estado)}` : ''}`).join('\n') : '(el negocio no tiene sedes registradas)'}`,
-    '',
-    `# HECHOS DEL NEGOCIO (del cerebro)\n${p.hechosDelCerebro === null ? '(hechos del negocio: aún no disponibles)' : p.hechosDelCerebro.length ? p.hechosDelCerebro.map((h) => `- ${h}`).join('\n') : '(el cerebro no tiene hechos de este negocio: no consta)'}`,
-    '',
-    `# REFERENCIAS (ids que puedes citar en \`fuente\`)\n${referencias(p.ctx)}`,
-    '',
-    `# PLAN\n${p.ctx.planTexto}`,
-    '',
-    `# MANUAL DE MARCA\n${p.ctx.manualTexto}`,
+    MOLDE_DE_LA_CADENA,
     `\n(versión de las fichas ${p.version})`,
+    cierreDeLaCadena('una ficha de HECHOS por oferta, cada dato con su fuente, sin inventar nada'),
   ].join('\n')
 }
 
@@ -113,6 +133,19 @@ export function tareaDeEstrategia(p: PedidoDeEstrategia): string {
     ? `\n\n# CORRECCIÓN (única)\nTu respuesta anterior falló estos chequeos. Corrige SOLO esto, sin rehacer lo demás:\n${p.correccion.map((f, i) => `${i + 1}. [${f.donde}] ${f.que} → ${f.propuesta}`).join('\n')}`
     : ''
   return [
+    // 19-nov · ADENDA 1 · P1c (CC5): los documentos ARRIBA; la instrucción, el alcance, lo que se conserva y el objetivo AL FINAL
+    `# Formatos permitidos por red\n${Object.entries(p.formatosPermitidos).map(([r, f]) => `- ${r}: ${f.join(', ')}`).join('\n')}`,
+    '',
+    `# SEDES del negocio\n${p.ctx.sedes.length ? p.ctx.sedes.map((s) => `- ${s.clave}${s.nombre ? ` (${s.nombre})` : ''}${contextoDeEstado(s.estado) ? ` · ${contextoDeEstado(s.estado)}` : ''}`).join('\n') : '(el negocio no tiene sedes registradas)'}`,
+    '',
+    lineaDeLlavesDeFechas(p.llavesDeFechas),
+    '',
+    `# REFERENCIAS (ids que puedes citar en \`ref\`)\n${referencias(p.ctx)}`,
+    '',
+    `# PLAN\n${documentoDeLaCadena('el plan', p.ctx.planTexto)}`,
+    '',
+    `# MANUAL DE MARCA\n${documentoDeLaCadena('el manual de marca', p.ctx.manualTexto)}`,
+    '',
     '# Qué te pido',
     'Lee el PLAN de marketing y el MANUAL de marca de este negocio y devuelve su ESTRATEGIA de redes como un objeto estructurado (canales, excluidos, pilares, fases, hitos, dependencias, fechas que importan, patrón semanal, piezas fijas, pendientes, alertas).',
     '',
@@ -132,19 +165,10 @@ export function tareaDeEstrategia(p: PedidoDeEstrategia): string {
       '`pendientes`: lo que falta saber, con qué pieza desbloquea y quién lo pide (`portero` = el cerebro del cliente, `sistema` = investigarlo con fuente). Nunca se le pregunta nada a nadie del negocio.',
     ]),
     '',
-    `# Formatos permitidos por red\n${Object.entries(p.formatosPermitidos).map(([r, f]) => `- ${r}: ${f.join(', ')}`).join('\n')}`,
-    '',
-    `# SEDES del negocio\n${p.ctx.sedes.length ? p.ctx.sedes.map((s) => `- ${s.clave}${s.nombre ? ` (${s.nombre})` : ''}${contextoDeEstado(s.estado) ? ` · ${contextoDeEstado(s.estado)}` : ''}`).join('\n') : '(el negocio no tiene sedes registradas)'}`,
-    '',
-    lineaDeLlavesDeFechas(p.llavesDeFechas),
-    '',
-    `# REFERENCIAS (ids que puedes citar en \`ref\`)\n${referencias(p.ctx)}`,
-    '',
-    `# PLAN\n${p.ctx.planTexto}`,
-    '',
-    `# MANUAL DE MARCA\n${p.ctx.manualTexto}`,
+    MOLDE_DE_LA_CADENA,
     `\n(versión de estrategia ${p.version})`,
     corr,
+    cierreDeLaCadena('la estrategia de redes que el PLAN pide, fiel al plan y al manual'),
   ].join('\n')
 }
 
@@ -246,6 +270,19 @@ export function tareaDeCalendario(p: PedidoDeCalendario): string {
     ? `\n\n# CORRECCIÓN (única)\n${p.correccion.modo === 'tanda' ? 'Tu tanda falló chequeos de conjunto: vuelve a entregarla ENTERA.' : 'Devuelve SOLO las piezas que fallaron, corregidas (mismo slot, semana y día).'}\nFichas:\n${p.correccion.fichas.map((f, i) => `${i + 1}. [${f.donde}] ${f.que} → ${f.propuesta}`).join('\n')}\nFilas que fallaron:\n${p.correccion.filas.map((f) => `- ${f.id}: ${f.tema ?? '(sin tema)'}`).join('\n')}`
     : ''
   return [
+    // 19-nov · ADENDA 1 · P1c (CC5): los documentos ARRIBA; la instrucción, el alcance, lo que se conserva y el objetivo AL FINAL
+    `# ESTRATEGIA (vigente)\n${JSON.stringify({ canales: e.canales, pilares: e.pilares, fases: e.fases, hitos: e.hitos, dependencias: e.dependencias, patron_semanal: e.patron_semanal, piezas_fijas: e.piezas_fijas, alertas: e.alertas })}`,
+    '',
+    `# SEDES y horarios\n${p.ctx.sedes.length ? p.ctx.sedes.map((s) => `- ${s.clave}: ${s.horario ? JSON.stringify(s.horario) : '(sin horario conocido)'}${contextoDeEstado(s.estado) ? ` · ${contextoDeEstado(s.estado)}` : ''}`).join('\n') : '(sin sedes)'}`,
+    '',
+    ...seccionDeOfertas(p),
+    seccionDeFechas(p),
+    '',
+    `# REFERENCIAS (ids que puedes citar en \`ref\`)\n${referencias(p.ctx)}`,
+    p.filasPrevias.length ? `\n# Piezas de tandas anteriores (para no repetir temas)\n${p.filasPrevias.map((f) => `- ${f.id}: ${f.tema ?? ''}`).join('\n')}` : '',
+    '',
+    `# PLAN\n${documentoDeLaCadena('el plan', p.ctx.planTexto)}`,
+    '',
     '# Qué te pido',
     `Materializa la TANDA ${p.tanda} del calendario editorial (semanas ${p.semanas.join(', ')}). Para cada slot del patrón semanal y cada semana, escribe el tema de la pieza; agrega las piezas fijas del plan y los ajustes puntuales.`,
     ...seccionesDelConcepto(p),
@@ -267,18 +304,9 @@ export function tareaDeCalendario(p: PedidoDeCalendario): string {
       ...[lineaDeDiasFueraDeLaCampana(p.semanas, p.fechaInicio, p.fechaFin)].filter(Boolean),
     ]),
     '',
-    `# ESTRATEGIA (vigente)\n${JSON.stringify({ canales: e.canales, pilares: e.pilares, fases: e.fases, hitos: e.hitos, dependencias: e.dependencias, patron_semanal: e.patron_semanal, piezas_fijas: e.piezas_fijas, alertas: e.alertas })}`,
-    '',
-    `# SEDES y horarios\n${p.ctx.sedes.length ? p.ctx.sedes.map((s) => `- ${s.clave}: ${s.horario ? JSON.stringify(s.horario) : '(sin horario conocido)'}${contextoDeEstado(s.estado) ? ` · ${contextoDeEstado(s.estado)}` : ''}`).join('\n') : '(sin sedes)'}`,
-    '',
-    ...seccionDeOfertas(p),
-    seccionDeFechas(p),
-    '',
-    `# REFERENCIAS (ids que puedes citar en \`ref\`)\n${referencias(p.ctx)}`,
-    p.filasPrevias.length ? `\n# Piezas de tandas anteriores (para no repetir temas)\n${p.filasPrevias.slice(-24).map((f) => `- ${f.id}: ${f.tema ?? ''}`).join('\n')}` : '',
-    '',
-    `# PLAN\n${p.ctx.planTexto}`,
+    MOLDE_DE_LA_CADENA,
     corr,
+    cierreDeLaCadena('las piezas de esta tanda, cada una fiel a la estrategia, al plan y a sus datos con referencia'),
   ].join('\n')
 }
 
@@ -290,6 +318,9 @@ export function tareaDeFechas(p: PedidoDeFechas): string {
   let usado = 0
   const paginas = p.paginas.map((x) => { const t = x.texto.slice(0, Math.max(0, MAX - usado)); usado += t.length; return '## PÁGINA ' + x.url + '\n' + t }).join('\n\n')
   return [
+    // 19-nov · ADENDA 1 · P1c (CC5): los documentos ARRIBA; la instrucción, el alcance, lo que se conserva y el objetivo AL FINAL
+    paginas,
+    '',
     '# Qué te pido',
     'Del texto de las páginas de abajo, extrae las fechas de «' + p.tipo + '» que valen en «' + p.ambito + '» durante ' + p.anio + '.',
     '',
@@ -301,7 +332,8 @@ export function tareaDeFechas(p: PedidoDeFechas): string {
       'Lo que busques y no encuentres va en `no_encontrado`. Una lista de fechas vacía es una respuesta válida.',
     ]),
     '',
-    paginas,
+    MOLDE_DE_LA_CADENA,
+    cierreDeLaCadena('las fechas que las páginas dicen explícitamente, cada una con su cita literal'),
   ].join('\n')
 }
 

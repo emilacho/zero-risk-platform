@@ -16,7 +16,7 @@ import { registrarPaso } from '../motor'
 import { cotaDeLaMesa, loQueSigueDeLaMesa, pasadasDeLaMesa } from '../topes-por-duracion'
 import type { Cambios, Encargo, Puertos } from '../puertos'
 import type { Estado, Plantilla } from '../tipos'
-import { armarTarea, ASIENTOS_CON_METODO, pedidoDeAgente, seccionDeMetodo, type ContextoDeTurno, type TipoDeTurno } from './pedidos'
+import { armarTarea, ASIENTOS_CON_METODO, cierreConElObjetivo, pedidoDeAgente, seccionDeMetodo, type ContextoDeTurno, type TipoDeTurno } from './pedidos'
 import { imagenesDelTurno } from './fotos-a-la-vista'
 import { condicionesDeLaPieza, direccionDe, especialistasPertinentes, ingenieroDePrompts, porteroDe } from './directorio'
 import { condicionesDelVideo } from './condiciones-de-video'
@@ -186,7 +186,7 @@ export async function pedidoDelTurno(P: Puertos, enc: Encargo, est: EstadoMesa, 
   const metodo = [await metodoDelAsiento(P, t.agente), biblioteca, referencias].filter(Boolean).join('\n\n') || undefined
   const imagenesARedactar = tipo === 'redactar_prompts' ? imagenesAGenerarDe(enc, est) : undefined
   const relleno = tipo === 'rellenar_banco' ? rellenoPendiente(marcoDe(enc.estado_del_motor), libro) ?? undefined : undefined
-  const task = armarTarea({ tipo, agente: t.agente, tarjeta, est, libro, c, pedido: pedidoAporte, faltanCitas, metodo, ...(imagenesARedactar ? { imagenesARedactar } : {}), ...(relleno ? { relleno } : {}) }) + seccionDeCambiosDelDueno(enc.sala_ref) + seccionDeNotasDelDueno(t.notas_del_dueno, t.tipo)
+  const task = armarTarea({ tipo, agente: t.agente, tarjeta, est, libro, c, pedido: pedidoAporte, faltanCitas, metodo, ...(imagenesARedactar ? { imagenesARedactar } : {}), ...(relleno ? { relleno } : {}) }) + seccionDeCambiosDelDueno(enc.sala_ref) + seccionDeNotasDelDueno(t.notas_del_dueno, t.tipo) + cierreConElObjetivo(c, tipo)
   const paso = `${PREFIJO}${t.tipo}:${t.agente}`
   const reserva = Math.max(0.1, Math.min(COTAS.RESERVA_POR_TURNO_USD, techoDe(tope) - enc.estado_del_motor.gasto_usd))
   return { agente: t.agente, paso, pedido: pedidoDeAgente({ agente: t.agente, task, encargo_id: enc.id, client_id: enc.client_id, dry_run: enc.dry_run, paso, reserva_usd: +reserva.toFixed(4), es_pieza: !esDeLaCadena(est.tipo), images: imagenesDelTurno(tipo, c.fotos) }) }

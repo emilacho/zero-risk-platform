@@ -40,8 +40,11 @@ describe('contrato estrategia.v1 · el pedido con el plan real', () => {
   })
   it('la tarea lleva el plan ENTERO bajo # PLAN, el manual, el registro del cliente y las reglas del contrato; sin voseo', () => {
     const t = tareaDeEstrategia({ ctx, formatosPermitidos: FORMATOS, version: 1 })
-    expect(t).toContain('# PLAN\n' + PLAN_REAL)
-    expect(t).toContain('# MANUAL DE MARCA\n(manual de marca de la prueba)')
+    // 19-nov · ADENDA 1 · P1c: el plan y el manual van ENTEROS en su <documento fuente>, arriba de la instrucción; el pedido cierra con el objetivo
+    expect(t).toContain('# PLAN\n<documento fuente="el plan">\n' + PLAN_REAL + '\n</documento>')
+    expect(t).toContain('# MANUAL DE MARCA\n<documento fuente="el manual de marca">\n(manual de marca de la prueba)\n</documento>')
+    expect(t.indexOf('# PLAN')).toBeLessThan(t.indexOf('# Qué te pido'))
+    expect(t.trimEnd().endsWith('fiel al plan y al manual.')).toBe(true)
     expect(t).toContain('# Formatos permitidos por red\n- facebook: ' + FORMATOS.facebook.join(', '))
     expect(Object.keys(FORMATOS).sort()).toEqual(['facebook', 'instagram', 'linkedin', 'tiktok', 'whatsapp', 'youtube'])
     expect(t).toMatch(/cita_plan/)

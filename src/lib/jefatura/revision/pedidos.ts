@@ -109,10 +109,20 @@ const minuscula = (s: string): string => (s ? s[0].toLowerCase() + s.slice(1) : 
 /** «{documentos}» → los títulos de la política, en minúscula inicial */
 export const documentosDeLaLinea = (p: PoliticaDeRevision): string => unir(p.contra_que.map((d) => minuscula(d.titulo)))
 
+/**
+ * 19-nov · ADENDA 1 · P1 · el molde común en la jefatura (CC5 · GO Lenovo 05:17Z · firma de Emilio, Lenovo 15:32Z):
+ *   (b) lo revisado y los documentos van ARRIBA, cada uno en `<documento fuente="…">`; la línea del tipo, las reglas y el formato van DESPUÉS;
+ *   (e) el pedido cierra con el objetivo.
+ * (c) copiar el alcance y (d) qué se conserva NO entran aquí: la guarda F8 (Emilio · «una línea de contexto, sin reglas ni criterios nuevos») lo prohíbe en el jefe.
+ * Queda como pregunta a Lenovo en el PIDO (la ADENDA 1 (d) dice que faltan en los 3 jefes): hasta su respuesta, la jefatura solo cambia de orden y cierra con el objetivo.
+ */
+export const documentoDeLaJefatura = (fuente: string, texto: string): string => `<documento fuente="${fuente}">\n${texto}\n</documento>`
+export const cierreDeLaJefatura = (tipo: TipoDeRevision): string => `## Lo que importa\nEl objetivo: que ${tituloDeLoRevisado(tipo)} sea fiel a sus documentos. Señala solo lo que lo impide.`
 const bloqueDeContexto = (docs: ContextoDelRevisor[]): string => {
   const con = docs.filter((d) => d.texto.trim())
-  return con.length ? `## Documentos\n${con.map((d) => `### ${d.titulo}${d.funcion ? ` — ${d.funcion}` : ''}\n${d.texto.trim()}`).join('\n\n')}` : ''
+  return con.length ? `## Documentos\n${con.map((d) => documentoDeLaJefatura(`${d.titulo}${d.funcion ? ` — ${d.funcion}` : ''}`, d.texto.trim())).join('\n\n')}` : ''
 }
+const loRevisado = (tipo: TipoDeRevision, texto: string): string => `## Lo que revisas (${tituloDeLoRevisado(tipo)})\n${documentoDeLaJefatura(`lo que revisas: ${tituloDeLoRevisado(tipo)}`, texto.trim())}`
 
 const FORMATO_DE_FICHAS = 'Devuelve solo el JSON {"fichas":[{"que":"…","donde":"…","contra_que":"…","gravedad":"bloquea|sugerencia","propuesta":"…"}]}. Si no hay nada que señalar, {"fichas":[]}.'
 const FORMATO_DE_FICHAS_CON_CIFRAS = 'Devuelve solo el JSON {"fichas":[{"que":"…","donde":"…","contra_que":"…","gravedad":"bloquea|sugerencia","propuesta":"…","cifra":"c1 (solo si la ficha es por una cifra de la lista)","respaldo":["ref de un hecho (opcional)"]}]}. Si no hay nada que señalar, {"fichas":[]}.'
@@ -140,7 +150,8 @@ export function tareaDeRevisionDeFondo(a: { politica: PoliticaDeRevision; payloa
   const ficha = fichaDeLaRevision(a.payload)
   const esquema = ficha ? 'fichas_con_cifras.v1' : 'fichas.v1'
   const cifras = ficha ? bloqueDeCifrasParaElJefe(ficha, cifrasParaElJefe(a.texto, ficha)) : ''
-  const partes = [linea, `## Lo que revisas (${tituloDeLoRevisado(a.tipo)})\n${a.texto.trim()}`, bloqueDeContexto(a.payload.contexto ?? []), REGLA_DE_LAS_PALABRAS_DEL_MANUAL, bloqueDeLoMarcado(a.tipo, a.payload.chequeos_previos?.marcas), cifras, `${ficha ? FORMATO_DE_FICHAS_CON_CIFRAS : FORMATO_DE_FICHAS} ${donde}`, limitesDelFormato(esquema)]
+  // 19-nov · ADENDA 1 · P1 (b)+(e): los documentos arriba; la línea del tipo, las reglas y el formato después; cierra el objetivo
+  const partes = [loRevisado(a.tipo, a.texto), bloqueDeContexto(a.payload.contexto ?? []), cifras, linea, REGLA_DE_LAS_PALABRAS_DEL_MANUAL, bloqueDeLoMarcado(a.tipo, a.payload.chequeos_previos?.marcas), `${ficha ? FORMATO_DE_FICHAS_CON_CIFRAS : FORMATO_DE_FICHAS} ${donde}`, limitesDelFormato(esquema), cierreDeLaJefatura(a.tipo)]
   return { task: partes.filter(Boolean).join('\n\n'), indicacion: linea, esquema }
 }
 
@@ -149,7 +160,8 @@ export function tareaDeRevisionDeLengua(a: { payload: PayloadDeRevision; tipo: T
   const linea = `Revisas SOLO la lengua de ${tituloDeLoRevisado(a.tipo)}: ortografía, gramática y puntuación propias del idioma en que está escrito. No cambies el contenido, el estilo ni la voz de la marca. Respeta el idioma y el trato (tú, vos o usted) que fija el manual del cliente: nunca cambies el trato del texto; si el manual fija tuteo, no lo corrijas hacia el voseo, y si fija voseo, no lo corrijas hacia el tuteo. Marca como error solo el trato que contradice al del manual. Tus propuestas van en el mismo idioma y trato del texto.`
   const dondes = a.duenos.flatMap((d) => (d.comodin ? [] : d.dondes))
   const donde = dondes.length ? `En «donde» pon SOLO una de estas palabras, tal cual: ${unir(dondes.map((d) => `«${d}»`))}. La palabra o frase con el error va en «que».` : 'En «donde» pon el pasaje al que se refiere.'
-  const partes = [linea, `## Lo que revisas (${tituloDeLoRevisado(a.tipo)})\n${a.texto.trim()}`, bloqueDeContexto(a.payload.contexto ?? []), `${FORMATO_DE_FICHAS} Toda ficha tuya lleva "gravedad":"bloquea" y en "propuesta" el texto ya corregido. ${donde}`, limitesDelFormato('fichas.v1')]
+  // 19-nov · ADENDA 1 · P1 (b)+(e): los documentos arriba, la instrucción después; cierra el objetivo
+  const partes = [loRevisado(a.tipo, a.texto), bloqueDeContexto(a.payload.contexto ?? []), linea, `${FORMATO_DE_FICHAS} Toda ficha tuya lleva "gravedad":"bloquea" y en "propuesta" el texto ya corregido. ${donde}`, limitesDelFormato('fichas.v1'), `## Lo que importa\nEl objetivo: que ${tituloDeLoRevisado(a.tipo)} quede sin errores de lengua, con el mismo contenido, voz y trato.`]
   return { task: partes.filter(Boolean).join('\n\n'), indicacion: linea, esquema: 'fichas.v1' }
 }
 

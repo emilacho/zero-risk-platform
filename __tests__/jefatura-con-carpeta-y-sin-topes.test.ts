@@ -111,7 +111,8 @@ describe('las palabras del manual son contexto (ADENDA de Emilio)', () => {
     expect(REGLA_DE_LAS_PALABRAS_DEL_MANUAL).toMatch(/reseña de un cliente, citada y atribuida/)
     expect(REGLA_DE_LAS_PALABRAS_DEL_MANUAL).toMatch(/coincidir con la lista no basta/)
     const lee = (p: string) => readFileSync(join(RAIZ, p), 'utf8')
-    expect(lee('src/lib/jefatura/revision/pedidos.ts')).toMatch(/bloqueDeContexto\(a\.payload\.contexto \?\? \[\]\), REGLA_DE_LAS_PALABRAS_DEL_MANUAL/)
+    // 19-nov · ADENDA 1 · P1b: la regla sigue en el pedido del jefe, después de los documentos y de la línea del tipo
+    expect(lee('src/lib/jefatura/revision/pedidos.ts')).toMatch(/bloqueDeContexto\(a\.payload\.contexto \?\? \[\]\), cifras, linea, REGLA_DE_LAS_PALABRAS_DEL_MANUAL/)
   })
   it('ningún chequeo de la cadena bloquea por una palabra de la lista', () => {
     const lee = (p: string) => readFileSync(join(RAIZ, p), 'utf8')
