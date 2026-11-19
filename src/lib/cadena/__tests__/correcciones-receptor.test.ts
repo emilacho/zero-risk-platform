@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest'
 import { AlmacenMemoria } from '../__fixtures__/almacen-memoria'
 import { ACCIONES } from '../acciones'
-import { VUELTAS_DE_REGLA_DURA, topeDeIntentos, bloqueaLaPieza, destinoFinal, devolverFilasAlBrief, paraLaPieza, guardarRespuesta, sondeoDelBanco, textoDeLaAlarma, type PuertoDelBanco, INTENTOS_POR_CORRECCION, leerRespuestaDelCreador, marcoDeLaCorreccion, PLAZO_DEL_CREADOR_MIN, repartirCorrecciones, type CreadorDeCorreccion } from '../correcciones'
+import { VUELTAS_DE_REGLA_DURA, avisoDeLaVuelta, topeDeIntentos, bloqueaLaPieza, destinoFinal, devolverFilasAlBrief, paraLaPieza, guardarRespuesta, sondeoDelBanco, textoDeLaAlarma, type PuertoDelBanco, INTENTOS_POR_CORRECCION, leerRespuestaDelCreador, marcoDeLaCorreccion, PLAZO_DEL_CREADOR_MIN, repartirCorrecciones, type CreadorDeCorreccion } from '../correcciones'
 import type { Campana } from '../almacen'
 
 const AHORA = '2026-11-17T21:00:00.000Z'
@@ -413,6 +413,22 @@ describe('7 · el banco por el puerto de CC1 (CONTRATO-CC1 · se sondea en cada 
     expect(al.alarmasEnviadas).toHaveLength(1)
     await repartirCorrecciones(al, mas(9), {}, { banco: sondeoDelBanco(p.fn) })
     expect(p.llamadas).toHaveLength(VUELTAS_DE_REGLA_DURA)
+    // el banco hace sus reintentos adentro: cada intento aquí es UNA vuelta
+    expect(al.alarmasEnviadas[0]).toContain(`en ${VUELTAS_DE_REGLA_DURA} vueltas`)
+  })
+  it('🔴 19-nov · la dura que el banco TOMA en la 2.ª vuelta: la fila vuelve al brief con la marca de ESA vuelta y cuenta como devuelta (reemplazada)', async () => {
+    const al = almacen(); const p = puerto([{ respuesta: 'no_dicha', motivo: 'la mesa no dio una respuesta válida' }, { respuesta: 'tomada', explicacion: 'quito la fecha' }])
+    await banco(al, { regla: 'D2' })
+    await repartirCorrecciones(al, AHORA, {}, { banco: sondeoDelBanco(p.fn) })
+    await repartirCorrecciones(al, mas(1), {}, { banco: sondeoDelBanco(p.fn) })
+    expect(p.llamadas.map((x) => x.c.correccion_id)).toEqual(['f-7:banco', 'f-7:banco~v2'])
+    const fila = al.filasGuardadas.find((x) => x.id === 'f-7')!
+    expect(fila.estado).toBe('lista_para_brief')
+    expect(fila.avisos).toContain(avisoDeLaVuelta('f-7:banco~v2'))
+    expect(al.correcciones[0]).toMatchObject({ estado: 'respondida', respuesta: 'tomada', intentos: 2, frena: false, version_nueva: { filas_al_brief: ['f-7'] } })
+    expect(al.correcciones[0].version_nueva).not.toHaveProperty('fila_sin_la_pieza_vieja')
+    expect(paraLaPieza(al.correcciones[0])).toBe('reemplazada')
+    expect(al.alarmasEnviadas).toEqual([])
   })
   it('🔴 una dura que el puerto deja «no_tomada» cuenta como no dicha y frena; una de criterio «no_tomada» queda y no frena', async () => {
     const a = almacen(); await banco(a, { regla: 'D1' })
