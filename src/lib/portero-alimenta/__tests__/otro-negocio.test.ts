@@ -129,6 +129,12 @@ describe('la marca al guardar', () => {
     expect(marcaDeOtroNegocio({ propiedad: 'propia', sede: 'antioquia,olon' }, PRUEBAS)).not.toBeNull()
     expect(marcaDeOtroNegocio({ propiedad: 'propia', sede: 'guayaquil,olon' }, PRUEBAS)).toBeNull()
   })
+  it('🔴 h08 de CC6 · la sede de otro negocio en SEGUNDO lugar también marca («olon,antioquia», «guayaquil, antioquia»)', () => {
+    const m = marcaDeOtroNegocio({ propiedad: 'propia', sede: 'olon,antioquia' }, PRUEBAS)
+    expect(m).toMatchObject({ prueba: HOTEL, por: MARCADO_POR_LA_REGLA })
+    expect(m!.motivo).toContain('«antioquia»')
+    expect(marcaDeOtroNegocio({ propiedad: 'ajena', sede: 'guayaquil, antioquia' }, PRUEBAS)).toMatchObject({ prueba: HOTEL })
+  })
   it('las columnas: la marca va ENTERA (motivo, prueba, cómo, nivel, quién y cuándo); sin marca, nada', () => {
     const m = marcaDeOtroNegocio({ propiedad: 'ajena', sede: 'antioquia' }, PRUEBAS)
     expect(columnasDeLaMarca(m, AHORA)).toEqual({ otro_negocio_motivo: m!.motivo, otro_negocio_prueba: HOTEL, otro_negocio_como: 'nada', otro_negocio_nivel: null, otro_negocio_por: MARCADO_POR_LA_REGLA, otro_negocio_en: AHORA.toISOString() })
@@ -147,6 +153,20 @@ describe('cargar las pruebas del cliente (lectura acotada; un error se DICE)', (
     const r = await cargarPruebasDelCliente(b.db as never, CL, { cliente: CLIENTE, sedes: SEDES })
     expect(r.ok && [...r.pruebas.sedesDeOtroNegocio.keys()]).toEqual(['antioquia'])
     expect(b.lecturas).toEqual(['client_sede_datos'])
+  })
+  it('🔴 h21 de CC6 · un dato RETIRADO no cuenta: ni salva una sede (el dueño retirado) ni la marca (la página ajena retirada)', async () => {
+    const sedes = [...SEDES, { id: 's-quito', client_id: CL, clave: 'quito', ciudad: 'Quito' }, { id: 's-cuenca', client_id: CL, clave: 'cuenca', ciudad: 'Cuenca' }]
+    const retirado = (d: ReturnType<typeof dato>) => ({ ...d, retirada_en: '2026-11-01T00:00:00Z' })
+    const datos = [
+      ...DATOS,
+      // Quito: su única palabra del dueño está RETIRADA; le queda solo la página del hotel → es de otro negocio
+      retirado(dato('s-quito', 'direccion', 'dueno', 'corrección del dueño (Emilio) · 2026-10-20')),
+      dato('s-quito', 'horario', 'sitio', HOTEL),
+      // Cuenca: su única página ajena está RETIRADA → no hay prueba de nada, no se marca
+      retirado(dato('s-cuenca', 'direccion', 'sitio', HOTEL)),
+    ]
+    const r = await cargarPruebasDelCliente(crearBaseFalsa({ ...tablas(), client_sedes: sedes, client_sede_datos: datos }).db as never, CL)
+    expect(r.ok && [...r.pruebas.sedesDeOtroNegocio.keys()].sort()).toEqual(['antioquia', 'quito'])
   })
   it('sin sedes no lee sus datos', async () => {
     const b = crearBaseFalsa({ ...tablas(), client_sedes: [] })
