@@ -4,6 +4,7 @@
  */
 import { TIPOS_DE_CONDICION, TIPOS_DE_PASO, type Condicion, type Plantilla } from './tipos'
 import { erroresDeLosTopesPorDuracion } from './topes-por-duracion'
+import { TECHO_DE_LA_PIEZA_S } from './video/techo-de-la-pieza'
 
 /** funciones de código registradas (lista CERRADA; se amplía con cada sala, por PR) */
 export const FUNCIONES_REGISTRADAS = [
@@ -78,6 +79,9 @@ export function validarPlantilla(p: Plantilla): string[] {
   if (!lim || !(lim.tope_encargo_usd > 0)) e.push('`limites.tope_encargo_usd` debe ser mayor que 0')
   // 17-nov · T7a · el dato por segundo/plano (topes que crecen con la pieza)
   e.push(...erroresDeLosTopesPorDuracion(p))
+  // 19-nov · G5 · la pieza de video más larga no pasa de lo que aguanta la cadena (`video/techo-de-la-pieza.ts`)
+  const segMax = (lim?.video as Record<string, unknown> | undefined)?.segundos_max
+  if (typeof segMax === 'number' && segMax > TECHO_DE_LA_PIEZA_S) e.push(`\`limites.video.segundos_max\` (${segMax}) pasa del techo de la pieza de video (${TECHO_DE_LA_PIEZA_S} s: lo que aguanta el render de la composición)`)
   if (!lim || ![1, 2].includes(lim.max_rondas)) e.push('`limites.max_rondas` debe ser 1 o 2')
 
   let sumaVueltas = 0

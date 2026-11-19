@@ -248,12 +248,16 @@ describe('T7b · adenda Lenovo 12:30 · 3 · el freno de la campaña para una fi
 })
 
 describe('T7b · el brazo: 60 por video y 2,0 por segundo', () => {
-  it('cada llamada se topa con lo menor entre 60 y 2,0 × sus segundos', () => {
+  // 19-nov · G5 (GO Lenovo 03:26Z): con cifra por segundo el 60 ya no corta; una llamada de 45 s se topa en 2,0 × 45 = 90 (el techo de la pieza lo pone el paso `video`)
+  it('cada llamada se topa con 2,0 × sus segundos; el 60 queda de respaldo y no corta', () => {
     const cfg = configDelBrazo(tomar(MIG, 'brazo'))
     expect(cfg).toMatchObject({ tope_por_video_usd: 60, tope_por_segundo_usd: 2 })
     expect(topeDeLaLlamada(cfg, 15)).toBe(30)
     expect(topeDeLaLlamada(cfg, 4)).toBe(8)
-    expect(topeDeLaLlamada(cfg, 45)).toBe(60)
+    expect(topeDeLaLlamada(cfg, 45)).toBe(90)
+    expect(topeDeLaLlamada(cfg, 45, 70)).toBe(70)
+    expect(topeDeLaLlamada(cfg, 0)).toBe(60)
+    expect(topeDeLaLlamada(cfg, Number.NaN)).toBe(60)
   })
   it('🔴 el brazo nunca deja a un video (1080p, plano entero de 15 s) por debajo del tope de su paso: 2,0 × 15 = 30', () => {
     const cfg = configDelBrazo(tomar(MIG, 'brazo'))

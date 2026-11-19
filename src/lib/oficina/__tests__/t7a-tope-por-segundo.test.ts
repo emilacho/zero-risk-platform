@@ -199,7 +199,8 @@ describe('T7a · el brazo, por llamada', () => {
     expect(cfg.tope_por_segundo_usd).toBe(1)
     expect(topeDeLaLlamada(cfg, 4)).toBe(4)
     expect(topeDeLaLlamada(cfg, 4, 10)).toBe(4)
-    expect(topeDeLaLlamada(cfg, 30)).toBe(15)
+    // 19-nov · G5 (GO Lenovo 03:26Z): con cifra por segundo el tope por video ya no corta; 1 × 30 = 30
+    expect(topeDeLaLlamada(cfg, 30)).toBe(30)
     const invalida = configDelBrazo({ tope_por_video_usd: 15, tope_por_segundo_usd: -1 })
     expect(invalida).toMatchObject({ tope_por_video_usd: 15, descuento: null })
     expect(invalida).not.toHaveProperty('tope_por_segundo_usd')
