@@ -11,6 +11,7 @@
 import type { Almacen } from './almacen'
 import { autorizarLlamada, cadena, err, type Respuesta } from './autorizar'
 import type { Fila } from './tipos'
+import { archivarPiezasViejas, motivoDePiezaVieja } from './banco-de-ideas'
 
 export const DESTINOS_DE_CORRECCION = ['hoja', 'calendario', 'banco'] as const
 export type DestinoDeCorreccion = (typeof DESTINOS_DE_CORRECCION)[number]
@@ -340,7 +341,11 @@ export function sondeoDelBanco(puerto: PuertoDelBanco): SondeoDeCorreccion {
     // 🔴 CC6 · una dura tomada cuya fila NO volvió: solo «sigue» si se SABE que la pieza ya se publicó; si no, frena
     const propia = ahoraFilas.find((f) => f.id === c.fila_id)
     const fila_publicada = !!(tomada && propia && !filas_al_brief.includes(c.fila_id) && al.piezaPublicada && (await al.piezaPublicada(c.campana_id, c.fila_id)))
-    return { estado: 'respondida', leida, version_nueva: { version: e.resultado.version, accion: x.accion ?? null, reasignadas: e.resultado.reasignadas ?? [], con_brief_sin_tocar: e.resultado.con_brief_sin_tocar ?? [], filas_al_brief, fila_publicada } }
+    // 19-nov · #1195 · decisión A de Lenovo (🔴 de CC7, cuidados de CC3 00:59Z): la pieza vieja de las OTRAS filas que volvieron se archiva, ANTES de cerrar la corrección
+    // (después de `respondida` el sondeo no se repite). La de la fila corregida NO: esa la maneja la oficina con `paraLaPieza` (reemplazada) · un solo escritor por pieza
+    const otras = filas_al_brief.filter((id) => id !== c.fila_id)
+    const piezas_viejas = otras.length ? await archivarPiezasViejas(al, c.campana_id, otras, motivoDePiezaVieja(c.idea_id, x.accion === 'editar' ? 'editar' : 'retirar'), ahora) : null
+    return { estado: 'respondida', leida, version_nueva: { version: e.resultado.version, accion: x.accion ?? null, reasignadas: e.resultado.reasignadas ?? [], con_brief_sin_tocar: e.resultado.con_brief_sin_tocar ?? [], filas_al_brief, fila_publicada, ...(piezas_viejas ? { piezas_viejas } : {}) } }
   }
 }
 

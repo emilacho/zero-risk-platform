@@ -9,6 +9,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { dispatchOneIntake, type ParsedIntakeEvent } from '@/lib/sala-router-consumer'
 import { buildDispatchMarkerEvent } from '@/lib/sala-router-consumer'
 import type { PersistedEvent } from '@/lib/sala-event-log'
+import { RUN_CAP_DEFAULT_USD } from '@/lib/sala-journey-dispatch/tope-por-corrida'
 
 const CLIENTE_A = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'
 const OTHER_TENANT = '11111111-2222-3333-4444-555555555555'
@@ -92,7 +93,7 @@ describe('dispatch · cap-wire · enforce ON · Náufrago tenant', () => {
 
   it('BLOCKS at cap · skipped_cap_blocked outcome · dispatcher NOT called', async () => {
     const fetcher = vi.fn(async () => new Response('{}', { status: 200 }))
-    const spend = vi.fn(async () => 5.01)
+    const spend = vi.fn(async () => 13.59) // un centavo sobre el general (13,58)
     const r = await dispatchOneIntake({
       intake: intake(),
       enabled: true,
@@ -111,8 +112,8 @@ describe('dispatch · cap-wire · enforce ON · Náufrago tenant', () => {
     const evalu = {
       verdict: 'block' as const,
       reason: 'over_cap' as const,
-      cap_usd: 5,
-      spent_usd: 5.01,
+      cap_usd: 13.58,
+      spent_usd: 13.59,
     }
     const marker = buildDispatchMarkerEvent({
       intake: intake(),
@@ -132,7 +133,7 @@ describe('dispatch · cap-wire · enforce ON · Náufrago tenant', () => {
 describe('dispatch · cap-wire · §150 #5 alert on block', () => {
   it('fires the injected alerter with cap + spend context when BLOCKED', async () => {
     const fetcher = vi.fn(async () => new Response('{}', { status: 200 }))
-    const spend = vi.fn(async () => 7.5)
+    const spend = vi.fn(async () => 15)
     const alerter = vi.fn(async () => {})
     const r = await dispatchOneIntake({
       intake: intake(),
@@ -148,8 +149,8 @@ describe('dispatch · cap-wire · §150 #5 alert on block', () => {
     expect(alerter).toHaveBeenCalledWith(
       expect.objectContaining({
         tenant_id: CLIENTE_A,
-        cap_usd: 5,
-        spent_usd: 7.5,
+        cap_usd: RUN_CAP_DEFAULT_USD,
+        spent_usd: 15,
         workflow_id: 'LyVoKcrypS5uLyuu',
         correlation_id: 'corr-cap-1',
       }),
@@ -176,7 +177,7 @@ describe('dispatch · cap-wire · §150 #5 alert on block', () => {
 
   it('alerter throw is swallowed · block outcome still returned (best-effort)', async () => {
     const fetcher = vi.fn(async () => new Response('{}', { status: 200 }))
-    const spend = vi.fn(async () => 9.99)
+    const spend = vi.fn(async () => 19.99)
     const alerter = vi.fn(async () => {
       throw new Error('slack down')
     })
@@ -204,19 +205,19 @@ describe('dispatch · cap-wire · el tope aplica a CUALQUIER cliente y su techo 
     cap_enforce_override: true,
     ...over,
   })
-  it('otro cliente sin techo propio: rige el general (5) y bloquea', async () => {
+  it('otro cliente sin techo propio: rige el general (13,58) y bloquea', async () => {
     const fetcher = vi.fn(async () => new Response('{}', { status: 200 }))
     const r = await dispatchOneIntake({ ...alCliente(), fetcher: fetcher as unknown as typeof fetch, cap_spend_query: vi.fn(async () => 9999), cap_alerter: vi.fn(async () => {}) })
     expect(r.kind).toBe('skipped_cap_blocked')
     expect(fetcher).not.toHaveBeenCalled()
   })
-  it('el techo de la ficha MANDA: 6 bloquea a 7, 20 deja pasar a 7,5', async () => {
+  it('el techo de la ficha MANDA: 6 bloquea a 7, 20 deja pasar a 15 (más que el general, 13,58)', async () => {
     const f1 = vi.fn(async () => new Response('{}', { status: 200 }))
     const bloquea = await dispatchOneIntake({ ...alCliente(), fetcher: f1 as unknown as typeof fetch, cap_spend_query: vi.fn(async () => 7), cap_usd_query: vi.fn(async () => 6), cap_alerter: vi.fn(async () => {}) })
     expect(bloquea.kind).toBe('skipped_cap_blocked')
     expect(bloquea.cap_evaluation).toMatchObject({ verdict: 'block', cap_usd: 6, spent_usd: 7 })
     const f2 = vi.fn(async () => new Response('{}', { status: 200 }))
-    const pasa = await dispatchOneIntake({ ...alCliente(), fetcher: f2 as unknown as typeof fetch, cap_spend_query: vi.fn(async () => 7.5), cap_usd_query: vi.fn(async () => 20) })
+    const pasa = await dispatchOneIntake({ ...alCliente(), fetcher: f2 as unknown as typeof fetch, cap_spend_query: vi.fn(async () => 15), cap_usd_query: vi.fn(async () => 20) })
     expect(pasa.kind).toBe('dispatched_ok')
   })
   it('sin dato en la ficha (null) o con la consulta caída: rige el general · nunca frena por una caída', async () => {

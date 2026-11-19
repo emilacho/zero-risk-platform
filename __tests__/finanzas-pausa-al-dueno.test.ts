@@ -1124,19 +1124,21 @@ describe('el jefe vuelve a cerrar y lee al dueño', () => {
 })
 
 describe('tope y manual', () => {
-  it('🔴 la corrida del plan nace con US$ 5; lo demás, con el piso de siempre', async () => {
+  // 18-nov · Lenovo 21:07Z: la base de la plantilla es el mismo techo, así que las dos nacen con 11,10
+  it('🔴 la corrida del plan nace con US$ 11,10 (3 × lo medido, 18-nov); lo demás, con la base, que ahora es la misma', async () => {
     const nacidas: Semilla[] = []
     const m = mundo({ estado: 'en_curso' })
     m.C.almacen.crearEncargo = async (n) => { nacidas.push(n.semilla); return { ok: true, encargo: m.e, nuevo: true } }
     await abrirConversacion(m.C, { client_id: 'cli', dry_run: false, trabajo_id: 'cor-1', semilla: {} })
     await abrirConversacion(m.C, { client_id: 'cli', dry_run: false, semilla: {} })
-    expect(topeEfectivoDelEncargo(nacidas[0])).toBe(5)
-    expect(topeEfectivoDelEncargo(nacidas[1])).toBe(1.5)
+    expect(topeEfectivoDelEncargo(nacidas[0])).toBe(TOPE_MAXIMO_POR_ENCARGO_USD)
+    expect(topeEfectivoDelEncargo(nacidas[1])).toBe(11.1)
   })
-  it('🔴 el encargo llega hasta US$ 5 sin firma aparte, y no más', () => {
-    expect(TOPE_MAXIMO_POR_ENCARGO_USD).toBe(5)
-    expect(topeEfectivoDelEncargo({ tope_encargo_usd: 5 })).toBe(5)
-    expect(topeEfectivoDelEncargo({ tope_encargo_usd: 9 })).toBe(5)
+  it('🔴 el encargo llega hasta US$ 11,10 sin firma aparte (US$ 5 → 3 × lo medido, 18-nov), y no más', () => {
+    expect(TOPE_MAXIMO_POR_ENCARGO_USD).toBe(11.1)
+    expect(topeEfectivoDelEncargo({ tope_encargo_usd: 11.1 })).toBe(11.1)
+    expect(topeEfectivoDelEncargo({ tope_encargo_usd: 11.11 })).toBe(11.1)
+    expect(topeEfectivoDelEncargo({ tope_encargo_usd: 20 })).toBe(11.1)
   })
   it('🔴 la semilla admite el manual entero, y el límite es el del pedido', async () => {
     const m = mundo({ estado: 'en_curso' })

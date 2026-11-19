@@ -3,7 +3,8 @@
 import { acuerdoConCritico, acuerdoOk, CLIENTES, guionBase, idDe, NEGOCIOS, planteo, redes, semilla } from './fixtures.mjs'
 
 export const REGISTROS = ['tuteo', 'voseo']
-export const TOPE_ENCARGO_USD = 1.5
+// 18-nov · Lenovo 21:07Z: la base de la plantilla pasa al techo, 11,10 (3 × el encargo más caro medido); antes 1,50
+export const TOPE_ENCARGO_USD = 11.1
 
 /**
  * Los casos. `guion(n)` devuelve el guion completo; `costo` el costo simulado por llamada; `espera` lo que debe observarse:
@@ -48,8 +49,8 @@ export const CASOS = [
     espera: { en_fallo: ['fpa'], llamadas: { fpa: 2 }, habla: ['redes', 'ajuste', 'calculo', 'firma'], gasto: { max: TOPE_ENCARGO_USD } },
   },
   {
-    caso: 'tope', que: 'cada llamada cuesta US$ 0,60 (simulado): al pasar US$ 1,50 la conversación cierra por tope y nunca bloquea',
-    costo: 0.6,
+    caso: 'tope', que: 'cada llamada cuesta US$ 2,50 (simulado): al pasar US$ 11,10 la conversación cierra por tope y nunca bloquea',
+    costo: 2.5,
     guion: (n) => guionBase(n),
     espera: { estado: 'cierre_por_tope', gasto: { min: TOPE_ENCARGO_USD } },
   },

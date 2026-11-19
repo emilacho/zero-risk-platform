@@ -3,7 +3,7 @@
  * Prueba en seco: un libro simulado, sin base ni modelo. El tope del cliente MANDA (sube o baja, desde el 30-oct) y falla ABIERTO.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { checkRunSdkSpendCap, resolveClientCapOverrideUsd, DEFAULT_RUN_SPEND_CAP_USD } from '../src/lib/run-sdk-spend-gate'
+import { checkRunSdkSpendCap, resolveClientCapOverrideUsd, DEFAULT_RUN_SCOPED_CAP_USD, DEFAULT_RUN_SPEND_CAP_USD } from '../src/lib/run-sdk-spend-gate'
 
 type Fila = { cost_usd: number; workflow_execution_id: string }
 /** libro simulado: la ficha del cliente (con su config) y las filas de agent_invocations */
@@ -32,7 +32,7 @@ beforeEach(() => { delete process.env.RUN_SPEND_CAP_ENFORCE; delete process.env.
 afterEach(() => { delete process.env.RUN_SPEND_CAP_ENFORCE; delete process.env.RUN_SPEND_CAP_USD })
 
 describe('tope por cliente · la puerta previa', () => {
-  it('sin tope en la ficha: rige el genérico de US$ 8 (nada cambia para los demás clientes)', async () => {
+  it('sin tope en la ficha: rige el genérico de US$ 24,05 (nada cambia para los demás clientes)', async () => {
     const r = await GATE(sb({ config: {}, libro: gasto(3.4) }))
     expect(r.blocked).toBe(false); expect(r.cap_usd).toBe(DEFAULT_RUN_SPEND_CAP_USD); expect(r).not.toHaveProperty('cap_override_usd')
   })
@@ -45,8 +45,9 @@ describe('tope por cliente · la puerta previa', () => {
     const pasado = await GATE(sb({ config, libro: gasto(3.5) }))
     expect(pasado).toMatchObject({ blocked: true, reason: 'over_cap' })
   })
-  it('SUBE (30-oct): un tope mayor que el genérico MANDA — con 50 y 9 gastados pasa; se corta al llegar a 50', async () => {
-    const r = await GATE(sb({ config: { spend_cap_usd: 50 }, libro: gasto(9) }))
+  it('SUBE (30-oct): un tope mayor que el genérico MANDA — con 50 y 30 gastados (más que el genérico, 24,05) pasa; se corta al llegar a 50', async () => {
+    expect(30).toBeGreaterThan(DEFAULT_RUN_SPEND_CAP_USD)
+    const r = await GATE(sb({ config: { spend_cap_usd: 50 }, libro: gasto(30) }))
     expect(r).toMatchObject({ blocked: false, cap_usd: 50, cap_override_usd: 50 })
     expect(await GATE(sb({ config: { spend_cap_usd: 50 }, libro: gasto(50) }))).toMatchObject({ blocked: true, reason: 'over_cap', cap_usd: 50 })
   })
@@ -58,7 +59,7 @@ describe('tope por cliente · la puerta previa', () => {
   it('FALLA ABIERTO: tope ilegible, cero, negativo, texto, ficha con error o sin ficha ⇒ techo genérico (nunca bloquea de más)', async () => {
     for (const config of [{ spend_cap_usd: 0 }, { spend_cap_usd: -1 }, { spend_cap_usd: 'mucho' }, { spend_cap_usd: null }, null, [], 'x']) {
       const r = await GATE(sb({ config, libro: gasto(5) }))
-      expect(r.blocked, JSON.stringify(config)).toBe(false); expect(r.cap_usd).toBe(8)
+      expect(r.blocked, JSON.stringify(config)).toBe(false); expect(r.cap_usd).toBe(DEFAULT_RUN_SPEND_CAP_USD)
     }
     expect((await GATE(sb({ fichaError: true, libro: gasto(5) }))).blocked).toBe(false)
     expect((await GATE(sb({ sinMaybeSingle: true, libro: gasto(5) }))).blocked).toBe(false)
@@ -67,8 +68,8 @@ describe('tope por cliente · la puerta previa', () => {
     expect(await resolveClientCapOverrideUsd(sb({ config: { spend_cap_usd: '3.3' }, libro: [] }), 'c1')).toBe(3.3)
     expect(await resolveClientCapOverrideUsd(sb({ config: {}, libro: [] }), 'c1')).toBeNull()
   })
-  it('la vara por corrida de US$ 5 sigue mandando y el kill-switch sigue apagando todo', async () => {
-    const run = await checkRunSdkSpendCap(sb({ config: { spend_cap_usd: 3.3 }, libro: [{ cost_usd: 5.2, workflow_execution_id: 'misma' }] }), 'c1', { runId: 'misma', notify: (async () => ({ ok: true })) as never })
+  it('la vara por corrida de US$ 13,58 sigue mandando y el kill-switch sigue apagando todo', async () => {
+    const run = await checkRunSdkSpendCap(sb({ config: { spend_cap_usd: 3.3 }, libro: [{ cost_usd: DEFAULT_RUN_SCOPED_CAP_USD, workflow_execution_id: 'misma' }] }), 'c1', { runId: 'misma', notify: (async () => ({ ok: true })) as never })
     expect(run).toMatchObject({ blocked: true, reason: 'run_over_cap' })
     process.env.RUN_SPEND_CAP_ENFORCE = 'false'
     expect((await GATE(sb({ config: { spend_cap_usd: 3.3 }, libro: gasto(9) }))).reason).toBe('disabled')

@@ -197,12 +197,13 @@ describe('F8 · omisión por canal (R11)', () => {
 })
 
 describe('F8 · tope, rondas y formato', () => {
-  it('el tope del encargo (US$ 1,50) corta: cierra por tope con lo que hay, nunca bloquea', async () => {
-    const m = mundo({ costoPorLlamada: 0.7 })
+  // 18-nov · la base de la plantilla es 11,10 (Lenovo 21:07Z): con 2,50 por llamada se pasa a la quinta
+  it('el tope del encargo (US$ 11,10) corta: cierra por tope con lo que hay, nunca bloquea', async () => {
+    const m = mundo({ costoPorLlamada: 2.5 })
     const id = String((await abrir(m)).cuerpo.encargo_id)
     const { r } = await correrTodo(m, id)
     expect(['cierre_por_tope', 'cerrado', 'sin_acuerdo']).toContain(r.cuerpo.estado)
-    expect(m.encargos.get(id)!.gasto_usd).toBeLessThanOrEqual(1.5 + 0.7)
+    expect(m.encargos.get(id)!.gasto_usd).toBeLessThanOrEqual(11.1 + 2.5)
     expect(m.c.llamadas.length).toBeLessThan(6)
   })
   it('un crítico del jefe abre la ronda 2 (solo el aludido) y NUNCA hay tercera', async () => {
@@ -413,7 +414,7 @@ describe('F8 · el pedido corto y la procedencia', () => {
   })
   it('la plantilla es válida y respeta tope, rondas y agentes', () => {
     expect(validarPlantillaFinanciera()).toEqual([])
-    expect(validarPlantillaFinanciera({ ...PLANTILLA_FINANCIERA, limites: { ...PLANTILLA_FINANCIERA.limites, tope_encargo_usd: 2 } }).length).toBeGreaterThan(0)
+    expect(validarPlantillaFinanciera({ ...PLANTILLA_FINANCIERA, limites: { ...PLANTILLA_FINANCIERA.limites, tope_encargo_usd: 12 } }).length).toBeGreaterThan(0)
     expect(validarPlantillaFinanciera({ ...PLANTILLA_FINANCIERA, limites: { ...PLANTILLA_FINANCIERA.limites, max_rondas: 3 } }).length).toBeGreaterThan(0)
     expect(validarPlantillaFinanciera({ ...PLANTILLA_FINANCIERA, pasos: PLANTILLA_FINANCIERA.pasos.map((p) => (p.clave === 'fpa' ? { ...p, quien: 'otro-agente' } : p)) }).length).toBeGreaterThan(0)
   })
@@ -497,5 +498,30 @@ describe('F8 · plan v3 V7 · el ajuste debe responder el equilibrio cuando la m
     await correrTodo(m, (r.cuerpo as any).encargo_id)
     expect(tareasDelAjuste(m).length).toBe(1)
     expect((m.arts.planteo_fijado as any).sin_supuestos_del_agente).toBeUndefined()
+  })
+})
+
+// 18-nov · Lenovo 21:07Z (opción a): la base de la plantilla pasa al techo, US$ 11,10. Con 1,50 la reserva del cierre (1,94, 3 × el 0,64 medido) no cabía nunca
+describe('18-nov · la base de finanzas es el techo: el cierre siempre cabe', () => {
+  it('🔴 un encargo SIN tope propio, al costo del cierre más caro medido (0,64 por llamada), termina con la palabra del jefe', async () => {
+    const m = mundo({ costoPorLlamada: 0.64 })
+    const id = String((await abrir(m)).cuerpo.encargo_id)
+    expect(m.encargos.get(id)!.semilla).not.toHaveProperty('tope_encargo_usd')
+    const { r } = await correrTodo(m, id)
+    expect(r.cuerpo.estado).toBe('cerrado')
+    const cierre = m.turnos.find((t) => t.paso === 'cierre')!
+    expect(cierre).toMatchObject({ agente: AGENTES.jefe, estado: 'hecho' })
+    expect(m.arts.cierre.estado).toBe('firmado')
+    // con la base vieja (1,50) esto cortaba por tope antes del jefe: lo gastado la pasa de sobra
+    expect(m.encargos.get(id)!.gasto_usd).toBeGreaterThan(1.5)
+    expect(m.encargos.get(id)!.gasto_usd).toBeLessThanOrEqual(PLANTILLA_FINANCIERA.limites.tope_encargo_usd)
+  })
+  it('🔴 ninguna reserva de la plantilla pasa del tope que la contiene, y la validación lo rechaza si pasa', () => {
+    const tope = PLANTILLA_FINANCIERA.limites.tope_encargo_usd
+    expect(tope).toBe(11.1)
+    for (const p of PLANTILLA_FINANCIERA.pasos) expect(p.tope_usd, p.clave).toBeLessThanOrEqual(tope)
+    expect(PLANTILLA_FINANCIERA.pasos.find((p) => p.clave === 'cierre')?.tope_usd).toBe(1.94)
+    const chica = { ...PLANTILLA_FINANCIERA, limites: { ...PLANTILLA_FINANCIERA.limites, tope_encargo_usd: 1.5 } }
+    expect(validarPlantillaFinanciera(chica)).toEqual(['cierre: su reserva (US$ 1.94) pasa del tope del encargo (US$ 1.5)'])
   })
 })

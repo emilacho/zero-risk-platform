@@ -34,6 +34,8 @@ export interface BriefLeido {
   /** 16-nov · Sprint 1 · Mejora 2 · el concepto de ESTA pieza que trae la fila (`IDEA DE LA PIEZA`, `QUÉ SE VE`); el mensaje y el llamado son los de siempre */
   idea_de_la_pieza?: string
   que_se_ve?: string
+  /** 19-nov · G5b · cuánto dura la pieza de video y por qué (campo `DURACIÓN` de la hoja: «N s · porqué»); la lee `video/duracion-de-la-pieza.ts` */
+  duracion?: string
 }
 
 /** FIRMA 01-nov «hoja sin reja»: lo que se le dice a todo el que recibe un brief (pedidos, pedidos-laminas y la mesa). Lo único fijo es el manual, lo prohibido y la gran idea. */
@@ -83,6 +85,7 @@ export function parsearBrief(parte: string, id: string): BriefLeido | null {
     ...(g('OBJETIVO') ? { objetivo: g('OBJETIVO') } : {}),
     ...(g('IDEA DE LA PIEZA') ? { idea_de_la_pieza: g('IDEA DE LA PIEZA') } : {}),
     ...(g('QUÉ SE VE') ? { que_se_ve: g('QUÉ SE VE') } : {}),
+    ...(g('DURACIÓN') ? { duracion: g('DURACIÓN') } : {}),
     // 17-nov · lo que la gran idea decidió (FIJO / LIBRE / PORQUÉ), tal cual lo escribe la hoja; ausente en un parte viejo
     ...(listas['LO DECIDIDO']?.length ? { lo_decidido: listas['LO DECIDIDO'] } : {}),
   }

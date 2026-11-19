@@ -4,7 +4,7 @@
  * Re-plan go-live paso (c) · ruling consejero 2026-07-18:
  *   (1) cap por el cliente/tenant DE LA CORRIDA · sin UUIDs hardcodeados
  *   (2) enforce ON por default (deja de ser default-OFF)
- *   (3) techo run-scoped ~$8 configurable (env `RUN_SPEND_CAP_USD`)
+ *   (3) techo run-scoped configurable (env `RUN_SPEND_CAP_USD`) · era ~$8; desde el 18-nov US$ 24,05 (3 × lo medido, firma de Emilio)
  * Mockea la cadena de query de Supabase. $0 · sin corridas · sin modelo.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
@@ -13,6 +13,7 @@ import {
   isRunSpendCapEnforced,
   resolveRunSpendCapUsd,
   DEFAULT_RUN_SPEND_CAP_USD,
+  DEFAULT_SYSTEM_SPEND_CAP_USD,
 } from '../src/lib/run-sdk-spend-gate'
 const CLIENTE_DE_PRUEBA = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'
 
@@ -36,21 +37,21 @@ afterEach(() => {
 })
 
 describe('§150 run-sdk spend gate · GENÉRICO', () => {
-  it('1 · enforce ON POR DEFAULT (sin env) · over cap $8 → BLOCK', async () => {
-    const sb = supabaseWith({ data: [{ cost_usd: 5 }, { cost_usd: 4 }], error: null }) // 9 >= 8
+  it('1 · enforce ON POR DEFAULT (sin env) · over cap $24,05 → BLOCK', async () => {
+    const sb = supabaseWith({ data: [{ cost_usd: 15 }, { cost_usd: 10 }], error: null }) // 25 >= 24,05
     const r = await checkRunSdkSpendCap(sb, 'any-client-uuid')
     expect(r.blocked).toBe(true)
     expect(r.reason).toBe('over_cap')
     expect(r.cap_usd).toBe(DEFAULT_RUN_SPEND_CAP_USD)
-    expect(r.spent_usd).toBeCloseTo(9)
+    expect(r.spent_usd).toBeCloseTo(25)
   })
 
   it('2 · enforce ON por default · under cap → pass (under_cap)', async () => {
-    const sb = supabaseWith({ data: [{ cost_usd: 2.5 }], error: null }) // 2.5 < 8
+    const sb = supabaseWith({ data: [{ cost_usd: 2.5 }], error: null }) // 2.5 < 24,05
     const r = await checkRunSdkSpendCap(sb, 'any-client-uuid')
     expect(r.blocked).toBe(false)
     expect(r.reason).toBe('under_cap')
-    expect(r.cap_usd).toBe(8)
+    expect(r.cap_usd).toBe(DEFAULT_RUN_SPEND_CAP_USD)
     expect(r.spent_usd).toBeCloseTo(2.5)
   })
 
@@ -63,39 +64,40 @@ describe('§150 run-sdk spend gate · GENÉRICO', () => {
   })
 
   it('4 · GENÉRICO · aplica a CUALQUIER tenant (no sólo Náufrago) → bloquea a un cliente arbitrario', async () => {
-    const sb = supabaseWith({ data: [{ cost_usd: 8.01 }], error: null })
+    const sb = supabaseWith({ data: [{ cost_usd: 24.06 }], error: null })
     const r = await checkRunSdkSpendCap(sb, 'peniche-or-any-future-client')
     expect(r.blocked).toBe(true) // el agujero latente cerrado: NO hay other_tenant que se salve
     expect(r.reason).toBe('over_cap')
   })
 
-  it('5 · GENÉRICO · Náufrago también cae bajo el techo $8 (sin special-casing · más estricto que $25)', async () => {
-    const sb = supabaseWith({ data: [{ cost_usd: 10 }], error: null }) // 10 >= 8
+  it('5 · GENÉRICO · Náufrago también cae bajo el techo $24,05 (sin special-casing · más estricto que $25)', async () => {
+    const sb = supabaseWith({ data: [{ cost_usd: 25 }], error: null }) // 25 >= 24,05
     const r = await checkRunSdkSpendCap(sb, CLIENTE_DE_PRUEBA)
     expect(r.blocked).toBe(true)
-    expect(r.cap_usd).toBe(8) // el genérico $8 · no $25 ni $5
+    expect(r.cap_usd).toBe(DEFAULT_RUN_SPEND_CAP_USD) // el genérico $24,05 · no $25 ni la vara por corrida
+    expect(DEFAULT_RUN_SPEND_CAP_USD).toBeLessThan(25)
   })
 
   it('6 · frontera exacta · spent == cap → BLOCK · spent apenas debajo → pass', async () => {
-    const atCap = await checkRunSdkSpendCap(supabaseWith({ data: [{ cost_usd: 8 }], error: null }), 'c')
+    const atCap = await checkRunSdkSpendCap(supabaseWith({ data: [{ cost_usd: 24.05 }], error: null }), 'c')
     expect(atCap.blocked).toBe(true)
-    const under = await checkRunSdkSpendCap(supabaseWith({ data: [{ cost_usd: 7.99 }], error: null }), 'c')
+    const under = await checkRunSdkSpendCap(supabaseWith({ data: [{ cost_usd: 24.04 }], error: null }), 'c')
     expect(under.blocked).toBe(false)
   })
 
   it('7 · techo TUNABLE por env RUN_SPEND_CAP_USD', async () => {
     process.env.RUN_SPEND_CAP_USD = '3'
-    const sb = supabaseWith({ data: [{ cost_usd: 3.5 }], error: null }) // 3.5 >= 3 (env) pero < 8 (default)
+    const sb = supabaseWith({ data: [{ cost_usd: 3.5 }], error: null }) // 3.5 >= 3 (env) pero < 24,05 (default)
     const r = await checkRunSdkSpendCap(sb, 'c')
     expect(r.blocked).toBe(true)
     expect(r.cap_usd).toBe(3)
   })
 
   it('8 · cost_usd como string se coerce a número', async () => {
-    const sb = supabaseWith({ data: [{ cost_usd: '6.0' }, { cost_usd: '2.5' }], error: null }) // 8.5 >= 8
+    const sb = supabaseWith({ data: [{ cost_usd: '20.0' }, { cost_usd: '4.5' }], error: null }) // 24.5 >= 24,05
     const r = await checkRunSdkSpendCap(sb, 'c')
     expect(r.blocked).toBe(true)
-    expect(r.spent_usd).toBeCloseTo(8.5)
+    expect(r.spent_usd).toBeCloseTo(24.5)
   })
 
   /**
@@ -106,7 +108,7 @@ describe('§150 run-sdk spend gate · GENÉRICO', () => {
    * teórico: el 10-ago `brand-strategist` corrió sin cliente y gastó $0,6147
    * (medición CC#3 2026-08-22).
    *
-   * Ahora cae en el cubo `system`, con techo propio ($2 · `RUN_SPEND_CAP_SYSTEM_USD`)
+   * Ahora cae en el cubo `system`, con techo propio ($2; desde el 18-nov $11,93 · `RUN_SPEND_CAP_SYSTEM_USD`)
    * y avisando. NO se bloquea a secas, porque un `client_id` nulo es legítimo para
    * llamadas de sistema: el caso queda VISIBLE, no bloqueado a ciegas.
    */
@@ -120,7 +122,7 @@ describe('§150 run-sdk spend gate · GENÉRICO', () => {
     const r = await checkRunSdkSpendCap(sb, null, { notify: async () => ({ dispatched: true }) })
     expect(r.blocked).toBe(false)
     expect(r.reason).toBe('system_under_cap')
-    expect(r.cap_usd).toBe(2)
+    expect(r.cap_usd).toBe(DEFAULT_SYSTEM_SPEND_CAP_USD)
     expect(r.spent_usd).toBeCloseTo(0.6147, 4)
   })
 
@@ -153,13 +155,13 @@ describe('isRunSpendCapEnforced · default ON · kill-switch explícito', () => 
   })
 })
 
-describe('resolveRunSpendCapUsd · default $8 · env override · valida', () => {
+describe('resolveRunSpendCapUsd · default $24,05 · env override · valida', () => {
   beforeEach(() => delete process.env.RUN_SPEND_CAP_USD)
   afterEach(() => delete process.env.RUN_SPEND_CAP_USD)
 
-  it('default = 8.0', () => {
-    expect(resolveRunSpendCapUsd()).toBe(8.0)
-    expect(DEFAULT_RUN_SPEND_CAP_USD).toBe(8.0)
+  it('default = 24.05 ($8 → 3 × lo medido, 18-nov)', () => {
+    expect(resolveRunSpendCapUsd()).toBe(24.05)
+    expect(DEFAULT_RUN_SPEND_CAP_USD).toBe(24.05)
   })
   it('env válido sobreescribe', () => {
     process.env.RUN_SPEND_CAP_USD = '12.5'
@@ -168,7 +170,7 @@ describe('resolveRunSpendCapUsd · default $8 · env override · valida', () => 
   it('env inválido / no-positivo → default', () => {
     for (const v of ['abc', '0', '-5', '']) {
       process.env.RUN_SPEND_CAP_USD = v
-      expect(resolveRunSpendCapUsd()).toBe(8.0)
+      expect(resolveRunSpendCapUsd()).toBe(DEFAULT_RUN_SPEND_CAP_USD)
     }
   })
 })

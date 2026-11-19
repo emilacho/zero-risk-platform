@@ -9,8 +9,8 @@
  * Reversible: apagar la bandera deja el tope inerte (el freno por cubo G6 y el §150 de run-sdk siguen vivos).
  */
 
-/** techo general por corrida cuando la ficha del cliente no trae el suyo · USD 5,00 */
-export const RUN_CAP_DEFAULT_USD = 5.0
+/** techo general por corrida cuando la ficha del cliente no trae el suyo · USD 13,58 (18-nov · Emilio: topes = 3 × lo medido (PARA-LENOVO-de-CC3-barrido-de-topes-de-gasto-medido-y-su-triple, GO 16:17Z): máx. medido 4,52) */
+export const RUN_CAP_DEFAULT_USD = 13.58
 
 /** el techo vivo · `SALA_RUN_CAP_USD` (número finito > 0) si existe, si no el general. La ficha del cliente lo baja o lo sube pasando `cap_usd` a `evaluateRunCap`. */
 export function resolveRunCapUsd(): number {

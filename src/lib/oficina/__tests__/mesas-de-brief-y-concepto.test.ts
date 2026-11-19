@@ -14,7 +14,7 @@ import { abrirMesaDeLaCadena, briefIdDeLaCadena, devolucionDelBrief, textoParaLa
 import { cotaAgotada, siguienteDeLaMesa, techoDe } from '../mesa/planificador'
 import { ROTULO_DE_MATERIAL, pedidoDeAperturaDeLaCadena } from '../mesa/orquestador'
 import { DIETA, armarTarea } from '../mesa/pedidos'
-import { BRIEF_MESA, CONCEPTO_MESA, TOPE_DE_LA_MESA_DE_CONCEPTO_USD } from '../plantillas/mesa'
+import { BRIEF_MESA, CONCEPTO_MESA, TOPE_DE_LA_MESA_DE_BRIEF_USD, TOPE_DE_LA_MESA_DE_CONCEPTO_USD } from '../plantillas/mesa'
 // 17-nov · Sprint 4 · D (ADENDA 4): el tope de la gran idea subió de 7 a 10; los turnos «caros» de las pruebas de tope guardan la MISMA proporción con el tope (3,1 de 7)
 const TURNO_CARO_CONCEPTO = (3.1 / 7) * TOPE_DE_LA_MESA_DE_CONCEPTO_USD
 import { vencerMesasPorPlazo } from '../vigia'
@@ -26,6 +26,9 @@ import type { PuertoDelCerebro, PuertoDeLaCadena } from '../puertos'
 
 const RAIZ = path.join(__dirname, '..', '..', '..', '..')
 const MIGRACION = fs.readFileSync(path.join(RAIZ, 'supabase', 'migrations', '202610312000_oficina_mesas_de_brief_y_concepto.sql'), 'utf8')
+// 18-nov · 3 × lo medido: la 202611181700 lleva el tope del brief de 1,60 (el de la siembra) al del código (3,24)
+const MIG_1700 = fs.readFileSync(path.join(RAIZ, 'supabase', 'migrations', '202611181700_oficina_topes_al_triple_de_lo_medido.sql'), 'utf8')
+const REV_1700 = fs.readFileSync(path.join(RAIZ, 'supabase', 'reversas', '202611181700_oficina_topes_al_triple_de_lo_medido_REVERSA.sql'), 'utf8')
 
 const tarjeta = (agente: string, rol: Tarjeta['rol'], pertinente_en: string[], activo = true): Tarjeta => ({ agente, rol, especialidad: `especialidad de ${agente}`, sabe_hacer: ['algo'], necesita: ['algo'], entrega: ['algo'], pertinente_en, activo, version: 1 })
 
@@ -90,12 +93,13 @@ describe('las plantillas y la migración', () => {
     expect(i).toBeGreaterThan(0)
     return JSON.parse(new RegExp(`\\$${m}\\$([\\s\\S]*?)\\$${m}\\$`).exec(MIGRACION.slice(i))![1])
   }
-  it('el dato sembrado es EXACTAMENTE el que produce el código (un solo paso mesa; brief 1,60 una ronda; concepto 5,00 dos rondas mínimas, plazo 90 min · el tope del concepto lo subió a 7 la 202611170900)', () => {
+  it('el dato sembrado es EXACTAMENTE el que produce el código (un solo paso mesa; brief 1,60 una ronda; concepto 5,00 dos rondas mínimas, plazo 90 min · el tope del concepto lo subieron la 202611170900 y la 202611172200; los dos, la 202611181700)', () => {
     expect(tomar('brief_mesa', 'pasos')).toEqual(JSON.parse(JSON.stringify(BRIEF_MESA.pasos)))
-    expect(tomar('brief_mesa', 'lim')).toEqual(JSON.parse(JSON.stringify(BRIEF_MESA.limites)))
+    expect(tomar('brief_mesa', 'lim')).toEqual(JSON.parse(JSON.stringify({ ...BRIEF_MESA.limites, tope_encargo_usd: 1.6 })))
     expect(tomar('concepto_mesa', 'pasos2')).toEqual(JSON.parse(JSON.stringify(CONCEPTO_MESA.pasos)))
     expect(tomar('concepto_mesa', 'lim2')).toEqual(JSON.parse(JSON.stringify({ ...CONCEPTO_MESA.limites, tope_encargo_usd: 5 })))
-    expect(BRIEF_MESA.limites).toMatchObject({ tope_encargo_usd: 1.6, max_rondas: 1, mesa: true })
+    expect(BRIEF_MESA.limites).toMatchObject({ tope_encargo_usd: TOPE_DE_LA_MESA_DE_BRIEF_USD, max_rondas: 1, mesa: true })
+    expect(TOPE_DE_LA_MESA_DE_BRIEF_USD).toBe(3.24)
     expect(CONCEPTO_MESA.limites).toMatchObject({ tope_encargo_usd: TOPE_DE_LA_MESA_DE_CONCEPTO_USD, max_rondas: 2, rondas_minimas: 2, plazo_mesa_min: 90, mesa: true })
     expect(BRIEF_MESA.pasos).toHaveLength(1)
     expect(CONCEPTO_MESA.pasos[0].funcion).toBe('mesa')
@@ -121,6 +125,36 @@ describe('las plantillas y la migración', () => {
   })
 })
 
+describe('🔴 202611181700 · el tope del brief al triple de lo medido (18-nov) es EXACTAMENTE el del código', () => {
+  const nuevo = /UPDATE public\.oficina_tipos_de_grupo g\s+SET tope_encargo_usd = ([\d.]+), limites = g\.limites \|\| jsonb_build_object\('tope_encargo_usd', ([\d.]+)\), version = g\.version \+ 1\s+WHERE g\.tipo = 'brief_mesa';/.exec(MIG_1700)
+  it('pone el tope del código (3,24) en la columna y en el límite de brief_mesa, y comprueba al final que quedó', () => {
+    expect(nuevo).not.toBeNull()
+    expect(Number(nuevo![1])).toBe(TOPE_DE_LA_MESA_DE_BRIEF_USD)
+    expect(Number(nuevo![2])).toBe(TOPE_DE_LA_MESA_DE_BRIEF_USD)
+    expect(BRIEF_MESA.limites.tope_encargo_usd).toBe(Number(nuevo![1]))
+    const comprobado = /g\.tipo = 'brief_mesa' AND g\.tope_encargo_usd = ([\d.]+) AND \(g\.limites->>'tope_encargo_usd'\)::numeric = ([\d.]+)\) THEN\s+RAISE EXCEPTION '202611181700: brief_mesa no quedó/.exec(MIG_1700)
+    expect([Number(comprobado![1]), Number(comprobado![2])]).toEqual([TOPE_DE_LA_MESA_DE_BRIEF_USD, TOPE_DE_LA_MESA_DE_BRIEF_USD])
+    expect(MIG_1700).toMatch(/^BEGIN;$/m)
+    expect(MIG_1700).toMatch(/^COMMIT;$/m)
+  })
+  it('se niega con encargos vivos de las mesas y si la fila no es la leída (1,60, la de la siembra, en columna y límite)', () => {
+    expect(MIG_1700).toMatch(/IF EXISTS \(SELECT 1 FROM public\.oficina_encargos e WHERE e\.estado IN \('abierto', 'en_paso'\) AND e\.familia IN \('brief_mesa', 'concepto_mesa', 'carrusel_mesa', 'kit_mesa', 'post_mesa'\)\) THEN\s+RAISE EXCEPTION '202611181700: hay un encargo vivo/)
+    const leida = /g\.tipo = 'brief_mesa' AND g\.tope_encargo_usd = ([\d.]+) AND \(g\.limites->>'tope_encargo_usd'\)::numeric = ([\d.]+)\) THEN\s+RAISE EXCEPTION '202611181700: el tope de brief_mesa no es el leído/.exec(MIG_1700)
+    expect(leida).not.toBeNull()
+    expect([Number(leida![1]), Number(leida![2])]).toEqual([1.6, 1.6])
+    // la leída es la que dejó la siembra (202610312000)
+    const i = MIGRACION.indexOf("'brief_mesa', 'brief_mesa'")
+    expect(JSON.parse(/\$lim\$([\s\S]*?)\$lim\$/.exec(MIGRACION.slice(i))![1]).tope_encargo_usd).toBe(Number(leida![2]))
+  })
+  it('la reversa vuelve el brief a 1,60 (columna y límite), exige el que dejó la migración y se niega con encargos vivos', () => {
+    const vuelve = /SET tope_encargo_usd = ([\d.]+), limites = g\.limites \|\| jsonb_build_object\('tope_encargo_usd', ([\d.]+)\), version = g\.version \+ 1 WHERE g\.tipo = 'brief_mesa';/.exec(REV_1700)
+    expect(vuelve).not.toBeNull()
+    expect([Number(vuelve![1]), Number(vuelve![2])]).toEqual([1.6, 1.6])
+    expect(REV_1700).toContain(`g.tipo = 'brief_mesa' AND g.tope_encargo_usd = ${TOPE_DE_LA_MESA_DE_BRIEF_USD})`)
+    expect(REV_1700).toMatch(/IF EXISTS \(SELECT 1 FROM public\.oficina_encargos e WHERE e\.estado IN \('abierto', 'en_paso'\) AND e\.familia IN \('brief_mesa', 'concepto_mesa', 'carrusel_mesa', 'kit_mesa', 'post_mesa'\)\) THEN\s+RAISE EXCEPTION 'reversa 202611181700: hay un encargo vivo/)
+  })
+})
+
 describe('el sobre de la cadena', () => {
   const OK = { dry_run: true, tipo_de_mesa: 'concepto', client_id: '0a2ffbd4-957c-4315-a37f-b9e4fbbbb312', campana_id: '8168f32b-47d9-466a-9350-3dff31700a58', version: 1, marco_texto: 'x'.repeat(40) }
   it('exige tipo, dry_run booleano, uuids, versión entera, un marco y condiciones bien formadas', () => {
@@ -143,13 +177,15 @@ describe('el sobre de la cadena', () => {
 
 describe('las cotas de las mesas de la cadena no reservan «lo que sigue» (no hay imagen ni jefatura de pieza)', () => {
   const est = { turnos: 0 } as EstadoMesa
-  it('con tope 1,60/5,00 y nada gastado la mesa NO nace agotada; con la reserva de una pieza sí lo estaría', () => {
-    for (const tope of [1.6, 5]) expect(cotaAgotada(est, { gasto_usd: 0, tope_usd: tope, hayImagenGenerada: false, reserva_posterior_usd: 0 })).toBeNull()
+  it('con los topes de hoy (brief 3,24 · concepto 17,79) y nada gastado la mesa NO nace agotada; con la reserva de una pieza y el tope de antes del brief (1,60) sí lo estaría', () => {
+    for (const tope of [TOPE_DE_LA_MESA_DE_BRIEF_USD, TOPE_DE_LA_MESA_DE_CONCEPTO_USD, 1.6]) expect(cotaAgotada(est, { gasto_usd: 0, tope_usd: tope, hayImagenGenerada: false, reserva_posterior_usd: 0 }), String(tope)).toBeNull()
     expect(cotaAgotada(est, { gasto_usd: 0, tope_usd: 1.6, hayImagenGenerada: false })).not.toBeNull()
   })
   it('agota cuando el gasto más la reserva de un turno pasa el tope, y a los 24 turnos', () => {
-    expect(cotaAgotada(est, { gasto_usd: 1.1, tope_usd: 1.6, hayImagenGenerada: false, reserva_posterior_usd: 0 })).toMatch(/pasa el tope/)
-    expect(cotaAgotada({ turnos: 24 } as EstadoMesa, { gasto_usd: 0, tope_usd: 5, hayImagenGenerada: false, reserva_posterior_usd: 0 })).toMatch(/24 turnos/)
+    // brief 3,24: 2,65 + 0,60 = 3,25 pasa; 2,64 + 0,60 = 3,24 cabe justo
+    expect(cotaAgotada(est, { gasto_usd: 2.65, tope_usd: TOPE_DE_LA_MESA_DE_BRIEF_USD, hayImagenGenerada: false, reserva_posterior_usd: 0 })).toMatch(/pasa el tope/)
+    expect(cotaAgotada(est, { gasto_usd: 2.64, tope_usd: TOPE_DE_LA_MESA_DE_BRIEF_USD, hayImagenGenerada: false, reserva_posterior_usd: 0 })).toBeNull()
+    expect(cotaAgotada({ turnos: 24 } as EstadoMesa, { gasto_usd: 0, tope_usd: TOPE_DE_LA_MESA_DE_CONCEPTO_USD, hayImagenGenerada: false, reserva_posterior_usd: 0 })).toMatch(/24 turnos/)
   })
 })
 
@@ -288,7 +324,7 @@ describe('la mesa del BRIEF de punta a punta', () => {
     expect(enc.familia).toBe('brief_mesa')
     expect(enc.parte_id).toBe(CAMPANA)
     expect(enc.brief_id).toBe(briefIdDeLaCadena('brief', CAMPANA, 1))
-    expect(enc.tope_usd).toBe(1.6)
+    expect(enc.tope_usd).toBe(TOPE_DE_LA_MESA_DE_BRIEF_USD)
     expect(enc.sala_ref).toMatchObject({ origen: 'cadena', tipo_de_mesa: 'brief', campana_id: CAMPANA, version: 1 })
     expect((m.a.cuerpo.turno as { agente: string }).agente).toBe('campaign-brief-agent')
     expect(m.hecho.pedidosAlPortero).toHaveLength(1)

@@ -6,7 +6,7 @@ import { calcular } from '../src/lib/finanzas/calculadora'
 import { entradaDesdeLaConversa } from '../src/lib/finanzas/conversa/entrada'
 import type { DatoConProcedencia } from '../src/lib/finanzas/conversa/esquemas'
 import { plantillaDelEncargo } from '../src/lib/finanzas/conversa/orquestador'
-import { PISO_DE_RESERVA_DEL_RECIERRE_USD, PLANTILLA_FINANCIERA, RESERVA_DEL_CIERRE_USD, TECHO_DE_RESERVA_DEL_RECIERRE_USD, reservaDelCierre2 } from '../src/lib/finanzas/conversa/plantilla'
+import { PISO_DE_RESERVA_DEL_RECIERRE_USD, PLANTILLA_FINANCIERA, RESERVA_DEL_CIERRE_USD, TECHO_DE_RESERVA_DEL_RECIERRE_USD, TOPE_DEL_ENCARGO_USD, reservaDelCierre2 } from '../src/lib/finanzas/conversa/plantilla'
 import type { EncargoDeConversa, TurnoDeConversa } from '../src/lib/finanzas/conversa/puertos'
 import { lineaBaseSemanal } from '../src/lib/finanzas/linea-base'
 import type { Entrada } from '../src/lib/finanzas/tipos'
@@ -110,9 +110,9 @@ describe('LÍNEA BASE · de dónde sale (y de dónde no)', () => {
 })
 
 describe('RESERVA DEL CIERRE · lo medido + margen, sin bajar la defensa', () => {
-  it('05-nov · la reserva general es 0,45 (GO de Lenovo): el 04-nov el cierre costó 0,349', () => {
-    expect(RESERVA_DEL_CIERRE_USD).toBe(0.45)
-    expect(PLANTILLA_FINANCIERA.pasos.find((p) => p.clave === 'cierre')?.tope_usd).toBe(0.45)
+  it('la reserva general es 1,94 (0,45 del GO de Lenovo 05-nov → 3 × lo medido, 18-nov: el cierre de la ronda 1 llegó a 0,6444)', () => {
+    expect(RESERVA_DEL_CIERRE_USD).toBe(1.94)
+    expect(PLANTILLA_FINANCIERA.pasos.find((p) => p.clave === 'cierre')?.tope_usd).toBe(RESERVA_DEL_CIERRE_USD)
     for (const clave of ['fpa', 'fpa_2']) expect(PLANTILLA_FINANCIERA.pasos.find((p) => p.clave === clave)?.tope_usd).toBe(0.4)
     // el re-cierre (cierre_2) reserva más: piso 0,40
     expect(PLANTILLA_FINANCIERA.pasos.find((p) => p.clave === 'cierre_2')?.tope_usd).toBe(0.4)
@@ -137,7 +137,7 @@ describe('RESERVA DEL CIERRE · lo medido + margen, sin bajar la defensa', () =>
     const con = plantillaDelEncargo(enc(1), [turno('cierre', 0.33)])
     expect(con.pasos.find((p) => p.clave === 'cierre_2')?.tope_usd).toBe(0.43)
     expect(plantillaDelEncargo(enc(1), [turno('cierre', 0.21)]).pasos.find((p) => p.clave === 'cierre_2')?.tope_usd).toBe(0.4)
-    expect(con.pasos.find((p) => p.clave === 'cierre')?.tope_usd).toBe(0.45)
+    expect(con.pasos.find((p) => p.clave === 'cierre')?.tope_usd).toBe(RESERVA_DEL_CIERRE_USD)
     // un cierre fallido o sin costo no cuenta
     expect(plantillaDelEncargo(enc(1), [turno('cierre', 0.21, 'fallo')]).pasos.find((p) => p.clave === 'cierre_2')?.tope_usd).toBe(0.4)
     expect(plantillaDelEncargo(enc(1), [turno('cierre', 0)]).pasos.find((p) => p.clave === 'cierre_2')?.tope_usd).toBe(0.4)
@@ -147,20 +147,22 @@ describe('RESERVA DEL CIERRE · lo medido + margen, sin bajar la defensa', () =>
     const i = PLANTILLA_FINANCIERA.pasos.findIndex((p) => p.clave === 'calculo_2')
     return { ...estadoInicial(), ultimo: i, pasos_ejecutados: i + 1, gasto_usd: gasto, artefactos: { bloque_2: { version: 1, version_consumida: 0, datos: { cambio: true } }, acuerdo: { version: 1, version_consumida: 1, datos: { requiere_ronda_2: true } } } }
   }
-  it('con la reserva del re-cierre (0,40) el borde del tope 3,00 es 2,60: cabe con 2,60 y no con 2,6027', () => {
-    const nueva = plantillaDelEncargo(enc(2.6), [turno('cierre', 0.22)])
-    const cabe = siguientePaso(estadoAntesDelCierre2(2.6), nueva)
+  // 18-nov · Lenovo 21:07Z: la base pasa al techo (11,10) y el propio solo sube: el tope 3,00 del caso real ya no baja nada. Se mide el mismo borde contra 11,10: 10,70 cabe y 10,7027 no
+  it('con la reserva del re-cierre (0,40) el borde del tope 11,10 es 10,70: cabe con 10,70 y no con 10,7027', () => {
+    const nueva = plantillaDelEncargo(enc(10.7), [turno('cierre', 0.22)])
+    expect(nueva.limites.tope_encargo_usd).toBe(11.1)
+    const cabe = siguientePaso(estadoAntesDelCierre2(10.7), nueva)
     expect(cabe.accion === 'ejecutar' && cabe.paso.clave).toBe('cierre_2')
-    const no = siguientePaso(estadoAntesDelCierre2(2.6027), nueva)
+    const no = siguientePaso(estadoAntesDelCierre2(10.7027), nueva)
     expect(no.accion === 'cierre_por_tope' && no.razon).toBe('tope_de_gasto')
   })
   it('la defensa NO baja: si lo cobrado más la reserva pasa del tope, el tope manda', () => {
-    const nueva = plantillaDelEncargo(enc(2.70), [turno('cierre', 0.22)])
-    const s = siguientePaso(estadoAntesDelCierre2(2.70), nueva)
+    const nueva = plantillaDelEncargo(enc(10.8), [turno('cierre', 0.22)])
+    const s = siguientePaso(estadoAntesDelCierre2(10.8), nueva)
     expect(s.accion).toBe('cierre_por_tope')
     expect(s.accion === 'cierre_por_tope' && s.razon).toBe('tope_de_gasto')
-    // y el tope del encargo sigue sin pasar del techo aunque la semilla pida más
-    expect(plantillaDelEncargo(enc(0, 9), [turno('cierre', 0.22)]).limites.tope_encargo_usd).toBe(5)
+    // y el tope del encargo sigue sin pasar del techo (US$ 11,10) aunque la semilla pida más
+    expect(plantillaDelEncargo(enc(0, 20), [turno('cierre', 0.22)]).limites.tope_encargo_usd).toBe(TOPE_DEL_ENCARGO_USD)
   })
 })
 
@@ -202,14 +204,16 @@ describe('RESERVA CONTRA HOLGURA DE LA PRUEBA · el tope total tambien frena', (
     const s = siguientePaso(e, pl)
     expect(s.accion === 'ejecutar' && s.paso.clave).toBe('firma')
   })
-  it('el caso real de Naufrago (tope 3,20, gasto 2,8314): con reserva 0,40 el tope del ENCARGO ya frena (3,2314 > 3,20); el re-cierre exigiria tope >= 3,24', () => {
-    const pl = plantillaDelEncargo(enc({ tope_encargo_usd: 3.2, firma_tope: { ...FIRMA, valor: 3.2 }, tope_de_prueba: { ...prueba, base_usd: 4.5 } }))
+  // 18-nov · con la base en el techo (11,10), el tope 3,20 firmado del caso real ya no baja el del ENCARGO; lo que frena es la PRUEBA, que sí toma lo firmado (3,20): holgura 3,20 − 2,8314 = 0,3686 < 0,40
+  it('el caso real de Naufrago (tope 3,20 firmado, gasto 2,8314): el tope del encargo queda en 11,10 y frena la PRUEBA con lo firmado (0,3686 < 0,40)', () => {
+    const pl = plantillaDelEncargo(enc({ tope_encargo_usd: 3.2, firma_tope: { ...FIRMA, valor: 3.2 }, tope_de_prueba: { limite_usd: 3.2, base_usd: 2.8314, encargo_base_usd: 0 } }))
+    expect(pl.limites.tope_encargo_usd).toBe(11.1)
     const s = siguientePaso(antesDelCierre2(2.8314), pl)
-    expect(s.accion === 'cierre_por_tope' && s.razon).toBe('tope_de_gasto')
+    expect(s.accion === 'cierre_por_tope' && s.razon).toBe('tope_de_prueba')
   })
-  it('el tope de la prueba rige tambien cuando el encargo NO pide tope propio (plantilla 1,50)', () => {
+  it('el tope de la prueba rige tambien cuando el encargo NO pide tope propio (plantilla 11,10 desde el 18-nov)', () => {
     const pl = plantillaDelEncargo(enc({ tope_de_prueba: { limite_usd: 1.2, base_usd: 0.9, encargo_base_usd: 0 } }))
-    expect(pl.limites.tope_encargo_usd).toBe(1.5)
+    expect(pl.limites.tope_encargo_usd).toBe(11.1)
     expect(pl.limites.prueba).toEqual({ limite_usd: 1.2, base_usd: 0.9, encargo_base_usd: 0 })
     const s = siguientePaso(antesDelCierre2(0), pl) // el re-cierre reserva 0,40 > holgura 0,30
     expect(s.accion === 'cierre_por_tope' && s.razon).toBe('tope_de_prueba')
