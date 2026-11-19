@@ -527,7 +527,7 @@ export async function escalateToHITL(params: {
   }
 }
 
-function parseEditorVerdict(rawResponse: string): EditorVerdict {
+export function parseEditorVerdict(rawResponse: string): EditorVerdict {
   const fallback: EditorVerdict = {
     status: 'escalated',
     issues: ['Could not parse reviewer response'],
