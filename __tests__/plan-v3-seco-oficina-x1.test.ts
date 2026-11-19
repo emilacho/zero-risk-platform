@@ -58,7 +58,8 @@ const CASOS_OFICINA: Record<CasoOficina, { semilla?: Record<string, unknown>; gu
   firmado: { estadoFinal: 'cerrado', firma: 'firmado' },
   sin_acuerdo: { semilla: { sin_referencia: true }, guion: (n) => ({ ...guionBase(n), redes: redes(n, { sinCosto: true }) }), estadoFinal: 'sin_acuerdo', firma: 'sin_bloque' },
   sin_firma: { guion: (n) => ({ ...guionBase(n), cierre: null }), estadoFinal: 'sin_acuerdo', firma: 'sin_firma' },
-  vencido: { costo: 0.6, estadoFinal: 'cierre_por_tope', firma: 'sin_turno_de_firma' },
+  // 18-nov · la base de finanzas es 11,10: para vencer hace falta más que 0,60 por llamada
+  vencido: { costo: 2.5, estadoFinal: 'cierre_por_tope', firma: 'sin_turno_de_firma' },
 }
 async function llamar(cuerpo: unknown) {
   const r = await POST(new Request('http://local/api/finanzas/conversa', { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': LLAVE }, body: JSON.stringify(cuerpo) }))
@@ -160,9 +161,9 @@ describe('X1 · datos del plan v3 + oficina financiera (por negocio)', () => {
       expect(o.obs.estado, caso).toBe(c.estadoFinal)
       expect(o.obs.turnos.find((t) => t.paso === 'firma')?.salida.estado ?? 'sin_turno_de_firma', caso).toBe(c.firma)
       if (caso === 'vencido') {
-        expect(o.obs.gasto_usd).toBeGreaterThanOrEqual(1.5)
-        expect(o.obs.gasto_usd).toBeLessThanOrEqual(1.5 + 0.6 + 1e-9)
-      } else expect(o.obs.gasto_usd, caso).toBeLessThanOrEqual(1.5)
+        expect(o.obs.gasto_usd).toBeGreaterThanOrEqual(11.1)
+        expect(o.obs.gasto_usd).toBeLessThanOrEqual(11.1 + 2.5 + 1e-9)
+      } else expect(o.obs.gasto_usd, caso).toBeLessThanOrEqual(11.1)
       // lo que la ruta del tablero diría (con bloque, aunque sin firma; sin bloque, 404) y el motivo que el sobre trae
       const resp = respuestaDeLaRuta(o.obs, undefined)
       const hayBloque = resp.statusCode === 200

@@ -79,7 +79,8 @@ export function catalogoDeModelos(valor: unknown): CatalogoDeModelos {
 export const RESOLUCION_APROBADA = '720p'
 export const RESOLUCIONES_PERMITIDAS: ReadonlySet<string> = new Set(['480p', '720p', '1080p'])
 /** el tope por video POR OMISIÓN (lo aprobado por Emilio el 31-oct); el vigente sale de la configuración (`configDelBrazo`) */
-export const TOPE_POR_VIDEO_USD = 5
+// 18-nov · Emilio: topes = 3 × lo medido (GO Lenovo 16:17Z): el video real más caro costó 7,82 (Higgsfield, 1080p) → 23,47. Solo vale sin la clave `brazo_de_video` (la viva trae 60)
+export const TOPE_POR_VIDEO_USD = 23.47
 
 /**
  * 11-nov · GO Lenovo 03:55Z · regla #18 del barrido: el descuento y el tope del proveedor NO viven en el código (el descuento del 31-oct quedó escrito con su fecha y venció el 7-nov).

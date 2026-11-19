@@ -1,5 +1,5 @@
 /**
- * LA VARA POR CORRIDA · $5 · firmada por el Arquitecto 2026-08-25 02:45 UTC
+ * LA VARA POR CORRIDA · $5 · firmada por el Arquitecto 2026-08-25 02:45 UTC → 3 × lo medido, 18-nov: $13,58 (y el freno por cliente, $8 → $24,05)
  *
  * FORMA FIRMADA · dos varas · UN solo punto de corte · UNA sola consulta · colgando del
  * freno de $8. NO un módulo nuevo. La vara nueva HEREDA la política de fallo del $8
@@ -11,7 +11,7 @@
  *    línea de cableado, lo que probó es que la vara NO EXISTE. 'En ámbito' NO es 'hecho'."
  *
  * Por eso esto tiene DOS familias de pruebas, y las dos deben ir de rojo a verde:
- *   1. CONDUCTA · la vara corta a $5 · se prueba contra el freno
+ *   1. CONDUCTA · la vara corta a $13,58 (era $5) · se prueba contra el freno
  *   2. CABLEADO · los DOS puntos de conexión le PASAN el identificador al freno
  *      ← ésta es la que distingue "en ámbito" de "hecho". Sin ella, implementar el
  *        freno daría verde con la vara desconectada: decoración.
@@ -21,6 +21,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { DEFAULT_RUN_SCOPED_CAP_USD, DEFAULT_RUN_SPEND_CAP_USD } from '../src/lib/run-sdk-spend-gate'
 
 const raiz = join(__dirname, '..')
 const leer = (p: string) => readFileSync(join(raiz, p), 'utf8')
@@ -60,14 +61,14 @@ afterEach(() => {
 })
 
 describe('vara por corrida · CONDUCTA', () => {
-  it('🔴 EL ROJO DE ACEPTACIÓN · una corrida que el $5 bloquea y el $8 NO', async () => {
+  it('🔴 EL ROJO DE ACEPTACIÓN · una corrida que el $13,58 bloquea y el $24,05 NO', async () => {
     const { checkRunSdkSpendCap } = await import('../src/lib/run-sdk-spend-gate')
-    // el caso medido · cliente con $2,90 acumulado + una corrida que se desboca a $5
-    //   por cliente/24h → 7,90 < 8  ⇒ el freno viejo NO bloquea
-    //   por corrida     → 5,00 ≥ 5  ⇒ la vara nueva SÍ
+    // el caso medido · cliente con $2,90 acumulado + una corrida que se desboca a la vara ($13,58)
+    //   por cliente/24h → 16,48 < 24,05  ⇒ el freno por cliente NO bloquea
+    //   por corrida     → 13,58 ≥ 13,58  ⇒ la vara SÍ
     filas = [
       { cost_usd: 2.9, workflow_execution_id: OTRA_CORRIDA },
-      { cost_usd: 5.0, workflow_execution_id: CORRIDA },
+      { cost_usd: 13.58, workflow_execution_id: CORRIDA },
     ]
 
     const r = await checkRunSdkSpendCap(supabaseFalso(), CLIENTE, {
@@ -78,16 +79,16 @@ describe('vara por corrida · CONDUCTA', () => {
 
     expect(r.blocked, 'la vara por corrida no bloqueó').toBe(true)
     expect(r.reason).toBe('run_over_cap')
-    expect(r.run_spent_usd).toBe(5.0)
-    expect(r.run_cap_usd).toBe(5.0)
-    // Y la comprobación que separa freno de decoración: el $8 NO habría bloqueado
-    expect(r.spent_usd).toBeCloseTo(7.9, 5)
-    expect(r.spent_usd!).toBeLessThan(8)
+    expect(r.run_spent_usd).toBe(13.58)
+    expect(r.run_cap_usd).toBe(DEFAULT_RUN_SCOPED_CAP_USD)
+    // Y la comprobación que separa freno de decoración: el $24,05 NO habría bloqueado
+    expect(r.spent_usd).toBeCloseTo(16.48, 5)
+    expect(r.spent_usd!).toBeLessThan(DEFAULT_RUN_SPEND_CAP_USD)
   })
 
-  it('una corrida legítima ($2,88 · la más cara jamás registrada) NO se corta', async () => {
+  it('una corrida legítima ($4,52 · la más cara medida, 213037 del 01-nov; antes $2,88) NO se corta', async () => {
     const { checkRunSdkSpendCap } = await import('../src/lib/run-sdk-spend-gate')
-    filas = [{ cost_usd: 2.8778, workflow_execution_id: CORRIDA }]
+    filas = [{ cost_usd: 4.52, workflow_execution_id: CORRIDA }]
 
     const r = await checkRunSdkSpendCap(supabaseFalso(), CLIENTE, {
       runId: CORRIDA,
@@ -96,12 +97,13 @@ describe('vara por corrida · CONDUCTA', () => {
     expect(r.blocked).toBe(false)
   })
 
-  it('la acumulación la sigue atrapando el $8 · 3 corridas de $2,80 pasan una a una', async () => {
+  it('la acumulación la sigue atrapando el $24,05 · 3 corridas de $8,02 pasan una a una', async () => {
     const { checkRunSdkSpendCap } = await import('../src/lib/run-sdk-spend-gate')
+    // 3 × 8,02 = 24,06 ≥ 24,05 · cada una bajo la vara (13,58)
     filas = [
-      { cost_usd: 2.8, workflow_execution_id: 'a' },
-      { cost_usd: 2.8, workflow_execution_id: 'b' },
-      { cost_usd: 2.8, workflow_execution_id: CORRIDA },
+      { cost_usd: 8.02, workflow_execution_id: 'a' },
+      { cost_usd: 8.02, workflow_execution_id: 'b' },
+      { cost_usd: 8.02, workflow_execution_id: CORRIDA },
     ]
 
     const r = await checkRunSdkSpendCap(supabaseFalso(), CLIENTE, {
@@ -109,13 +111,14 @@ describe('vara por corrida · CONDUCTA', () => {
       notify: (() => {}) as never,
     })
     expect(r.blocked, 'el freno por cliente no atrapó la acumulación').toBe(true)
-    expect(r.reason).toBe('over_cap')   // el $8, no el $5 · cada corrida iba bajo $5
+    expect(r.reason).toBe('over_cap')   // el $24,05, no el $13,58 · cada corrida iba bajo $13,58
   })
 
   it('sólo suma la corrida propia · el gasto de otra corrida NO cuenta contra la vara', async () => {
     const { checkRunSdkSpendCap } = await import('../src/lib/run-sdk-spend-gate')
+    // sumadas (14) pasarían la vara (13,58); solas, la propia (1) no
     filas = [
-      { cost_usd: 4.9, workflow_execution_id: OTRA_CORRIDA },
+      { cost_usd: 13.0, workflow_execution_id: OTRA_CORRIDA },
       { cost_usd: 1.0, workflow_execution_id: CORRIDA },
     ]
 
@@ -181,7 +184,11 @@ describe('vara por corrida · lo que va ESCRITO al lado del default', () => {
   it('el margen real, el disparador de recalibración y la regla del camino ruidoso', () => {
     const src = leer('src/lib/run-sdk-spend-gate.ts')
 
-    expect(src, 'falta el default de la vara').toContain('DEFAULT_RUN_SCOPED_CAP_USD = 5.0')
+    expect(src, 'falta el default de la vara').toContain('DEFAULT_RUN_SCOPED_CAP_USD = 13.58')
+    // 18-nov · la cuenta de hoy: 3 × la corrida más cara medida (4,52)
+    expect(src, 'falta el máximo medido de hoy').toMatch(/4[.,]52/)
+    expect(src, 'falta el «3 × lo medido»').toContain('3 × lo medido')
+    // la aritmética de la firma del 25-ago (la vara de $5), que sigue escrita como historia
     // la aritmética del margen · como la de K=3
     expect(src, 'falta el margen real medido').toMatch(/2[.,]88/)
     expect(src, 'falta el múltiplo del margen').toMatch(/1[.,]74/)

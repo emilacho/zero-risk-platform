@@ -1,7 +1,7 @@
 /**
  * 18-nov · T7d · encargo de Lenovo, arreglo 1 (regla de Emilio: los límites técnicos al máximo sin preguntar). US$ 0, sin base ni red ni modelo.
  * En la mesa de la GRAN IDEA (`0aa14d17`) el director anotó 6 pedidos (A3–A8), el máximo por agente, y en su última integración el sistema le contestó con el tope.
- * Los conteos de esa mesa suben (12 pedidos por agente · profundidad 4 · 48 turnos) y el freno queda en el dinero. Las demás mesas siguen igual.
+ * Los conteos de esa mesa suben (12 pedidos por agente · profundidad 4 · 48 turnos). Con el tope al triple (17,79, 19-nov) cortan primero las vueltas; el dinero frena si el turno cuesta más. Las demás mesas siguen igual.
  * Lo que NO prueba esto: que el banco llegue a 120. El banco se perdió en la devolución por citas, no por los pedidos (ver el papel de Lenovo).
  */
 import { describe, expect, it } from 'vitest'
@@ -29,15 +29,24 @@ describe('los conteos de la mesa de la gran idea', () => {
     expect(COTAS_DE_LA_GRAN_IDEA.MAX_PROFUNDIDAD).toBe(COTAS.MAX_IDAS_VUELTAS_POR_PAREJA)
   })
 
-  it('el freno es el dinero: al costo real de T7d (US$ 5,93 en 22 turnos), el tope de 10 corta antes de los 48 turnos', () => {
+  // 19-nov · Lenovo 02:36Z, opción (a): el tope de la mesa es 3× lo medido (17,79). Con eso, al costo de T7d cortan PRIMERO las 48 vueltas,
+  // con dinero de sobra; los topes de vueltas también los aprobó Emilio (18-nov). El dinero sigue frenando si el turno sale más caro.
+  it('al costo real de T7d (US$ 5,93 en 22 turnos) cortan primero las 48 vueltas, con dinero de sobra; el tope de 17,79 frena si el turno cuesta más', () => {
+    expect(TOPE_DE_LA_MESA_DE_CONCEPTO_USD).toBe(17.79)
     const costoPorTurno = 5.929889 / 22
     const est = (turnos: number) => ({ tipo: 'concepto', turnos } as unknown as EstadoMesa)
-    const ctx = (turnos: number) => ({ gasto_usd: turnos * costoPorTurno, tope_usd: TOPE_DE_LA_MESA_DE_CONCEPTO_USD, hayImagenGenerada: false, reserva_posterior_usd: 0, tipo: 'concepto' as const })
+    const ctx = (turnos: number, porTurno = costoPorTurno) => ({ gasto_usd: turnos * porTurno, tope_usd: TOPE_DE_LA_MESA_DE_CONCEPTO_USD, hayImagenGenerada: false, reserva_posterior_usd: 0, tipo: 'concepto' as const })
     let corte = 0
     while (!cotaAgotada(est(corte), ctx(corte))) corte++
-    expect(cotaAgotada(est(corte), ctx(corte))).toMatch(/tope de la pieza/)
-    expect(corte).toBeLessThan(COTAS_DE_LA_GRAN_IDEA.MAX_TURNOS)
-    expect(corte).toBeGreaterThan(COTAS.MAX_TURNOS) // con los 24 de antes, la mesa cortaba por conteo con dinero de sobra
+    expect(corte).toBe(COTAS_DE_LA_GRAN_IDEA.MAX_TURNOS)
+    expect(cotaAgotada(est(corte), ctx(corte))).toMatch(/48 turnos/)
+    expect(ctx(corte).gasto_usd).toBeLessThan(TOPE_DE_LA_MESA_DE_CONCEPTO_USD) // ≈ 12,94: sobra dinero
+    // con el turno al doble del de T7d, el dinero corta antes de las 48
+    let caro = 0
+    while (!cotaAgotada(est(caro), ctx(caro, 2 * costoPorTurno))) caro++
+    expect(cotaAgotada(est(caro), ctx(caro, 2 * costoPorTurno))).toMatch(/tope de la pieza/)
+    expect(caro).toBeLessThan(COTAS_DE_LA_GRAN_IDEA.MAX_TURNOS)
+    expect(caro).toBeGreaterThan(COTAS.MAX_TURNOS) // con los 24 de antes, la mesa cortaba por conteo con dinero de sobra
     expect(reservaDeLoQueSigue(false, 0, 'concepto')).toBe(0)
     // los 48 siguen siendo una cota (bucle coherente): con dinero de sobra, cortan
     expect(cotaAgotada(est(48), { ...ctx(0), gasto_usd: 0 })).toMatch(/48 turnos/)
