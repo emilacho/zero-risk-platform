@@ -139,6 +139,8 @@ function senalesLegibles(s: SenalesDelPlano | undefined): string {
 export function tareaDeLaMirada(o: {
   cuadros: CuadroDelVideo[]; planos: Plano[]; segundos: number; brief_texto: string; red: string; formato: string; contrato: string; errorDeFormato?: string
   imagenes_clave?: Array<{ n: number; url: string }>; senales?: SenalesDelVideo | null; max?: number
+  /** 19-nov · ADENDA 1 · P2b (CC5): el manual y el plan del cliente, ENTEROS, para que los ojos del video juzguen contra la marca y no solo contra el guion · ausentes = el pedido de siempre */
+  manual_texto?: string; plan_texto?: string | null
 }): { task: string; images: string[] } {
   const senalDe = new Map((o.senales?.por_plano ?? []).map((s) => [s.plano, s]))
   // Sprint 2 · S2-1 · el rol del plano en la historia y lo que tenía que decir van primero: el agente juzga si el plano CUMPLE su rol, no solo si se ve lo pedido
@@ -158,6 +160,8 @@ export function tareaDeLaMirada(o: {
   const task = [
     `## La pieza\nUn video de ${o.segundos} s${duracion ? ` (medido: ${duracion} s)` : ''} para ${o.red} (${o.formato}), ya generado por el modelo de video. Lo que sigue es lo que se pidió y lo que salió.`,
     `## La fila del brief (lo que la pieza tiene que contar)\n${o.brief_texto.trim() || '(sin texto)'}`,
+    ...(o.manual_texto ? [`## El manual de marca del cliente\n<documento fuente="el manual de marca">\n${o.manual_texto}\n</documento>`] : []),
+    ...(o.plan_texto ? [`## El plan de trabajo del cliente\n<documento fuente="el plan">\n${o.plan_texto}\n</documento>`] : []),
     `## Los planos del guion (lo que se pidió, en orden)\n${planos || '- (sin planos)'}`,
     ...(o.senales ? ['## Lo que midió ffmpeg\nEn cada plano dice si hubo cambios de escena dentro del plano, segundos en negro o imagen congelada. Es un DATO, no un veredicto: un corte puede ser lo que el plano pedía y una imagen quieta puede ser intencional. Tú decides si importa para lo que el plano tenía que contar.'] : []),
     `## Las imágenes que te muestro (por plano: su imagen clave si la hubo, y sus cuadros de inicio, medio y final)${vistos && vistos < o.planos.length ? ` · son ${vistos} de ${o.planos.length} planos (los demás no se muestran: no juzgues lo que no ves)` : ''}\n${lineas.join('\n') || '- (ninguna)'}`,

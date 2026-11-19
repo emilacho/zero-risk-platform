@@ -547,7 +547,7 @@ export function armarPedidoV(paso: Paso, e: Estado, errorDeFormato?: string): { 
   const imagenes_clave = arr<{ n: number; url: string }>(imagenesClaveVigentes(e)?.planos)
   const senales = (cv?.senales ?? null) as SenalesDelVideo | null
   const esquema = paso.salida?.esquema ?? 'mirada_video.v1'
-  const t = tareaDeLaMirada({ cuadros, planos: g?.planos ?? [], segundos: g?.segundos ?? 0, brief_texto: b.brief.texto, red: b.brief.red, formato: b.brief.formato, contrato: CONTRATOS_EN_TEXTO[esquema] ?? '', imagenes_clave, senales, ...(errorDeFormato ? { errorDeFormato } : {}) })
+  const t = tareaDeLaMirada({ cuadros, planos: g?.planos ?? [], segundos: g?.segundos ?? 0, brief_texto: b.brief.texto, red: b.brief.red, formato: b.brief.formato, contrato: CONTRATOS_EN_TEXTO[esquema] ?? '', imagenes_clave, senales, manual_texto: b.F.manual_texto, plan_texto: b.F.plan_texto, ...(errorDeFormato ? { errorDeFormato } : {}) })
   return { ...t, esquema }
 }
 

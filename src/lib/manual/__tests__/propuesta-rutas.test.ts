@@ -14,7 +14,7 @@ function base(opciones: { version?: number; contentText?: string } = {}): Db {
     apify_raw: [{ id: 'r1', apify_function: 'website_content_scraper', params: { url: 'https://negocio.example' }, respuesta: [{ url: 'https://negocio.example', text: 'Somos un negocio local. Atendemos a quien pasa por la zona con cocina de casa.' }], ensayo: false }, { id: 'r2', apify_function: 'instagram_scraper', params: {}, respuesta: [], ensayo: false }],
     client_icp_documents: [],
   }
-  return { from: (t: string) => { const q: any = { select: () => q, eq: () => q, order: () => q, limit: () => q, then: (ok: (v: unknown) => unknown) => ok({ data: tablas[t] ?? [], error: null }) }; return q } } as unknown as Db
+  return { from: (t: string) => { const q: any = { select: () => q, eq: () => q, is: () => q, order: () => q, limit: () => q, then: (ok: (v: unknown) => unknown) => ok({ data: tablas[t] ?? [], error: null }) }; return q } } as unknown as Db
 }
 const RESPUESTA = JSON.stringify({ mision: { texto: 'Ofrecemos cocina de la casa a quienes pasan por la zona.', razon: 'el sitio lo describe así' } })
 
@@ -84,7 +84,7 @@ const baseConDueno = (opciones: { sedesError?: boolean; draft?: Record<string, u
       { sede_id: 's2', campo: 'tipo_de_atencion', valor_texto: 'restaurante (local)', fuente: 'dueno', fuente_ref: 'dueño', observado_en: '2026-10-01T10:00:00Z' }, // una corrección anterior: la más nueva gana
     ],
   }
-  return { from: (t: string) => { const q: any = { select: () => q, eq: () => q, order: () => q, limit: () => q, then: (ok: (v: unknown) => unknown) => ok(t === 'client_sedes' && opciones.sedesError ? { data: null, error: { message: 'la base no contestó' } } : { data: tablas[t] ?? [], error: null }) }; return q } } as unknown as Db
+  return { from: (t: string) => { const q: any = { select: () => q, eq: () => q, is: () => q, order: () => q, limit: () => q, then: (ok: (v: unknown) => unknown) => ok(t === 'client_sedes' && opciones.sedesError ? { data: null, error: { message: 'la base no contestó' } } : { data: tablas[t] ?? [], error: null }) }; return q } } as unknown as Db
 }
 describe('lo que dijo el dueño manda y llega primero', () => {
   it('el pedido lleva sus datos ANTES del manual y la evidencia, con la corrección más nueva', async () => {

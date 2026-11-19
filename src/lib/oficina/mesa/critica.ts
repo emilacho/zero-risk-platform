@@ -66,9 +66,7 @@ export function estadoDeLaCritica(est: EstadoMesa, libro: Aporte[]): { critico: 
   return { critico, motivo: 'no hubo una ronda de aportes nuevos que criticar' }
 }
 
-/** cuánto de la crítica ve la dirección en su tarea (completa hasta aquí; nunca se corta callado) */
-export const LARGO_DE_LA_CRITICA_PARA_LA_DIRECCION = 8000
-const recortaCritica = (t: string): string => (t.length <= LARGO_DE_LA_CRITICA_PARA_LA_DIRECCION ? t : `${t.slice(0, LARGO_DE_LA_CRITICA_PARA_LA_DIRECCION)}\n[… recortado: ${LARGO_DE_LA_CRITICA_PARA_LA_DIRECCION} de ${t.length} caracteres de la crítica]`)
+/** 19-nov · ADENDA 1 · P2 (CC5 · «nada se recorta»): la dirección lee la crítica ENTERA (antes hasta 8000, con aviso) */
 
 /** la sección que se agrega a la tarea de la dirección cuando integra (null = no hay crítico: la tarea es la de siempre) */
 export function seccionDeLaCriticaParaLaDireccion(est: EstadoMesa, libro: Aporte[]): string | null {
@@ -76,9 +74,9 @@ export function seccionDeLaCriticaParaLaDireccion(est: EstadoMesa, libro: Aporte
   if (!e) return null
   if ('aporte' in e) return [
     `## La crítica de esta ronda (A${e.aporte.n} · ${e.critico})`,
-    `${e.critico} confrontó lo que propuso el equipo con los hechos y el plan. Léela antes de integrar (aquí va completa; en el tablero puede verse recortada). Tú decides: la crítica asesora, no aprueba ni rechaza.`,
+    `${e.critico} confrontó lo que propuso el equipo con los hechos y el plan. Léela antes de integrar (aquí va completa, igual que en el tablero). Tú decides: la crítica asesora, no aprueba ni rechaza.`,
     '',
-    recortaCritica(e.aporte.texto),
+    e.aporte.texto,
     '',
     `Dentro de \`## Citas\`, además de la cita de A${e.aporte.n}, escribe líneas que empiecen por «${PREFIJO_DE_LA_CRITICA}»: qué tomaste de la crítica, qué cambiaste por ella y por qué; y qué no tomaste y por qué. Nombra lo que cambió por su id (A<n>, o el id de la idea); no copies ahí líneas del banco ni de la pieza.`,
   ].join('\n')

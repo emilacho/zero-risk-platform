@@ -33,7 +33,7 @@ vi.mock('@/lib/supabase', () => {
   const consulta = (t: string) => {
     h.tablas.push(t)
     const o: Record<string, unknown> = {}
-    for (const m of ['select', 'eq', 'order', 'limit', 'in', 'contains']) o[m] = () => o
+    for (const m of ['select', 'eq', 'is', 'order', 'limit', 'in', 'contains']) o[m] = () => o
     for (const m of ['insert', 'upsert', 'update', 'delete']) o[m] = () => { h.escrituras.push(`${m}:${t}`); return o }
     o.then = (ok: (x: unknown) => unknown) => ok({ data: DATOS[t] ?? [], error: null })
     return o

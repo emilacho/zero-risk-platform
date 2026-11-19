@@ -141,14 +141,17 @@ describe('cantidad por semana: el faltante no detiene; el exceso y lo demás sí
     expect(al.campanas.find((c) => c.id === id)!.estado).toBe('activa')
     expect(JSON.stringify(al.validaciones.filter((v) => v.objeto === 'calendario'))).toContain('por confirmar')
   })
-  it('🔴 faltante + un bloqueo que no es de cantidad: sigue yendo a necesita_humano', async () => {
+  it('🔴 faltante + un bloqueo que no es de cantidad: el bloqueo sigue volviendo al creador (19-nov · grupo C: otra ronda, no necesita_humano); el faltante no', async () => {
     const al = almacen()
     const { id } = await conEstrategia(al, conFrecuencia('facebook', 2))
     const t = tandaBuena(A)
     const mala = { ...t, piezas: t.piezas.map((p) => (p.semana === 4 && p.slot === 'b' ? { ...p, formato: 'formato-inexistente' } : p)) }
     const { g } = await primera(al, id, mala)
     const g2 = await corregir(al, id, g, mala, 'tanda')
-    expect(g2.cuerpo.necesita_humano).toBe(true)
+    expect(g2.cuerpo.necesita_humano).toBeUndefined()
+    expect(g2.cuerpo.correccion).toBe(true)
+    expect(g2.cuerpo.ronda).toBe(2)
+    expect(JSON.stringify(g2.cuerpo.fichas)).toContain('formato-inexistente')
   })
 })
 

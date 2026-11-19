@@ -45,7 +45,7 @@ describe('la vara es dato de la política pieza', () => {
     const politica = { indicacion_fondo: 'Revisas la pieza. ' + VARA, contra_que: [{ clave: 'manual', titulo: 'Manual de marca vigente', funcion: '' }] }
     const t = tareaDeRevisionDeFondo({ politica: politica as never, payload: { contexto: [contextoDeHechos(null)] } as unknown as PayloadDeRevision, tipo: 'pieza' as never, texto: 'Ya llegó.', duenos: [] })
     expect(t.task).toContain('Coherencia con los hechos:')
-    expect(t.task).toContain(`### ${TITULO_DEL_BLOQUE}`)
+    expect(t.task).toContain(`<documento fuente="${TITULO_DEL_BLOQUE}`) // 19-nov · ADENDA 1 · P1: cada documento con su fuente
     expect(t.task).toContain(AVISO_SIN_BLOQUE)
   })
 })
