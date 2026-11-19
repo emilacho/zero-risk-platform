@@ -368,6 +368,9 @@ export function tareaDelRelleno(r: RellenoPendiente | undefined): string {
   ].join('\n')
 }
 
+/** 19-nov · GO Lenovo «la gran idea sin el plan» (firma de Emilio 20:39, decisión del 18-nov): lo que lee la gran idea donde las demás mesas leen el plan */
+export const LA_GRAN_IDEA_SIN_PLAN = '(el brief de la campaña ya es la lectura del plan: no se repite aquí)'
+
 export function armarTarea(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarjeta | undefined; est: EstadoMesa; libro: Aporte[]; c: ContextoDeTurno; pedido?: Aporte; faltanCitas?: string; extra?: string; metodo?: string; /** Sprint 1 · mejora 4 · las imágenes a generar de la pieza integrada (turno del ingeniero de prompts) */ imagenesARedactar?: ImagenARedactar[]; /** 18-nov · relleno del banco: qué capítulo y cuántas faltan por red (lo calcula de-la-cadena con la lectura de la cadena) */ relleno?: RellenoPendiente }): string {
   if (o.c.tipo === 'reubicacion') return tareaDeReubicacion(o)
   if (o.c.tipo === 'fallidos') return tareaDeFallidos(o)
@@ -396,7 +399,10 @@ export function armarTarea(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarj
     documento(c.tipo === 'brief' ? 'el marco de la campaña' : c.tipo === 'concepto' ? 'el brief de la campaña' : 'el brief de este entregable', recorta(c.brief_texto, DIETA[c.tipo].marco, 'el marco')),
     '',
     '## 3 · El plan de trabajo',
-    c.plan_texto ? documento('el plan de trabajo', recorta(c.plan_texto, DIETA[c.tipo].plan, 'el plan')) : '(sin plan)',
+    // 19-nov · GO Lenovo (firma de Emilio 20:39): la gran idea parte del brief, que ya es la lectura del plan; el plan entero va a la jefatura · las demás mesas lo reciben entero
+    ...(c.tipo === 'concepto' ? [LA_GRAN_IDEA_SIN_PLAN] : [
+      c.plan_texto ? documento('el plan de trabajo', recorta(c.plan_texto, DIETA[c.tipo].plan, 'el plan')) : '(sin plan)',
+    ]),
     '',
     // 19-nov · ADENDA 1 · P2b: el perfil del público, entero, como un documento más (antes la mesa no lo recibía)
     ...(c.perfil_texto ? ['## El perfil del público', documento('el perfil del público', c.perfil_texto), ''] : []),

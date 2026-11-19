@@ -5,11 +5,11 @@
  *   2 · «sin WhatsApp»: el plan pedía «WhatsApp Business activo» antes de pautar y la ficha lo dejó PENDIENTE; el pendiente no viajaba y las piezas dijeron «pide por WhatsApp»
  *   3 · la B de Guayaquil: la hipótesis B del plan está en el carácter 15 114 (plan real de 54 265); las piezas leían 3000 del plan
  *   4 · la frase de la gran idea: el brief de la pieza (la hoja) se cortaba a 5000; ahora llega entero, con la gran idea y todo lo que viene detrás
- * Más: el tablero llega con cada aporte entero (antes 2500 / 220) y la gran idea recibe el plan (antes 0).
+ * Más: el tablero llega con cada aporte entero (antes 2500 / 220). La gran idea NO recibe el plan (GO Lenovo 19-nov 20:40, firma de Emilio: el brief ya es su lectura).
  * Sin red, sin modelo, US$ 0.
  */
 import { describe, expect, it } from 'vitest'
-import { armarTarea, tableroEnTexto, tareaDelRelleno } from '../mesa/pedidos'
+import { armarTarea, LA_GRAN_IDEA_SIN_PLAN, tableroEnTexto, tareaDelRelleno } from '../mesa/pedidos'
 import { parsearBrief } from '../brief'
 import { escribirHoja, CAMPO_PENDIENTES_DE_LA_FICHA, CAMPO_TEMA_DE_LA_FILA, type FilaDeHoja, type InsumosDeLaHoja } from '../../cadena/hoja'
 import { leerBriefCreativo } from '../../cadena/brief-creativo'
@@ -66,16 +66,25 @@ describe('ADENDA 1 · P2 · caso 3 · la B de Guayaquil: el plan llega ENTERO a 
     expect(PLAN.indexOf(HIPOTESIS_B)).toBe(15114)
     expect(PLAN.indexOf(SURF)).toBe(11752)
   })
-  it.each([...PIEZAS, 'concepto' as const, 'brief' as const])('🔴 %s: la hipótesis B, el tema de la semana y la última línea del plan llegan, sin aviso de recorte', (tipo) => {
+  it.each([...PIEZAS, 'brief' as const])('🔴 %s: la hipótesis B, el tema de la semana y la última línea del plan llegan, sin aviso de recorte', (tipo) => {
     const t = tarea(tipo)
     expect(t).toContain(HIPOTESIS_B)
     expect(t).toContain(SURF)
     expect(t).toContain(FINAL_DEL_PLAN)
     expect(t).toContain(PLAN)
     expect(t).not.toMatch(/\[… recortado: \d+ de \d+ caracteres de el plan\]/)
+    expect(t).not.toContain(LA_GRAN_IDEA_SIN_PLAN)
   })
-  it('🔴 la gran idea ya no dice «el brief ya es la lectura del plan»: recibe el plan', () => {
-    expect(tarea('concepto')).not.toContain('ya es la lectura del plan')
+  // 19-nov · GO Lenovo «la gran idea sin el plan» (firma de Emilio 20:39): la gran idea parte del brief, que ya es la lectura del plan; el plan entero va a la jefatura
+  it('🔴 la gran idea NO recibe el plan, aunque le llegue: dice que el brief ya es su lectura', () => {
+    const t = tarea('concepto')
+    expect(t).toContain(LA_GRAN_IDEA_SIN_PLAN)
+    expect(t).not.toContain(HIPOTESIS_B)
+    expect(t).not.toContain(SURF)
+    expect(t).not.toContain(FINAL_DEL_PLAN)
+    expect(t).not.toContain(DEPENDENCIA_WAB)
+    expect(t).not.toContain('(sin plan)')
+    expect(t).toContain('## 3 · El plan de trabajo')
   })
   it('🔴 el manual entero también (antes 7000 en las piezas)', () => {
     const manual = `${relleno(60_000, 'm')}FINAL-DEL-MANUAL`
