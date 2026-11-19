@@ -22,7 +22,8 @@ import { condicionesDeLaPieza, direccionDe, especialistasPertinentes, ingenieroD
 import { condicionesDelVideo } from './condiciones-de-video'
 import { FORMATO_DE_PIEZA, destinatarioDe, leerRespuestaSobreNotas, quitarLineasDeNotas, rastroDeLasNotas, seccionDeNotasDelDueno, tareaParaConsultar } from './aprendizaje'
 import { separarRespuestas } from '../sentido-contra-la-ficha'
-import { leerIndice, pedidoDelIndice, piezaParaElCerebro } from './indice-del-cerebro'
+import { leerIndice, pedidoDelIndice } from './indice-del-cerebro'
+import { leeElIndice, piezaDeLaMesa } from './pieza-de-la-mesa'
 import { integracionDevuelta, pegarCitas, tableroParaLaJefatura, textoDeLoQueFalta } from './libro'
 import { siguienteDeLaMesa, techoDe, type ContextoDeLaMesa } from './planificador'
 import { traducirPieza, hayImagenesAGenerar, pedidoDeImagen, type ConceptoDeImagen, type OpcionesDeTraduccion, type Traduccion } from './traductor'
@@ -96,7 +97,7 @@ function contextoDe(enc: Encargo, est: EstadoMesa, tope: number = enc.tope_usd):
   // 31-oct · mesas de la cadena (brief y concepto): no hay brief de la sala ni láminas; el contexto es el marco que la cadena guardó al abrir
   if (esDeLaCadena(est.tipo)) {
     const m = marcoDe(enc.estado_del_motor)
-    return { cliente_nombre: m?.cliente_nombre ?? '', tipo: est.tipo, brief_id: enc.brief_id, brief_texto: m?.marco_texto ?? '(sin marco)', manual_texto: m?.manual_texto ?? '', plan_texto: m?.plan_texto ?? null, fotos: m?.fotos ?? [], tope_usd: tope, gasto_usd: enc.estado_del_motor.gasto_usd }
+    return { ...(est.indice ? { cerebro: est.indice } : {}), cliente_nombre: m?.cliente_nombre ?? '', tipo: est.tipo, brief_id: enc.brief_id, brief_texto: m?.marco_texto ?? '(sin marco)', manual_texto: m?.manual_texto ?? '', plan_texto: m?.plan_texto ?? null, fotos: m?.fotos ?? [], tope_usd: tope, gasto_usd: enc.estado_del_motor.gasto_usd }
   }
   const b = baseDeLaminas(enc.estado_del_motor)
   return { ...(est.indice ? { cerebro: est.indice } : {}), cliente_nombre: b.F.cliente_nombre, tipo: est.tipo, brief_id: enc.brief_id, brief_texto: b.brief.texto, manual_texto: b.F.manual_texto, plan_texto: b.F.plan_texto, fotos: b.F.fotos, tope_usd: tope, gasto_usd: enc.estado_del_motor.gasto_usd, ...(est.video ? { video: est.video } : {}), ...perfilDeLaMesa(b.F) }
@@ -292,9 +293,9 @@ export async function avanzarMesa(P: Puertos, enc0: Encargo, pl: Plantilla, indi
       // 18-nov · LA MESA LEE EL ÍNDICE DEL CEREBRO (firma de Emilio 16:53 Zúrich), SIN CASILLAS (corrección 19:19 Zúrich): en las mesas de pieza, UNA lectura al abrir
       //   con la HOJA completa de la pieza (brief + plan). Con el índice no sale el pedido mezclado: cada turno lee la base completa y pide por número (`pedir_fichas`).
       //   Si el índice no responde, la mesa NO se frena: queda la marca con el motivo y abre con el pedido de siempre.
-      if (P.indice && !esDeLaCadena(est.tipo)) {
-        const bf = baseDeLaminas(enc.estado_del_motor)
-        const ped = pedidoDelIndice({ client_id: enc.client_id, agente: 'oficina-creativa', pieza: piezaParaElCerebro({ encargo_id: enc.id, fila: enc.sala_ref?.fila, brief_texto: bf.brief.texto, plan_texto: bf.F.plan_texto }) })
+      //   18-nov · GO Lenovo (Emilio 22:50 Zúrich): también la mesa de la gran idea (`concepto`), con el marco de la cadena como hoja
+      if (P.indice && leeElIndice(est.tipo)) {
+        const ped = pedidoDelIndice({ client_id: enc.client_id, agente: 'oficina-creativa', pieza: piezaDeLaMesa(enc, est) })
         const r = await P.indice.indice(ped)
         const ix = r.ok ? leerIndice(r.body) : null
         if (ix) est = { ...est, indice: ix }
