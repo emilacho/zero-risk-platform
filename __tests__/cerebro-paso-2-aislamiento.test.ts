@@ -155,6 +155,9 @@ export const PUEDEN_NOMBRARLAS = [
   // 19-nov · G2c (CC5): copias del flujo VIVO del manual (ensayo de G2c, las aplica CC7); desde c745d997 (CC2) la mesa creativa del manual LEE
   // `etiqueta_confianza` y `que_muestra` de las fotos del cliente para ponerlas a la vista. Solo SELECT: el flujo no escribe esas columnas
   /^scripts\/worker-staging\/g2c-enteros\/(vivo|nuevo)\/ssLtwYPt7zxuvnM2\.json$/,
+  // 19-nov · G6b (CC5): copias del MISMO flujo vivo del manual (ensayo de G6b, el piso visual; las aplica CC7). G6b solo cambia el nodo del piso visual;
+  // la lectura de `etiqueta_confianza` y `que_muestra` es la misma de arriba (mesa creativa, solo SELECT)
+  /^scripts\/worker-staging\/g6b-piso-visual\/(vivo|nuevo)\/ssLtwYPt7zxuvnM2\.json$/,
   // 17-nov · Sprint 3 · T1b (decisión Lenovo B · persona real solo con permiso registrado): la sala de video LEE `con_personas` de las fotos propias que ya trae
   //   `fuentes` para pedir permiso; no escribe ni consulta el cerebro. Solo la regla pura y su prueba (bases falsas)
   /^src\/lib\/oficina\/video\/permisos\.ts$/,
