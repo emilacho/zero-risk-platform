@@ -42,7 +42,7 @@ export function leerArtifactIdDeRegistro(id: string): { doc: DocDeRegistro; camp
 
 // ───────────────────────────────────────────────────────── tramo 3 · el calendario como documento (una línea por fila)
 /** las filas de la tanda que llevan un tema que se publica: ni esquemas, ni las que salieron sin fuente, ni temas vacíos */
-export const filasConTema = (filas: Fila[]): Fila[] => filas.filter((f) => f.estado !== 'esquema' && f.estado !== 'descartada_sin_fuente' && !!f.tema?.trim())
+export const filasConTema = (filas: Fila[]): Fila[] => filas.filter((f) => f.estado !== 'esquema' && f.estado !== 'descartada_sin_fuente' && f.estado !== 'descartada_por_bloqueo' && !!f.tema?.trim())
 /** la cabecera FIJA de cada fila en el documento (la arma el código; el revisor solo juzga lo que va después) */
 export const cabeceraDeFila = (f: Pick<Fila, 'id' | 'fecha' | 'red' | 'formato'>): string => `- [${f.id} · ${f.fecha} · ${f.red}/${f.formato}] `
 /** el calendario de la tanda como texto: una línea por fila, en el orden de las filas, con su tema tal cual */

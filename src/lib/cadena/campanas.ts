@@ -87,7 +87,7 @@ export async function abrirCampana(al: Almacen, cuerpo: Record<string, unknown>,
   try { nueva = await al.insertarCampana({
     client_id: clientId, plan_id: plan.plan_id, fecha_inicio: ventana.fecha_inicio, fecha_inicio_origen: ventana.origen, fecha_fin: ventana.fecha_fin, ...(semanasDeTanda === SEMANAS_DE_TANDA ? {} : { semanas_de_tanda: semanasDeTanda as number }),
     zona_horaria: ctx.zonaHoraria, pais: ctx.pais, sedes: ctx.sedes.map((x) => x.clave), estado: 'abierta', estado_motivo: [ctx.sedes.length === 0 ? 'sin sede declarada: no se comprueba si el local está abierto' : null, ctx.zonaHorariaOrigen === 'sin_dato' ? 'zona horaria sin dato: hay que preguntarla' : null, sedesRec.ok ? null : 'no se pudieron leer las sedes: ' + String(sedesRec.error ?? 'sin detalle').slice(0, 80)].filter((x): x is string => !!x).join(' · ') || null,
-    // 18-nov · la bolsa nace de lo medido (3 × estrategia + tandas), no de los US$ 6 fijos (DECISION-EMILIO-topes-con-margen-triple)
+    // 19-nov · grupo C1 (DECISIÓN Lenovo 05:00Z): 3 × lo medido de una planificación completa con sus rondas, por las tandas de ESTA campaña (reemplaza la del grupo A: 3 × (1,42 + 1,24 × tandas))
     presupuesto_planificacion_usd: bolsaDePlanificacion(medidaDeCampana({ fecha_inicio: ventana.fecha_inicio, fecha_fin: ventana.fecha_fin, semanas_de_tanda: semanasDeTanda as number }).totalTandas), ventana_parte_dias: 10, sustituir_video_por: 'ninguna', autoproducir: (await al.leerConfig('autoproducir_por_omision')) === true,
     ...(topeInicial !== null ? { tope_gasto_usd: topeInicial } : {}),
     sala_ref: typeof cuerpo.sala_ref === 'object' && cuerpo.sala_ref ? (cuerpo.sala_ref as Record<string, unknown>) : {}, reemplaza_a: reemplaza, seco: s.seco,

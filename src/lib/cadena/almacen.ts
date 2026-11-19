@@ -58,6 +58,23 @@ export interface EstrategiaGuardada {
 }
 
 /**
+ * 19-nov · grupo C · una pasada de la estrategia que quedó con bloqueos (la primera o una ronda de corrección), guardada APARTE de `cadena_estrategias`
+ * (casi todos los lectores toman la última estrategia sin mirar su estado: un borrador de ronda sería «la última» para ellos). Tras la última ronda, la de menos
+ * bloqueos (si empatan, la última) entra a `cadena_estrategias` como `validada`, con sus fichas como avisos. Única por (campaña, versión, ronda).
+ */
+export interface RondaDeEstrategia {
+  campana_id: string
+  /** la versión de la estrategia que se está armando (la que se insertará como validada) */
+  version: number
+  /** 0 = la primera pasada; 1… = las rondas de corrección */
+  ronda: number
+  contenido: Estrategia
+  bloqueos: number
+  fichas: Ficha[]
+  seco: boolean
+}
+
+/**
  * 17-nov · Sprint 4 · A entrega 2: las fichas de hechos por oferta de una campaña (`cadena_fichas_de_oferta`), las que escribió el lector.
  * UNA fila por (campaña, versión). Sin fuente un dato no entra (se cuenta en `descartados`). No es reja: sin fichas, la hoja lo declara.
  */
@@ -320,6 +337,10 @@ export interface Almacen {
    */
   hechosDelNegocio?(clientId: string): Promise<HechoDelNegocioPorOferta[] | null>
   insertarEstrategia(e: EstrategiaGuardada): Promise<void>
+  /** 19-nov · grupo C · guarda una pasada bloqueada de la estrategia (idempotente: la misma campaña, versión y ronda no se duplica) */
+  guardarRondaDeEstrategia(r: RondaDeEstrategia): Promise<void>
+  /** 19-nov · grupo C · las pasadas bloqueadas guardadas de una versión de la estrategia */
+  rondasDeEstrategia(campanaId: string, version: number): Promise<RondaDeEstrategia[]>
   /** colaterales (tramo 2c) · una versión CONCRETA de la estrategia (deshacer vuelve a su base) */
   estrategiaEnVersion(campanaId: string, version: number): Promise<EstrategiaGuardada | null>
   /** colaterales (tramo 2c) · inserta una versión nueva; false si esa (campaña, versión) ya existe (otra se adelantó) · cualquier otro error se lanza */
