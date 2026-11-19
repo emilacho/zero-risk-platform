@@ -10,7 +10,7 @@ import { abrirCampana, relojDeLaCadena } from '../index'
 import { llaveDeReintentoDelPaso, prepararCorrida } from '../nucleo'
 import { AlmacenMemoria } from '../__fixtures__/almacen-memoria'
 import { clienteA, contextoDe } from '../__fixtures__/clientes'
-import type { Corrida } from '../tipos'
+import type { Corrida } from '../almacen'
 
 const A = clienteA()
 const AYER = '2026-10-08T08:00:00Z'
