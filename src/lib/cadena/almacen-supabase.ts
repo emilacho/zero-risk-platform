@@ -273,6 +273,17 @@ export function almacenDeSupabase(): Almacen {
       // solo los partes (las piezas): las mesas de la cadena tienen como parte a la campaña misma y no se rehacen por aquí
       return encargosParaRehacerDe(db as unknown as DbDeGasto, [...new Set(partes)])
     },
+    // 19-nov · #1195 (decisión A de Lenovo) · la pieza vieja de una fila que volvió al brief: la archiva la oficina, dentro de los partes de ESTA campaña (nunca lanza)
+    async archivarPiezasDeFilas(campanaId, filaIds, motivo, ahora) {
+      try {
+        const tag = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {})
+        const partes = (await lista<{ id: string; provenance_tag: unknown }>(db.from('client_historical_outputs').select('id, provenance_tag').eq('output_type', 'campaign_brief_pack').eq('provenance_tag->>campana_id', campanaId).limit(500)))
+          .filter((f) => tag(f.provenance_tag).seco !== true && tag(f.provenance_tag).prueba_seco !== true).map((f) => String(f.id))
+        // la oficina se importa en el acto (la oficina ya importa este archivo: así no hay ciclo al cargar)
+        const { archivarPiezasDeFilas } = await import('@/lib/oficina/archivar-piezas-de-filas')
+        return await archivarPiezasDeFilas(db as never, { parte_ids: partes, fila_ids: filaIds, motivo }, new Date(ahora))
+      } catch (e) { return { ok: false as const, motivo: `no se pudieron leer los partes de la campaña: ${e instanceof Error ? e.message : String(e)}`.slice(0, 300) } }
+    },
     arreglosPublicados: (desde) => arreglosPublicadosReal(desde),
     abrirMesaDeFallidos: (sobre) => abrirMesaDeReubicacionReal(sobre),
     // 17-nov · la corrección del banco (nace apagada): la misma apertura en proceso

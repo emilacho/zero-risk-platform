@@ -24,7 +24,50 @@ export const INTENTOS_DE_ESCRITURA = 3
 /** las filas que todavía no tienen brief: se reasignan al retirar; las de brief en adelante conservan su idea (cuidado 3 de CC6 · propuesta CC1, decisión final de Lenovo/Emilio) */
 export const ESTADOS_SIN_BRIEF: readonly Fila['estado'][] = ['esquema', 'propuesta', 'validada', 'en_investigacion', 'lista_para_brief']
 export const ESTADOS_CON_BRIEF: readonly Fila['estado'][] = ['briefeada', 'en_oficina', 'aprobada', 'espera_video']
+/**
+ * 19-nov · firma de Emilio (23:25 Zúrich, vía Lenovo 22:30Z): al retirar una idea, las filas CON BRIEF todavía sin aprobar también reciben otra idea del mismo
+ * capítulo y su brief se rehace. `aprobada` y `espera_video` no se tocan aquí (la aprobada vuelve solo con regla dura, y eso lo decide el receptor de CC3).
+ * La VUELTA al brief (`→ lista_para_brief`) va SIEMPRE antes de la idea nueva, con la marca de quien la pide: desde el tablero, la de este núcleo; por una corrección,
+ * la del receptor de CC3 (`avisoDeLaVuelta(llave)`, para que su conteo por estado + marca siga igual · CC3 19-nov 00:59Z: un corte nunca deja brief viejo + idea nueva).
+ * 19-nov · decisión A de Lenovo (01:16Z, 🔴 de CC7): la pieza vieja de una fila que volvió al brief se ARCHIVA sola (`archivarPiezasViejas`, una sola función para las dos
+ * puertas): solo la que espera a Emilio, nunca una que él ya decidió; lo que no se puede leer no se archiva y se dice.
+ */
+export const ESTADOS_CON_BRIEF_QUE_CAMBIAN: readonly Fila['estado'][] = ['briefeada', 'en_oficina']
+export const ESTADOS_QUE_CAMBIAN_DE_IDEA: readonly Fila['estado'][] = [...ESTADOS_SIN_BRIEF, ...ESTADOS_CON_BRIEF_QUE_CAMBIAN]
 export const PREFIJO_AVISO_DE_REASIGNACION = 'idea reasignada: '
+export const avisoDeLaVueltaPorElTablero = (ideaId: string) => `la idea «${ideaId}» se retiró del banco desde el tablero: el brief se rehace con la idea nueva y la pieza vieja queda reemplazada`
+/** el motivo que queda escrito en la pieza archivada y en su encargo (el texto lo fijó Lenovo 01:16Z) */
+export const motivoDePiezaVieja = (ideaId: string, accion: 'retirar' | 'editar' = 'retirar') => `reemplazada: la idea «${ideaId}» se ${accion === 'retirar' ? 'retiró del' : 'corrigió en el'} banco`
+
+/** lo que pasó con las piezas viejas: `error` = no se pudo leer o escribir, NADA se dio por archivado (se dice, no se calla) */
+export interface PiezasViejas { archivadas: string[]; ya_archivadas: string[]; no_archivadas: Array<{ fila_id: string; hitl_id: string | null; motivo: string; estado?: string }>; error?: string; alarma?: 'enviada' | 'no_salio' }
+/**
+ * LA función de las dos puertas (tablero y receptor): archiva la pieza pendiente de cada fila. Quien llama elige las filas POR ESTADO (`lista_para_brief` con su marca),
+ * así repetir no duplica ni se salta nada (la oficina cuenta lo ya archivado como `ya_archivadas`). Nunca lanza.
+ */
+export async function archivarPiezasViejas(al: Almacen, campanaId: string, filaIds: readonly string[], motivo: string, ahora: string): Promise<PiezasViejas> {
+  const vacio: PiezasViejas = { archivadas: [], ya_archivadas: [], no_archivadas: [] }
+  const ids = [...new Set(filaIds)]
+  if (!ids.length) return vacio
+  let error: string
+  if (!al.archivarPiezasDeFilas) error = 'esta cadena no tiene cómo archivar piezas'
+  else {
+    try {
+      const r = await al.archivarPiezasDeFilas(campanaId, ids, motivo, ahora)
+      if (r.ok) return { archivadas: r.archivadas.map((a) => a.hitl_id), ya_archivadas: r.ya_archivadas, no_archivadas: r.no_archivadas.map((n) => ({ fila_id: n.fila_id, hitl_id: n.hitl_id, motivo: n.motivo, ...(n.estado ? { estado: n.estado } : {}) })) }
+      error = r.motivo
+    } catch (e) {
+      error = `la oficina no contestó: ${e instanceof Error ? e.message : String(e)}`.slice(0, 300)
+    }
+  }
+  // 🟡 CC3 01:31Z · «se dice» de verdad: UNA alarma en #alertas por incidente (después de esto la corrección se cierra y nadie vuelve a mirar); el campo queda igual
+  return { ...vacio, error, alarma: await alarmaDePiezaVieja(al, campanaId, ids, motivo, error) }
+}
+export const textoDeAlarmaDePiezaVieja = (campanaId: string, filaIds: readonly string[], motivo: string, error: string) =>
+  `⚠️ Pieza vieja sin archivar · campaña ${campanaId} · la(s) fila(s) ${filaIds.join(', ')} volvieron al brief (${motivo}), pero su pieza vieja puede seguir esperando en la bandeja: no la apruebes; archívala a mano. Motivo: ${error}.`
+async function alarmaDePiezaVieja(al: Almacen, campanaId: string, filaIds: readonly string[], motivo: string, error: string): Promise<'enviada' | 'no_salio'> {
+  try { return (await al.avisarAlarma(textoDeAlarmaDePiezaVieja(campanaId, filaIds, motivo, error))).ok ? 'enviada' : 'no_salio' } catch { return 'no_salio' }
+}
 
 export interface Reasignada { fila_id: string; idea_vieja: string; idea_nueva: string | null }
 export interface EntradaDelHistorial {
@@ -38,6 +81,10 @@ export interface EntradaDelHistorial {
   cuando: string
   reasignadas?: Reasignada[]
   con_brief_sin_tocar?: string[]
+  /** 19-nov · las filas con brief (sin aprobar) que recibieron otra idea */
+  con_brief_reasignadas?: string[]
+  /** 19-nov · decisión A de Lenovo · lo que pasó con las piezas viejas de las filas que volvieron al brief desde el tablero */
+  piezas_viejas?: PiezasViejas
 }
 type IdeaRetirada = IdeaDelBanco & { retirada_en: string; retirada_por: string }
 
@@ -195,12 +242,15 @@ export async function bancoRetirar(al: Almacen, cuerpo: Record<string, unknown>,
   if (!p.ok) return p.r
   const ideaId = cadena(cuerpo.idea_id)
   if (!ideaId) return fallo(400, 'E-CAMPOS', 'falta idea_id')
-  return retirarDelBanco(al, p.ctx, ideaId, ahora)
+  // desde el tablero no hay receptor: este mismo núcleo devuelve al brief las filas con brief (sin aprobar) que cambian de idea
+  return retirarDelBanco(al, p.ctx, ideaId, ahora, undefined, { avisoDeLaVuelta: avisoDeLaVueltaPorElTablero(ideaId), archivarPiezas: true })
 }
 
 /** 17-nov · el NÚCLEO de retirar (sin la puerta): reasigna las filas sin brief y saca la idea; lo usan el tablero y el puerto de correcciones */
 /** `esperada` (solo el puerto de correcciones): la `linea` que la idea debe tener antes de tocar filas Y en cada intento de escritura; si cambió → 409 E-IDEA-CAMBIADA */
-export async function retirarDelBanco(al: Almacen, ctx: ContextoDelBanco, ideaId: string, ahora: string, esperada?: string): Promise<Respuesta> {
+/** `o.avisoDeLaVuelta`: antes de la idea nueva, la fila con brief vuelve a `lista_para_brief` con ESA marca (el tablero, la suya; la corrección, la del receptor). Sin él no vuelve. */
+/** `o.archivarPiezas` (solo el tablero): archiva la pieza vieja de las filas que volvieron con esa marca, ANTES de escribir el concepto (repetir el retiro la completa). Por una corrección la archiva el receptor. */
+export async function retirarDelBanco(al: Almacen, ctx: ContextoDelBanco, ideaId: string, ahora: string, esperada?: string, o: { avisoDeLaVuelta?: string; archivarPiezas?: boolean } = {}): Promise<Respuesta> {
   const p = { ctx }
   const v0 = await leerVigente(al, p.ctx)
   if (!v0.ok) return v0.r
@@ -214,20 +264,41 @@ export async function retirarDelBanco(al: Almacen, ctx: ContextoDelBanco, ideaId
   const calVersion = await al.ultimaVersionDeCalendario(p.ctx.campana_id)
   const filas = calVersion ? await al.filas(p.ctx.campana_id, calVersion) : []
   const citan = filas.filter((f) => f.idea_ref === ideaId).sort((a, b) => (a.fecha ?? '').localeCompare(b.fecha ?? '') || a.id.localeCompare(b.id))
-  const con_brief_sin_tocar = citan.filter((f) => ESTADOS_CON_BRIEF.includes(f.estado)).map((f) => f.id)
+  // 🔴 condición de CC3 (19-nov 00:21Z): si un retiro anterior se cortó DESPUÉS de reasignar y ANTES del historial, las filas con brief ya no citan la idea;
+  // se recuperan por el aviso de reasignación de ESTA idea, así la repetición las vuelve a listar y el receptor las devuelve al brief
+  const marcaDeEstaIdea = `${PREFIJO_AVISO_DE_REASIGNACION}la idea «${ideaId}» se retiró del banco`
+  const yaReasignadasConBrief = filas.filter((f) => f.idea_ref !== ideaId && ESTADOS_CON_BRIEF.includes(f.estado) && f.avisos.some((a) => a.startsWith(marcaDeEstaIdea))).map((f) => f.id)
+  // las que ESTE retiro ya devolvió al brief (con su marca) en un intento anterior cortado: siguen siendo «con brief» para el receptor (cuenta por estado + marca)
+  const marcaDeLaVuelta = o.avisoDeLaVuelta
+  const yaDevueltas = marcaDeLaVuelta ? filas.filter((f) => f.estado === 'lista_para_brief' && f.avisos.includes(marcaDeLaVuelta)) : []
+  const con_brief_sin_tocar = [...new Set([...citan.filter((f) => ESTADOS_CON_BRIEF.includes(f.estado)).map((f) => f.id), ...yaReasignadasConBrief, ...yaDevueltas.map((f) => f.id)])]
   const usos = new Map<string, number>()
   for (const f of filas) if (f.idea_ref) usos.set(f.idea_ref, (usos.get(f.idea_ref) ?? 0) + 1)
   const banco = v0.banco.filter((i) => i.id !== ideaId)
   const reasignadas: Reasignada[] = []
-  for (const f of citan.filter((x) => ESTADOS_SIN_BRIEF.includes(x.estado))) {
+  const con_brief_reasignadas: string[] = [...new Set([...yaReasignadasConBrief, ...yaDevueltas.filter((f) => f.idea_ref !== ideaId).map((f) => f.id)])]
+  for (const f of citan.filter((x) => ESTADOS_QUE_CAMBIAN_DE_IDEA.includes(x.estado))) {
+    const conBrief = ESTADOS_CON_BRIEF_QUE_CAMBIAN.includes(f.estado)
+    // desde el tablero: PRIMERO la vuelta al brief y DESPUÉS la idea. Si se corta en el medio, la fila ya está sin brief y repetir el retiro la reasigna como a las demás
+    // si la vuelta no se pudo escribir (la fila cambió de estado entre medio), NO se le cambia la idea: una fila con brief viejo e idea nueva no debe existir
+    if (conBrief && o.avisoDeLaVuelta && calVersion && !(await al.reubicarFila(p.ctx.campana_id, calVersion, f.id, { estado: 'lista_para_brief' }, o.avisoDeLaVuelta, ESTADOS_CON_BRIEF_QUE_CAMBIAN))) continue
     const nueva = ideaDeReemplazo(banco, retirada, usos)
     const aviso = nueva
       ? `${PREFIJO_AVISO_DE_REASIGNACION}la idea «${ideaId}» se retiró del banco; la fila realiza ahora «${nueva.id}» (mismo capítulo)`
       : `${PREFIJO_AVISO_DE_REASIGNACION}la idea «${ideaId}» se retiró del banco y su capítulo no tiene otra: la fila queda sin idea`
-    if (await al.reasignarIdeaDeFila(p.ctx.campana_id, calVersion, f.id, ideaId, nueva?.id ?? null, aviso, ESTADOS_SIN_BRIEF)) {
+    if (await al.reasignarIdeaDeFila(p.ctx.campana_id, calVersion, f.id, ideaId, nueva?.id ?? null, aviso, ESTADOS_QUE_CAMBIAN_DE_IDEA)) {
       reasignadas.push({ fila_id: f.id, idea_vieja: ideaId, idea_nueva: nueva?.id ?? null })
+      if (conBrief || yaDevueltas.some((x) => x.id === f.id)) con_brief_reasignadas.push(f.id)
       if (nueva) usos.set(nueva.id, (usos.get(nueva.id) ?? 0) + 1)
     }
+  }
+
+  // 1b) decisión A de Lenovo · desde el tablero, la pieza vieja de cada fila que volvió (POR ESTADO: `lista_para_brief` con la marca de este retiro) se archiva ANTES del concepto
+  let piezas_viejas: PiezasViejas | undefined
+  if (o.archivarPiezas && o.avisoDeLaVuelta && calVersion) {
+    const marca = o.avisoDeLaVuelta
+    const volvieron = (await al.filas(p.ctx.campana_id, calVersion)).filter((f) => f.estado === 'lista_para_brief' && f.avisos.includes(marca)).map((f) => f.id)
+    if (volvieron.length) piezas_viejas = await archivarPiezasViejas(al, p.ctx.campana_id, volvieron, motivoDePiezaVieja(ideaId), ahora)
   }
 
   // 2) el concepto: sacar la idea a `ideas_retiradas` + su entrada de historial, en una sola escritura condicional
@@ -235,9 +306,9 @@ export async function retirarDelBanco(al: Almacen, ctx: ContextoDelBanco, ideaId
     const v = intento === 1 ? v0 : await leerVigente(al, p.ctx)
     if (!v.ok) return v.r
     const k = v.banco.findIndex((i) => i.id === ideaId)
-    if (k < 0 && !reasignadas.length) return fallo(409, 'E-IDEA-RETIRADA', 'esa idea ya se retiró del banco', { idea_id: ideaId })
+    if (k < 0 && !reasignadas.length) return fallo(409, 'E-IDEA-RETIRADA', 'esa idea ya se retiró del banco', { idea_id: ideaId, ...(piezas_viejas ? { piezas_viejas } : {}) })
     if (esperada !== undefined && (k < 0 || v.banco[k].linea !== esperada)) return fallo(409, 'E-IDEA-CAMBIADA', 'la idea cambió desde que se armó la corrección: no se pisa', { idea_id: ideaId, reasignadas })
-    const entrada: EntradaDelHistorial = { accion: 'retirar', idea_id: ideaId, version: p.ctx.version, antes: { ...retirada }, despues: null, quien: p.ctx.autor, cuando: ahora, reasignadas, con_brief_sin_tocar }
+    const entrada: EntradaDelHistorial = { accion: 'retirar', idea_id: ideaId, version: p.ctx.version, antes: { ...retirada }, despues: null, quien: p.ctx.autor, cuando: ahora, reasignadas, con_brief_sin_tocar, con_brief_reasignadas, ...(piezas_viejas ? { piezas_viejas } : {}) }
     const leido: Record<string, unknown> = { ...v.leido, historial_del_banco: [...v.historial, entrada] }
     let md = v.c.texto_md
     if (k >= 0) {
@@ -247,7 +318,7 @@ export async function retirarDelBanco(al: Almacen, ctx: ContextoDelBanco, ideaId
       if (md !== null) md = textoConIdea(md, ideaId, null).md
     }
     if (await al.actualizarConceptoSiSello(p.ctx.campana_id, p.ctx.version, v.sello, { leido, texto_md: md })) {
-      return { status: 200, cuerpo: { ok: true, version: p.ctx.version, ideas: [retirada], historial: [entrada], reasignadas, con_brief_sin_tocar, ...(k < 0 ? { ya_retirada: true } : {}) } }
+      return { status: 200, cuerpo: { ok: true, version: p.ctx.version, ideas: [retirada], historial: [entrada], reasignadas, con_brief_sin_tocar, con_brief_reasignadas, ...(piezas_viejas ? { piezas_viejas } : {}), ...(k < 0 ? { ya_retirada: true } : {}) } }
     }
   }
   return fallo(409, 'E-CONCURRENTE', 'otra edición del banco se guardó al mismo tiempo y no se pudo retirar la idea: vuelve a abrir la gran idea', { reasignadas })

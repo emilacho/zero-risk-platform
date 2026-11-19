@@ -12,7 +12,7 @@ import type { Fila } from '../tipos'
 import { ACCIONES } from '../acciones'
 import { ideaDelBanco, ideasDelTexto, resumenDeLaVersionAnterior, resumenDelBanco, type ConceptoLeido, type IdeaDelBanco } from '../conceptos'
 import { conceptoParaElCalendario } from '../mesas'
-import { bancoEditar, bancoRetirar, ideaDeReemplazo, lineaDeIdea, lineaSeLeeIgual, LARGO_MAXIMO_DE_CAMPO, PREFIJO_AVISO_DE_REASIGNACION, textoConIdea } from '../banco-de-ideas'
+import { avisoDeLaVueltaPorElTablero, bancoEditar, bancoRetirar, ideaDeReemplazo, lineaDeIdea, lineaSeLeeIgual, LARGO_MAXIMO_DE_CAMPO, PREFIJO_AVISO_DE_REASIGNACION, retirarDelBanco, textoConIdea } from '../banco-de-ideas'
 
 const A = clienteA()
 const CAMP = '28de888e-b3f2-4aca-86b3-2c7f7bf6685a'
@@ -231,16 +231,22 @@ describe('retirar · la idea sale del banco y las filas sin brief pasan a otra d
     expect(leido.ideas_retiradas).toEqual([{ ...idea('C1-I07'), retirada_en: AHORA, retirada_por: 'emilio' }])
     expect(ideasDelTexto(v4(al).texto_md!).some((x) => x.id === 'C1-I07')).toBe(false)
     expect(resumenDelBanco(leido as unknown as ConceptoLeido).total).toBe(BANCO_NAUFRAGO_V4.length - 1)
-    expect(historialDe(al)).toEqual([{ accion: 'retirar', idea_id: 'C1-I07', version: 4, antes: idea('C1-I07'), despues: null, quien: 'emilio', cuando: AHORA, reasignadas: r.cuerpo.reasignadas, con_brief_sin_tocar: [] }])
+    expect(historialDe(al)).toEqual([{ accion: 'retirar', idea_id: 'C1-I07', version: 4, antes: idea('C1-I07'), despues: null, quien: 'emilio', cuando: AHORA, reasignadas: r.cuerpo.reasignadas, con_brief_sin_tocar: [], con_brief_reasignadas: [] }])
     // ninguna fila queda apuntando a una idea retirada (medida 4 de CC6)
     const vivas = new Set(bancoDe(al).map((i) => i.id))
     for (const x of al.filasGuardadas.filter((y) => y.idea_ref && ['validada', 'lista_para_brief', 'propuesta', 'esquema', 'en_investigacion'].includes(y.estado))) expect(vivas.has(x.idea_ref!)).toBe(true)
   })
-  it('C1-I16 (real): la fila YA briefeada conserva su idea y queda listada; nada se reasigna', async () => {
+  // 19-nov · firma de Emilio: la fila con brief (sin aprobar) también cambia de idea y su brief se rehace · nuevas pruebas en banco-retirar-con-brief.test.ts
+  it('🔴 C1-I16 (real) · 19-nov: desde el tablero, la fila YA briefeada vuelve al brief Y recibe otra idea del capítulo; sigue listada en con_brief_sin_tocar (contrato con el receptor)', async () => {
     const al = almacen()
     const r = await bancoRetirar(al, tablero({ idea_id: 'C1-I16' }), AHORA)
-    expect(r.cuerpo).toMatchObject({ ok: true, reasignadas: [], con_brief_sin_tocar: ['s2-d4-jue_foto_olon'] })
-    expect(filaDe(al, 's2-d4-jue_foto_olon')).toMatchObject({ idea_ref: 'C1-I16', estado: 'briefeada', avisos: [] })
+    expect(r.cuerpo).toMatchObject({ ok: true, con_brief_sin_tocar: ['s2-d4-jue_foto_olon'], con_brief_reasignadas: ['s2-d4-jue_foto_olon'] })
+    const [re] = r.cuerpo.reasignadas as Array<{ fila_id: string; idea_vieja: string; idea_nueva: string | null }>
+    expect(re).toMatchObject({ fila_id: 's2-d4-jue_foto_olon', idea_vieja: 'C1-I16' })
+    expect(re.idea_nueva).toMatch(/^C1-I\d{2}$/)
+    const f = filaDe(al, 's2-d4-jue_foto_olon')
+    expect(f).toMatchObject({ idea_ref: re.idea_nueva, estado: 'lista_para_brief' })
+    expect(f.avisos).toEqual([avisoDeLaVueltaPorElTablero('C1-I16'), `${PREFIJO_AVISO_DE_REASIGNACION}la idea «C1-I16» se retiró del banco; la fila realiza ahora «${re.idea_nueva}» (mismo capítulo)`])
   })
   it('C1-I03 (real): la fila que perdió su fecha no se toca ni se lista', async () => {
     const al = almacen()
@@ -320,5 +326,100 @@ describe('la ruta', () => {
   it('las acciones están en la tabla de la ruta /api/cadena/concepto/banco', () => {
     expect(ACCIONES.banco.editar).toBe(bancoEditar)
     expect(ACCIONES.banco.retirar).toBe(bancoRetirar)
+  })
+})
+
+describe('19-nov · firma de Emilio: al retirar, las filas CON BRIEF (sin aprobar) también cambian de idea y su brief se rehace', () => {
+  const F = 's2-d4-jue_foto_olon'
+  it('🔴 «en_oficina» también: vuelve al brief y recibe otra idea del capítulo', async () => {
+    const al = almacen()
+    filaDe(al, F).estado = 'en_oficina'
+    const r = await bancoRetirar(al, tablero({ idea_id: 'C1-I16' }), AHORA)
+    expect(r.cuerpo).toMatchObject({ ok: true, con_brief_sin_tocar: [F], con_brief_reasignadas: [F] })
+    const f = filaDe(al, F)
+    expect(f.estado).toBe('lista_para_brief')
+    expect(f.idea_ref).not.toBe('C1-I16')
+    expect(bancoDe(al).some((i) => i.id === f.idea_ref)).toBe(true)
+  })
+  for (const estado of ['aprobada', 'espera_video'] as const) {
+    it(`🔴 «${estado}» NO se toca: conserva su idea y su estado, queda listada para el receptor (la aprobada vuelve solo con regla dura)`, async () => {
+      const al = almacen()
+      filaDe(al, F).estado = estado
+      const r = await bancoRetirar(al, tablero({ idea_id: 'C1-I16' }), AHORA)
+      expect(r.cuerpo).toMatchObject({ ok: true, reasignadas: [], con_brief_sin_tocar: [F], con_brief_reasignadas: [] })
+      expect(filaDe(al, F)).toMatchObject({ estado, idea_ref: 'C1-I16', avisos: [] })
+    })
+  }
+  it('🔴 la idea nueva es del MISMO capítulo, y ninguna fila con brief sin aprobar queda apuntando a la retirada', async () => {
+    const al = almacen()
+    await bancoRetirar(al, tablero({ idea_id: 'C1-I16' }), AHORA)
+    expect(filaDe(al, F).idea_ref!.startsWith('C1-')).toBe(true)
+    const vivas = new Set(bancoDe(al).map((i) => i.id))
+    for (const x of al.filasGuardadas.filter((y) => y.idea_ref && ['briefeada', 'en_oficina', 'lista_para_brief', 'validada'].includes(y.estado))) expect(vivas.has(x.idea_ref!)).toBe(true)
+  })
+  it('🔴 la historia del banco guarda qué filas con brief cambiaron de idea', async () => {
+    const al = almacen()
+    await bancoRetirar(al, tablero({ idea_id: 'C1-I16' }), AHORA)
+    expect(historialDe(al).at(-1)).toMatchObject({ accion: 'retirar', idea_id: 'C1-I16', con_brief_sin_tocar: [F], con_brief_reasignadas: [F] })
+  })
+  it('🟢 corte entre la vuelta y la idea nueva: la fila quedó sin brief con la idea vieja; repetir el retiro la termina (otra idea, sin moverla dos veces)', async () => {
+    const al = almacen()
+    const real = al.reasignarIdeaDeFila.bind(al)
+    let cortes = 1
+    al.reasignarIdeaDeFila = async (...a: Parameters<typeof real>) => (cortes-- > 0 ? false : real(...a))
+    await bancoRetirar(al, tablero({ idea_id: 'C1-I16' }), AHORA)
+    expect(filaDe(al, F)).toMatchObject({ estado: 'lista_para_brief', idea_ref: 'C1-I16' })
+    const r = await bancoRetirar(al, tablero({ idea_id: 'C1-I16' }), AHORA)
+    expect(r.status).toBe(200)
+    const f = filaDe(al, F)
+    expect(f.estado).toBe('lista_para_brief')
+    expect(f.idea_ref).not.toBe('C1-I16')
+    expect(f.avisos.filter((x) => x === avisoDeLaVueltaPorElTablero('C1-I16'))).toHaveLength(1)
+  })
+  it('🔴 corte ANTES de la vuelta (se cae al escribirla): la fila no cambia; repetir el retiro la devuelve al brief y le da otra idea (la vuelta va primero)', async () => {
+    const al = almacen()
+    const real = al.reubicarFila.bind(al)
+    let cortes = 1
+    al.reubicarFila = async (...a: Parameters<typeof real>) => { if (cortes-- > 0) throw new Error('corte'); return real(...a) }
+    await expect(bancoRetirar(al, tablero({ idea_id: 'C1-I16' }), AHORA)).rejects.toThrow('corte')
+    expect(filaDe(al, F)).toMatchObject({ estado: 'briefeada', idea_ref: 'C1-I16' })
+    expect((await bancoRetirar(al, tablero({ idea_id: 'C1-I16' }), AHORA)).status).toBe(200)
+    const f = filaDe(al, F)
+    expect(f.estado).toBe('lista_para_brief')
+    expect(f.idea_ref).not.toBe('C1-I16')
+  })
+  it('🔴 si la vuelta no se puede escribir (la fila cambió de estado entre medio), NO se le cambia la idea', async () => {
+    const al = almacen()
+    al.reubicarFila = async () => false
+    const r = await bancoRetirar(al, tablero({ idea_id: 'C1-I16' }), AHORA)
+    expect(r.cuerpo).toMatchObject({ ok: true, con_brief_sin_tocar: [F], con_brief_reasignadas: [] })
+    expect(filaDe(al, F)).toMatchObject({ estado: 'briefeada', idea_ref: 'C1-I16' })
+  })
+  it('🔴 una fila que TODAVÍA cita la idea y ya lleva su aviso de reasignación se lista UNA sola vez (no se duplica para el receptor)', async () => {
+    const al = almacen()
+    filaDe(al, F).avisos = [`${PREFIJO_AVISO_DE_REASIGNACION}la idea «C1-I16» se retiró del banco; la fila realiza ahora «C1-I01» (mismo capítulo)`]
+    const r = await bancoRetirar(al, tablero({ idea_id: 'C1-I16' }), AHORA)
+    expect(r.cuerpo).toMatchObject({ ok: true, con_brief_sin_tocar: [F], con_brief_reasignadas: [F] })
+  })
+  it('🔴 i2 de CC7 · el rescate por aviso nombra la idea ENTERA: el aviso de «C1-I070» no rescata nada al retirar «C1-I07»', async () => {
+    const al = almacen()
+    filaDe(al, F).avisos = [`${PREFIJO_AVISO_DE_REASIGNACION}la idea «C1-I070» se retiró del banco; la fila realiza ahora «C1-I16» (mismo capítulo)`]
+    const r = await bancoRetirar(al, tablero({ idea_id: 'C1-I07' }), AHORA)
+    expect(r.cuerpo).toMatchObject({ ok: true, con_brief_sin_tocar: [], con_brief_reasignadas: [] })
+    expect(filaDe(al, F)).toMatchObject({ estado: 'briefeada', idea_ref: 'C1-I16' })
+  })
+  it('🔴 i7 de CC7 · al repetir un retiro cortado por la corrección, la fila ya reasignada entra en «con_brief_reasignadas» y en la historia', async () => {
+    const al = almacen()
+    // el corte: la fila con brief ya recibió «C1-I01» y su aviso; el concepto no se escribió (la idea sigue en el banco)
+    Object.assign(filaDe(al, F), { idea_ref: 'C1-I01', avisos: [`${PREFIJO_AVISO_DE_REASIGNACION}la idea «C1-I16» se retiró del banco; la fila realiza ahora «C1-I01» (mismo capítulo)`] })
+    const r = await retirarDelBanco(al, { campana_id: CAMP, version: 4, autor: 'jefatura' }, 'C1-I16', AHORA)
+    expect(r.cuerpo).toMatchObject({ ok: true, con_brief_sin_tocar: [F], con_brief_reasignadas: [F] })
+    expect(historialDe(al).at(-1)).toMatchObject({ accion: 'retirar', idea_id: 'C1-I16', con_brief_sin_tocar: [F], con_brief_reasignadas: [F] })
+    expect(filaDe(al, F)).toMatchObject({ estado: 'briefeada', idea_ref: 'C1-I01' })
+  })
+  it('🟢 las filas sin brief siguen como antes (validada pasa a otra idea sin cambiar de estado)', async () => {
+    const al = almacen()
+    await bancoRetirar(al, tablero({ idea_id: 'C1-I07' }), AHORA)
+    expect(filaDe(al, 's1-d4-jue_anuncio_fb')).toMatchObject({ estado: 'validada', idea_ref: 'C1-I21' })
   })
 })
