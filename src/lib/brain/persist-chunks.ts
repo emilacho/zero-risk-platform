@@ -15,7 +15,25 @@ import { generateEmbedding } from './embed'
 import { runIngressFilter, type ProvenanceTag } from '../ingress-filter'
 import { buildBrainProvenanceTag, type BrainTrustLevel } from '../client-brain'
 import { brainRoutePolicy, quarantineChunk } from './portero'
+import { baseDeEtiqueta, basesConRechazo, seccionesEnTrozos, trozosViejos } from './trozos'
 import { CAMPOS } from '../manual/campos-del-manual'
+
+/** ENCARGO 11: el tope de UN trozo (el texto entero va en varios; nada se corta) */
+export const MAX_POR_TROZO = 6000
+
+/** saca los trozos de una partición vieja de las secciones recién escritas (misma fuente). Best-effort: si falla, la búsqueda igual une solo los de la partición vigente */
+export async function sacarTrozosViejos(supabase: SupabaseClient, o: { clientId: string; sourceTable: string; sourceId: string; escritas: string[] }): Promise<number> {
+  if (o.escritas.length === 0) return 0
+  try {
+    const { data } = await supabase.from('client_brain_chunks').select('section_label').eq('client_id', o.clientId).eq('source_table', o.sourceTable).eq('source_id', o.sourceId)
+    const viejos = trozosViejos(((data ?? []) as Array<{ section_label: string }>).map((r) => r.section_label), o.escritas)
+    if (viejos.length === 0) return 0
+    const { error } = await supabase.from('client_brain_chunks').delete().eq('client_id', o.clientId).eq('source_table', o.sourceTable).eq('source_id', o.sourceId).in('section_label', viejos)
+    return error ? 0 : viejos.length
+  } catch {
+    return 0
+  }
+}
 
 export interface BrainChunk {
   section_label: string
@@ -39,7 +57,7 @@ function toIngressSource(source: string): ProvenanceTag['source'] {
 }
 
 export type PersistResult =
-  | { ok: true; chunks_upserted: number; tokens_used: number; cost_usd: number }
+  | { ok: true; chunks_upserted: number; tokens_used: number; cost_usd: number; /** ENCARGO 11 (propuesta de CC5, inventario de topes): las secciones que NO se escribieron y por qué. Antes un trozo sin huella se descartaba sin aviso */ secciones_fuera?: Array<{ section_label: string; razon: 'filtro_de_entrada' | 'sin_huella' }> }
   | { ok: false; code: string; detail: string; partial_upserted: number }
 
 const COST_PER_1K_TOKENS = 0.00002
@@ -152,12 +170,19 @@ export async function persistChunks(
 
   let tokens = 0
   let upserted = 0
-  for (const c of args.chunks) {
-    const text = c.chunk_text.slice(0, 6000) // cap to keep tokens bounded
+  // ENCARGO 11 · paso 2b: nada se recorta. Un texto de más de 6000 caracteres va ENTERO en trozos parejos y numerados de la misma fuente
+  // (antes se cortaba a 6000 y el resto se perdía). La búsqueda los une al leer (`unirTrozos`).
+  const trozos: BrainChunk[] = args.chunks.flatMap((c) =>
+    seccionesEnTrozos(c.section_label, c.chunk_text, MAX_POR_TROZO, c.metadata).map((x) => ({ section_label: x.section_label, chunk_text: x.text, ...(x.metadata ? { metadata: x.metadata } : {}) })),
+  )
 
-    // FASE C · portero anti-injection (ADR-012) · §144-per-flip ·
-    // shadow (default · audita) | enforce (BRAIN_INGRESS_ENFORCE='true' · chunk
-    // bloqueado NO se escribe · va a ingress_quarantine). skip_classifier · sin LLM.
+  // FASE C · portero anti-injection (ADR-012) · §144-per-flip ·
+  // shadow (default · audita) | enforce (BRAIN_INGRESS_ENFORCE='true' · chunk
+  // bloqueado NO se escribe · va a ingress_quarantine). skip_classifier · sin LLM.
+  const rechazado: boolean[] = []
+  for (const c of trozos) {
+    const text = c.chunk_text
+    let fuera = false
     try {
       const decision = await runIngressFilter(
         { raw_text: text, source: ingressSource, ingress_route: 'lib/brain/persist-chunks', client_id: args.clientId },
@@ -165,6 +190,7 @@ export async function persistChunks(
       )
       if (!decision.allow) {
         // enforce · cuarentena + skip (NO embebe ni escribe al cerebro).
+        fuera = true
         await quarantineChunk(supabase, {
           decision,
           source: brainSource,
@@ -178,9 +204,7 @@ export async function persistChunks(
           `[persist-chunks][ingress-filter][enforce] ${args.sourceTable}/${c.section_label} RECHAZADO → quarantine · ` +
             `${decision.block_gate ?? 'block'}(${decision.block_severity ?? decision.severity}) · client=${args.clientId}`,
         )
-        continue
-      }
-      if (decision.shadow_blocks.length > 0) {
+      } else if (decision.shadow_blocks.length > 0) {
         console.warn(
           `[persist-chunks][ingress-filter][shadow] ${args.sourceTable}/${c.section_label} bloquearía en enforce · ` +
             `${decision.shadow_blocks.join('+')}(${decision.severity}) · client=${args.clientId}`,
@@ -189,13 +213,25 @@ export async function persistChunks(
     } catch {
       // El filtro nunca debe romper la escritura · best-effort audit/enforce.
     }
+    rechazado.push(fuera)
+  }
 
-    const e = await generateEmbedding(text)
-    if (!e.ok) {
-      // Skip this chunk · log via stderr-style return when caller logs
-      continue
-    }
+  // TODO O NADA por sección original: si un trozo se rechaza o no se pudo embeber, no se escribe ningún trozo de esa sección
+  const fueraDeLaBase = basesConRechazo(trozos.map((c) => c.section_label), (i) => rechazado[i])
+  const embebidos: Array<{ c: BrainChunk; embedding: number[] }> = []
+  const sinHuella = new Set<string>()
+  for (const c of trozos) {
+    const base = baseDeEtiqueta(c.section_label)
+    if (fueraDeLaBase.has(base)) continue
+    const e = await generateEmbedding(c.chunk_text)
+    if (!e.ok) { fueraDeLaBase.add(base); sinHuella.add(base); continue }
     tokens += e.tokens
+    embebidos.push({ c, embedding: e.embedding })
+  }
+  const escritas: string[] = []
+  for (const { c, embedding } of embebidos) {
+    if (fueraDeLaBase.has(baseDeEtiqueta(c.section_label))) continue
+    const text = c.chunk_text
     const { error } = await supabase.from('client_brain_chunks').upsert(
       {
         client_id: args.clientId,
@@ -203,19 +239,24 @@ export async function persistChunks(
         source_id: args.sourceId,
         section_label: c.section_label,
         chunk_text: text,
-        embedding: e.embedding as unknown as string, // pgvector accepts JSON array
+        embedding: embedding as unknown as string, // pgvector accepts JSON array
         provenance_tag: provenanceTag,
         metadata: c.metadata ?? {},
         updated_at: nowIso,
       },
       { onConflict: 'client_id,source_table,source_id,section_label' },
     )
-    if (!error) upserted++
+    if (!error) { upserted++; escritas.push(c.section_label) }
   }
+  // los trozos de una partición vieja de las mismas secciones salen (antes «trozo k de 3», ahora «de 2», o antes entera): el índice no guarda dos versiones
+  await sacarTrozosViejos(supabase, { clientId: args.clientId, sourceTable: args.sourceTable, sourceId: args.sourceId, escritas })
 
+  const secciones_fuera = [...fueraDeLaBase].map((section_label) => ({ section_label, razon: (sinHuella.has(section_label) ? 'sin_huella' : 'filtro_de_entrada') as 'sin_huella' | 'filtro_de_entrada' }))
+  if (secciones_fuera.length) console.warn(`[persist-chunks] ${args.sourceTable}/${args.sourceId} · ${secciones_fuera.length} sección(es) fuera del índice (todo o nada): ${secciones_fuera.map((x) => `${x.section_label}(${x.razon})`).join(' · ')} · client=${args.clientId}`)
   return {
     ok: true,
     chunks_upserted: upserted,
+    ...(secciones_fuera.length ? { secciones_fuera } : {}),
     tokens_used: tokens,
     cost_usd: (tokens / 1000) * COST_PER_1K_TOKENS,
   }
