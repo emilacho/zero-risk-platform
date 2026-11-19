@@ -12,6 +12,10 @@ import { validarPlantilla } from '../plantilla'
 import { TOPE_MAXIMO_DEL_SOBRE_USD } from '../sobre'
 import { abrirEncargo, plantillaDe } from '../orquestador'
 import { ejecutarCodigoV } from '../orquestador-video'
+import { recibirResultadoMesa } from '../mesa/orquestador'
+import type { Tarjeta } from '../mesa/tipos'
+import { sobreDeLaRevision } from '../paso-jefatura'
+import { crearMesaEnMemoria } from './mesa-memoria'
 import { traducirGuion } from '../video/guion'
 import { parametrosDelVideo } from '../video/propuestas'
 import { VIDEO_MESA_POR_SEGUNDO } from '../plantillas/video-mesa'
@@ -126,6 +130,40 @@ describe('G5b · por la oficina (memoria, en seco)', () => {
     const t15 = topesA(15).limites.tope_encargo_usd
     const { r } = await abrir(parteCon('15 s · un momento'), conRango(), Math.ceil(t15) + 1)
     expect(r.status, JSON.stringify(r.cuerpo)).toBeLessThan(300)
+  })
+})
+
+describe('G5b · 🔴 de CC7 (04:13Z) · la mesa y la jefatura frenan contra el tope de ESTA pieza, no contra el de la campaña', () => {
+  const tj = (agente: string, rol: Tarjeta['rol'], pertinente_en: string[]): Tarjeta => ({ agente, rol, especialidad: agente, sabe_hacer: [], necesita: [], entrega: [], pertinente_en, indicacion: [], activo: true, version: 1 })
+  const DIRECTORIO_VIDEO: Tarjeta[] = [tj('creative-director-mesa', 'direccion', ['video:dirige']), tj('video-editor', 'miembro', ['video']), tj('portero', 'portero', [])]
+  const abrirReel = async () => {
+    const M = crearMemoria({ plantilla: conRango(), parte: parteCon('15 s · corto') })
+    M.P.mesa = crearMesaEnMemoria(DIRECTORIO_VIDEO)
+    const a = await abrirEncargo(M.P, { cuerpo: { parte_id: PARTE, brief_id: 'BRF-G5B', dry_run: true, familia: conRango().familia, tope_usd: 300 }, client_id: CLIENTE, target_step_id: TARGET_STEP_PRODUCIR })
+    expect(a.status, JSON.stringify(a.cuerpo)).toBeLessThan(300)
+    const id = String(a.cuerpo.encargo_id)
+    return { M, a, id, t15: topesA(15).limites.tope_encargo_usd }
+  }
+  it('🔴 el pedido del primer turno dice el tope de la pieza (15 s), no el del sobre (300)', async () => {
+    const { M, a, id, t15 } = await abrirReel()
+    expect(M.encargos.get(id)!.tope_usd).toBe(300)
+    const task = String((a.cuerpo.turno as { pedido?: { task?: string } } | undefined)?.pedido?.task ?? '')
+    expect(task, JSON.stringify(a.cuerpo).slice(0, 300)).toContain(`tope de US$ ${t15.toFixed(2)}`)
+    expect(task).not.toContain('tope de US$ 300.00')
+  })
+  it('🔴 con el tope de sus 15 s ya gastado, la mesa NO abre otro turno (antes seguía hasta los 300 y el motor la cortaba en el paso del video)', async () => {
+    const { M, a, id, t15 } = await abrirReel()
+    const enc = M.encargos.get(id)!
+    enc.estado_del_motor = { ...enc.estado_del_motor, gasto_usd: t15 }
+    const n = Number((a.cuerpo.turno as { n: number }).n)
+    const r = await recibirResultadoMesa(M.P, id, n, { texto: 'Idea rectora: el local en un gesto. Pido el guion a video-editor.', costo_usd: 0 } as never)
+    const turno = r.cuerpo.turno as { paso?: string } | undefined
+    expect(String(turno?.paso ?? ''), JSON.stringify(r.cuerpo).slice(0, 400)).not.toMatch(/^mesa:/)
+  })
+  it('🔴 la jefatura recibe lo que le queda a la pieza, no al sobre', () => {
+    const pl = topesA(15)
+    const s = sobreDeLaRevision({ id: 'e', client_id: CLIENTE, familia: pl.familia, tope_usd: 300, dry_run: true, sala_ref: null } as never, pl, { ...estadoInicial(), gasto_usd: 100 }, { pieza: 'x', imagenes: [], contexto: [] } as never)
+    expect(JSON.stringify(s)).toContain(`"tope_restante_usd":${+(pl.limites.tope_encargo_usd - 100).toFixed(6)}`)
   })
 })
 

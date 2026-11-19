@@ -207,7 +207,7 @@ export async function avanzar(P: Puertos, encargoId: string): Promise<Respuesta>
       if (abierto.tipo === 'brazo') return r(200, { accion: 'esperar_brazo', reentrega: true, turno: { n: abierto.n, paso: abierto.paso, tipo: 'brazo', dispatch_key: abierto.dispatch_key } })
       // 16-nov · Sprint 2 · el encargo espera al DUEÑO (propuestas del video): la misma acción que al abrirlo; lo despierta el tablero cuando el dueño decide
       if (abierto.tipo === TURNO_DEL_DUENO) return r(200, { accion: 'esperar_dueno', reentrega: true, turno: { n: abierto.n, paso: abierto.paso, tipo: TURNO_DEL_DUENO, dispatch_key: abierto.dispatch_key } })
-      if (abierto.paso.startsWith('mesa:')) return (await import('./mesa/orquestador')).reentregaDelTurno(P, enc, abierto)
+      if (abierto.paso.startsWith('mesa:')) return (await import('./mesa/orquestador')).reentregaDelTurno(P, enc, abierto, pl.limites.tope_encargo_usd)
       const sg = siguientePaso(enc.estado_del_motor, pl)
       if (sg.accion === 'ejecutar' && (sg.paso.tipo === 'agente' || sg.paso.tipo === 'portero')) {
         const a = armarPedido(enc, pl, sg.paso, enc.estado_del_motor)
