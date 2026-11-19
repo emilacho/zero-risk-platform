@@ -138,6 +138,37 @@ describe("G9 · el detector (casos chicos)", () => {
     for (const c of [sinRazon, sinFirma, sinFecha]) expect(D.revisar({ cortes: c, lista: vacia, listaBase: null }).marcasMalas).toHaveLength(1)
   })
 
+  // 19-nov · 🟡 de CC6 (k1, k2, k3, k4, k9): la forma exacta de la marca, fijada caso por caso
+  it("k1 · la marca de arriba vale solo si esa línea es un comentario: un corte marcado al final de una línea no tapa el de la siguiente", () => {
+    const c = de("x = a.slice(0, 3) // corte: el código postal tiene 3 dígitos · firma CC5 2026-11-19\ny = b.slice(0, 300)")
+    const r = D.revisar({ cortes: c, lista: vacia, listaBase: null })
+    expect(r.nuevos.map((x: Corte) => x.n)).toEqual([2])
+  })
+
+  it("k2 · un tipo inventado no vale", () => {
+    const [c] = de("x = a.slice(0, 3) // corte (otro): el código postal tiene 3 dígitos · firma CC5 2026-11-19")
+    expect(D.problemasDeLaMarca(c.marca)).toEqual(["el tipo «otro» no existe: usa «corte:» o «corte (lectura):»"])
+  })
+
+  it("k3 · el papel de un corte de lectura es una ruta raw/….md, no cualquier archivo", () => {
+    const [c] = de("x = manual.slice(0, 9000) // corte (lectura): el proveedor acepta 9000 · firma CC5 2026-11-19 · papel notas.txt · autoriza Lenovo")
+    expect(D.problemasDeLaMarca(c.marca)).toEqual(["un corte de lectura nombra el papel donde se firmó: «· papel raw/<…>.md»"])
+  })
+
+  it("k4 · «autoriza» es exactamente Lenovo o Emilio, no algo que empiece así", () => {
+    for (const quien of ["Lenovo-CC5", "LenovoX", "EmilioCC5"]) {
+      const [c] = de(`x = manual.slice(0, 9000) // corte (lectura): el proveedor acepta 9000 · firma CC5 2026-11-19 · papel raw/tasks/2026-11-19-x.md · autoriza ${quien}`)
+      expect(D.problemasDeLaMarca(c.marca), quien).toEqual(["un corte de lectura lo autoriza Lenovo, o Emilio si es su documento: «· autoriza Lenovo»"])
+    }
+  })
+
+  it("k9 · la firma lleva una fecha AAAA-MM-DD, no cualquier palabra", () => {
+    for (const f of ["CC5 hoy", "CC5 19-11-2026", "CC5 2026-11-19x"]) {
+      const [c] = de(`x = a.slice(0, 3) // corte: el código postal tiene 3 dígitos · firma ${f}`)
+      expect(D.problemasDeLaMarca(c.marca), f).toEqual(["falta la firma: «· firma <quién> <AAAA-MM-DD>»"])
+    }
+  })
+
   it("una razón vacía o de relleno no vale aunque la firma esté bien (y el aviso dice que falta la razón)", () => {
     for (const r of ["", "todo", "...", "<razón>"]) {
       const [c] = de(`x = a.slice(0, 3) // corte: ${r} · firma CC5 2026-11-19`)
