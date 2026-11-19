@@ -143,7 +143,7 @@ export async function correrBorradorDeImagen(P: Puertos, enc: Encargo, pl: Plant
         plan.errores.push(`«${q.ref}» no cabe en el tope del borrador (US$ ${tope}: comprometido ${r4(comprometido)} + ${estimado} por imagen): sin imagen en el borrador`)
         continue
       }
-      const g = await P.imagen({ prompt: q.prompt, client_id: enc.client_id, encargo_id: enc.id, dry_run: enc.dry_run, foto: q.foto, ...(q.foto && q.otras_fotos.length ? { otras_fotos: q.otras_fotos } : {}), ...calidad })
+      const g = await P.imagen({ prompt: q.prompt, client_id: enc.client_id, encargo_id: enc.id, dry_run: enc.dry_run, foto: q.foto, ...(q.otras_fotos.length ? { otras_fotos: q.otras_fotos } : {}), ...calidad })
       // pedida = comprometida, salga o no (un fallo del proveedor puede haber cobrado igual)
       comprometido += Math.max(estimado, g.ok ? g.costo_usd : 0)
       if (!g.ok) { plan.errores.push(`el generador no devolvió la imagen de «${q.ref}»: ${g.error}`); continue }

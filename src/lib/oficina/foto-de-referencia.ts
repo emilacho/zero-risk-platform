@@ -5,6 +5,8 @@
  * Primero la que eligió el director visual, si es apta; si no, las candidatas en su orden, rotando para que dos imágenes del mismo
  * encargo no salgan de la misma foto. Sin candidata apta → null y la imagen se genera como siempre. Pura.
  */
+import { MAX_FOTOS_POR_IMAGEN } from '../imagen-sobre-foto'
+
 export interface FotoDeReferencia { id: string; url: string }
 
 interface FotoConUrl { id: string; url?: string | null }
@@ -23,11 +25,17 @@ export function fotosDeReferencia(fotos: FotoConUrl[], candidatas: CandidataMin[
   return aptas
 }
 
-/** 19-nov · «lo real es el set» (precisión de Emilio 16:34) · sin foto real la imagen se genera igual con el estilo del manual, y la pieza lo dice: nunca frena */
-export const avisoDeImagenGenerada = (cual: string): string => `${cual} salió generada con el estilo del manual: el cliente no tiene una foto real de esto`
+/**
+ * 19-nov · «lo real es el set» (precisión de Emilio 16:34) · sin foto real la imagen se genera igual con el estilo del manual, y la pieza lo dice: nunca frena.
+ * `nombradas`: las fotos reales que el agente nombró y existen, pero ninguna sirve de base (🟡 CC6 23:11Z: el aviso no dice «no tiene foto» si sí las tiene).
+ */
+export const avisoDeImagenGenerada = (cual: string, nombradas: string[] = []): string =>
+  nombradas.length
+    ? `${cual} salió generada con el estilo del manual: se nombraron fotos reales (${nombradas.map((id) => `foto:${id}`).join(', ')}), pero ninguna sirve de base (no muestran al protagonista)`
+    : `${cual} salió generada con el estilo del manual: el cliente no tiene una foto real de esto`
 
-/** 19-nov · «lo real es el set» · cuántas fotos viajan con la base en un pedido (la edición admite 16 en total) */
-export const MAX_OTRAS_FOTOS = 15
+/** 19-nov · «lo real es el set» · cuántas fotos viajan con la base en un pedido: las que admite la edición menos la base (16 − 1 = 15) */
+export const MAX_OTRAS_FOTOS = MAX_FOTOS_POR_IMAGEN - 1
 
 /**
  * 19-nov · «lo real es el set» (GO Lenovo + ADENDA 1: nadie arma un juego aparte) · las OTRAS fotos que viajan con la base de UNA imagen. Pura.

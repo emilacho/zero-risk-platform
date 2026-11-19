@@ -589,7 +589,7 @@ async function ejecutarCodigo(P: Puertos, enc: Encargo, pl: Plantilla, paso: Pas
         const g = await P.imagen({ prompt: validos[i].prompt, client_id: enc.client_id, encargo_id: enc.id, dry_run: enc.dry_run, foto, ...(otras.length ? { otras_fotos: otras } : {}) })
         if (!g.ok) { fichas.push(fichaNueva(`imagen-${intento}-${i}`, 'chequeo', 'imagen', 'sugerencia', `el generador no devolvió una imagen para el prompt ${i + 1}: ${g.error}`)); continue }
         const sobre = foto && g.referencia?.usada ? { foto_referencia_id: foto.id } : {}
-        if (!foto) fichas.push(fichaNueva(`imagen-generada-${intento}-${i}`, 'chequeo', 'imagen', 'sugerencia', avisoDeImagenGenerada(`la imagen ${i + 1}`), 'fotos del cliente', 'si el cliente tiene una foto real de esto, subirla al cerebro'))
+        if (!foto) fichas.push(fichaNueva(`imagen-generada-${intento}-${i}`, 'chequeo', 'imagen', 'sugerencia', avisoDeImagenGenerada(`la imagen ${i + 1}`, o.otras.map((f) => f.id)), 'fotos del cliente', 'si el cliente tiene una foto real de esto, subirla al cerebro'))
         if (foto && !g.referencia?.usada) fichas.push(fichaNueva(`imagen-sin-foto-${intento}-${i}`, 'chequeo', 'imagen', 'sugerencia', `la imagen ${i + 1} se generó sin la foto real «${foto.id}» (${g.referencia?.motivo ?? 'sin motivo'}): el producto puede no ser el del cliente`, 'fotos propias del cliente', 'mirar que el producto sea el real'))
         const indice = items.length
         items.push({ indice, intento, prompt_idx: i, url: g.url, generation_id: g.generation_id, prompt: validos[i].prompt, ...sobre })
