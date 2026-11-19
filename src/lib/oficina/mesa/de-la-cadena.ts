@@ -11,7 +11,7 @@ import type { Cambios, Encargo, Puertos } from '../puertos'
 import { estadoInicial, type Estado } from '../tipos'
 import { TOPE_REAL_DEL_PEDIDO } from '../../limites-de-tamano'
 import { esCritica } from './critica'
-import { claveDeTexto, leerIdea } from '../../cadena/conceptos'
+import { claveDeTexto, leerConcepto, leerIdea, type InsumosDelBanco } from '../../cadena/conceptos'
 
 export type TipoDeMesaDeLaCadena = 'brief' | 'concepto' | 'reubicacion' | 'fallidos' | 'banco'
 export const FAMILIA_DE: Record<TipoDeMesaDeLaCadena, string> = { brief: 'brief_mesa', concepto: 'concepto_mesa', reubicacion: 'reubicacion_mesa', fallidos: 'fallidos_mesa', banco: 'banco_mesa' }
@@ -24,7 +24,7 @@ const r = (status: number, cuerpo: Record<string, unknown>): Respuesta => ({ sta
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 /** lo que la cadena le pasa a la oficina para abrir una mesa de la campaña */
-export interface SobreDeLaCadena { tipo_de_mesa: TipoDeMesaDeLaCadena; client_id: string; campana_id: string; version: number; marco_texto: string; dry_run: boolean; /** 17-nov · solo BAJA el tope de la plantilla (el reintento de una corrección del banco va dentro del MISMO tope: lo que queda) */ tope_usd?: number; /** condiciones del directorio que la estrategia activa (`si_instagram`, `si_video`…): las calcula la CADENA del plan de canales, no la oficina */ condiciones: string[] }
+export interface SobreDeLaCadena { tipo_de_mesa: TipoDeMesaDeLaCadena; client_id: string; campana_id: string; version: number; marco_texto: string; dry_run: boolean; /** 17-nov · solo BAJA el tope de la plantilla (el reintento de una corrección del banco va dentro del MISMO tope: lo que queda) */ tope_usd?: number; /** condiciones del directorio que la estrategia activa (`si_instagram`, `si_video`…): las calcula la CADENA del plan de canales, no la oficina */ condiciones: string[]; /** 18-nov · relleno del banco: solo la mesa de concepto; sin esto la mesa entrega el banco como esté (como antes) */ insumos_del_banco?: InsumosDelBanco }
 
 /** lo que viaja dentro del encargo (artefacto `marco_cadena`): el contexto de la cadena + lo que el cliente tiene (manual, plan, fotos) leído UNA vez al abrir */
 export interface MarcoDeLaCadena {
@@ -34,6 +34,8 @@ export interface MarcoDeLaCadena {
   marco_texto: string
   condiciones: string[]
   fotos: FotoEtiquetada[]
+  /** 18-nov · relleno del banco (solo concepto): fases con semanas y redes con huecos, para contar el banco con la misma lectura de la cadena */
+  insumos_del_banco?: InsumosDelBanco
 }
 export const marcoDe = (e: Estado): MarcoDeLaCadena | null => (datos(e, ARTEFACTO_MARCO) as unknown as MarcoDeLaCadena | undefined) ?? null
 
@@ -52,8 +54,35 @@ export function validarSobreDeLaCadena(x: unknown): { ok: true; sobre: SobreDeLa
   if (typeof b.marco_texto !== 'string' || b.marco_texto.trim().length < 20) errores.push('`marco_texto` falta (el marco de la mesa)')
   if (b.condiciones !== undefined && (!Array.isArray(b.condiciones) || b.condiciones.some((c) => typeof c !== 'string' || !/^si_[a-z0-9_]{1,30}$/.test(c)))) errores.push('`condiciones` debe ser una lista de claves `si_…`')
   if (b.tope_usd !== undefined && (typeof b.tope_usd !== 'number' || !Number.isFinite(b.tope_usd) || b.tope_usd <= 0)) errores.push('`tope_usd` debe ser un número positivo')
+  const ib = insumosDelBancoDelSobre(b.insumos_del_banco, b.tipo_de_mesa)
+  if (typeof ib === 'string') errores.push(ib)
   if (errores.length) return { ok: false, errores }
-  return { ok: true, sobre: { ...(typeof b.tope_usd === 'number' ? { tope_usd: b.tope_usd } : {}), condiciones: ((b.condiciones as string[] | undefined) ?? []).slice(0, 20), tipo_de_mesa: b.tipo_de_mesa as TipoDeMesaDeLaCadena, client_id: b.client_id as string, campana_id: b.campana_id as string, version: b.version as number, marco_texto: (b.marco_texto as string).slice(0, TOPE_REAL_DEL_PEDIDO), dry_run: b.dry_run as boolean } }
+  return { ok: true, sobre: { ...(typeof b.tope_usd === 'number' ? { tope_usd: b.tope_usd } : {}), ...(ib && typeof ib === 'object' ? { insumos_del_banco: ib } : {}), condiciones: ((b.condiciones as string[] | undefined) ?? []).slice(0, 20), tipo_de_mesa: b.tipo_de_mesa as TipoDeMesaDeLaCadena, client_id: b.client_id as string, campana_id: b.campana_id as string, version: b.version as number, marco_texto: (b.marco_texto as string).slice(0, TOPE_REAL_DEL_PEDIDO), dry_run: b.dry_run as boolean } }
+}
+
+/**
+ * 18-nov · relleno del banco: los insumos del banco que trae el sobre (solo en la mesa de concepto). Ausente ⇒ null (la mesa entrega como antes).
+ * Mal formados ⇒ el error (texto). Se copian solo los campos conocidos y con tope de tamaño: el sobre viene de fuera.
+ */
+function insumosDelBancoDelSobre(x: unknown, tipo: unknown): InsumosDelBanco | null | string {
+  if (x === undefined || x === null) return null
+  const mal = '`insumos_del_banco` debe ser { fases: [{ clave, semanas }], redes: [{ red, huecos_por_semana }] } y solo va en la mesa de concepto'
+  if (tipo !== 'concepto' || typeof x !== 'object' || Array.isArray(x)) return mal
+  const o = x as Record<string, unknown>
+  if (!Array.isArray(o.fases) || !Array.isArray(o.redes) || o.fases.length > 20 || o.redes.length > 20) return mal
+  const fases: InsumosDelBanco['fases'] = []
+  for (const f of o.fases as unknown[]) {
+    const g = f as Record<string, unknown> | null
+    if (!g || typeof g.clave !== 'string' || !/^[A-Za-z0-9_]{1,40}$/.test(g.clave) || typeof g.semanas !== 'number' || !Number.isFinite(g.semanas) || g.semanas < 0 || g.semanas > 60) return mal
+    fases.push({ clave: g.clave, semanas: g.semanas })
+  }
+  const redes: InsumosDelBanco['redes'] = []
+  for (const r0 of o.redes as unknown[]) {
+    const g = r0 as Record<string, unknown> | null
+    if (!g || typeof g.red !== 'string' || !g.red.trim() || g.red.length > 40 || typeof g.huecos_por_semana !== 'number' || !Number.isFinite(g.huecos_por_semana) || g.huecos_por_semana < 0 || g.huecos_por_semana > 30) return mal
+    redes.push({ red: g.red, huecos_por_semana: g.huecos_por_semana })
+  }
+  return { fases, redes }
 }
 
 /**
@@ -68,7 +97,7 @@ export async function abrirMesaDeLaCadena(P: Puertos, s: SobreDeLaCadena, avanza
   if (!P.mesa) return r(409, { error: 'mesa_sin_puerto', detalle: 'la mesa no tiene su puerto (libro y directorio) configurado' })
   const fu = await P.fuentes(s.client_id)
   if ('error' in fu) return r(409, { error: 'sin_fuentes', detalle: fu.error })
-  const marco: MarcoDeLaCadena = { tipo_de_mesa: s.tipo_de_mesa, campana_id: s.campana_id, version: s.version, cliente_nombre: fu.cliente_nombre, manual_texto: fu.manual_texto, plan_texto: fu.plan_texto, marco_texto: s.marco_texto, condiciones: s.condiciones, fotos: fu.fotos }
+  const marco: MarcoDeLaCadena = { tipo_de_mesa: s.tipo_de_mesa, campana_id: s.campana_id, version: s.version, cliente_nombre: fu.cliente_nombre, manual_texto: fu.manual_texto, plan_texto: fu.plan_texto, marco_texto: s.marco_texto, condiciones: s.condiciones, fotos: fu.fotos, ...(s.insumos_del_banco ? { insumos_del_banco: s.insumos_del_banco } : {}) }
   const e0: Estado = estadoInicial()
   const estado: Estado = { ...e0, artefactos: { ...e0.artefactos, [ARTEFACTO_MARCO]: { version: 1, version_consumida: 0, datos: marco as unknown as Record<string, unknown> } } }
   const topeDeLaPlantilla = pl.plantilla.limites.tope_encargo_usd ?? TOPE_POR_OMISION_USD[s.tipo_de_mesa]
@@ -113,6 +142,8 @@ export function ideasDeLosAportes(libro: Array<{ n?: number; de: string; tipo: s
   const orden = [
     ...citados.map((n) => aportes.find((a) => a.n === n)).filter((a): a is (typeof aportes)[number] => !!a),
     ...[...aportes].reverse().filter((a) => a.n === undefined || !citados.includes(a.n)),
+    // 18-nov · relleno del banco: lo que la dirección escribió para completar las cuotas va AL FINAL (nunca le quita el id a una idea del equipo; si choca, se renumera)
+    ...libro.filter((a) => a.tipo === 'aporta' && a.de === dir && esRellenoDelBanco(a.texto)),
   ]
   // 18-nov · ids únicos (corrección de CC1 · GO Lenovo 13:08Z, dentro de la (b)): cada miembro numera desde C1-I01, así que dos aportes chocan con ideas DISTINTAS
   // y la cadena botaba la segunda como «id duplicado» (T7d, concepto 5: 39 de 71). Ahora la segunda se RENUMERA dentro de su capítulo. Lo que no cambia:
@@ -130,7 +161,9 @@ export function ideasDeLosAportes(libro: Array<{ n?: number; de: string; tipo: s
   }
   const salen = idsQueSalen(integracion)
   const ultimo = new Map<string, number>()
-  for (const t of [integracion, ...libro.map((a) => a.texto)]) {
+  // la base del número nuevo NO cuenta el relleno de la dirección: así el id que recibe una idea del equipo no cambia después de rellenar
+  // (la dirección vio ese id en «ya están»). La unicidad no depende de esto: cada línea se compara contra los ids ya ocupados.
+  for (const t of [integracion, ...libro.filter((a) => !(a.tipo === 'aporta' && a.de === dir && esRellenoDelBanco(a.texto))).map((a) => a.texto)]) {
     for (const m of t.matchAll(/\bC([A-Za-z0-9_]+)-I(\d{2,})\b/g)) ultimo.set(m[1], Math.max(ultimo.get(m[1]) ?? 0, Number(m[2])))
   }
   const vistas = new Set<string>()
@@ -148,9 +181,12 @@ export function ideasDeLosAportes(libro: Array<{ n?: number; de: string; tipo: s
         if (previa === undefined) ocupados.set(p.id, clave)
         else if (previa !== clave) {
           const cap = /^C([A-Za-z0-9_]+)-I\d{2,}$/.exec(p.id)?.[1] ?? ''
-          const n = (ultimo.get(cap) ?? 0) + 1
+          // el número nuevo sube mientras caiga sobre un id ya ocupado (el relleno no entra a la base · hueco hallado por CC7 en #1189)
+          let n = (ultimo.get(cap) ?? 0) + 1
+          const idDe = (k: number): string => `C${cap}-I${String(k).padStart(2, '0')}`
+          while (ocupados.has(idDe(n))) n++
           ultimo.set(cap, n)
-          const nuevo = `C${cap}-I${String(n).padStart(2, '0')}`
+          const nuevo = idDe(n)
           ocupados.set(nuevo, clave)
           limpia = `- ${nuevo} · ${p.resto}`
           vistas.add(limpia)
@@ -201,6 +237,64 @@ export function textoParaLaCadena(libro: Array<{ n?: number; de: string; tipo: s
   // sin integración, lo que el equipo escribió (la crítica no: confronta, no propone; sus citas de ideas no deben leerse como ideas)
   return libro.filter((a) => ['dirige', 'aporta', 'responde'].includes(a.tipo) && a.texto.trim() && !esCritica(a.texto)).map((a) => `[${a.de}] ${a.texto.trim()}`).join('\n\n')
 }
+/**
+ * 18-nov · RELLENO DEL BANCO (la (b) de Lenovo, 09:59Z y 13:08Z · reparto con CC2 20:56Z). Las cuotas del plan piden huecos × semanas ideas por red y capítulo
+ * (`banco_parcial` de la cadena); en T7d el banco quedó en 70 de 120 aun con ids únicos. Después de integrar, la dirección tiene UN turno por capítulo con faltantes
+ * para escribir solo las que faltan. Lo escribe como `aporta` con la cabecera «## Relleno del banco · <capítulo>»:
+ *  · no es un «aporte nuevo» que obligue a integrar otra vez (la integración no cambia; las líneas viajan en «Banco de ideas · líneas de los aportes»);
+ *  · un capítulo con su relleno escrito no vuelve a pedirse, aunque no haya alcanzado (sin bucle);
+ *  · la cuenta es la de la cadena: `leerConcepto` sobre el mismo texto que se le entrega, con las fases y redes del sobre. Sin insumos en el sobre ⇒ no hay relleno (como antes).
+ */
+export const TITULO_DEL_RELLENO = '## Relleno del banco'
+export const esRellenoDelBanco = (texto: string): boolean => /^\s*##\s*Relleno del banco\b/i.test(texto)
+/** la clave de la fase que nombra la cabecera del relleno (null si no la trae) */
+export function capituloDelRelleno(texto: string): string | null {
+  const m = /^\s*##\s*Relleno del banco\s*·\s*([A-Za-z0-9_]+)/i.exec(texto)
+  return m ? m[1] : null
+}
+/** el texto del relleno tal como se anota: SIEMPRE con la cabecera canónica de su capítulo (la escriba o no la dirección), para que no se pida dos veces */
+export function conCabeceraDelRelleno(texto: string, capitulo: string): string {
+  const cab = `${TITULO_DEL_RELLENO} · ${capitulo}`
+  const sin = texto.replace(/^\s*##\s*Relleno del banco\b[^\n]*\n?/i, '').trim()
+  return `${cab}\n\n${sin}`
+}
+export interface RellenoPendiente {
+  /** la clave de la fase (el capítulo del banco) */
+  capitulo: string
+  /** el prefijo de los ids de ese capítulo (`C<prefijo>-I<nn>`) */
+  prefijo: string
+  /** desde qué número seguir (mayor que cualquier id de ese capítulo en el texto) */
+  desde: number
+  /** cuántas faltan por red para llegar a la cuota */
+  redes: Array<{ red: string; faltan: number; esperadas: number }>
+  /** lo que ya está en el banco de ese capítulo (para no repetir): id · red · mensaje */
+  ya_estan: Array<{ id: string; red: string; mensaje: string }>
+}
+/** el primer capítulo que aún no llega a su cuota y no tiene relleno escrito; null si no hay nada que rellenar (o la mesa no es de concepto, o no hay integración) */
+export function rellenoPendiente(marco: Pick<MarcoDeLaCadena, 'tipo_de_mesa' | 'insumos_del_banco'> | null, libro: Array<{ n?: number; de: string; tipo: string; texto: string }>): RellenoPendiente | null {
+  if (!marco || marco.tipo_de_mesa !== 'concepto' || !marco.insumos_del_banco) return null
+  const ult = [...libro].reverse().find((a) => a.tipo === 'integra' && a.texto.trim())
+  if (!ult) return null
+  const texto = textoParaLaCadena(libro, null, true)
+  const ins = marco.insumos_del_banco
+  const l = leerConcepto(texto, { fases: ins.fases, redes: ins.redes, prohibidas: [], fotos: [] })
+  const rellenos = libro.filter((a) => a.tipo === 'aporta' && a.de === ult.de && esRellenoDelBanco(a.texto))
+  // tope duro: nunca más rellenos que fases (aunque una cabecera llegue sin capítulo, la mesa no da vueltas)
+  if (rellenos.length >= ins.fases.length) return null
+  const hechos = new Set(rellenos.map((a) => claveDeTexto(capituloDelRelleno(a.texto) ?? '')))
+  for (const [k, f] of ins.fases.entries()) {
+    const redes = l.banco_parcial.filter((b) => b.capitulo === f.clave && b.faltan > 0).map((b) => ({ red: b.red, faltan: b.faltan, esperadas: b.esperadas }))
+    if (!redes.length || hechos.has(claveDeTexto(f.clave))) continue
+    const ya_estan = l.banco.filter((i) => i.capitulo === f.clave).map((i) => ({ id: i.id, red: i.red, mensaje: i.mensaje }))
+    // el prefijo que YA usan las ideas de ese capítulo (los miembros numeran por orden: C1, C2…); sin ideas, el número de orden de la fase (el lector lo casa por orden)
+    const prefijo = /^C([A-Za-z0-9_]+)-I\d{2,}$/.exec(ya_estan[0]?.id ?? '')?.[1] ?? String(k + 1)
+    let desde = 0
+    for (const m of texto.matchAll(new RegExp(`\\bC${prefijo}-I(\\d{2,})\\b`, 'g'))) desde = Math.max(desde, Number(m[1]))
+    return { capitulo: f.clave, prefijo, desde: desde + 1, redes, ya_estan }
+  }
+  return null
+}
+
 /** lo que la mesa le entrega a la cadena: la de concepto lleva las ideas de los aportes */
 export const textoDeLaMesaParaLaCadena = (enc: Pick<Encargo, 'familia'>, libro: Array<{ n?: number; de: string; tipo: string; texto: string }>, piezaTexto: string | null | undefined): string =>
   textoParaLaCadena(libro, piezaTexto, enc.familia === FAMILIA_DE.concepto)
