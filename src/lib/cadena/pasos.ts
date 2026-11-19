@@ -98,7 +98,7 @@ function respuestaDePreparar(res: Awaited<ReturnType<typeof prepararCorrida>>): 
 
 // ─────────────────────────────────────────────────────────────── ESTRATEGIA
 /** 19-nov · ADENDA 1 · P2b: el brief VALIDADO de la campaña, en lo que lee el calendario · sin brief validado = null (la tarea de siempre) · nunca lanza */
-async function briefParaElCalendario(al: Almacen, campanaId: string): Promise<{ publico: string; hechos_de_las_ofertas: string } | null> {
+export async function briefParaElCalendario(al: Almacen, campanaId: string): Promise<{ publico: string; hechos_de_las_ofertas: string } | null> {
   try {
     const b = await al.ultimoBriefCreativo(campanaId)
     return b && b.estado === 'validada' && b.texto_md ? delBriefParaElCalendario(b.texto_md) : null

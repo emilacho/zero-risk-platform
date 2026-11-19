@@ -2,6 +2,7 @@
  * 19-nov · ADENDA 1 · P2b · el calendario recibe del brief VALIDADO el «Público» y los «Hechos de las ofertas», enteros (CC5).
  * Sin el nuevo orden (sin gran idea) o sin brief, la tarea es la de siempre. Sin red, US$ 0.
  */
+import { briefParaElCalendario } from '../pasos'
 import { describe, expect, it } from 'vitest'
 import { clienteA, contextoDe } from '../__fixtures__/clientes'
 import { delBriefParaElCalendario } from '../brief-creativo'
@@ -28,5 +29,21 @@ describe('ADENDA 1 · P2b · el brief al calendario', () => {
     expect(tareaDeCalendario({ ...base, brief: delBriefParaElCalendario(MD) } as never)).toBe(tareaDeCalendario(base as never))
     expect(tareaDeCalendario({ ...base, concepto, brief: null } as never)).toBe(tareaDeCalendario({ ...base, concepto } as never))
     expect(tareaDeCalendario({ ...base, concepto } as never)).not.toContain('# EL BRIEF DE LA CAMPAÑA')
+  })
+})
+
+// 19-nov · sabotaje d8 (sobrevivía): solo el brief VALIDADO llega al calendario; un borrador o un brief caído no
+describe('ADENDA 1 · P2b · solo el brief validado llega al calendario', () => {
+  const almacen = (b: unknown) => ({ ultimoBriefCreativo: async () => b }) as never
+  const MD = '## Público\nLos vecinos del barrio.\n\n## Hechos de las ofertas\nEl menú cuesta 6.'
+  it('🔴 validado → público y hechos', async () => {
+    expect(await briefParaElCalendario(almacen({ estado: 'validada', texto_md: MD }), 'c')).toEqual({ publico: 'Los vecinos del barrio.', hechos_de_las_ofertas: 'El menú cuesta 6.' })
+  })
+  it('🔴 un borrador (sin validar) no llega', async () => {
+    expect(await briefParaElCalendario(almacen({ estado: 'borrador', texto_md: MD }), 'c')).toBeNull()
+  })
+  it('sin brief, o si la lectura falla, no llega (y no rompe el paso)', async () => {
+    expect(await briefParaElCalendario(almacen(null), 'c')).toBeNull()
+    expect(await briefParaElCalendario({ ultimoBriefCreativo: async () => { throw new Error('caída') } } as never, 'c')).toBeNull()
   })
 })

@@ -223,6 +223,8 @@ describe.each(CLIENTES)('%s · el camino real: el video se mira antes de la jefa
     expect(r.miradas[0].task).toContain(C.fila)
     // 19-nov · ADENDA 1 · P2b: los ojos del video reciben también el manual de marca del cliente, entero, en su <documento>
     expect(r.miradas[0].task).toMatch(/## El manual de marca del cliente\n<documento fuente="el manual de marca">\n[\s\S]+\n<\/documento>/)
+    // y el plan del cliente (el que se lee de la parte, como en producción), entero (sabotaje f5: sobrevivía sin esta línea)
+    expect(r.miradas[0].task).toContain('## El plan de trabajo del cliente\n<documento fuente="el plan">\nPLAN DE TRABAJO DE PRUEBA: serie de posts de producto antes de la pauta.\n</documento>')
     expect(r.enc.estado_del_motor.artefactos['mirada_video'].datos).toMatchObject({ coincide: true })
     expect(r.enc.estado_del_motor.fichas.filter((f) => f.donde === 'mirada' && f.estado === 'abierta')).toHaveLength(0)
     // la jefatura: los cuadros entre sus imágenes y lo que vio el agente en su contexto
