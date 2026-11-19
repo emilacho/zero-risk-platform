@@ -4,7 +4,7 @@
 import type { Almacen, Campana, EstadoCampana } from './almacen'
 import { autorizarLlamada, cadena, compuerta, err, leerSeco, type Respuesta } from './autorizar'
 import { arrancarAlActivar, type ResultadoDelArranque } from './arranque'
-import { DIAS_DE_CAMPANA, DIAS_MAXIMOS_DE_CAMPANA, medidaDeCampana, SEMANAS_DE_TANDA } from './constantes'
+import { bolsaDePlanificacion, DIAS_DE_CAMPANA, DIAS_MAXIMOS_DE_CAMPANA, medidaDeCampana, SEMANAS_DE_TANDA } from './constantes'
 import { esFechaIso, sumarDias } from './fechas'
 import { ventanaDelPlan } from './fechas-en-texto'
 import { nuevoOrdenEncendido } from './mesas'
@@ -87,7 +87,8 @@ export async function abrirCampana(al: Almacen, cuerpo: Record<string, unknown>,
   try { nueva = await al.insertarCampana({
     client_id: clientId, plan_id: plan.plan_id, fecha_inicio: ventana.fecha_inicio, fecha_inicio_origen: ventana.origen, fecha_fin: ventana.fecha_fin, ...(semanasDeTanda === SEMANAS_DE_TANDA ? {} : { semanas_de_tanda: semanasDeTanda as number }),
     zona_horaria: ctx.zonaHoraria, pais: ctx.pais, sedes: ctx.sedes.map((x) => x.clave), estado: 'abierta', estado_motivo: [ctx.sedes.length === 0 ? 'sin sede declarada: no se comprueba si el local está abierto' : null, ctx.zonaHorariaOrigen === 'sin_dato' ? 'zona horaria sin dato: hay que preguntarla' : null, sedesRec.ok ? null : 'no se pudieron leer las sedes: ' + String(sedesRec.error ?? 'sin detalle').slice(0, 80)].filter((x): x is string => !!x).join(' · ') || null,
-    presupuesto_planificacion_usd: 6, ventana_parte_dias: 10, sustituir_video_por: 'ninguna', autoproducir: (await al.leerConfig('autoproducir_por_omision')) === true,
+    // 19-nov · grupo C1 (DECISIÓN Lenovo 05:00Z): 3 × lo medido de una planificación completa con sus rondas, por las tandas de ESTA campaña (antes, 6 fijo)
+    presupuesto_planificacion_usd: bolsaDePlanificacion(medidaDeCampana({ fecha_inicio: ventana.fecha_inicio, fecha_fin: ventana.fecha_fin, semanas_de_tanda: semanasDeTanda as number }).totalTandas), ventana_parte_dias: 10, sustituir_video_por: 'ninguna', autoproducir: (await al.leerConfig('autoproducir_por_omision')) === true,
     ...(topeInicial !== null ? { tope_gasto_usd: topeInicial } : {}),
     sala_ref: typeof cuerpo.sala_ref === 'object' && cuerpo.sala_ref ? (cuerpo.sala_ref as Record<string, unknown>) : {}, reemplaza_a: reemplaza, seco: s.seco,
   }) } catch (e) {

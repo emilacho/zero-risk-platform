@@ -19,7 +19,7 @@ import { clienteA, clienteB, contextoDe, type ClienteFixture } from '../__fixtur
 import { fichasConHechos, fichasEnTexto, hechoEnTexto, leerFichasDelLector, type HechoDelNegocioPorOferta } from '../ficha-de-oferta'
 import { ESQUEMAS } from '../esquemas'
 import { bolsaDelPaso, gastoDeCampana, presupuestoDelLector } from '../nucleo'
-import { PASOS_CON_PRESUPUESTO_PROPIO, PASOS_SIN_REVISION, PRESUPUESTO_LECTOR_POR_OMISION, topeDelPaso } from '../constantes'
+import { bolsaDePlanificacion, medidaDeCampana, PASOS_CON_PRESUPUESTO_PROPIO, PASOS_SIN_REVISION, PRESUPUESTO_LECTOR_POR_OMISION, topeDelPaso } from '../constantes'
 
 const AHORA = '2026-10-09T12:00:00Z'
 const RAIZ = resolve(__dirname, '..', '..', '..', '..')
@@ -298,7 +298,9 @@ describe('🟡 1 de CC6 · RESPUESTA-LENOVO (b) · el lector gasta de su PROPIA 
     const pe = await estrategiaPreparar(al, { ...wf(), campana_id: id }, AHORA)
     await estrategiaGuardar(al, { ...wf(), campana_id: id, corrida_id: pe.cuerpo.corrida_id, resultado: ok(c.estrategia, 2.02) }, AHORA)
     const campana = campanaDe(al, id)
-    expect(campana.presupuesto_planificacion_usd).toBe(6)
+    // 19-nov · C1 (DECISIÓN Lenovo 05:00Z): la bolsa ya no es 6 fijo; es la de las tandas de esta campaña
+    const bolsa = bolsaDePlanificacion(medidaDeCampana(campana).totalTandas)
+    expect(campana.presupuesto_planificacion_usd).toBe(bolsa)
     expect(presupuestoDelLector(campana)).toBe(PRESUPUESTO_LECTOR_POR_OMISION)
     for (let i = 0; i < 5; i++) {
       const p = await fichasPreparar(al, { ...wf(), workflow_execution_id: `ex-${i}`, campana_id: id }, AHORA)
@@ -308,7 +310,7 @@ describe('🟡 1 de CC6 · RESPUESTA-LENOVO (b) · el lector gasta de su PROPIA 
     expect(al.corridas.filter((x) => x.paso === 'fichas').map((x) => x.estado)).toEqual(['fallida', 'fallida', 'fallida'])
     expect((await bolsaDelPaso(al, campana, 'fichas')).gastado).toBe(1.5)
     // la planificación ve SOLO lo suyo: la estrategia
-    expect(await bolsaDelPaso(al, campana, 'calendario')).toEqual({ gastado: 2.02, presupuesto: 6 })
+    expect(await bolsaDelPaso(al, campana, 'calendario')).toEqual({ gastado: 2.02, presupuesto: bolsa })
     expect((await calendarioPreparar(al, { ...wf(), campana_id: id, tanda: 1 }, AHORA)).status).toBe(200)
     expect(campanaDe(al, id).estado).not.toBe('necesita_humano')
   })

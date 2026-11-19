@@ -10,6 +10,7 @@ import {
 } from '../index'
 import { AlmacenMemoria } from '../__fixtures__/almacen-memoria'
 import { siguienteDespuesDe } from '../mesas'
+import { bolsaDePlanificacion, medidaDeCampana } from '../constantes'
 import { clienteA, clienteB, contextoDe, piezaBuena, tandaBuena } from '../__fixtures__/clientes'
 
 const A = clienteA()
@@ -346,6 +347,13 @@ describe('la estrategia: preparar y guardar', () => {
     expect(al.campanas[0].estado).toBe('calendario')
     expect(al.esperas.some((e) => e.objeto_tipo === 'necesita_humano')).toBe(false)
     expect(al.validaciones.map((v) => v.intento)).toEqual([1, 2, 2, 2])
+  })
+  it('19-nov · C1 · DECISIÓN Lenovo 05:00Z · la campaña abierta por el camino real nace con la bolsa de planificación de SUS tandas (no 6)', async () => {
+    const al = almacen()
+    const id = idCampana(await abrir(al))
+    const c = al.campanas.find((x) => x.id === id)!
+    expect(c.presupuesto_planificacion_usd).toBe(bolsaDePlanificacion(medidaDeCampana(c).totalTandas))
+    expect(c.presupuesto_planificacion_usd).toBeGreaterThan(6)
   })
   it('19-nov · grupo C · la mejor versión es la de MENOS bloqueos (no la última), y sus bloqueos son los avisos', async () => {
     const al = almacen()

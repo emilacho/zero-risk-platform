@@ -200,11 +200,6 @@ const sobreAbrir = (extra: Record<string, unknown> = {}) => ({
 const sobreVigia = (extra: Record<string, unknown> = {}) => ({ client_id: UUID, tenant_id: UUID, dry_run: true, _sala_correlation_id: 'corr-2', _journey_id: 'viaje-1', target_step_id: 'router.dispatch.cadena/vigia.briefear', ...extra })
 const entrada = (cuerpo: Record<string, unknown>, llave = 'k-sala'): Item[] => [{ json: { headers: { 'x-sala-dispatch-key': llave }, body: cuerpo } }]
 const correr = (m: Mundo, cuerpo: Record<string, unknown>, llave?: string) => m.sim.ejecutar(IDS.puerta, entrada(cuerpo, llave))
-/** 19-nov · grupo C · la campaña nace con una bolsa de planificación de US$ 40 (solo en la prueba): para medir el tope de vueltas sin que la bolsa corte antes */
-const bolsaGrande = (al: AlmacenMemoria) => {
-  const insertar = al.insertarCampana.bind(al)
-  al.insertarCampana = (c) => insertar({ ...c, presupuesto_planificacion_usd: 40 })
-}
 const simulacros = (c: ClienteFixture, extra: Record<string, unknown> = {}) => ({ estrategia: [c.estrategia], calendario: [tandaBuena(c)], ...extra })
 const agenteQueDevuelve = (objetos: Record<string, any>): ((b: any) => RespuestaHttp) => (b) => {
   const k = /^estrategia\.v[123]$/.test(String(b.extra?.contrato)) ? 'estrategia' : b.extra?.contrato === 'calendario_tanda.v1' ? 'calendario' : b.extra?.contrato === 'fichas_de_oferta.v1' ? 'fichas' : 'fechas'
@@ -357,8 +352,9 @@ describe('COMPORTAMIENTO · la cadena en seco con agente simulado (ensayo por la
     const mala = { ...m.cliente.estrategia, fases: m.cliente.estrategia.fases.map((f) => ({ ...f, dia_hasta: 9999 })) }
     const f = { __fallo: 'se cayó' }
     const doce = [f, f, mala, f, f, mala, f, f, mala, f, f, mala]
-    bolsaGrande(m.al) // 8 llamadas caídas cuentan US$ 8 (su tope) y la bolsa de planificación es de 6: aquí se mide el tope de vueltas, no la bolsa
+    // 19-nov · DECISIÓN Lenovo 05:00Z: la bolsa de planificación de la campaña cubre las 8 caídas (US$ 8 a su tope): con los 6 fijos de antes cortaba en la vuelta 8
     const r = await correr(m, sobreAbrir({ _simulacros: simulacros(m.cliente, { estrategia: doce }) }))
+    expect(m.al.campanas[0].presupuesto_planificacion_usd).toBeGreaterThanOrEqual(12)
     expect(r[0].json.resultado).toBe('cadena_abierta')
     expect(m.al.corridas.filter((c) => c.paso === 'estrategia')).toHaveLength(12) // el control: se usaron las 12 vueltas
     expect(m.al.corridas.filter((c) => c.paso === 'estrategia').map((c) => c.clave_idempotencia)).toEqual(['v1:c0', 'v1:c0', 'v1:c0', 'v1:c1', 'v1:c1', 'v1:c1', 'v1:c2', 'v1:c2', 'v1:c2', 'v1:c3', 'v1:c3', 'v1:c3'])
@@ -370,7 +366,6 @@ describe('COMPORTAMIENTO · la cadena en seco con agente simulado (ensayo por la
     const rev = { ...t, piezas: t.piezas.map((p) => (p.semana === 4 && p.slot === 'b' ? { ...p, formato: 'formato-inexistente' } : p)) }
     const sigue = { piezas: [{ ...piezaBuena(m.cliente, 4, 'b', 'x'), formato: 'formato-inexistente' }], ajustes_al_patron: [] }
     const f = { __fallo: 'se cayó' }
-    bolsaGrande(m.al)
     const r = await correr(m, sobreAbrir({ _simulacros: { estrategia: [m.cliente.estrategia], calendario: [f, f, rev, f, f, sigue, f, f, sigue, f, f, sigue] } }))
     expect(r[0].json.resultado).toBe('cadena_abierta')
     expect(m.al.corridas.filter((c) => c.paso === 'calendario')).toHaveLength(12)

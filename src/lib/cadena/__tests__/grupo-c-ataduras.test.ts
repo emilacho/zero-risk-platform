@@ -7,7 +7,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { MAXIMO_DE_INTENTOS, RONDAS_DE_CORRECCION, TOPE_DE_VUELTAS_DEL_SUBFLUJO } from '../constantes'
+import { bolsaDePlanificacion, MAXIMO_DE_INTENTOS, MEDIDO_POR_LLAMADA_USD, medidaDeCampana, RONDAS_DE_CORRECCION, TOPE_DE_VUELTAS_DEL_SUBFLUJO, topeDelPaso } from '../constantes'
 import { SALIERON_EN_LA_CADENA } from '../tipos'
 import { mejorRonda, rondaDeClave } from '../pasos'
 import type { RondaDeEstrategia } from '../almacen'
@@ -41,6 +41,35 @@ describe('A · el tope de vueltas de los sub-flujos sale de las rondas', () => {
     const vueltasLegitimas = (1 + RONDAS_DE_CORRECCION) * MAXIMO_DE_INTENTOS
     expect(vueltasLegitimas - 1).toBeLessThan(TOPE_DE_VUELTAS_DEL_SUBFLUJO)
     expect(vueltasLegitimas).toBe(TOPE_DE_VUELTAS_DEL_SUBFLUJO)
+  })
+})
+
+describe('la bolsa de planificación (DECISIÓN Lenovo 19-nov 05:00Z): 3 × lo medido con sus rondas, nunca menos que un paso con todas sus vueltas caídas', () => {
+  it('lo medido es el máximo real leído el 19-nov (estrategia 0,7712 · calendario 0,7261)', () => {
+    expect(MEDIDO_POR_LLAMADA_USD).toEqual({ estrategia: 0.7712, calendario: 0.7261 })
+  })
+  it('una campaña de 90 días (4 tandas): 3 × 4 pasadas × (0,7712 + 4 × 0,7261) = 44,11', () => {
+    expect(medidaDeCampana({ fecha_inicio: '2026-11-16', fecha_fin: '2027-02-13' }).totalTandas).toBe(4)
+    expect(bolsaDePlanificacion(4)).toBe(44.11)
+  })
+  it('sale de las mismas constantes que el tope de vueltas: la cuenta exacta, por tandas', () => {
+    for (const tandas of [1, 2, 4, 7, 14]) {
+      const medida = (1 + RONDAS_DE_CORRECCION) * (MEDIDO_POR_LLAMADA_USD.estrategia + tandas * MEDIDO_POR_LLAMADA_USD.calendario)
+      const peorCaida = TOPE_DE_VUELTAS_DEL_SUBFLUJO * Math.max(topeDelPaso('estrategia'), topeDelPaso('calendario'))
+      expect(bolsaDePlanificacion(tandas)).toBe(Math.ceil(Math.max(3 * medida, peorCaida) * 100) / 100)
+    }
+  })
+  it('nunca menos que el peor caso de 12 caídas a su tope (ni con 0 tandas)', () => {
+    expect(bolsaDePlanificacion(0)).toBeGreaterThanOrEqual(TOPE_DE_VUELTAS_DEL_SUBFLUJO * topeDelPaso('estrategia'))
+    expect(bolsaDePlanificacion(0)).toBe(12)
+  })
+  it('crece con las tandas (más tandas, más rondas posibles)', () => {
+    expect(bolsaDePlanificacion(14)).toBeGreaterThan(bolsaDePlanificacion(4))
+  })
+  it('la campaña nace con la bolsa de SUS tandas, no con un número fijo', () => {
+    const c = leer('src/lib/cadena/campanas.ts')
+    expect(c).not.toMatch(/presupuesto_planificacion_usd:\s*\d/)
+    expect(c).toContain('presupuesto_planificacion_usd: bolsaDePlanificacion(medidaDeCampana({ fecha_inicio: ventana.fecha_inicio, fecha_fin: ventana.fecha_fin, semanas_de_tanda: semanasDeTanda as number }).totalTandas)')
   })
 })
 
