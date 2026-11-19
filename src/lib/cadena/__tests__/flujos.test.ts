@@ -200,6 +200,11 @@ const sobreAbrir = (extra: Record<string, unknown> = {}) => ({
 const sobreVigia = (extra: Record<string, unknown> = {}) => ({ client_id: UUID, tenant_id: UUID, dry_run: true, _sala_correlation_id: 'corr-2', _journey_id: 'viaje-1', target_step_id: 'router.dispatch.cadena/vigia.briefear', ...extra })
 const entrada = (cuerpo: Record<string, unknown>, llave = 'k-sala'): Item[] => [{ json: { headers: { 'x-sala-dispatch-key': llave }, body: cuerpo } }]
 const correr = (m: Mundo, cuerpo: Record<string, unknown>, llave?: string) => m.sim.ejecutar(IDS.puerta, entrada(cuerpo, llave))
+/** 19-nov · grupo C · la campaña nace con una bolsa de planificación de US$ 40 (solo en la prueba): para medir el tope de vueltas sin que la bolsa corte antes */
+const bolsaGrande = (al: AlmacenMemoria) => {
+  const insertar = al.insertarCampana.bind(al)
+  al.insertarCampana = (c) => insertar({ ...c, presupuesto_planificacion_usd: 40 })
+}
 const simulacros = (c: ClienteFixture, extra: Record<string, unknown> = {}) => ({ estrategia: [c.estrategia], calendario: [tandaBuena(c)], ...extra })
 const agenteQueDevuelve = (objetos: Record<string, any>): ((b: any) => RespuestaHttp) => (b) => {
   const k = /^estrategia\.v[123]$/.test(String(b.extra?.contrato)) ? 'estrategia' : b.extra?.contrato === 'calendario_tanda.v1' ? 'calendario' : b.extra?.contrato === 'fichas_de_oferta.v1' ? 'fichas' : 'fechas'
@@ -336,15 +341,40 @@ describe('COMPORTAMIENTO · la cadena en seco con agente simulado (ensayo por la
     expect(filas.filter((f) => f.estado === 'validada')).toHaveLength(15)
     expect(m.reg.cadena.filter((p) => String((p.cuerpo as any).accion) === 'guardar' && /calendario/.test(p.url)).length).toBe(2) // exactamente UNA corrección
   })
-  it('🔴 una estrategia inválida dos veces: la campaña necesita a Emilio y el cable lo cuenta (la sala se entera, nada queda colgado)', async () => {
+  it('🔴 19-nov · grupo C · una estrategia inválida 4 veces (la primera + 3 rondas): queda vigente la mejor con avisos, la cadena sigue y el cable lo cuenta', async () => {
     const m = mundo()
     const mala = { ...m.cliente.estrategia, fases: m.cliente.estrategia.fases.map((f) => ({ ...f, dia_hasta: 9999 })) }
-    const r = await correr(m, sobreAbrir({ _simulacros: { estrategia: [mala, mala] } }))
-    expect(r[0].json.resultado).toBe('necesita_humano')
-    expect(m.reg.cable[0]).toMatchObject({ resultado: 'necesita_humano', worker_id: IDS.puerta })
-    expect(m.al.campanas[0].estado).toBe('necesita_humano')
-    expect(m.al.esperas.some((e) => e.objeto_tipo === 'necesita_humano' && e.estado === 'viva')).toBe(true)
-    expect(m.al.estrategias).toHaveLength(0)
+    const r = await correr(m, sobreAbrir({ _simulacros: simulacros(m.cliente, { estrategia: [mala, mala, mala, mala] }) }))
+    expect(r[0].json.resultado).toBe('cadena_abierta')
+    expect(m.reg.cable[0]).toMatchObject({ resultado: 'cadena_abierta', worker_id: IDS.puerta })
+    expect(m.al.estrategias).toHaveLength(1)
+    expect(m.al.estrategias[0].estado).toBe('validada')
+    expect(m.al.rondasDeLaEstrategia.map((x) => x.ronda)).toEqual([0, 1, 2, 3])
+    expect(m.al.esperas.some((e) => e.objeto_tipo === 'necesita_humano')).toBe(false)
+  })
+  it('🔴 19-nov · grupo C · A · el PEOR caso legítimo de la estrategia cabe en el tope de vueltas: 4 pasadas × 3 intentos = 12 vueltas (con el tope viejo de 6 se detenía)', async () => {
+    const m = mundo()
+    const mala = { ...m.cliente.estrategia, fases: m.cliente.estrategia.fases.map((f) => ({ ...f, dia_hasta: 9999 })) }
+    const f = { __fallo: 'se cayó' }
+    const doce = [f, f, mala, f, f, mala, f, f, mala, f, f, mala]
+    bolsaGrande(m.al) // 8 llamadas caídas cuentan US$ 8 (su tope) y la bolsa de planificación es de 6: aquí se mide el tope de vueltas, no la bolsa
+    const r = await correr(m, sobreAbrir({ _simulacros: simulacros(m.cliente, { estrategia: doce }) }))
+    expect(r[0].json.resultado).toBe('cadena_abierta')
+    expect(m.al.corridas.filter((c) => c.paso === 'estrategia')).toHaveLength(12) // el control: se usaron las 12 vueltas
+    expect(m.al.corridas.filter((c) => c.paso === 'estrategia').map((c) => c.clave_idempotencia)).toEqual(['v1:c0', 'v1:c0', 'v1:c0', 'v1:c1', 'v1:c1', 'v1:c1', 'v1:c2', 'v1:c2', 'v1:c2', 'v1:c3', 'v1:c3', 'v1:c3'])
+    expect(m.al.estrategias[0].estado).toBe('validada')
+  })
+  it('🔴 19-nov · grupo C · A · el peor caso legítimo del calendario también cabe: 12 vueltas en la tanda 1', async () => {
+    const m = mundo()
+    const t = tandaBuena(m.cliente)
+    const rev = { ...t, piezas: t.piezas.map((p) => (p.semana === 4 && p.slot === 'b' ? { ...p, formato: 'formato-inexistente' } : p)) }
+    const sigue = { piezas: [{ ...piezaBuena(m.cliente, 4, 'b', 'x'), formato: 'formato-inexistente' }], ajustes_al_patron: [] }
+    const f = { __fallo: 'se cayó' }
+    bolsaGrande(m.al)
+    const r = await correr(m, sobreAbrir({ _simulacros: { estrategia: [m.cliente.estrategia], calendario: [f, f, rev, f, f, sigue, f, f, sigue, f, f, sigue] } }))
+    expect(r[0].json.resultado).toBe('cadena_abierta')
+    expect(m.al.corridas.filter((c) => c.paso === 'calendario')).toHaveLength(12)
+    expect(m.al.filasGuardadas.filter((x) => x.estado === 'descartada_por_bloqueo')).toHaveLength(1)
   })
   it('sin simulacro, el agente se llama con el cuerpo COMPLETO: esquema, tope, modelo, razonamiento, workflow ids, dry_run booleano y la cabecera de saltar el editor', async () => {
     const m = mundo({ agente: agenteQueDevuelve({ estrategia: clienteUuid().estrategia, calendario: tandaBuena(clienteUuid()), fichas: { fichas: [], pendientes: [] } }) })
@@ -477,8 +507,10 @@ describe('COMPORTAMIENTO · el vigía', () => {
   })
   it('los avisos van agregados por campaña y, en ensayo, se REGISTRAN y no se mandan a Slack; encendida, sale UN mensaje con «qué hacer»', async () => {
     const m = mundo({ estado: 'ensayo' })
-    const mala = { ...m.cliente.estrategia, fases: m.cliente.estrategia.fases.map((f) => ({ ...f, dia_hasta: 9999 })) }
-    await correr(m, sobreAbrir({ _simulacros: { estrategia: [mala, mala] } }))
+    // 19-nov · grupo C: los bloqueos ya no llevan a una persona; lo que sí la pide es la llamada que no entrega el objeto tras 3 intentos
+    const f = { __fallo: 'se cayó' }
+    await correr(m, sobreAbrir({ _simulacros: { estrategia: [f, f, f] } }))
+    expect(m.al.campanas[0].estado).toBe('necesita_humano') // el control: hay una espera que avisar
     await m.sim.ejecutar(ID_VIGIA, [{ json: {} }])
     expect(m.reg.slack).toHaveLength(0)
     m.al.config.set('estado_cadena', 'encendida')
@@ -533,15 +565,23 @@ describe('afinando lo que las mutaciones dejaron vivo (flujos)', () => {
     expect(m.reg.agente).toHaveLength(0)
     expect(m.al.campanas[0].estado).toBe('necesita_humano')
   })
-  it('🔴 si el calendario no queda, el cable cuenta necesita_humano (no «cadena_abierta»)', async () => {
+  it('🔴 si el calendario no queda (la llamada no entrega tras 3 intentos), el cable cuenta necesita_humano (no «cadena_abierta»)', async () => {
+    const m = mundo()
+    const f = { __fallo: 'se cayó' }
+    const r = await correr(m, sobreAbrir({ _simulacros: { estrategia: [m.cliente.estrategia], calendario: [f, f, f] } }))
+    expect(r[0].json.resultado).toBe('necesita_humano')
+    expect(m.reg.cable[0].resultado).toBe('necesita_humano')
+    expect(m.al.campanas[0].estado).toBe('necesita_humano')
+  })
+  it('19-nov · grupo C · una pieza que sigue bloqueada tras 3 rondas SALE y el cable cuenta «cadena_abierta»', async () => {
     const m = mundo()
     const t = tandaBuena(m.cliente)
     const rev = { ...t, piezas: t.piezas.map((p) => (p.semana === 4 && p.slot === 'b' ? { ...p, formato: 'formato-inexistente' } : p)) }
     const sigue = { piezas: [{ ...piezaBuena(m.cliente, 4, 'b', 'x'), formato: 'formato-inexistente' }], ajustes_al_patron: [] }
-    const r = await correr(m, sobreAbrir({ _simulacros: { estrategia: [m.cliente.estrategia], calendario: [rev, sigue] } }))
-    expect(r[0].json.resultado).toBe('necesita_humano')
-    expect(m.reg.cable[0].resultado).toBe('necesita_humano')
-    expect(m.al.campanas[0].estado).toBe('necesita_humano')
+    const r = await correr(m, sobreAbrir({ _simulacros: { estrategia: [m.cliente.estrategia], calendario: [rev, sigue, sigue, sigue] } }))
+    expect(r[0].json.resultado).toBe('cadena_abierta')
+    expect(m.reg.cable[0].resultado).toBe('cadena_abierta')
+    expect(m.al.filasGuardadas.find((x) => x.tanda === 1 && x.semana === 4 && x.id.endsWith('-b'))!.estado).toBe('descartada_por_bloqueo')
   })
   it('el sobre del vigía en modo parte sin lote o sin filas se detiene antes de llamar a nadie; la tanda siguiente exige tanda ≥ 2', async () => {
     const m = mundo()
@@ -582,17 +622,19 @@ describe('afinando lo que las mutaciones dejaron vivo (flujos)', () => {
     expect(m.al.corridas).toHaveLength(corridas)
     expect(m.reg.agente).toHaveLength(0)
   })
-  it('🔴 un tope propio de vueltas: si el servidor pidiera correcciones sin fin, el flujo se detiene a las 6 (nunca un bucle)', async () => {
+  it('🔴 un tope propio de vueltas: si el servidor pidiera correcciones sin fin, el flujo se detiene a las 12 (19-nov · grupo C: 1 pasada + 3 rondas, 3 intentos cada una · nunca un bucle)', async () => {
     const m = mundo()
     const original = (m.sim as any).o.http
+    let preparados = 0
     // el servidor simulado pide una corrección TRAS OTRA (defensa en profundidad: el servidor real no lo haría, su idempotencia lo corta antes)
     const sim = new SimuladorN8n({ flujos: POR_ID, env: ENV, http: async (p, ctx) => {
-      if (/\/api\/cadena\/estrategia/.test(p.url) && (p.cuerpo as any).accion === 'preparar') return { statusCode: 200, body: { corrida_id: 1, headers: { 'x-skip-editor-middleware': '1' }, run_sdk: { agent: 'x', task: 't' } } }
+      if (/\/api\/cadena\/estrategia/.test(p.url) && (p.cuerpo as any).accion === 'preparar') return preparados++,  { statusCode: 200, body: { corrida_id: 1, headers: { 'x-skip-editor-middleware': '1' }, run_sdk: { agent: 'x', task: 't' } } }
       if (/\/api\/cadena\/estrategia/.test(p.url) && (p.cuerpo as any).accion === 'guardar') return { statusCode: 200, body: { correccion: true, modo: 'tanda', fichas: [] } }
       return original(p, ctx)
     } })
     const id = await abrirYa(m)
-    await expect(sim.ejecutar(IDS.estrategia, [{ json: { campana_id: id, seco: true, simulacro: Array.from({ length: 10 }, () => m.cliente.estrategia) } }])).rejects.toThrow(/CADENA_DEMASIADAS_VUELTAS/)
+    await expect(sim.ejecutar(IDS.estrategia, [{ json: { campana_id: id, seco: true, simulacro: Array.from({ length: 20 }, () => m.cliente.estrategia) } }])).rejects.toThrow(/CADENA_DEMASIADAS_VUELTAS/)
+    expect(preparados).toBe(13) // las vueltas 0 a 12: la 12 es la que ya no sigue
   })
   // 11-nov · arreglo genérico de CC7: solo cuenta como página una respuesta de TEXTO con texto legible; lo demás se descarta con su razón y NO se llama al agente
   // (antes un PDF bajado «como texto» contaba como página: se llamaba al agente y se gastaban 3 intentos sin poder citar nada). Con dos países: no depende de ninguno.

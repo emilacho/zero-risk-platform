@@ -46,6 +46,20 @@ async function tandaDe(al: AlmacenMemoria, id: string, tanda: number, objeto: un
   return { p, g }
 }
 
+/** 19-nov · grupo C · las 3 rondas de corrección de la tanda 1 con la misma pieza mala (4b con un formato que no existe); devuelve la última respuesta */
+const tresRondasMalas = async (al: ReturnType<typeof almacen>, id: string, g0: { cuerpo: Record<string, unknown> }) => {
+  let g = g0
+  for (const ronda of [1, 2, 3]) {
+    expect(g.cuerpo.correccion).toBe(true)
+    expect(g.cuerpo.ronda ?? 1).toBe(ronda)
+    const p = await calendarioPreparar(al, { ...wf(), campana_id: id, tanda: 1, correccion: { fichas: g.cuerpo.fichas, fila_ids: g.cuerpo.fila_ids, modo: 'filas' } }, AHORA)
+    expect(al.corridas.find((c) => c.id === p.cuerpo.corrida_id)!.clave_idempotencia).toBe(`t1:v1:c${ronda}`)
+    g = await calendarioGuardar(al, { ...wf(), campana_id: id, tanda: 1, corrida_id: p.cuerpo.corrida_id, correccion: true, modo: 'filas', resultado: ok({ piezas: [{ ...piezaBuena(A, 4, 'b', 'Tema'), formato: 'formato-inexistente' }], ajustes_al_patron: [] }) }, AHORA)
+  }
+  return g
+}
+const fila4b = (al: ReturnType<typeof almacen>) => al.filasGuardadas.find((f) => f.tanda === 1 && f.semana === 4 && f.id.endsWith('-b'))!
+
 describe('la medida de la campaña (01-nov · firma de Emilio)', () => {
   it('🔴 sin pedirla: 90 días y sin columna escrita, como siempre', async () => {
     const al = almacen()
@@ -299,20 +313,51 @@ describe('la estrategia: preparar y guardar', () => {
     expect(al.esperas.some((e) => e.objeto_tipo === 'necesita_humano' && e.estado === 'viva')).toBe(true)
     expect(al.corridas.every((c) => c.estado === 'fallida')).toBe(true)
   })
-  it('una estrategia inválida: UNA corrección con sus fichas; si sigue mal, necesita_humano (la estrategia no tiene «filas que salen»)', async () => {
+  it('19-nov · grupo C · una estrategia inválida: hasta 3 rondas de corrección con sus fichas; si sigue mal, queda vigente la MEJOR con avisos y la campaña sigue (ya no necesita_humano)', async () => {
     const al = almacen()
     const id = idCampana(await abrir(al))
     const mala = { ...A.estrategia, fases: A.estrategia.fases.map((f) => ({ ...f, dia_hasta: 9999 })) }
     const p1 = await estrategiaPreparar(al, { ...wf(), campana_id: id }, AHORA)
-    const g1 = await estrategiaGuardar(al, { ...wf(), campana_id: id, corrida_id: p1.cuerpo.corrida_id, resultado: ok(mala) }, AHORA)
-    expect(g1.cuerpo.correccion).toBe(true)
-    expect((g1.cuerpo.fichas as unknown[]).length).toBeGreaterThan(0)
-    const p2 = await estrategiaPreparar(al, { ...wf(), campana_id: id, correccion: { fichas: g1.cuerpo.fichas } }, AHORA)
-    expect((p2.cuerpo.run_sdk as { task: string }).task).toContain('CORRECCIÓN')
-    const g2 = await estrategiaGuardar(al, { ...wf(), campana_id: id, corrida_id: p2.cuerpo.corrida_id, correccion: true, resultado: ok(mala) }, AHORA)
-    expect(g2.cuerpo.necesita_humano).toBe(true)
-    expect(al.estrategias).toHaveLength(0)
-    expect(al.validaciones.map((v) => v.intento)).toEqual([1, 2])
+    let g = await estrategiaGuardar(al, { ...wf(), campana_id: id, corrida_id: p1.cuerpo.corrida_id, resultado: ok(mala) }, AHORA)
+    for (const ronda of [1, 2, 3]) {
+      expect(g.cuerpo.correccion).toBe(true)
+      expect(g.cuerpo.ronda).toBe(ronda)
+      expect((g.cuerpo.fichas as unknown[]).length).toBeGreaterThan(0)
+      const p = await estrategiaPreparar(al, { ...wf(), campana_id: id, correccion: { fichas: g.cuerpo.fichas } }, AHORA)
+      expect((p.cuerpo.run_sdk as { task: string }).task).toContain('CORRECCIÓN')
+      expect(al.corridas.find((c) => c.id === p.cuerpo.corrida_id)!.clave_idempotencia).toBe(`v1:c${ronda}`)
+      g = await estrategiaGuardar(al, { ...wf(), campana_id: id, corrida_id: p.cuerpo.corrida_id, correccion: true, resultado: ok(mala) }, AHORA)
+    }
+    expect(g.cuerpo.necesita_humano).toBeUndefined()
+    expect(g.cuerpo.ok).toBe(true)
+    expect(al.estrategias).toHaveLength(1)
+    expect(al.estrategias[0].estado).toBe('validada')
+    expect((g.cuerpo.avisos as string[]).length).toBeGreaterThan(0)
+    expect((g.cuerpo.avisos as string[]).every((a) => a.includes('quedó vigente la mejor versión'))).toBe(true)
+    expect(al.rondasDeLaEstrategia.map((x) => x.ronda)).toEqual([0, 1, 2, 3])
+    expect(al.campanas[0].estado).toBe('calendario')
+    expect(al.esperas.some((e) => e.objeto_tipo === 'necesita_humano')).toBe(false)
+    expect(al.validaciones.map((v) => v.intento)).toEqual([1, 2, 2, 2])
+  })
+  it('19-nov · grupo C · la mejor versión es la de MENOS bloqueos (no la última), y sus bloqueos son los avisos', async () => {
+    const al = almacen()
+    const id = idCampana(await abrir(al))
+    // muy mala: la fase fuera de la campaña + una red excluida sin cita (S03); poco mala: solo la fase
+    const pocoMala = { ...A.estrategia, fases: A.estrategia.fases.map((f) => ({ ...f, dia_hasta: 9999 })) }
+    const muyMala = { ...pocoMala, excluidos: [...A.estrategia.excluidos, { red: 'red-sin-cita', cita_plan: '' }] }
+    const respuestas = [muyMala, pocoMala, muyMala, muyMala]
+    const p1 = await estrategiaPreparar(al, { ...wf(), campana_id: id }, AHORA)
+    let g = await estrategiaGuardar(al, { ...wf(), campana_id: id, corrida_id: p1.cuerpo.corrida_id, resultado: ok(respuestas[0]) }, AHORA)
+    for (const r of respuestas.slice(1)) {
+      const p = await estrategiaPreparar(al, { ...wf(), campana_id: id, correccion: { fichas: g.cuerpo.fichas } }, AHORA)
+      g = await estrategiaGuardar(al, { ...wf(), campana_id: id, corrida_id: p.cuerpo.corrida_id, correccion: true, resultado: ok(r) }, AHORA)
+    }
+    const bloqueos = al.rondasDeLaEstrategia.map((x) => x.bloqueos)
+    expect(bloqueos[1]).toBeLessThan(bloqueos[0]) // el control: la poco mala de verdad tiene menos
+    expect(al.estrategias[0].contenido).toEqual(al.rondasDeLaEstrategia[1].contenido)
+    expect(al.estrategias[0].contenido).not.toEqual(al.rondasDeLaEstrategia[3].contenido)
+    expect(g.cuerpo.avisos as string[]).toHaveLength(bloqueos[1])
+    expect((g.cuerpo.avisos as string[])[0]).toContain('ronda 1')
   })
   it('🔴 el presupuesto de planificación se respeta: sin presupuesto no se llama (necesita_humano) y un corte con costo 0 en el libro cuenta el tope', async () => {
     const al = almacen()
@@ -390,17 +435,19 @@ describe('el calendario: preparar, guardar, una corrección, filas que salen', (
     expect(g2.cuerpo).toMatchObject({ ok: true, validadas: 16 })
     expect(g2.cuerpo.salieron_sin_fuente).toEqual([])
   })
-  it('🔴 un bloqueo que NO es de dato (una revisión inventada) tras la corrección detiene la campaña en la bandeja de Emilio', async () => {
+  it('🔴 19-nov · grupo C · un bloqueo que NO es de dato vuelve al creador hasta 3 rondas; tras la última la FILA sale (descartada_por_bloqueo) y la campaña sigue', async () => {
     const al = almacen()
     const { id } = await conEstrategia(al)
     const mala = { ...tandaBuena(A), piezas: tandaBuena(A).piezas.map((p) => (p.semana === 4 && p.slot === 'b' ? { ...p, formato: 'formato-inexistente' } : p)) }
     const { g } = await tandaDe(al, id, 1, mala)
-    expect(g!.cuerpo.correccion).toBe(true)
-    const p2 = await calendarioPreparar(al, { ...wf(), campana_id: id, tanda: 1, correccion: { fichas: g!.cuerpo.fichas, fila_ids: g!.cuerpo.fila_ids, modo: 'filas' } }, AHORA)
-    const g2 = await calendarioGuardar(al, { ...wf(), campana_id: id, tanda: 1, corrida_id: p2.cuerpo.corrida_id, correccion: true, modo: 'filas', resultado: ok({ piezas: [{ ...piezaBuena(A, 4, 'b', 'Tema'), formato: 'formato-inexistente' }], ajustes_al_patron: [] }) }, AHORA)
-    expect(g2.cuerpo.necesita_humano).toBe(true)
-    expect(al.campanas.find((c) => c.id === id)!.estado).toBe('necesita_humano')
-    expect(al.esperas.some((e) => e.objeto_tipo === 'necesita_humano' && e.estado === 'viva')).toBe(true)
+    const g4 = await tresRondasMalas(al, id, g!)
+    expect(g4.cuerpo.necesita_humano).toBeUndefined()
+    expect(g4.cuerpo.ok).toBe(true)
+    expect(g4.cuerpo.salieron_por_bloqueo).toEqual([fila4b(al).id])
+    expect(g4.cuerpo.salieron_sin_fuente).toEqual([])
+    expect(fila4b(al).estado).toBe('descartada_por_bloqueo')
+    expect(al.campanas.find((c) => c.id === id)!.estado).not.toBe('necesita_humano')
+    expect(al.esperas.some((e) => e.objeto_tipo === 'necesita_humano')).toBe(false)
   })
   it('una pieza de video nace espera_video con su reloj (fecha − lead) y no entra a ningún lote', async () => {
     const al = almacen()
@@ -640,14 +687,16 @@ describe('afinando lo que las mutaciones dejaron vivo (manejadores)', () => {
     al.campanas[0].estado = 'calendario'
     expect((await calendarioPreparar(al, { ...wf(), campana_id: id, tanda: 1 }, AHORA)).cuerpo.code).toBe('E-SIN-ESTRATEGIA')
   })
-  it('un bloqueo que no es de dato deja dicho POR QUÉ la campaña necesita a Emilio', async () => {
+  it('19-nov · grupo C · la fila que sale por bloqueo deja dicho POR QUÉ (el motivo y lo que la bloqueaba), y lo viejo no queda como bloqueo abierto', async () => {
     const al = almacen()
     const { id } = await conEstrategia(al)
     const mala = { ...tandaBuena(A), piezas: tandaBuena(A).piezas.map((p) => (p.semana === 4 && p.slot === 'b' ? { ...p, formato: 'formato-inexistente' } : p)) }
     const { g } = await tandaDe(al, id, 1, mala)
-    const p2 = await calendarioPreparar(al, { ...wf(), campana_id: id, tanda: 1, correccion: { fichas: g!.cuerpo.fichas, fila_ids: g!.cuerpo.fila_ids, modo: 'filas' } }, AHORA)
-    await calendarioGuardar(al, { ...wf(), campana_id: id, tanda: 1, corrida_id: p2.cuerpo.corrida_id, correccion: true, modo: 'filas', resultado: ok({ piezas: [{ ...piezaBuena(A, 4, 'b', 'Tema'), formato: 'formato-inexistente' }], ajustes_al_patron: [] }) }, AHORA)
-    expect(al.campanas[0].estado_motivo).toMatch(/tras la única corrección/)
+    await tresRondasMalas(al, id, g!)
+    expect(fila4b(al).avisos.some((a) => a.startsWith('la fila salió: siguió bloqueada tras la última ronda de corrección: ') && a.includes('formato-inexistente'))).toBe(true)
+    // las rondas 1 y 2 también guardaron sus bloqueos en el intento 2: vale solo el último guardado, que ya no bloquea nada
+    expect(al.validaciones.filter((v) => v.objeto === 'calendario' && v.intento === 2).length).toBeGreaterThanOrEqual(3)
+    expect(await al.hallazgosQueBloquean(id, 1)).toEqual([])
   })
   it('una fila con un dato declarado PENDIENTE no sale a producción: queda en investigación con su reloj', async () => {
     const al = almacen()

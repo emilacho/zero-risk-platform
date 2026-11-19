@@ -4,7 +4,7 @@
  */
 import type { ResultadoDeAbrirMesa, SobreDeReubicacion } from '../reubicar'
 import type { EncargoDeLaCampana, LecturaDeArreglos, ResultadoDeAbrirMesaDeFallidos, SobreDeFallidos } from '../rehacer-fallidos'
-import type { Almacen, BriefCreativoGuardado, Campana, ConceptoGuardado, ContextoDelCliente, Corrida, EntradaDeRegistro, EsperaFila, EstrategiaGuardada, FechaCobertura, FichasGuardadas, ObjetoDeValidacion, ParteSecoAGuardar, PreguntaAlDueno, ResultadoDeAbrirRegistro } from '../almacen'
+import type { Almacen, BriefCreativoGuardado, Campana, ConceptoGuardado, ContextoDelCliente, Corrida, EntradaDeRegistro, EsperaFila, EstrategiaGuardada, RondaDeEstrategia, FechaCobertura, FichasGuardadas, ObjetoDeValidacion, ParteSecoAGuardar, PreguntaAlDueno, ResultadoDeAbrirRegistro } from '../almacen'
 import type { HechoDelNegocioPorOferta } from '../ficha-de-oferta'
 import type { LlaveDeFecha } from '../indicaciones'
 import { claveDeFecha, ordenarLlaves } from '../fechas-del-cliente'
@@ -61,6 +61,7 @@ export class AlmacenMemoria implements Almacen {
   ])
   campanas: Campana[] = []
   estrategias: EstrategiaGuardada[] = []
+  rondasDeLaEstrategia: RondaDeEstrategia[] = []
   fichasDeOferta: FichasGuardadas[] = []
   /** los hechos del cerebro que sirve este doble; undefined = el almacén no los sabe leer (aún no disponibles) */
   hechos?: HechoDelNegocioPorOferta[]
@@ -209,6 +210,8 @@ export class AlmacenMemoria implements Almacen {
   async campanasActivas() { return structuredClone(this.campanas.filter((c) => c.estado === 'activa')) }
   async ultimaEstrategia(campanaId: string) { return this.estrategias.filter((e) => e.campana_id === campanaId).sort((a, b) => b.version - a.version)[0] ?? null }
   async insertarEstrategia(e: EstrategiaGuardada) { this.estrategias.push(e) }
+  async guardarRondaDeEstrategia(r: RondaDeEstrategia) { if (!this.rondasDeLaEstrategia.some((x) => x.campana_id === r.campana_id && x.version === r.version && x.ronda === r.ronda)) this.rondasDeLaEstrategia.push(structuredClone(r)) }
+  async rondasDeEstrategia(campanaId: string, version: number) { return structuredClone(this.rondasDeLaEstrategia.filter((x) => x.campana_id === campanaId && x.version === version)) }
   async ultimasFichas(campanaId: string) { return this.fichasDeOferta.filter((f) => f.campana_id === campanaId).sort((a, b) => b.version - a.version)[0] ?? null }
   async insertarFichas(f: FichasGuardadas) { if (!this.fichasDeOferta.some((x) => x.campana_id === f.campana_id && x.version === f.version)) this.fichasDeOferta.push(f) }
   async hechosDelNegocio(_clientId: string) { return this.hechos ?? null }
@@ -323,7 +326,8 @@ export class AlmacenMemoria implements Almacen {
   async hallazgosQueBloquean(campanaId: string, tanda: number) {
     const v = this.validaciones.filter((x) => x.campana_id === campanaId && x.objeto === 'calendario' && x.tanda === tanda)
     const ultimo = v.reduce((m, x) => Math.max(m, x.intento), 0)
-    return v.filter((x) => x.intento === ultimo).flatMap((x) => x.hallazgos).filter((h) => h.severidad === 'bloquea').map((h) => ({ ficha: h.ficha, fila_id: h.fila_id, chequeo: h.chequeo }))
+    // 19-nov · grupo C · igual que Supabase: vale solo el ÚLTIMO guardado del intento más alto (las rondas viejas no cuentan); un guardado sin hallazgos no escribe filas allá
+    return v.filter((x) => x.intento === ultimo && x.hallazgos.length > 0).slice(-1).flatMap((x) => x.hallazgos).filter((h) => h.severidad === 'bloquea').map((h) => ({ ficha: h.ficha, fila_id: h.fila_id, chequeo: h.chequeo }))
   }
   async corridaPorClave(campanaId: string, paso: string, clave: string, intento: number) { return this.corridas.find((c) => c.campana_id === campanaId && c.paso === paso && c.clave_idempotencia === clave && c.intento === intento) ?? null }
   async abrirCorrida(c: Omit<Corrida, 'id'>) {
