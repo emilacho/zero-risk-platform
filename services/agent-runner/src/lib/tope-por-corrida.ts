@@ -104,9 +104,13 @@ export type RazonamientoResuelto = { ok: true; valor: ModoDeRazonamiento | null 
 export const TECHO_DE_RESPUESTA_TOKENS = '128000'
 
 /** qué admite cada modelo · por prefijo del id (el corredor usa ids completos, p. ej. `claude-haiku-4-5-20251001`) */
-const SIN_EFFORT = ['claude-haiku-4-5', 'claude-haiku-3', 'claude-sonnet-4-5', 'claude-opus-4-5', 'claude-opus-4-1', 'claude-opus-4-0', 'claude-sonnet-4-0']
+// 19-nov · ajuste de precisión de G1 (🟡 de CC6 a #1183; referencia oficial de la API):
+//   · Opus 4.5 SÍ acepta `effort`, pero solo `low/medium/high` (no `xhigh` ni `max`) → sale de SIN_EFFORT y va en HASTA_HIGH;
+//   · Haiku 5.5 SÍ deja apagar el razonamiento (`thinking: disabled` con `low/medium/high`; su valor por omisión es `high`) → sale de NO_SE_APAGA
+const SIN_EFFORT = ['claude-haiku-4-5', 'claude-haiku-3', 'claude-sonnet-4-5', 'claude-opus-4-1', 'claude-opus-4-0', 'claude-sonnet-4-0']
 const SIN_XHIGH = ['claude-opus-4-6', 'claude-sonnet-4-6']
-const NO_SE_APAGA = ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5', 'claude-fable']
+const HASTA_HIGH = ['claude-opus-4-5']
+const NO_SE_APAGA = ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-fable']
 const empiezaCon = (modelo: string | undefined, prefijos: readonly string[]) => typeof modelo === 'string' && prefijos.some((p) => modelo.startsWith(p))
 
 /** toma el PRIMER candidato presente y lo valida · ninguno presente ⇒ sin límite (`valor:null`) · `null` explícito NO es «ausente» */
@@ -123,6 +127,7 @@ export function opcionDeRazonamiento(modo: ModoDeRazonamiento | null | undefined
   if (modo === 'disabled') return empiezaCon(modelo, NO_SE_APAGA) ? { effort: 'low' } : { thinking: { type: 'disabled' } }
   if (empiezaCon(modelo, SIN_EFFORT)) return {}
   const nivel: NivelDeEsfuerzo = modo === 'maximo' ? 'max' : modo
+  if ((nivel === 'xhigh' || nivel === 'max') && empiezaCon(modelo, HASTA_HIGH)) return { effort: 'high' }
   if (nivel === 'xhigh' && empiezaCon(modelo, SIN_XHIGH)) return { effort: 'high' }
   return { effort: nivel }
 }
