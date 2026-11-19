@@ -16,8 +16,10 @@ export const PEDIDO_DEL_OBSERVADOR = (descripcion: string, textoDeLaPieza = ''):
   'PERSONAS: <número de personas visibles>',
   'TEXTO_AJENO: <sí o no · ¿algún texto que se lee en la imagen NO es del texto de la pieza (abajo)? Un texto de la pieza con otras mayúsculas o sin acentos no es ajeno; sin texto visible, escribe: no>',
   'DATO_SIN_VERIFICAR: <sí o no · ¿la imagen muestra un precio, una cifra, un sello, una certificación, una etiqueta, una norma o la lectura de un instrumento que el texto de la pieza no dice?>',
-  `La imagen se pidió así: ${descripcion.slice(0, 600)}`,
-  `Texto de la pieza: ${textoDeLaPieza.replace(/\s+/g, ' ').trim().slice(0, 1500) || '(sin texto)'}`,
+  // 19-nov · G8 (GO Lenovo 10:36 · firma de Emilio «nada se recorta»): el juez recibe el pedido y el texto de la pieza ENTEROS. Antes, 600 y 1500: un texto
+  // de la pieza que pasaba de 1500 (un carrusel con todas sus láminas) hacía ver como «ajeno» lo que sí era de la pieza, y el final del pedido no llegaba.
+  `La imagen se pidió así: ${descripcion}`,
+  `Texto de la pieza: ${textoDeLaPieza.replace(/\s+/g, ' ').trim() || '(sin texto)'}`,
 ].join('\n')
 
 /** `texto_ajeno` y `dato_sin_verificar`: null = el observador no contestó esa pregunta (o no se pudo leer) */
