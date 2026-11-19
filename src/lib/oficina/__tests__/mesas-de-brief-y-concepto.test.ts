@@ -541,7 +541,11 @@ describe('09-nov · la entrega de la mesa de CONCEPTO lleva las líneas de idea 
     expect(texto).toContain('## Banco de ideas · líneas de los aportes del equipo')
     const aportes = m.MS.filas.filter((x) => x.encargo_id === m.id && x.tipo === 'aporta')
     expect(aportes.length).toBeGreaterThan(0)
-    for (const a of aportes) expect(texto).toContain(limpia(a.de))
+    // 18-nov · ids únicos: todos escriben C1-I01; el primero lo conserva y los demás entran renumerados (C1-I02, …), con el resto de su línea igual
+    for (const a of aportes) expect(texto).toContain(limpia(a.de).replace(/^- C1-I01 · /, ''))
+    const enTexto = [...texto.matchAll(/^- (C1-I\d{2,}) · instagram · foto · la idea de /gm)].map((x) => x[1])
+    expect(new Set(enTexto).size).toBe(enTexto.length)
+    expect(enTexto).toContain('C1-I01')
     expect(texto).not.toContain('## Mi banco')
   })
   it('cerrada por tope con integración: también lleva las líneas de idea de los aportes', async () => {

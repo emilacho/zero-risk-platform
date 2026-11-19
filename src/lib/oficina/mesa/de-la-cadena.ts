@@ -11,6 +11,7 @@ import type { Cambios, Encargo, Puertos } from '../puertos'
 import { estadoInicial, type Estado } from '../tipos'
 import { TOPE_REAL_DEL_PEDIDO } from '../../limites-de-tamano'
 import { esCritica } from './critica'
+import { claveDeTexto, leerIdea } from '../../cadena/conceptos'
 
 export type TipoDeMesaDeLaCadena = 'brief' | 'concepto' | 'reubicacion' | 'fallidos' | 'banco'
 export const FAMILIA_DE: Record<TipoDeMesaDeLaCadena, string> = { brief: 'brief_mesa', concepto: 'concepto_mesa', reubicacion: 'reubicacion_mesa', fallidos: 'fallidos_mesa', banco: 'banco_mesa' }
@@ -99,8 +100,8 @@ export function lineaDeIdeaLimpia(linea: string): string {
  * ninguna idea con mensaje y gancho → `sin_concepto`. Ahora, detrás de la integración, va una sección con las LÍNEAS DE IDEA de los aportes (solo esas líneas: el resto de
  * los aportes no entra, para que sus títulos no se confundan con las secciones del concepto).
  *  · Qué aportes: los de los miembros (no la dirección) tipo `aporta`/`responde`. Si la integración cita aportes (`A23`), van primero los citados, en el orden en que los
- *    cita; después el resto, del más nuevo al más viejo. Cuando dos miembros usaron el mismo id, la cadena se queda con la PRIMERA línea y declara las otras
- *    «id duplicado»: así manda la elección de la dirección.
+ *    cita; después el resto, del más nuevo al más viejo. Cuando dos miembros usaron el mismo id, la PRIMERA línea conserva el id (así manda la elección de la
+ *    dirección) y, desde el 18-nov, las otras se renumeran dentro de su capítulo en vez de perderse como «id duplicado».
  *  · Sin integración, o en la mesa del brief, nada cambia.
  */
 export function ideasDeLosAportes(libro: Array<{ n?: number; de: string; tipo: string; texto: string }>, integracion: string): string[] {
@@ -113,18 +114,68 @@ export function ideasDeLosAportes(libro: Array<{ n?: number; de: string; tipo: s
     ...citados.map((n) => aportes.find((a) => a.n === n)).filter((a): a is (typeof aportes)[number] => !!a),
     ...[...aportes].reverse().filter((a) => a.n === undefined || !citados.includes(a.n)),
   ]
+  // 18-nov · ids únicos (corrección de CC1 · GO Lenovo 13:08Z, dentro de la (b)): cada miembro numera desde C1-I01, así que dos aportes chocan con ideas DISTINTAS
+  // y la cadena botaba la segunda como «id duplicado» (T7d, concepto 5: 39 de 71). Ahora la segunda se RENUMERA dentro de su capítulo. Lo que no cambia:
+  //  · la primera línea con ese id (la integración, luego los citados en orden) conserva el id: lo que la dirección cita sigue apuntando a la misma idea;
+  //  · la misma idea repetida (mismo texto) no se renumera: es una sola;
+  //  · una línea SIN mensaje o sin red no ocupa el id (el lector la descarta igual · reserva 1 de CC3): la dirección suele escribir «- C1-I01 · usé A23» solo para citar;
+  //  · un id que la dirección puso en «Ideas que salen» no se renumera: no se sabe a cuál de las dos se refería, así que sale como antes;
+  //  · el número nuevo es mayor que cualquier id de ese capítulo en TODO el libro, para no caer sobre un id que alguien ya escribió o citó.
+  const esIdea = (linea: string): boolean => { const i = leerIdea(linea); return !!i && !!i.mensaje.trim() && !!i.red }
+  const ocupados = new Map<string, string>()
+  for (const l of integracion.replace(/\r/g, '').split('\n')) {
+    if (!esIdea(l)) continue
+    const p = partesDeLinea(lineaDeIdeaLimpia(l))
+    if (p && !ocupados.has(p.id)) ocupados.set(p.id, claveDeTexto(p.resto))
+  }
+  const salen = idsQueSalen(integracion)
+  const ultimo = new Map<string, number>()
+  for (const t of [integracion, ...libro.map((a) => a.texto)]) {
+    for (const m of t.matchAll(/\bC([A-Za-z0-9_]+)-I(\d{2,})\b/g)) ultimo.set(m[1], Math.max(ultimo.get(m[1]) ?? 0, Number(m[2])))
+  }
   const vistas = new Set<string>()
   const out: string[] = []
   for (const a of orden) {
     for (const l of a.texto.replace(/\r/g, '').split('\n')) {
       if (!RE_LINEA_DE_IDEA_EN_APORTE.test(l)) continue
-      const limpia = lineaDeIdeaLimpia(l)
+      let limpia = lineaDeIdeaLimpia(l)
       if (vistas.has(limpia)) continue
       vistas.add(limpia)
+      const p = esIdea(limpia) ? partesDeLinea(limpia) : null
+      if (p && !salen.has(p.id)) {
+        const clave = claveDeTexto(p.resto)
+        const previa = ocupados.get(p.id)
+        if (previa === undefined) ocupados.set(p.id, clave)
+        else if (previa !== clave) {
+          const cap = /^C([A-Za-z0-9_]+)-I\d{2,}$/.exec(p.id)?.[1] ?? ''
+          const n = (ultimo.get(cap) ?? 0) + 1
+          ultimo.set(cap, n)
+          const nuevo = `C${cap}-I${String(n).padStart(2, '0')}`
+          ocupados.set(nuevo, clave)
+          limpia = `- ${nuevo} · ${p.resto}`
+          vistas.add(limpia)
+        }
+      }
       out.push(limpia)
     }
   }
   return out
+}
+/** los ids que la integración lista en «## Ideas que salen» (`- C1-I04: motivo`) */
+function idsQueSalen(integracion: string): Set<string> {
+  const out = new Set<string>()
+  let dentro = false
+  for (const l of integracion.replace(/\r/g, '').split('\n')) {
+    if (/^#{1,3}\s/.test(l)) dentro = /^#{1,3}\s*Ideas que salen/i.test(l)
+    if (!dentro) continue
+    for (const m of l.matchAll(/\bC[A-Za-z0-9_]+-I\d{2,}\b/g)) out.add(m[0])
+  }
+  return out
+}
+/** el id y el resto de una línea ya limpia (`- C1-I01 · …`) */
+function partesDeLinea(limpia: string): { id: string; resto: string } | null {
+  const m = /^- (C[A-Za-z0-9_]+-I\d{2,}) · (.*)$/.exec(limpia)
+  return m ? { id: m[1], resto: m[2] } : null
 }
 
 /**
