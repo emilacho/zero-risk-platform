@@ -14,7 +14,7 @@ import { MAX_OTRAS_FOTOS, avisoDeImagenGenerada, otrasFotosDeLaImagen } from '..
 import type { Tarjeta } from '../mesa/tipos'
 import { traducirGuion } from '../video/guion'
 import { fotosDelPlano, pedidosDeImagenClave, type PlanoDeLaHoja } from '../video/imagen-clave'
-import { CLIENTE, FUENTES, PARTE, crearMemoria } from './memoria'
+import { BUENOS_PROMPTS, CLIENTE, FICHAS_VACIAS, FUENTES, PARTE, PARTE_OTRO_PRODUCTO, PIEZA_OK, crearMemoria, correr, direccionGenerada, observacion, type Guion } from './memoria'
 import { DIRECTORIO, crearMesaEnMemoria } from './mesa-memoria'
 import { BRIEF_CARRUSEL, LAMINAS_OK, jugar, parteCon, pieza } from './mesa-arnes'
 
@@ -157,5 +157,35 @@ describe('punto 2 en el video · las fotos que la hoja nombró valen para toda l
     const base = PROPIAS_V[0]
     expect(fotosDelPlano({}, base, [], PROPIAS_V)).toEqual(fotosDelPlano({}, base, [], PROPIAS_V, []))
     expect(fotosDelPlano({}, null, [], PROPIAS_V, ['3b215a19'])).toEqual({ base: null, otras: [], texto: '', sin_foto: [] })
+  })
+})
+
+describe('punto 4 en el post de una imagen (el motor, en seco)', () => {
+  const indicesDe = (t: string) => [...t.matchAll(/índice (\d+)/g)].map((x) => Number(x[1]))
+  const guion: Guion = {
+    paquete: () => ({ texto: 'material del portero' }),
+    direccion_visual: () => ({ texto: direccionGenerada() }),
+    prompts: () => ({ texto: BUENOS_PROMPTS }),
+    mirar: (_n, t) => ({ texto: observacion(indicesDe(t)) }),
+    texto: () => ({ texto: PIEZA_OK }),
+    revision_jefe: () => ({ texto: FICHAS_VACIAS }),
+  }
+  const abrirPost = async (M: ReturnType<typeof crearMemoria>) => String((await abrirEncargo(M.P, { cuerpo: { parte_id: PARTE, brief_id: 'BRF-0003', dry_run: true, familia: 'post_img' }, client_id: CLIENTE, target_step_id: TARGET_STEP_PRODUCIR })).cuerpo.encargo_id)
+  it('🔴 CERO fotos: cada imagen sale generada, la pieza se cierra y una ficha por imagen lo dice', async () => {
+    const M = crearMemoria({ parte: PARTE_OTRO_PRODUCTO, fuentes: { fotos: [] } })
+    const id = await abrirPost(M)
+    const { ultima } = await correr(M, id, guion)
+    expect(ultima.cuerpo.estado).toBe('cerrado')
+    expect(M.llamadas.imagen).toBeGreaterThan(0)
+    const f = M.encargos.get(id)!.estado_del_motor.fichas.filter((x) => x.id.startsWith('imagen-generada'))
+    expect(f).toHaveLength(M.llamadas.imagen)
+    expect(f[0]).toMatchObject({ gravedad: 'sugerencia', que: avisoDeImagenGenerada('la imagen 1') })
+  })
+  it('🔴 con fotos aptas no se dice «salió generada»', async () => {
+    const M = crearMemoria({ parte: PARTE_OTRO_PRODUCTO })
+    const id = await abrirPost(M)
+    await correr(M, id, guion)
+    expect(M.llamadas.imagenFotos.every((x) => x !== null)).toBe(true)
+    expect(M.encargos.get(id)!.estado_del_motor.fichas.some((x) => x.id.startsWith('imagen-generada'))).toBe(false)
   })
 })
