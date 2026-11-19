@@ -20,6 +20,7 @@ import { criticaPendiente } from './critica'
 import { esRellenoDelBanco, type RellenoPendiente } from './de-la-cadena'
 import { faltanCitasDe, idasYVueltas, participacion, pedidosSinContestar, verificarCitas } from './libro'
 import { COTAS, profundidadMaximaDe, turnosMaximosDe, type Accion, type Aporte, type EstadoMesa, type TipoDePieza } from './tipos'
+import { esDeUnAutor, hayObjeciones, revisoresDe } from './un-autor'
 
 export interface ContextoDeLaMesa { gasto_usd: number; tope_usd: number; hayImagenGenerada: boolean; /** 18-nov · relleno del banco (CC1): el capítulo de la gran idea que no llega a su cuota (null/ausente = nada que rellenar) */ relleno_del_banco?: RellenoPendiente | null; /** 17-nov · GO Lenovo · la cota de la mesa (dato de la plantilla): lo gastado por sus turnos y lo permitido (cota × pasadas) */ cota_de_la_mesa?: { gastado: number; permitido: number }; /** 17-nov · T7b · lo que sigue es EXACTO (sale de los pasos de la plantilla, como en el video): la integración final tampoco pasa del TOPE (el motor frena en el tope, no en el techo; pasarlo cortaría el encargo después) */ techo_es_el_tope?: boolean; /** lo que queda por gastar DESPUÉS de la mesa; el calendario no dibuja ni pasa por la jefatura de la pieza: 0 */ reserva_posterior_usd?: number; /** 31-oct · la mesa de concepto: cuántas integraciones mínimas (rondas) antes de dar por buena la pieza; por omisión 1 (las demás mesas) */ rondas_minimas?: number; /** T8 · el tipo de pieza (el video reserva lo del brazo); sin él, carrusel/kit */ tipo?: TipoDePieza; /** 17-nov · «creativos en cada paso» · cuántas RONDAS de aportes tiene la mesa (dato `limites.rondas_de_la_mesa`): hechas esas integraciones, los especialistas ya no aportan ni contestan pedidos; la dirección sí cierra (citas, prompts, pregunta del traductor). Sin él, sin límite de rondas (lo de siempre) */ rondas_max?: number }
 
@@ -95,6 +96,9 @@ export function siguienteDeLaMesa(est: EstadoMesa, libro: Aporte[], ctx: Context
     return { accion: 'seguir_a_dibujar', motivo: agotada }
   }
 
+  // 19-nov · la tanda B (un solo autor, dato `limites.modo_de_la_mesa`): abierta la mesa y sin cotas agotadas, sus turnos los decide `siguienteDelAutor`
+  if (esDeUnAutor(est)) return siguienteDelAutor(est, libro, ctx, dir.agente)
+
   // 17-nov · la mesa corta: con las rondas hechas, solo la dirección sigue (contesta lo que se le devolvió, integra, se le devuelven citas, el ingeniero escribe los prompts)
   const rondasHechas = typeof ctx.rondas_max === 'number' && ctx.rondas_max > 0 && libro.filter((a) => a.tipo === 'integra').length >= ctx.rondas_max
 
@@ -143,5 +147,44 @@ export function siguienteDeLaMesa(est: EstadoMesa, libro: Aporte[], ctx: Context
   const ingP = ingenieroPendiente(est, libro, ctx.hayImagenGenerada)
   if (ingP) return turnoDelIngeniero(ingP, 'la pieza integrada pide imágenes generadas: instrucción exacta para el modelo de imagen')
 
+  return { accion: 'traducir' }
+}
+
+/**
+ * 19-nov · LA TANDA B · UN SOLO AUTOR (`un-autor.ts` · GO Lenovo 18-nov, firma de Emilio 16:37 Zúrich). La dirección es el autor: ya abrió con sus conceptos (paso 2).
+ *  a. lo que se le devuelve al autor (la vuelta de la revisión o de la jefatura) → lo contesta;
+ *  b. sin propuestas → el autor las escribe;
+ *  c. con las propuestas escritas → cada revisor revisa UNA vez (objeciones atadas a un plano);
+ *  d. con objeciones y sin corrección → el autor corrige UNA vuelta;
+ *  e. lo que el autor contestó después de su última integración → integra otra vez;
+ *  f. las citas de la corrección (cada revisión citada, máx. 1 devolución), los prompts si la pieza pide imágenes, y a traducir.
+ * Sin pedidos entre compañeros, sin portero a mitad de mesa, sin ronda de crítica y sin relleno del banco. Los topes son los de la mesa (pasos 1 y 3).
+ */
+function siguienteDelAutor(est: EstadoMesa, libro: Aporte[], ctx: ContextoDeLaMesa, autor: string): Accion {
+  const autorAgotado = fallosDe(libro, autor) >= COTAS.REINTENTOS_DE_TURNO
+  const devuelto = pedidosAtendibles(est, libro).find((p) => p.para === autor)
+  if (devuelto) return { accion: 'turno', agente: autor, tipo: 'responder', responde_a: devuelto.id, motivo: `pedido de ${devuelto.de}` }
+  const integras = libro.filter((a) => a.tipo === 'integra')
+  if (!integras.length) {
+    if (autorAgotado) return { accion: 'seguir_a_dibujar', motivo: 'el autor no pudo escribir las propuestas tras los reintentos' }
+    return { accion: 'turno', agente: autor, tipo: 'integrar', responde_a: null, motivo: 'el autor escribe las propuestas' }
+  }
+  const primera = integras[0]
+  const ult = integras[integras.length - 1]
+  const revisores = revisoresDe(est, ctx.hayImagenGenerada).filter((a) => a !== autor)
+  const revisaron = participacion(libro, primera.n)
+  const faltan = revisores.filter((a) => !revisaron[a] && fallosDe(libro, a) < COTAS.REINTENTOS_DE_TURNO)
+  if (faltan.length) return { accion: 'turno', agente: faltan[0], tipo: 'aportar', responde_a: null, motivo: 'revisa las propuestas del autor' }
+  if (!autorAgotado && integras.length === 1 && hayObjeciones(libro)) return { accion: 'turno', agente: autor, tipo: 'integrar', responde_a: null, motivo: 'el autor corrige una vuelta con las objeciones' }
+  if (!autorAgotado && libro.some((a) => a.de === autor && a.tipo === 'responde' && a.n > ult.n)) return { accion: 'turno', agente: autor, tipo: 'integrar', responde_a: null, motivo: 'hay aportes nuevos' }
+  if (integras.length > 1) {
+    const citables = revisores.filter((a) => revisaron[a])
+    const v = verificarCitas(ult.texto, libro, citables)
+    if (!v.ok && est.devoluciones_por_citas < COTAS.MAX_DEVOLUCIONES_POR_CITAS && !autorAgotado) {
+      return { accion: 'turno', agente: autor, tipo: 'devolver_citas', responde_a: ult.id, motivo: 'faltan citas de revisiones usadas o descartadas', faltan_citas: faltanCitasDe(v, libro) }
+    }
+  }
+  const ingP = ingenieroPendiente(est, libro, ctx.hayImagenGenerada)
+  if (ingP) return turnoDelIngeniero(ingP, 'la pieza integrada pide imágenes generadas: instrucción exacta para el modelo de imagen')
   return { accion: 'traducir' }
 }

@@ -18,6 +18,7 @@ import { fotosALaVista, fotosDeLaLista, REGLA_DE_LOS_ELEMENTOS_REALES, rotuloDeL
 import type { ImagenDelPedido } from '../../imagenes-del-pedido'
 import type { RellenoPendiente } from './de-la-cadena'
 import { TOPE_REAL_DEL_PEDIDO } from '../../limites-de-tamano'
+import { esDeUnAutor, tareaDelAutor } from './un-autor'
 
 export type TipoDeTurno = 'dirigir' | 'aportar' | 'responder' | 'integrar' | 'devolver_citas' | 'rellenar_banco' | 'redactar_prompts' | 'criticar'
 
@@ -455,6 +456,10 @@ export function armarTarea(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarj
     rellenar_banco: tareaDelRelleno(o.relleno),
     redactar_prompts: tareaDelIngeniero(o.imagenesARedactar ?? []),
     criticar: tareaDeLaCritica(agente),
+  }
+  // 19-nov · la tanda B (un solo autor): el autor escribe y los especialistas revisan; los turnos que cambian son dirigir, aportar e integrar (los demás, los de siempre)
+  if (esDeUnAutor(est) && (tipo === 'dirigir' || tipo === 'aportar' || tipo === 'integrar')) {
+    tu[tipo] = tareaDelAutor({ tipo, agente, libro, propuestas: c.video?.propuestas ?? est.imagen?.propuestas ?? 1, convencion: CONVENCION_DE_LA_PIEZA(c.tipo, c.video) })
   }
   return cab + seccionDeIndicacion(o.tarjeta, agente) + (o.metodo ? o.metodo + '\n\n' : '') + antesDeEscribir(tipo) + tu[tipo]
 }
