@@ -4,6 +4,7 @@
  * que el encargo nace de una campaña de la cadena (sin brief de la sala), que la entrega va a la CADENA por su puerto (nunca a la bandeja ni a la jefatura de la pieza), que el concepto tiene
  * DOS rondas (caminos → elección → desarrollo → integración), que la dirección puede DEVOLVER el brief una vez y la mesa cierra sin gastar más, y que todo fallo le avisa a la cadena.
  */
+import { registrarHerramienta } from '../mesa/herramienta'
 import fs from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -219,7 +220,7 @@ const integracionCon = (libro: Array<{ n: number; de: string; tipo: string }>, c
 
 type Entregas = { briefs: Array<Parameters<PuertoDeLaCadena['entregarBrief']>[0]>; conceptos: Array<Parameters<PuertoDeLaCadena['entregarConcepto']>[0]>; pedidosAlPortero: Array<Record<string, unknown>> }
 
-async function montar(tipo: 'brief' | 'concepto', o: { directorio?: Tarjeta[]; cerebro?: boolean; cadenaFalla?: boolean; plantillaActiva?: boolean; condiciones?: string[]; dry?: boolean; /** 18-nov · cuenta las lecturas del índice del cerebro */ indice?: { lecturas: number }; insumos?: SobreDeLaCadena['insumos_del_banco']; extra?: Partial<SobreDeLaCadena> } = {}) {
+async function montar(tipo: 'brief' | 'concepto', o: { directorio?: Tarjeta[]; cerebro?: boolean; cadenaFalla?: boolean; plantillaActiva?: boolean; condiciones?: string[]; dry?: boolean; /** 18-nov · cuenta las lecturas del índice del cerebro */ indice?: { lecturas: number; pedidos?: Array<Record<string, unknown>>; entregas?: Array<Record<string, unknown>> }; insumos?: SobreDeLaCadena['insumos_del_banco']; extra?: Partial<SobreDeLaCadena> } = {}) {
   const pl = tipo === 'brief' ? BRIEF_MESA : CONCEPTO_MESA
   const M = crearMemoria({ plantilla: pl, config: { familias_activas: [pl.familia] } })
   if (o.plantillaActiva === false) M.plantilla = { plantilla: M.plantilla!.plantilla, activo: false }
@@ -238,24 +239,64 @@ async function montar(tipo: 'brief' | 'concepto', o: { directorio?: Tarjeta[]; c
     }
     M.P.cerebro = cerebro
   }
-  if (o.indice) { const ix = o.indice; M.P.indice = { indice: async () => { ix.lecturas++; return { ok: true, body: { lista_texto: '1. algo', huella: 'h' } } }, entregar: async () => ({ ok: false, error: 'no se usa' }) } }
+  if (o.indice) { const ix = o.indice; M.P.indice = { indice: async (p) => { ix.lecturas++; ix.pedidos?.push(p as unknown as Record<string, unknown>); return { ok: true, body: { lista_texto: '1. algo', huella: 'h', base_completa: [{ numero: null, ref: 'manual', texto: 'lo fijo' }] } } }, entregar: async (p) => { ix.entregas?.push(p as unknown as Record<string, unknown>); return { ok: true, body: { material: [{ numero: 1, estado_de_lectura: 'ok', texto: 'una reseña real' }] } } } } }
   const a = await abrirMesaDeLaCadena(M.P, sobre(tipo, { dry_run: o.dry ?? false, condiciones: o.condiciones ?? [], ...(o.insumos ? { insumos_del_banco: o.insumos } : {}), ...(o.extra ?? {}) }), avanzar)
   return { M, MS, hecho, a, id: String(a.cuerpo.encargo_id ?? '') }
 }
 
-// 18-nov · el índice del cerebro es solo para las mesas de pieza: la cadena (brief, concepto) sigue abriendo con el pedido de siempre
-describe('las mesas de la cadena no leen el índice del cerebro (en esta entrega)', () => {
-  for (const tipo of ['brief', 'concepto'] as const) {
-    it(`${tipo}: con el puerto del índice puesto, no lo pide y el pedido al portero sale como siempre`, async () => {
-      const indice = { lecturas: 0 }
-      const { hecho } = await montar(tipo, { indice })
-      expect(indice.lecturas).toBe(0)
-      expect(hecho.pedidosAlPortero).toHaveLength(1)
-    })
-  }
+// 18-nov · GO Lenovo (firma de Emilio 22:50 Zúrich) · LA MESA DE LA GRAN IDEA TAMBIÉN MIRA LO REAL: el índice y la entrega por número también en `concepto`,
+// con el marco de la cadena como hoja; el brief de la cadena no cambia
+describe('la mesa del brief no lee el índice del cerebro', () => {
+  it('brief: con el puerto del índice puesto, no lo pide y el pedido al portero sale como siempre', async () => {
+    const indice = { lecturas: 0 }
+    const { hecho } = await montar('brief', { indice })
+    expect(indice.lecturas).toBe(0)
+    expect(hecho.pedidosAlPortero).toHaveLength(1)
+  })
 })
 
-type Turno = { paso: string; agente: string; tipo: string; task: string; n: number }
+describe('la mesa de la gran idea mira lo real', () => {
+  it('lee el índice UNA vez al abrir, con el marco completo como hoja y sin casillas; no sale el pedido mezclado al portero', async () => {
+    const indice = { lecturas: 0, pedidos: [] as Array<Record<string, unknown>> }
+    const { hecho } = await montar('concepto', { indice })
+    expect(indice.lecturas).toBe(1)
+    expect(hecho.pedidosAlPortero).toHaveLength(0)
+    const p = indice.pedidos[0] as { cliente: string; agente: string; pieza: { encargo_id: string; fila?: unknown; hoja: string } }
+    expect(Object.keys(p).sort()).toEqual(['agente', 'cliente', 'pieza'])
+    expect(Object.keys(p.pieza).sort()).toEqual(['encargo_id', 'hoja'])
+    expect(p.pieza.hoja.startsWith(sobre('concepto').marco_texto.trim())).toBe(true)
+    for (const k of ['sede', 'oferta', 'tema', 'canal', 'para_que']) expect(JSON.stringify(p)).not.toContain(`"${k}"`)
+  })
+  it('cada turno (director y miembros) lleva la base completa, la herramienta y sin_empuje; los que trabajan con imagen ven las fotos', async () => {
+    const indice = { lecturas: 0, pedidos: [] as Array<Record<string, unknown>> }
+    const m = await montar('concepto', { indice })
+    const { turnos } = await jugar(m)
+    const conTarea = turnos.filter((t) => t.task)
+    expect(conTarea.length).toBeGreaterThan(2)
+    for (const t of conTarea) {
+      expect(t.task).toContain('## Lo que sabemos del cliente')
+      expect(t.task).toContain('pedir_fichas')
+      expect(t.extra?.sin_empuje).toBe(true)
+    }
+    expect(new Set(conTarea.map((t) => t.agente)).size).toBeGreaterThan(1)
+    const conFotos = turnos.filter((t) => ['dirigir', 'aportar', 'integrar'].includes(t.tipo))
+    expect(conFotos.length).toBeGreaterThan(0)
+    for (const t of conFotos) expect((t.images ?? []).length).toBeGreaterThan(0)
+  })
+  it('pedir_fichas en la gran idea va con la misma hoja (el marco) y la huella', async () => {
+    const indice = { lecturas: 0, pedidos: [] as Array<Record<string, unknown>>, entregas: [] as Array<Record<string, unknown>> }
+    const m = await montar('concepto', { indice })
+    const t = m.a.cuerpo.turno as { agente: string }
+    const r = await registrarHerramienta(m.M.P, { herramienta: 'pedir_fichas', encargo_id: m.id, de: t.agente, numeros: [1] })
+    expect(r.cuerpo.ok).toBe(true)
+    const e = indice.entregas[0] as { pieza: { hoja: string }; huella: string; numeros: number[] }
+    expect(e.huella).toBe('h')
+    expect(e.numeros).toEqual([1])
+    expect(e.pieza.hoja).toBe((indice.pedidos[0] as { pieza: { hoja: string } }).pieza.hoja)
+  })
+})
+
+type Turno = { paso: string; agente: string; tipo: string; task: string; n: number; extra?: Record<string, unknown>; images?: unknown[] }
 type Montaje = Awaited<ReturnType<typeof montar>>
 type Dado = { texto?: string; error?: string; costo_usd?: number } | undefined
 async function jugar(m: Montaje, responder: (t: Turno, veces: number) => Dado = () => undefined, max = 40) {
@@ -263,8 +304,8 @@ async function jugar(m: Montaje, responder: (t: Turno, veces: number) => Dado = 
   const turnos: Turno[] = []
   const veces: Record<string, number> = {}
   for (let i = 0; i < max && ultima.cuerpo.accion === 'esperar'; i++) {
-    const t = ultima.cuerpo.turno as { n: number; paso: string; agente: string; pedido?: { task?: string } }
-    const turno: Turno = { paso: t.paso, agente: t.agente, tipo: t.paso.split(':')[1] ?? t.paso, task: t.pedido?.task ?? '', n: t.n }
+    const t = ultima.cuerpo.turno as { n: number; paso: string; agente: string; pedido?: { task?: string; extra?: Record<string, unknown>; images?: unknown[] } }
+    const turno: Turno = { paso: t.paso, agente: t.agente, tipo: t.paso.split(':')[1] ?? t.paso, task: t.pedido?.task ?? '', n: t.n, ...(t.pedido?.extra ? { extra: t.pedido.extra } : {}), ...(t.pedido?.images ? { images: t.pedido.images } : {}) }
     turnos.push(turno)
     veces[t.paso] = (veces[t.paso] ?? 0) + 1
     const libro = m.MS.filas.filter((x) => x.encargo_id === m.id)

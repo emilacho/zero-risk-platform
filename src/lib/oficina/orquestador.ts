@@ -125,9 +125,9 @@ export async function abrirEncargo(P: Puertos, entrada: { cuerpo: unknown; clien
   if (!pl.activo && !entrada.permitir_apagada) return r(409, { error: 'plantilla_inactiva', familia: dec.familia, ...(!tienePasarela(clase) ? { sin_pasarela: true } : {}) })
   // 17-nov · T7a · los topes que crecen con la pieza (idempotente: el almacén real ya los aplicó) y la condición 1 de CC6: el tope con que nace el encargo (el menor entre
   //   el sobre y la plantilla) cubre una pasada por los pasos que gastan; si no, el encargo NO nace (antes nacía y se cortaba a medias, con lo gastado perdido)
-  // 19-nov · G5b (A′ · GO Lenovo 03:41Z) · el video: la duración la declara el brief de la pieza y los topes de ESTE encargo se calculan con ella (no con la pieza más
+  // 19-nov · G5b · el video: la duración la define la GRAN IDEA (firma de Emilio, GO Lenovo 15:05 Zúrich; la hoja la copia en `DURACIÓN`) y los topes de ESTE encargo se calculan con ella (no con la pieza más
   //   larga que admite la plantilla). El tope con que nace el encargo es el de la campaña (el sobre, hasta el techo de la plantilla): si el guion pide más, los topes
-  //   se recalculan dentro de él. La cobertura se mide con la duración declarada
+  //   se recalculan dentro de él. La cobertura se mide con la duración de la idea
   const cruda = pl.cruda ?? pl.plantilla
   let duracion: DuracionDeLaPieza | null = null
   if (topesPorSegundoDeVideo(cruda)) {
