@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest'
 import { abrirEncargo, recibirDecisionDelDueno } from '../orquestador'
 import { CARRUSEL_MESA, KIT_MESA, POST_MESA } from '../plantillas/mesa'
-import { CARRUSEL_MESA_CON_PROPUESTAS, KIT_MESA_CON_PROPUESTAS, POST_MESA_CON_PROPUESTAS, PROPUESTAS_DE_IMAGEN, topeDelBorradorDeImagenDe } from '../plantillas/imagen-propuestas'
+import { reservaDeUnaVueltaDeLaJefatura, CARRUSEL_MESA_CON_PROPUESTAS, KIT_MESA_CON_PROPUESTAS, POST_MESA_CON_PROPUESTAS, PROPUESTAS_DE_IMAGEN, topeDelBorradorDeImagenDe } from '../plantillas/imagen-propuestas'
 import { coberturaDelTope } from '../topes-por-duracion'
 import { propuestasDeLaPlantilla } from '../mesa/propuestas-imagen'
 import { ARTEFACTO_BORRADOR_IMAGEN, correrBorradorDeImagen, type BorradoresDeImagen } from '../mesa/borrador-imagen'
@@ -33,7 +33,8 @@ describe('las plantillas de imagen con propuestas (solo código)', () => {
     expect(propuestasDeLaPlantilla(con)).toBe(PROPUESTAS_DE_IMAGEN)
     // GO Lenovo (cota de la mesa): el tope sale de la cuenta, nunca menos que el de hoy × 3
     const sinTope = { ...con, limites: { ...con.limites, tope_encargo_usd: 0 } } as Plantilla
-    expect(con.limites.tope_encargo_usd).toBe(Math.max(Number(hoy.limites.tope_encargo_usd) * 3, Math.ceil(coberturaDelTope(sinTope, 0).requerido)))
+    // 18-nov · más UNA vuelta de la jefatura (`reservaDeUnaVueltaDeLaJefatura`)
+    expect(con.limites.tope_encargo_usd).toBe(Math.max(Number(hoy.limites.tope_encargo_usd) * 3, Math.ceil(coberturaDelTope(sinTope, 0).requerido + reservaDeUnaVueltaDeLaJefatura(sinTope))))
     // la de hoy queda igual (no se comparten objetos)
     expect(JSON.stringify(hoy)).toBe(antes)
     expect(propuestasDeLaPlantilla(hoy)).toBe(1)

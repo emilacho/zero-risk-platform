@@ -176,8 +176,11 @@ describe('propuestas en imagen · el borrador de cada propuesta (tramo 2b)', () 
     expect(c).toMatchObject({ requerido: 4.7, cubre: false })
     expect(c.detalle).toContain('la mesa con propuestas guarda 4.7')
     const conVuelta: Plantilla = { ...pl, pasos: pl.pasos.map((p) => (p.clave === 'jefatura' ? { ...p, vuelve_a: structuredClone(VUELTA_DE_LA_JEFATURA_A_LA_MESA) } : p)) }
+    // 18-nov · GO Lenovo 13:52Z · la vuelta de la JEFATURA ya no se reserva al abrir: se salta si no cabe (se mide entera antes de devolver; nunca corta a medias).
+    //   Con la vuelta por regla dura (hasta 6) reservarla dejaría sin abrir al post y al carrusel con mesa de hoy (12,04 + 3,58 y 13,04 + 3,98 contra 15)
+    expect(coberturaDelTope(conVuelta, 4)).toMatchObject({ requerido: 4.7, cubre: false })
     const { a } = await montar(conVuelta)
-    expect(a.cuerpo).toMatchObject({ error: 'tope_no_cubre', requerido_usd: 5.9, tope_usd: 5 })
+    expect(a.cuerpo).not.toHaveProperty('error')
   })
 
   it('calidadDelBorradorDeImagen: sin dato o mal escrito → low; size solo si es AxB', () => {

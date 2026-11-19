@@ -160,11 +160,15 @@ export interface EstadoMesa {
   tablero_para_la_jefatura?: string
   /** cambio 4 · firma de Emilio · las líneas «RESPUESTA A LA JEFATURA S<n>: …» con que la dirección respondió las correcciones de la vuelta (fuera de la pieza) */
   respuestas_a_la_jefatura?: string[]
+  /** 18-nov · GO Lenovo «lo exacto se autocorrige» · lo que el código cambió solo en el texto de la mesa antes de traducirlo (teléfono o @ ajeno → el del cliente), dicho en palabras */
+  autocorregido?: string[]
   /** el turno que está esperando respuesta */
   /** Sprint 2 · S2-1 · solo video: la duración y las propuestas que dice la plantilla, congeladas al abrir (un cambio de la plantilla no mueve la meta de una pieza en vuelo) */
   video?: import('./pedidos').ParametrosDelVideo
   /** 17-nov · propuestas también en IMAGEN · solo kit, carrusel y foto: cuántas propuestas presenta la mesa (`limites.propuestas`), congelado al abrir; ausente = una pieza, como hoy */
   imagen?: { propuestas: number }
+  /** 19-nov · la tanda B (`un-autor.ts`): la mesa trabaja con UN autor y revisores (dato `limites.modo_de_la_mesa`), congelado al abrir; ausente = la mesa de siempre */
+  modo?: import('./un-autor').ModoDeLaMesa
   /** 17-nov · GO Lenovo (encendido de imagen) · lo que costaron los turnos de agente de esta mesa, en todas sus pasadas (la cota de la mesa se mide contra esto) */
   gasto_de_los_turnos_usd?: number
   turno_abierto: { n: number; agente: string; tipo: 'dirigir' | 'aportar' | 'responder' | 'integrar' | 'devolver_citas' | 'rellenar_banco' | 'redactar_prompts' | 'criticar' | 'traducir'; responde_a: string | null; /** lo que el cerebro entregó a este agente al abrirse el turno (se consulta UNA vez: la reentrega del turno muestra lo mismo) */ notas_del_dueno?: LecturaDeNotas; /** 18-nov · `devolver_citas`: lo que el código comprobó que falta (el director escribe solo esas líneas) */ faltan_citas?: FaltanCitas } | null

@@ -374,7 +374,7 @@ describe('el vigía ③ y los lectores de `resultado_para_la_sala` (medida de CC
     // la misma pieza, además, rompe una regla dura propia (la que no vuelve a la cadena): el cierre la frena
     m.enc().estado_del_motor.fichas.push({ id: 'regla-6-0', origen: 'chequeo', donde: 'archivos', gravedad: 'bloquea', que: 'falta el archivo que la red exige', estado: 'abierta', dura: true } as never)
     await m.vigia()
-    const frenos = () => m.alertas().filter((a) => /frenada/i.test(a.texto) && !/cadena/.test(a.texto))
+    const frenos = () => m.alertas().filter((a) => /frenada|en corrección/i.test(a.texto) && !/cadena/.test(a.texto))
     expect(frenos()).toHaveLength(1)
     expect(m.espera()!.pendiente).toBe(false)
     for (let i = 0; i < 3; i++) await revisarEsperasDeLaCadena(m.M.P, dbCon([m.id]) as never)

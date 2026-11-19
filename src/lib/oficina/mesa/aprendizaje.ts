@@ -13,6 +13,8 @@ import type { LecturaDeNotas, NotaLeida, TipoDePieza } from './tipos'
  */
 export const DESTINATARIO_DE_AGENTE: Record<string, string> = {
   'creative-director-mesa': 'direccion',
+  // 19-nov · el director de la gran idea lee las notas de dirección, como el director de las piezas
+  'director-gran-idea': 'direccion',
   'content-creator': 'texto',
   'carousel-designer': 'diseno',
   'design-visual-storyteller': 'diseno',
