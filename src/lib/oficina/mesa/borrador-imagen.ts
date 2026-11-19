@@ -12,7 +12,7 @@
  *  · La tarjeta (CC5) lee `borrador_imagen.propuestas[i].laminas[j]` por `n` (`direccion/decisiones-propuestas.ts`).
  */
 import { datos } from '../ayudas'
-import { avisoDeImagenGenerada, fotosDeReferencia, fotosPorImagen, otrasFotosDeLaImagen, type FotoDeReferencia } from '../foto-de-referencia'
+import { fotosDeReferencia, fotosPorImagen, otrasFotosDeLaImagen, type FotoDeReferencia } from '../foto-de-referencia'
 import { armarLaminasDeCarrusel, armarLaminasDeKit, type ElementoDeCopyKit, type ElementoDeEstructura, type ImagenDeRef, type Lamina } from '../laminas'
 import type { Cambios, Encargo, FuentesCompletas, Puertos } from '../puertos'
 import type { Estado, Plantilla } from '../tipos'
@@ -107,7 +107,6 @@ function planDeLaPropuesta(e: Estado, p: PropuestaDeImagen, fotos: FuentesComple
     const foto = porImagen.fotos[j]
     const o = otrasFotosDeLaImagen(fotos, foto, [primero(i).foto_de_referencia, ...(primero(i).otras_fotos_de_referencia ?? [])], deLaPieza)
     for (const id of o.no_aptas) errores.push(`el ingeniero nombró la foto «${id}» para «${i.ref}» y no se puede usar (no existe o no tiene dirección): la imagen sale sin ella`)
-    if (!foto) errores.push(avisoDeImagenGenerada(`«${i.ref}»`))
     return { ref: i.ref, prompt: primero(i).prompt, foto, otras_fotos: foto ? o.otras : [] }
   })
   return { p, porRef, errores, costo: 0, pedidos }

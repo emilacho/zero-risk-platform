@@ -246,11 +246,12 @@ async function imagenRef(P: Puertos, enc: Encargo, pl: Plantilla, esRe = false):
     const o = otrasFotosDeLaImagen(baseL(e).F.fotos, foto, nombradas(ref), deLaPieza)
     for (const id of o.no_aptas) fichas.push(fichaNueva(`imagen-otra-foto-no-apta-${intento}-${ref}-${id}`, 'chequeo', 'imagen', 'sugerencia', `el ingeniero de prompts nombró la foto «${id}» para «${ref}», pero no se puede usar (no existe o no tiene dirección): la imagen sale sin ella`, 'fotos del cliente', 'nombrar una foto propia que exista'))
     const otras = foto ? o.otras : []
-    if (!foto) fichas.push(fichaNueva(`imagen-generada-${intento}-${ref}`, 'chequeo', 'imagen', 'sugerencia', avisoDeImagenGenerada(`la imagen «${ref}»`), 'fotos del cliente', 'si el cliente tiene una foto real de esto, subirla al cerebro'))
+    let dichaGenerada = false
     for (let k = 0; k < prompts.length; k++) {
       const g = await P.imagen({ prompt: prompts[k].prompt, client_id: enc.client_id, encargo_id: enc.id, dry_run: enc.dry_run, foto, ...(otras.length ? { otras_fotos: otras } : {}) })
       if (!g.ok) { fichas.push(fichaNueva(`imagen-${intento}-${ref}-${k}`, 'chequeo', 'imagen', 'sugerencia', `el generador no devolvió una imagen para «${ref}» (prompt ${k + 1}): ${g.error}`)); continue }
       if (foto && !g.referencia?.usada) fichas.push(fichaNueva(`imagen-sin-foto-${intento}-${ref}-${k}`, 'chequeo', 'imagen', 'sugerencia', `la imagen «${ref}» (prompt ${k + 1}) se generó sin la foto real «${foto.id}» (${g.referencia?.motivo ?? 'sin motivo'}): el producto puede no ser el del cliente`, 'fotos propias del cliente', 'mirar que el producto sea el real'))
+      if (!foto && !dichaGenerada) { dichaGenerada = true; fichas.push(fichaNueva(`imagen-generada-${intento}-${ref}`, 'chequeo', 'imagen', 'sugerencia', avisoDeImagenGenerada(`la imagen «${ref}»`), 'fotos del cliente', 'si el cliente tiene una foto real de esto, subirla al cerebro')) }
       items.push({ indice: items.length, ref, intento, prompt_idx: k, url: g.url, generation_id: g.generation_id, prompt: prompts[k].prompt, ...(foto && g.referencia?.usada ? { foto_referencia_id: foto.id } : {}) })
       costo += g.costo_usd; hubo = true
       gastos.push({ concepto: 'imagen', ref_tabla: 'agent_image_generations', ref_id: g.generation_id, cost_usd: g.costo_usd, base: 'usage' })

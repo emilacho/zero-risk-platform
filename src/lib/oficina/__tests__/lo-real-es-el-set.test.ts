@@ -63,8 +63,9 @@ describe('por la mesa (carrusel, en seco): el pedido al generador lleva las foto
   const DIR_ING: Tarjeta[] = DIRECTORIO.map((t) => (t.agente === ING ? { ...t, pertinente_en: ['carrusel:redacta_prompts', 'kit:redacta_prompts'] } : t))
   const CITAS = '## Citas\nA2 usé: los titulares\nA3 usé: el ritmo de las láminas\nA4 usé: la dirección visual del plato'
   const PROMPT = 'Overhead shot of the dish of the day on a light wooden table, natural light, no text.'
-  async function correr(referencia: string, fotos?: typeof FUENTES.fotos) {
+  async function correr(referencia: string, fotos?: typeof FUENTES.fotos, falla = false) {
     const M = crearMemoria({ parte: parteCon(BRIEF_CARRUSEL), plantilla: CARRUSEL_MESA, ...(fotos ? { fuentes: { fotos } } : {}) })
+    if (falla) M.imagenFalla = () => true
     M.P.mesa = crearMesaEnMemoria(DIR_ING)
     const a = await abrirEncargo(M.P, { cuerpo: { parte_id: PARTE, brief_id: 'BRF-0100', dry_run: true, familia: 'carrusel_mesa' }, client_id: CLIENTE, target_step_id: TARGET_STEP_PRODUCIR })
     const id = String(a.cuerpo.encargo_id)
@@ -102,6 +103,11 @@ describe('por la mesa (carrusel, en seco): el pedido al generador lleva las foto
     const f = M.encargos.get(id)!.estado_del_motor.fichas.find((x) => x.id.startsWith('imagen-generada'))
     expect(f).toMatchObject({ gravedad: 'sugerencia', que: avisoDeImagenGenerada('la imagen «hook»') })
     expect(M.encargos.get(id)!.estado_del_motor.fichas.filter((x) => x.gravedad === 'bloquea')).toEqual([])
+  })
+  it('🔴 cero fotos y el generador falla: no se dice «salió generada» (la imagen no salió)', async () => {
+    const { M, id } = await correr('ninguna', [], true)
+    expect(M.llamadas.imagen).toBeGreaterThan(0)
+    expect(M.encargos.get(id)!.estado_del_motor.fichas.some((x) => x.id.startsWith('imagen-generada'))).toBe(false)
   })
   it('🔴 con foto base no se dice «salió generada»', async () => {
     const { M, id } = await correr('foto:780fc5e1')
