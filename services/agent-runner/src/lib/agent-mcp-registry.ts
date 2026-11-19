@@ -97,6 +97,8 @@ export const MESA_ALLOW: ReadonlySet<string> = new Set([
   'whimsy-injector',
   'tiktok-strategist',
   'inclusive-visuals-specialist',
+  // 19-nov · agente propio (ok de Emilio 18-nov 23:06 Zúrich): dirige la mesa de la gran idea (`concepto_mesa`) en lugar de creative-director-mesa
+  'director-gran-idea',
 ])
 const DATAFORSEO_ALLOW: ReadonlySet<string> = new Set([
   'market-research',
