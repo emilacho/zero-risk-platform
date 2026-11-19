@@ -176,6 +176,26 @@ describe('BLOQUEANTE 1 · el tablero y las citas llegan a la jefatura', () => {
     // los documentos de siempre siguen ahí
     expect(sobres[0].payload.contexto.map((c) => c.titulo)).toEqual(expect.arrayContaining(['Manual de marca del cliente', 'El brief de este entregable']))
   })
+  // 19-nov · el t3 (y el t7) de CC7 en #1223: por el camino REAL de la mesa, no la función pura. Si el llamador volviera a pasar 7000 (o cortara el aporte), esto lo ve
+  it('punta a punta: un aporte de más de 7000 caracteres y varias líneas llega ENTERO, en una línea y sin «recortado», al tablero guardado y a la revisión', async () => {
+    const { M, MS, a, id } = await montar()
+    const sobres: Array<{ payload: { contexto: Array<{ titulo: string; texto: string }> } }> = []
+    M.P.jefatura = (async (sobre: never) => { sobres.push(sobre); return { estado: 'esperando', revision_id: 'rev-1' } }) as never
+    const parrafo = (i: number) => `Párrafo ${i}: el titular nombra el plato del día y la sede, con la voz del manual, sin promesas que el cliente no hace.`
+    const largo = `${Array.from({ length: 70 }, (_, i) => parrafo(i + 1)).join('\n\n')}\nFIN-DEL-APORTE-LARGO`
+    expect(largo.length).toBeGreaterThan(7000)
+    const { ultima } = await jugar(M, id, a, (t) => (t.agente === 'content-creator' && t.tipo !== 'dirigir' && t.tipo !== 'integrar' && t.tipo !== 'devolver_citas' ? { texto: largo } : undefined))
+    expect(ultima.cuerpo.accion).toBe('esperar_jefatura')
+    const fila = MS.filas.find((f) => f.de === 'content-creator' && f.tipo === 'aporta')!
+    const enUnaLinea = largo.replace(/\s+/g, ' ').trim()
+    const guardado = (M.encargos.get(id)!.estado_del_motor.artefactos.mesa.datos as { tablero_para_la_jefatura: string }).tablero_para_la_jefatura
+    for (const t of [guardado, sobres[0].payload.contexto.find((c) => /tablero del equipo/.test(c.titulo))!.texto]) {
+      expect(t).toContain(`A${fila.n} · content-creator · aporta: ${enUnaLinea}`)
+      expect(t).toContain('FIN-DEL-APORTE-LARGO')
+      expect(t).not.toMatch(/recortado/)
+      expect(t).not.toMatch(/Párrafo 1: [^\n]*\n\nPárrafo 2/)
+    }
+  })
 })
 
 describe('T7 · un texto de 2.000 caracteres no se rechaza, pero queda una ficha VISIBLE para la jefatura', () => {
