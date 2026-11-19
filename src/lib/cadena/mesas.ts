@@ -768,16 +768,11 @@ export async function conceptoDecidir(al: Almacen, cuerpo: Record<string, unknow
   if (!apuntaA) return err(400, 'E-APUNTA-A', 'cambios necesita apunta_a: «concepto» (otra ronda de la mesa) o «brief» (brief nuevo y concepto sobre él)')
   if (!nota) return err(400, 'E-NOTA', 'cambios necesita una nota: qué cambiar (va al marco de la mesa)')
   const vueltas = cuentaDe(todos, (x) => x.aprobacion === 'cambios')
-  // 19-nov · grupo D · D2 (c) de Lenovo 08:00Z (el 3 lo firmó Emilio): pasado el tope, el pedido NO se aplica y se le PREGUNTA en el buzón; la campaña no se detiene
-  // (sigue esperando su aprobación: puede aprobar cualquier versión desde el tablero). Una pregunta por campaña y por pedido (la clave lleva la versión).
+  // 19-nov · grupo D · D2 (c): el tope es 3 (firma de Emilio). Pasado el tope, el pedido NO se aplica y la campaña no se detiene: las propuestas siguen en su pantalla
+  // de Propuestas, como siempre, y él aprueba la que quiera. Emilio 16:19 Zúrich (Lenovo 15:21Z): SIN mensaje ni alerta en el buzón; la respuesta lo dice en pantalla
   if (vueltas >= CAP_DE_VUELTAS_DE_CAMBIOS) {
-    const r = await al.avisarAlBuzon({
-      clave: `cadena:vueltas-de-cambios:${campana.id}:v${version}`, tipo: 'pregunta', client_id: campana.client_id, origen: 'cadena/mesas · grupo D', workflow_id: cadena(cuerpo.workflow_id) ?? null, workflow_execution_id: cadena(cuerpo.workflow_execution_id) ?? null,
-      titulo: `La gran idea de la campaña ${campana.id}: ya pediste cambios ${vueltas} veces`,
-      detalle: `Es tu pedido número ${vueltas + 1} sobre la gran idea (el tope firmado es ${CAP_DE_VUELTAS_DE_CAMBIOS}), y no lo apliqué. ¿Abro otra ronda con tu nota, o apruebas una de las versiones desde el tablero? Tu nota: «${nota}». La campaña sigue esperando tu aprobación; no se detiene.`,
-    })
-    return { status: 409, cuerpo: { error: 'vueltas_agotadas', necesita_humano: false, pregunta: r.ok ? 'enviada' : 'no_salio', vueltas, tope: CAP_DE_VUELTAS_DE_CAMBIOS,
-      detalle: `Ya pediste cambios ${vueltas} veces, que es el tope. Este pedido no lo apliqué: ${r.ok ? 'te dejé la pregunta en el buzón' : 'la pregunta al buzón no salió'}. Puedes aprobar una de las versiones; la campaña no se detiene.` } }
+    return { status: 409, cuerpo: { error: 'vueltas_agotadas', necesita_humano: false, vueltas, tope: CAP_DE_VUELTAS_DE_CAMBIOS,
+      detalle: `Ya pediste cambios ${vueltas} veces, que es el tope, así que este pedido no lo apliqué. Las propuestas siguen aquí: aprueba la que prefieras. La campaña no se detiene.` } }
   }
   // cambios sobre un concepto YA aprobado también valen (cambio de rumbo a mitad de campaña · nota 3 de CC3): las filas ya ordenadas conservan su idea_ref
   await al.actualizarConcepto(campana.id, version, { aprobacion: 'cambios', apunta_a: apuntaA, nota_de_emilio: nota, decidido_en: ahora })

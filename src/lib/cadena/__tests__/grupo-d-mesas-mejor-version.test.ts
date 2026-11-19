@@ -343,7 +343,7 @@ describe('D2 (c) · tope de 3 pedidos de cambios; al 4.º, la pregunta al buzón
     expect(a.cuerpo.version).toBe(version)
     expect(await recibirConcepto(al, entrega(version, CONCEPTO_BUENO), AHORA)).toMatchObject({ estado: 'lista' })
   }
-  it('🔴 tres pedidos abren tres rondas; el 4.º no se aplica, pregunta UNA vez por versión y Emilio puede aprobar', async () => {
+  it('🔴 tres pedidos abren tres rondas; el 4.º no se aplica, NO manda nada al buzón (Emilio 16:19 Zúrich) y Emilio puede aprobar', async () => {
     expect(CAP_DE_VUELTAS_DE_CAMBIOS).toBe(3)
     const al = almacen()
     await briefAbrir(al, wf(), AHORA)
@@ -355,18 +355,18 @@ describe('D2 (c) · tope de 3 pedidos de cambios; al 4.º, la pregunta al buzón
       await conConceptoListo(al, v + 1)
     }
     const r4 = await conceptoDecidir(al, wf({ decision: 'cambios', apunta_a: 'concepto', nota: 'un cuarto cambio' }), AHORA)
-    expect(r4).toMatchObject({ status: 409, cuerpo: { error: 'vueltas_agotadas', necesita_humano: false, pregunta: 'enviada', detalle: expect.stringContaining('te dejé la pregunta en el buzón') } })
+    expect(r4).toMatchObject({ status: 409, cuerpo: { error: 'vueltas_agotadas', necesita_humano: false, vueltas: 3, tope: 3, detalle: expect.stringContaining('aprueba la que prefieras') } })
+    expect(r4.cuerpo).not.toHaveProperty('pregunta')
+    expect(String(r4.cuerpo.detalle)).not.toMatch(/buz[oó]n/i)
     expect(al.conceptos).toHaveLength(4)
     expect(al.conceptos[3]).toMatchObject({ estado: 'lista', aprobacion: 'pendiente' })
     expect(al.campanas[0].estado).toBe('calendario')
     expect(al.esperas.filter((e) => e.objeto_tipo === 'necesita_humano')).toHaveLength(0)
-    const preguntas = al.avisosAlBuzon.filter((a) => a.tipo === 'pregunta')
-    expect(preguntas).toHaveLength(1)
-    expect(preguntas[0].titulo).toContain('3 veces')
-    expect(preguntas[0].detalle).toContain('número 4 sobre la gran idea (el tope firmado es 3)')
-    // el mismo pedido otra vez: misma clave (el buzón la marca repetida: no sale a Slack otra vez)
-    await conceptoDecidir(al, wf({ decision: 'cambios', apunta_a: 'concepto', nota: 'un cuarto cambio' }), AHORA)
-    expect(al.avisosAlBuzon.filter((a) => a.tipo === 'pregunta').map((a) => a.accion)).toEqual(['abrio', 'repetida'])
+    expect(al.avisosAlBuzon).toHaveLength(0)
+    // el mismo pedido otra vez: igual, sin aplicar y sin nada al buzón
+    expect((await conceptoDecidir(al, wf({ decision: 'cambios', apunta_a: 'concepto', nota: 'un cuarto cambio' }), AHORA)).status).toBe(409)
+    expect(al.avisosAlBuzon).toHaveLength(0)
+    expect(al.conceptos).toHaveLength(4)
     expect((await conceptoDecidir(al, wf({ decision: 'aprobar' }), AHORA)).status).toBe(200)
   })
 })
