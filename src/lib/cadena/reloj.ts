@@ -5,12 +5,13 @@
  */
 import crypto from 'node:crypto'
 import type { Almacen, EsperaFila } from './almacen'
-import { autorizarLlamada, cadena, err, type Respuesta } from './autorizar'
+import { autorizarLlamada, cadena, compuerta, err, type Respuesta } from './autorizar'
 import { escalonQueToca, invarianteDeReloj, type Violacion } from './esperas'
-import { abrirEsperaDe, resolverEsperas } from './nucleo'
+import { abrirEsperaDe, resolverEsperas, tramoDeReintento } from './nucleo'
+import { sobreDeReintento } from './campanas'
 import { pasarSinRevision } from './revision-jefatura'
 import { retomarPorCantidades, seguirSinRevisionDelCalendario } from './pasos'
-import { avisoDePrimeraSemana, cerrarMesasVencidas, seguirSinRevisionDeRegistro, TIPO_DE_ESPERA_DE_CONCEPTO } from './mesas'
+import { avisoDePrimeraSemana, cerrarMesasVencidas, nuevoOrdenEncendido, seguirSinRevisionDeRegistro, TIPO_DE_ESPERA_DE_CONCEPTO } from './mesas'
 import { leerObjetoDeRegistro } from './registro-en-jefatura'
 import { abrirReubicaciones, avisosDeReubicacion } from './reubicar'
 import { abrirRevisionesDeFallidos, avisosDeFallidos } from './rehacer-fallidos'
@@ -81,6 +82,18 @@ export async function relojDeLaCadena(al: Almacen, cuerpo: Record<string, unknow
     if (!corridas.length || corridas.some((x) => x.estado === 'en_curso')) continue
     const ultima = corridas[corridas.length - 1]
     if (ultima.estado === 'ok') continue
+    // grupo A (18-nov · «nada detiene el flujo») · ya no solo se avisa: el reloj deja el sobre del plan y la puerta retoma la campaña (la llave del intento la deriva `prepararCorrida`).
+    //   La tanda de una campaña en `calendario` con la palanca del nuevo orden la reemite ya `calendario · siguiente` en esta misma pasada del vigía: ahí no se deja otro sobre.
+    if (!seco && (c.estado !== 'calendario' || !(await nuevoOrdenEncendido(al, c.client_id))) && !(await compuerta(al, c.client_id, c.seco))) {
+      try {
+        const r = await al.emitirSobre(sobreDeReintento(c, tramoDeReintento(ahora)))
+        if (r.resultado === 'aceptado') aplicado.push(`campaña ${c.id} retomada sola (sobre del plan, tramo ${tramoDeReintento(ahora)})`)
+        if (r.resultado !== 'rechazado') {
+          lineas.push({ repetible: true, campana_id: c.id, texto: `la campaña sigue sola: su última llamada (${ultima.paso}) terminó ${ultima.estado}; se reintenta en cada vuelta del vigía, sin que haga falta nadie` })
+          continue
+        }
+      } catch { /* sin sobre, queda el aviso de siempre */ }
+    }
     lineas.push({ repetible: true, campana_id: c.id, texto: `la campaña quedó en «${c.estado}»: su última llamada (${ultima.paso}, intento ${ultima.intento}) terminó ${ultima.estado} y no hay ninguna en curso. Qué hacer: reenviar el sobre del plan para que la cadena reintente` })
   }
 

@@ -524,14 +524,18 @@ describe('afinando lo que las mutaciones dejaron vivo (flujos)', () => {
     for (const p of m.reg.agente) expect((p.cuerpo as any).dry_run).toBe(false)
     expect(m.al.campanas[0].seco).toBe(false)
   })
-  it('🔴 el tope de presupuesto de planificación detiene antes de llamar al agente y el cable le cuenta a la sala que la campaña necesita a Emilio', async () => {
+  it('🔴 el tope de presupuesto de planificación detiene antes de llamar al agente · 18-nov grupo A: la campaña NO pasa a necesita_humano (sigue con una alerta)', async () => {
     const m = mundo({ agente: () => { throw new Error('no debía llamar al agente') } })
     await abrirYa(m)
     m.al.campanas[0].presupuesto_planificacion_usd = 0.5
+    m.al.campanas[0].tope_gasto_usd = 0.5 // la bolsa se agrandaría sola al triple; con el tope de la campaña en 0,50 no puede crecer
+    const antes = m.al.campanas[0].estado
     const e = await sub(m, IDS.estrategia, { campana_id: m.al.campanas[0].id, seco: true })
-    expect(e[0].json.resultado).toBe('necesita_humano')
+    expect(e[0].json.resultado).toBe('necesita_humano') // la etiqueta del fin declarado en n8n
+    expect(e[0].json.alerta).toMatch(/sigue sola/)
     expect(m.reg.agente).toHaveLength(0)
-    expect(m.al.campanas[0].estado).toBe('necesita_humano')
+    expect(m.al.campanas[0].estado).toBe(antes)
+    expect(m.al.campanas[0].presupuesto_planificacion_usd).toBe(0.5)
   })
   it('🔴 si el calendario no queda, el cable cuenta necesita_humano (no «cadena_abierta»)', async () => {
     const m = mundo()

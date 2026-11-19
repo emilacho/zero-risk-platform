@@ -4,7 +4,7 @@
 import type { Almacen, Campana, EstadoCampana } from './almacen'
 import { autorizarLlamada, cadena, compuerta, err, leerSeco, type Respuesta } from './autorizar'
 import { arrancarAlActivar, type ResultadoDelArranque } from './arranque'
-import { DIAS_DE_CAMPANA, DIAS_MAXIMOS_DE_CAMPANA, medidaDeCampana, SEMANAS_DE_TANDA } from './constantes'
+import { bolsaDePlanificacion, DIAS_DE_CAMPANA, DIAS_MAXIMOS_DE_CAMPANA, medidaDeCampana, SEMANAS_DE_TANDA } from './constantes'
 import { esFechaIso, sumarDias } from './fechas'
 import { ventanaDelPlan } from './fechas-en-texto'
 import { nuevoOrdenEncendido } from './mesas'
@@ -87,7 +87,8 @@ export async function abrirCampana(al: Almacen, cuerpo: Record<string, unknown>,
   try { nueva = await al.insertarCampana({
     client_id: clientId, plan_id: plan.plan_id, fecha_inicio: ventana.fecha_inicio, fecha_inicio_origen: ventana.origen, fecha_fin: ventana.fecha_fin, ...(semanasDeTanda === SEMANAS_DE_TANDA ? {} : { semanas_de_tanda: semanasDeTanda as number }),
     zona_horaria: ctx.zonaHoraria, pais: ctx.pais, sedes: ctx.sedes.map((x) => x.clave), estado: 'abierta', estado_motivo: [ctx.sedes.length === 0 ? 'sin sede declarada: no se comprueba si el local está abierto' : null, ctx.zonaHorariaOrigen === 'sin_dato' ? 'zona horaria sin dato: hay que preguntarla' : null, sedesRec.ok ? null : 'no se pudieron leer las sedes: ' + String(sedesRec.error ?? 'sin detalle').slice(0, 80)].filter((x): x is string => !!x).join(' · ') || null,
-    presupuesto_planificacion_usd: 6, ventana_parte_dias: 10, sustituir_video_por: 'ninguna', autoproducir: (await al.leerConfig('autoproducir_por_omision')) === true,
+    // 18-nov · la bolsa nace de lo medido (3 × estrategia + tandas), no de los US$ 6 fijos (DECISION-EMILIO-topes-con-margen-triple)
+    presupuesto_planificacion_usd: bolsaDePlanificacion(medidaDeCampana({ fecha_inicio: ventana.fecha_inicio, fecha_fin: ventana.fecha_fin, semanas_de_tanda: semanasDeTanda as number }).totalTandas), ventana_parte_dias: 10, sustituir_video_por: 'ninguna', autoproducir: (await al.leerConfig('autoproducir_por_omision')) === true,
     ...(topeInicial !== null ? { tope_gasto_usd: topeInicial } : {}),
     sala_ref: typeof cuerpo.sala_ref === 'object' && cuerpo.sala_ref ? (cuerpo.sala_ref as Record<string, unknown>) : {}, reemplaza_a: reemplaza, seco: s.seco,
   }) } catch (e) {
@@ -123,10 +124,22 @@ export const ESTADOS_QUE_SE_REABREN: readonly EstadoCampana[] = ['necesita_human
 /** el sobre que deja la reapertura: el MISMO que deja planeación al terminar el plan (la sala lo despacha a la puerta en modo «abrir», que retoma la campaña que sigue armando) */
 export interface SobreDePlan {
   source: 'planeacion/plan-listo'; intent: 'briefear'
-  payload: { client_id: string; plan_id: string; dry_run: boolean; desde_worker: 'cadena/reabrir'; campana_id: string }
+  payload: { client_id: string; plan_id: string; dry_run: boolean; desde_worker: 'cadena/reabrir' | 'cadena/reintento'; campana_id: string }
   idempotency_key: string; logical_period: string; tenant_id: string; client_id: string
 }
 export const llaveDeReapertura = (campanaId: string, fechaInicio: string): string => `${campanaId}:reabrir:${fechaInicio}`
+/**
+ * 18-nov · «NADA detiene el flujo» (grupo A) · el sobre con que el reloj RETOMA una campaña que sigue armando y cuya última llamada murió: el mismo del plan (la puerta, en modo
+ * «abrir», contesta `ya_abierta` y retoma donde quedó · lo ya validado no se repite). UNO por tramo de medio día: la sala deduplica la llave.
+ */
+export const llaveDeReintentoDelPlan = (campanaId: string, tramo: string): string => `${campanaId}:reintento:${tramo}`
+export function sobreDeReintento(c: Pick<Campana, 'id' | 'client_id' | 'plan_id' | 'seco'>, tramo: string): SobreDePlan {
+  return {
+    source: 'planeacion/plan-listo', intent: 'briefear',
+    payload: { client_id: c.client_id, plan_id: c.plan_id, dry_run: c.seco === true, desde_worker: 'cadena/reintento', campana_id: c.id },
+    idempotency_key: llaveDeReintentoDelPlan(c.id, tramo), logical_period: `reintento:${tramo}`, tenant_id: c.client_id, client_id: c.client_id,
+  }
+}
 
 /**
  * E (09-nov · firma de Emilio, regla de sistema) · REABRIR una campaña en el mismo lugar: la misma fila, el mismo plan.

@@ -64,6 +64,23 @@ export const PASOS_SIN_REVISION: readonly Paso[] = ['estrategia', 'calendario', 
 export const PASOS_CON_PRESUPUESTO_PROPIO: ReadonlySet<Paso> = new Set<Paso>(['fichas'])
 /** el presupuesto del lector cuando la campaña no trae el suyo (US$ 2: hasta 3 intentos de ~0,5, o 2 si fallan sin costo registrado) */
 export const PRESUPUESTO_LECTOR_POR_OMISION = 2
+/** el presupuesto de planificación con el que nace una campaña (`campanas.ts` · abrir, y el DEFAULT de la columna) */
+export const PRESUPUESTO_PLANIFICACION_POR_OMISION = 6
+/** 18-nov · firma de Emilio (DECISION-EMILIO-topes-con-margen-triple): todo tope de gasto = el triple de lo medido */
+export const MULTIPLO_DE_LA_BOLSA = 3
+/**
+ * 18-nov · lo MEDIDO (SELECT de `cadena_corridas`, 18-nov ~14:50Z, solo lectura) en la campaña de Náufrago `36e66179`, US$ 5,14 en total:
+ *   · la ESTRATEGIA, una vez por campaña: 0,7712 + su corrección 0,6502 = 1,42;
+ *   · cada TANDA de calendario con su corrección: (0,7261 + 0,6336) · (0,5466 + 0,5925) · (0,5417 + 0,6779) = 3,72 / 3 = 1,24.
+ * Cuenta firmada por Lenovo 15:12Z («estrategia fija + por tanda»): ninguna campaña queda corta, porque la estrategia es un costo fijo que una cuenta por semana no ve.
+ */
+export const COSTO_DE_LA_ESTRATEGIA_USD = 1.42
+export const COSTO_POR_TANDA_USD = 1.24
+/** La bolsa de planificación de una campaña: 3 × (la estrategia + cada una de sus tandas), nunca menos que la de siempre. 3 tandas → US$ 15,42 · 4 tandas (Náufrago) → 19,14. */
+export function bolsaDePlanificacion(totalTandas: number): number {
+  const n = Number.isFinite(totalTandas) && totalTandas > 0 ? totalTandas : 0
+  return Math.max(PRESUPUESTO_PLANIFICACION_POR_OMISION, Math.round(MULTIPLO_DE_LA_BOLSA * (COSTO_DE_LA_ESTRATEGIA_USD + COSTO_POR_TANDA_USD * n) * 100) / 100)
+}
 
 export async function modeloDeLaCadena(al: Almacen): Promise<string> {
   const v = await al.leerConfig('modelo_cadena')
