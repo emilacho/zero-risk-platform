@@ -140,7 +140,7 @@ describe('el PEDIDO que recibe n8n para cada empleado', () => {
     expect(lineas[1]).toMatch(/^1\. Propones 2 o 3 prompts/)
     expect(lineas).toHaveLength(6) // encabezado + las 5 reglas firmadas
     expect(p.extra).toMatchObject({ paso_de_la_oficina: 'prompts', encargo_id: id })
-    expect(p).toMatchObject({ max_budget_usd: 0.2, thinking_mode: 'disabled', dry_run: true, client_id: CLIENTE })
+    expect(p).toMatchObject({ max_budget_usd: 0.2, thinking_mode: 'maximo', dry_run: true, client_id: CLIENTE })
     const m = pedidos['mirar'][0] as { agent_name: string; images: Array<{ url: string }> }
     expect(m.agent_name).toBe('marketing_instagram_curator'); expect(m.images.length).toBeGreaterThan(0); expect(m.images[0].url.startsWith('https://dry.test/')).toBe(true)
     expect((pedidos['paquete'][0] as { destino: string; cuerpo: { cliente: string; voy_a_producir: Record<string, unknown> } }).cuerpo).toMatchObject({ cliente: CLIENTE, voy_a_producir: { entregable: 'BRF-0003', red: 'Instagram' } })

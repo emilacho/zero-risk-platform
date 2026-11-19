@@ -60,6 +60,9 @@ describe('MESA · cada agente lee las notas que le tocan al abrirse su turno', (
     expect(t).toMatch(/\[N2\] \(hacer · de su rubro\) Muestra siempre el plato completo/)
     expect(t).toMatch(/N1 apliqué/)
     expect(t.indexOf('Lo que el dueño ha dicho antes')).toBeGreaterThan(t.indexOf('Tu turno'))
+    // 19-nov · ADENDA 1 · P1 (e): el pedido CIERRA con el objetivo, detrás de las notas del dueño (lo último que lee el agente)
+    expect(t.indexOf('## Lo que importa')).toBeGreaterThan(t.indexOf('Lo que el dueño ha dicho antes'))
+    expect(t.trimEnd().endsWith('Todo lo que escribas en este turno sirve a eso.')).toBe(true)
     // la dirección integra: las líneas van dentro de «## Citas»
     const integra = turnos.find((x) => x.tipo === 'integrar')!.task
     expect(integra).toMatch(/dentro de la sección «## Citas»/)

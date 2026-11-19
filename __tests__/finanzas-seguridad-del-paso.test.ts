@@ -110,8 +110,9 @@ describe('1 · candado de paso en vuelo', () => {
 })
 
 describe('2 · el tope cuenta lo COBRADO, no solo lo guardado', () => {
-  it('con US$ 1,60 cobrados (y 0,00 guardados) el encargo cierra por tope SIN llamar al modelo', async () => {
-    const m = mundo({ cobrado: 1.6 })
+  // 18-nov · la base es 11,10: lo cobrado tiene que pasarla
+  it('con US$ 11,20 cobrados (y 0,00 guardados) el encargo cierra por tope SIN llamar al modelo', async () => {
+    const m = mundo({ cobrado: 11.2 })
     const id = await abrirYHacerElPrimerPaso(m)
     const r = await avanzar(m.P, id)
     expect(r.status).toBe(200)

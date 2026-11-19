@@ -92,7 +92,7 @@ describe('lo aprobado por Emilio (31-oct) · armarPedido', () => {
     expect(armarPedido({ prompt: 'corto', formato: 'reel' })).toMatchObject({ ok: false })
     expect(armarPedido({ ...base, resolucion: '720p', segundos: 12 })).toMatchObject({ ok: true })
   })
-  it('el tope aprobado es US$ 5 por video', () => expect(TOPE_POR_VIDEO_USD).toBe(5))
+  it('el tope por omisión es US$ 23,47 por video (aprobado por Emilio 31-oct → 3 × lo medido, 18-nov)', () => expect(TOPE_POR_VIDEO_USD).toBe(23.47))
 })
 
 describe('el libro', () => {
@@ -169,14 +169,15 @@ describe('POST /api/video/generate', () => {
     expect((await post(PEDIDO)).status).toBe(500)
     expect(fetchMock).not.toHaveBeenCalled()
   })
-  it('1080p 8 s cuesta US$ 9,10 > tope 5 → 409 SIN enviar (solo la estimación gratis)', async () => {
+  it('1080p 30 s cuesta US$ 34,12 de lista (23,88 con el 30 %) > tope 23,47 → 409 SIN enviar (solo la estimación gratis)', async () => {
     fetchMock.mockResolvedValueOnce(respuesta(200, { type: 'description', pricing_description: DESC_25 }, { 'x-correlation-id': 'c-1' }))
-    const r = await post({ ...PEDIDO, resolucion: '1080p' })
+    const r = await post({ ...PEDIDO, resolucion: '1080p', segundos: 30 })
     const j = await r.json()
     expect(r.status).toBe(409)
     expect(j.error).toBe('tope_por_video')
-    expect(j.costo_lista_usd).toBeCloseTo(9.0979, 3)
-    expect(j.costo_estimado_usd).toBeCloseTo(6.3685, 3) // con el 30 % vigente sigue fuera del tope
+    expect(j.costo_lista_usd).toBeCloseTo(34.1171, 3)
+    expect(j.costo_estimado_usd).toBeCloseTo(23.882, 3) // con el 30 % vigente sigue fuera del tope
+    expect(j.costo_estimado_usd).toBeGreaterThan(TOPE_POR_VIDEO_USD)
     expect(llamadas()).toHaveLength(1)
     expect(llamadas()[0].url).toBe('https://api.higgsfield.ai/estimate/bytedance/seedance-2.5/text-to-video')
     expect((llamadas()[0].init!.headers as Record<string, string>).Authorization).toBe('Key id:secreto')
@@ -351,12 +352,12 @@ describe('condición 2 · sin clave y sin contexto de flujo no se envía nada', 
 })
 
 describe('mutantes vivos de CC3 (a, b)', () => {
-  it('(a) `tope_usd` del pedido NO puede subir el tope aprobado: 1080p con tope_usd 50 sigue siendo 409 y el tope aplicado es 5', async () => {
+  it('(a) `tope_usd` del pedido NO puede subir el tope aprobado: 1080p 30 s con tope_usd 50 sigue siendo 409 y el tope aplicado es 23,47', async () => {
     fetchMock.mockResolvedValueOnce(respuesta(200, { type: 'description', pricing_description: DESC_25 }))
-    const r = await post({ ...PEDIDO, resolucion: '1080p', tope_usd: 50 })
+    const r = await post({ ...PEDIDO, resolucion: '1080p', segundos: 30, tope_usd: 50 })
     const j = await r.json()
     expect(r.status).toBe(409)
-    expect(j.tope_usd).toBe(5)
+    expect(j.tope_usd).toBe(TOPE_POR_VIDEO_USD)
     expect(llamadas()).toHaveLength(1)
   })
   it('(b) GET sin llave interna → 401 y ninguna llamada al proveedor', async () => {
@@ -375,18 +376,19 @@ describe('el descuento vigente del proveedor (medido 31-oct: lista 3,70 → carg
     expect(conDescuento(3.6979, 'otro/modelo', antes, DESCUENTO_31OCT)).toEqual({ usd: 3.6979, pct: 0 })
     expect(conDescuento(3.6979, 'bytedance/seedance-2.5', antes, null)).toEqual({ usd: 3.6979, pct: 0 })
   })
-  it('D6 (CC3): el tope se compara con el costo CON descuento, no con la lista: 720p 12 s = lista 5,55 > 5 pero 3,88 con el 30 % → se envía y se reserva 3,88', async () => {
+  it('D6 (CC3): el tope se compara con el costo CON descuento, no con la lista: 1080p 24 s = lista 27,29 > 23,47 pero 19,11 con el 30 % → se envía y se reserva 19,11', async () => {
     fetchMock
       .mockResolvedValueOnce(respuesta(200, { type: 'description', pricing_description: DESC_25 }))
       .mockResolvedValueOnce(respuesta(200, { status: 'queued', request_id: 'r12', status_url: 'https://api.higgsfield.ai/requests/r12/status' }))
-    const r = await post({ ...PEDIDO, segundos: 12 })
+    const r = await post({ ...PEDIDO, resolucion: '1080p', segundos: 24 })
     const j = await r.json()
     expect(r.status).toBe(202)
-    expect(j.costo_lista_usd).toBeCloseTo(5.5469, 3)
-    expect(j.costo_estimado_usd).toBeCloseTo(3.8828, 3)
-    expect(j.tope_usd).toBe(5)
+    expect(j.costo_lista_usd).toBeCloseTo(27.2937, 3)
+    expect(j.costo_lista_usd).toBeGreaterThan(TOPE_POR_VIDEO_USD)
+    expect(j.costo_estimado_usd).toBeCloseTo(19.1056, 3)
+    expect(j.tope_usd).toBe(TOPE_POR_VIDEO_USD)
     expect(llamadas()).toHaveLength(2) // estimación + envío
-    expect(insert.mock.calls[0][0].cost_usd).toBeCloseTo(3.8828, 3)
+    expect(insert.mock.calls[0][0].cost_usd).toBeCloseTo(19.1056, 3)
   })
   it('pasada la fecha del descuento, la ruta vuelve a reservar la lista (720p 8 s = US$ 3,70)', async () => {
     vi.useFakeTimers({ toFake: ['Date'] })
@@ -405,11 +407,11 @@ describe('el descuento vigente del proveedor (medido 31-oct: lista 3,70 → carg
 describe('regla #18 · el descuento y el tope del proveedor salen de la configuración', () => {
   // dos clientes de rubros distintos: el brazo no mira el cliente, pero la prueba corre con los dos
   const CLIENTES = [['restaurante', { ...PEDIDO, client_id: 'cli-restaurante' }], ['B2B de seguridad', { ...PEDIDO, client_id: 'cli-seguridad', formato: 'short', prompt: 'Así se revisa un extintor en una planta industrial, paso a paso' }]] as const
-  it.each(CLIENTES)('🔴 %s · sin la clave: tope aprobado (US$ 5) y SIN descuento (se reserva la lista)', async (_n, ped) => {
+  it.each(CLIENTES)('🔴 %s · sin la clave: tope por omisión (US$ 23,47) y SIN descuento (se reserva la lista)', async (_n, ped) => {
     configRows.value = []
     fetchMock.mockResolvedValueOnce(respuesta(200, { type: 'description', pricing_description: DESC_25 }))
     const j = await (await post({ ...ped, dry_run: true })).json()
-    expect(j).toMatchObject({ descuento_pct: 0, tope_usd: 5 })
+    expect(j).toMatchObject({ descuento_pct: 0, tope_usd: TOPE_POR_VIDEO_USD })
     expect(j.costo_estimado_usd).toBeCloseTo(3.698, 3)
   })
   it.each(CLIENTES)('🔴 %s · un tope configurado más bajo corta antes de enviar (409, solo la estimación gratis)', async (_n, ped) => {
@@ -430,12 +432,12 @@ describe('regla #18 · el descuento y el tope del proveedor salen de la configur
   })
   it('🔴 config ilegible (error de la base) o con valores raros: la de por omisión, del lado seguro', async () => {
     const { configDelBrazo, FICHAS_POR_OMISION } = await import('@/lib/video/parametros')
-    expect(configDelBrazo(null)).toMatchObject({ tope_por_video_usd: 5, descuento: null })
+    expect(configDelBrazo(null)).toMatchObject({ tope_por_video_usd: TOPE_POR_VIDEO_USD, descuento: null })
     expect(configDelBrazo(null).catalogo.fichas).toEqual(FICHAS_POR_OMISION)
-    expect(configDelBrazo({ tope_por_video_usd: -1, descuento: { pct: 1.5, hasta: 'mañana', modelos: [] } })).toMatchObject({ tope_por_video_usd: 5, descuento: null })
+    expect(configDelBrazo({ tope_por_video_usd: -1, descuento: { pct: 1.5, hasta: 'mañana', modelos: [] } })).toMatchObject({ tope_por_video_usd: TOPE_POR_VIDEO_USD, descuento: null })
     expect(configDelBrazo({ tope_por_video_usd: 3.5 })).toMatchObject({ tope_por_video_usd: 3.5, descuento: null })
-    // CC7: tope no numérico, ≤ 0 o vacío ⇒ US$ 5 (nunca «sin tope»); descuento fuera de su modelo o con fecha ilegible ⇒ sin descuento
-    for (const t of [0, '', '3', null, Number.NaN, Number.POSITIVE_INFINITY]) expect(configDelBrazo({ tope_por_video_usd: t }).tope_por_video_usd, String(t)).toBe(5)
+    // CC7: tope no numérico, ≤ 0 o vacío ⇒ el de por omisión, US$ 23,47 (nunca «sin tope»); descuento fuera de su modelo o con fecha ilegible ⇒ sin descuento
+    for (const t of [0, '', '3', null, Number.NaN, Number.POSITIVE_INFINITY]) expect(configDelBrazo({ tope_por_video_usd: t }).tope_por_video_usd, String(t)).toBe(TOPE_POR_VIDEO_USD)
     expect(configDelBrazo({ descuento: { pct: 0.3, hasta: 'pronto', modelos: ['bytedance/seedance-2.5'] } }).descuento).toBeNull()
     expect(configDelBrazo({ descuento: { pct: 0.3, hasta: '2026-11-07T13:19:13Z' } }).descuento).toBeNull()
     expect(configDelBrazo([1, 2]).descuento).toBeNull()
@@ -443,7 +445,7 @@ describe('regla #18 · el descuento y el tope del proveedor salen de la configur
     for (const pct of [1, 1.5, 0, -0.2]) expect(configDelBrazo({ descuento: { ...DESCUENTO_31OCT, pct } }).descuento, String(pct)).toBeNull()
     configRows.value = null; configRows.error = { message: 'la base no contesta' }
     fetchMock.mockResolvedValueOnce(respuesta(200, { type: 'description', pricing_description: DESC_25 }))
-    expect(await (await post({ ...PEDIDO, dry_run: true })).json()).toMatchObject({ descuento_pct: 0, tope_usd: 5 })
+    expect(await (await post({ ...PEDIDO, dry_run: true })).json()).toMatchObject({ descuento_pct: 0, tope_usd: TOPE_POR_VIDEO_USD })
   })
 })
 

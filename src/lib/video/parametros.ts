@@ -79,7 +79,8 @@ export function catalogoDeModelos(valor: unknown): CatalogoDeModelos {
 export const RESOLUCION_APROBADA = '720p'
 export const RESOLUCIONES_PERMITIDAS: ReadonlySet<string> = new Set(['480p', '720p', '1080p'])
 /** el tope por video POR OMISIÓN (lo aprobado por Emilio el 31-oct); el vigente sale de la configuración (`configDelBrazo`) */
-export const TOPE_POR_VIDEO_USD = 5
+// 18-nov · Emilio: topes = 3 × lo medido (GO Lenovo 16:17Z): el video real más caro costó 7,82 (Higgsfield, 1080p) → 23,47. Solo vale sin la clave `brazo_de_video` (la viva trae 60)
+export const TOPE_POR_VIDEO_USD = 23.47
 
 /**
  * 11-nov · GO Lenovo 03:55Z · regla #18 del barrido: el descuento y el tope del proveedor NO viven en el código (el descuento del 31-oct quedó escrito con su fecha y venció el 7-nov).
@@ -103,12 +104,14 @@ export function configDelBrazo(valor: unknown): ConfigDelBrazo {
   return { tope_por_video_usd: tope, descuento, ...(porSegundo !== null ? { tope_por_segundo_usd: porSegundo } : {}), catalogo: catalogoDeModelos(v) }
 }
 
-/** 17-nov · T7a · el tope de UNA llamada al brazo: el de la configuración por video y, si hay cifra por segundo, no más que ella × los segundos de ESA llamada
- *  (en plano por plano, cada plano es una llamada: un plano de 4 s no puede gastar lo de uno de 15). Lo que mande el llamador solo puede bajarlo · pura */
+/** 17-nov · T7a · el tope de UNA llamada al brazo: la cifra por segundo × los segundos de ESA llamada (en plano por plano, cada plano es una llamada:
+ *  un plano de 4 s no puede gastar lo de uno de 15). Lo que mande el llamador solo puede bajarlo · pura
+ *  19-nov · G5 (GO Lenovo 03:26Z: «el brazo también tiene que salir del triple de lo medido por segundo»): con cifra por segundo, el tope por video NO corta,
+ *  crece con la llamada; sin cifra por segundo (o con segundos inválidos) manda el tope por video, que queda de respaldo. El techo de la pieza entera lo pone
+ *  el paso `video` (que también crece por segundo) y llega como `pedido`. */
 export function topeDeLaLlamada(cfg: ConfigDelBrazo, segundos: number, pedido?: unknown): number {
-  const porVideo = cfg.tope_por_video_usd
-  const porSegundo = typeof cfg.tope_por_segundo_usd === 'number' && Number.isFinite(segundos) && segundos > 0 ? Math.round(cfg.tope_por_segundo_usd * segundos * 10000) / 10000 : Number.POSITIVE_INFINITY
-  const delBrazo = Math.min(porVideo, porSegundo)
+  const porSegundo = typeof cfg.tope_por_segundo_usd === 'number' && Number.isFinite(segundos) && segundos > 0 ? Math.round(cfg.tope_por_segundo_usd * segundos * 10000) / 10000 : null
+  const delBrazo = porSegundo ?? cfg.tope_por_video_usd
   return typeof pedido === 'number' && Number.isFinite(pedido) && pedido > 0 ? Math.min(pedido, delBrazo) : delBrazo
 }
 

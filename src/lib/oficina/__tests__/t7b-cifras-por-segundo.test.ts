@@ -8,7 +8,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { registrarPaso, siguientePaso } from '../motor'
-import { CIFRAS_POR_SEGUNDO_T7B, VIDEO_MESA_ENCENDIDA, VIDEO_MESA_POR_SEGUNDO, VIDEO_MESA_POR_SEGUNDO_1800 } from '../plantillas/video-mesa'
+import { CIFRAS_POR_SEGUNDO_T7B, VIDEO_MESA_POR_SEGUNDO_1900, VIDEO_MESA_POR_SEGUNDO_1800 } from '../plantillas/video-mesa'
 import { aplicarTopesPorDuracion, coberturaDelTope, loQueSigueDeLaMesa, topeDelEncargoDeLaFila, VUELTAS_QUE_SE_SALTAN_SI_NO_CABEN } from '../topes-por-duracion'
 import { cotaAgotada, siguienteDeLaMesa } from '../mesa/planificador'
 import { reservaDeLaMesa } from '../mesa/orquestador'
@@ -21,6 +21,10 @@ import { configDelBrazo, topeDeLaLlamada } from '../../video/parametros'
 import { TOPE_MAXIMO_DEL_SOBRE_USD, validarSobre } from '../sobre'
 import type { Estado, Plantilla } from '../tipos'
 
+// 19-nov · desde 202611190330 (topes al triple · `topes-al-triple-video.test.ts`) la plantilla viva tiene otras cifras: esta prueba queda como HISTORIA
+//   de T7b y mide la plantilla que escribió 202611171900, ya cargada. Las mismas condiciones de CC6, con las cifras nuevas, viven en la prueba del triple.
+const VIDEO_MESA_POR_SEGUNDO = VIDEO_MESA_POR_SEGUNDO_1900
+const VIDEO_MESA_ENCENDIDA = aplicarTopesPorDuracion(VIDEO_MESA_POR_SEGUNDO_1900).plantilla
 const RAIZ = path.resolve(__dirname, '../../../../supabase')
 const leer = (...p: string[]) => fs.readFileSync(path.join(RAIZ, ...p), 'utf8').replace(/\r/g, '')
 const MIG = leer('migrations', '202611171900_oficina_video_t7b_cifras_por_segundo_y_techo_650.sql')
@@ -245,12 +249,16 @@ describe('T7b · adenda Lenovo 12:30 · 3 · el freno de la campaña para una fi
 })
 
 describe('T7b · el brazo: 60 por video y 2,0 por segundo', () => {
-  it('cada llamada se topa con lo menor entre 60 y 2,0 × sus segundos', () => {
+  // 19-nov · G5 (GO Lenovo 03:26Z): con cifra por segundo el 60 ya no corta; una llamada de 45 s se topa en 2,0 × 45 = 90 (el techo de la pieza lo pone el paso `video`)
+  it('cada llamada se topa con 2,0 × sus segundos; el 60 queda de respaldo y no corta', () => {
     const cfg = configDelBrazo(tomar(MIG, 'brazo'))
     expect(cfg).toMatchObject({ tope_por_video_usd: 60, tope_por_segundo_usd: 2 })
     expect(topeDeLaLlamada(cfg, 15)).toBe(30)
     expect(topeDeLaLlamada(cfg, 4)).toBe(8)
-    expect(topeDeLaLlamada(cfg, 45)).toBe(60)
+    expect(topeDeLaLlamada(cfg, 45)).toBe(90)
+    expect(topeDeLaLlamada(cfg, 45, 70)).toBe(70)
+    expect(topeDeLaLlamada(cfg, 0)).toBe(60)
+    expect(topeDeLaLlamada(cfg, Number.NaN)).toBe(60)
   })
   it('🔴 el brazo nunca deja a un video (1080p, plano entero de 15 s) por debajo del tope de su paso: 2,0 × 15 = 30', () => {
     const cfg = configDelBrazo(tomar(MIG, 'brazo'))

@@ -17,8 +17,8 @@
  *      ni se archiva nada: se devuelve qué hay y qué falta.
  */
 import {
-  AGENTE, crearPresupuesto, filtrarPerfil, MAX_VOCES_AL_REDACTOR, fuentesFaltantes, OFICINA, vocesDelTipo, pareceUnaOrden, publicosDe, suficiencia, tareaDelPerfil, TIPO_DEL_INFORME,
-  TOPE_DEL_REDACTOR_USD, TOPE_POR_CORRIDA_USD, type PublicoObjetivo, type VozConId,
+  AGENTE, crearPresupuesto, filtrarPerfil, MAX_VOCES_AL_REDACTOR, fuentesFaltantes, OFICINA, pareceUnaOrden, publicosDe, suficiencia, tareaDelPerfil, TIPO_DEL_INFORME,
+  TOPE_DEL_REDACTOR_USD, TOPE_POR_CORRIDA_USD, type DeclaracionDelCerebro, type PublicoObjetivo, type TipoDePublico, type VozConId,
 } from './perfil'
 
 export const RUTA = '/api/perfil-del-publico'
@@ -33,9 +33,9 @@ export interface DepsDeLaCorrida {
   leerFicha(): Promise<FichaDelCliente | null>
   /** las filas del documento de público ideal de ESTE cliente */
   leerPublicos(): Promise<ReadonlyArray<Record<string, unknown>>>
-  /** la voz del público que el CEREBRO ya juntó para ESTE cliente, por su consulta (fuente `cerebro:<clase>`, id = id de la ficha) · nunca raspa.
-   *  `corte`: si no se leyó todo lo que hay, por qué (se declara; nunca es mudo) */
-  leerVoces(): Promise<{ voces: ReadonlyArray<VozConId>; corte: string | null }>
+  /** la voz de ESE TIPO de público que el CEREBRO ya juntó para ESTE cliente, por su consulta con `publico=<tipo>` (fuente `cerebro:<clase>`, id = id de la ficha) · nunca raspa.
+   *  Las clases las elige el cerebro (#1167) y las declara en `declara`. `corte`: si no se leyó todo lo que hay, por qué (se declara; nunca es mudo) */
+  leerVoces(tipo: TipoDePublico): Promise<{ voces: ReadonlyArray<VozConId>; corte: string | null; declara?: DeclaracionDelCerebro | null }>
   /** el filtro de seguridad que ya existe: true = pasa. Si lanza, la voz queda apartada (falla cerrado) */
   filtroDeSeguridad(texto: string): Promise<boolean>
   redactar(tarea: string, tope_usd: number, publico: PublicoObjetivo): Promise<ResultadoDelRedactor>
@@ -93,18 +93,24 @@ export async function correrPerfil(deps: DepsDeLaCorrida, e: EntradaDeLaCorrida)
 
   // 2 · la voz del público que ya juntó el cerebro, pasada por la red propia y el filtro existente
   const pasa = async (texto: string): Promise<boolean> => { if (pareceUnaOrden(texto)) return false; try { return (await deps.filtroDeSeguridad(texto)) === true } catch { return false } }
-  const voces: VozConId[] = []
-  const lectura = await deps.leerVoces()
-  if (lectura.corte) r.cortes.push(lectura.corte)
-  for (const v of lectura.voces) { if (await pasa(v.texto)) voces.push(v); else r.voces_apartadas++ }
-  r.voces_del_cerebro = voces.length
+  // 18-nov · una lectura por TIPO de público (el cerebro elige sus clases): cada tipo recibe solo su voz
+  const porTipo = new Map<TipoDePublico, { voces: VozConId[]; declara: DeclaracionDelCerebro | null }>()
+  for (const tipo of [...new Set(publicos.map((p) => p.tipo))]) {
+    const lectura = await deps.leerVoces(tipo)
+    if (lectura.corte) r.cortes.push(lectura.corte)
+    const suyas: VozConId[] = []
+    for (const v of lectura.voces) { if (await pasa(v.texto)) suyas.push(v); else r.voces_apartadas++ }
+    porTipo.set(tipo, { voces: suyas, declara: lectura.declara ?? null })
+    r.voces_del_cerebro += suyas.length
+  }
   const textos: string[] = []
   const citas = new Set<string>()
 
   for (const p of publicos) {
-    const suyas = vocesDelTipo(voces, p.tipo)
+    const delTipo = porTipo.get(p.tipo) ?? { voces: [], declara: null }
+    const suyas = delTipo.voces
     const muestra = suficiencia(suyas)
-    const faltantes = fuentesFaltantes(p.tipo, suyas)
+    const faltantes = fuentesFaltantes(p.tipo, suyas, delTipo.declara)
     const base = { publico: p.nombre, tipo: p.tipo, muestra: muestra.motivo, voces_usadas: suyas.length, fuentes_faltantes: faltantes }
     if (e.dry_run) { r.publicos.push({ ...base, estado: 'ensayo', detalle: 'ensayo: se leyó lo que el cerebro ya tiene · no se redactó ni se archivó · US$ 0' }); continue }
     // 3 · sin muestra no se redacta; lo que falta se declara (no se busca afuera)

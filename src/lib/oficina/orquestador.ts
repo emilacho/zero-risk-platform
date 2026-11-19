@@ -40,7 +40,7 @@ import { seccionDeCambiosDelDueno } from './cambios-del-dueno'
 import { antesDeLasFotos, despuesDeUnAgente, pedirLoQueElAgenteNecesita, seccionDeMaterialParaElAgente } from './material-orquestador'
 import { duenoDeLaFicha, registrarPaso, siguientePaso, type ResultadoDePaso } from './motor'
 import { contextoDeHechos } from './hechos-del-negocio'
-import { construirTarea, contextoDelRevisor, CONTRATOS_EN_TEXTO, type ContextoDePedido } from './pedidos'
+import { construirTarea, contextoDelRevisor, CONTRATOS_EN_TEXTO, resumenParaElJefe, type ContextoDePedido } from './pedidos'
 import { seccionDeAutorevision, validarAutorevision, type NotaVista } from '../notas-del-dueno/autorevision'
 import type { Cambios, Encargo, FuentesCompletas, Puertos, TurnoRegistrado } from './puertos'
 import { chequearPrompts, citasExisten, derivarDecision, elegirVersion, veredictoDeImagenes, type ObservacionDeImagen, type ReglasDeImagen } from './reglas-de-imagen'
@@ -51,6 +51,7 @@ import { decidirPuerta, TARGET_STEP_PRODUCIR, validarSobre, type Sobre } from '.
 import { CLAVE_DE_LA_PALANCA, FAMILIA_CON_MESA, familiaConMesa } from './mesa/con-mesa'
 import { claseDe, tienePasarela } from './clase'
 import { aplicarTopesPorDuracion, coberturaDelTope } from './topes-por-duracion'
+import { CLAVE_DE_LA_DURACION, duracionDeLaPieza, segundosDelEncargo, topesPorSegundoDeVideo, type DuracionDeLaPieza } from './video/duracion-de-la-pieza'
 import { estadoInicial, type Estado, type Ficha, type Paso, type Plantilla, type Siguiente } from './tipos'
 
 export interface Respuesta { status: number; cuerpo: Record<string, unknown> }
@@ -94,7 +95,7 @@ function salaRefConFila(ref: Record<string, unknown> | null | undefined, s: { fi
  * 17-nov · «creativos en cada paso» · la ruta a la versión con mesa (`mesa/con-mesa.ts`): solo una pieza NUEVA (sin reapertura ni devolución del dueño), con la palanca `creativos_con_mesa`
  * del cliente encendida y la plantilla con mesa ACTIVA. Cualquier lectura que falle = sin ruta: la pieza sigue EXACTA la línea de siempre. Devuelve la plantilla a abrir o null.
  */
-async function rutaConMesa(P: Puertos, s: Sobre, clientId: string): Promise<{ familia: string; pl: { plantilla: Plantilla; activo: boolean } } | null> {
+async function rutaConMesa(P: Puertos, s: Sobre, clientId: string): Promise<{ familia: string; pl: { plantilla: Plantilla; activo: boolean; cruda?: Plantilla } } | null> {
   if (!s.familia || s.reabrir_causa_corregida || s.cambios_del_dueno || !FAMILIA_CON_MESA[s.familia] || !P.mesa?.configDeLaCadena) return null
   try {
     // la actividad de la versión con mesa se mira leyendo SU plantilla (abajo): aquí solo se decide si la palanca la pide
@@ -125,11 +126,21 @@ export async function abrirEncargo(P: Puertos, entrada: { cuerpo: unknown; clien
   if (!pl.activo && !entrada.permitir_apagada) return r(409, { error: 'plantilla_inactiva', familia: dec.familia, ...(!tienePasarela(clase) ? { sin_pasarela: true } : {}) })
   // 17-nov · T7a · los topes que crecen con la pieza (idempotente: el almacén real ya los aplicó) y la condición 1 de CC6: el tope con que nace el encargo (el menor entre
   //   el sobre y la plantilla) cubre una pasada por los pasos que gastan; si no, el encargo NO nace (antes nacía y se cortaba a medias, con lo gastado perdido)
-  const topes = aplicarTopesPorDuracion(pl.plantilla)
+  // 19-nov · G5b (A′ · GO Lenovo 03:41Z) · el video: la duración la declara el brief de la pieza y los topes de ESTE encargo se calculan con ella (no con la pieza más
+  //   larga que admite la plantilla). El tope con que nace el encargo es el de la campaña (el sobre, hasta el techo de la plantilla): si el guion pide más, los topes
+  //   se recalculan dentro de él. La cobertura se mide con la duración declarada
+  const cruda = pl.cruda ?? pl.plantilla
+  let duracion: DuracionDeLaPieza | null = null
+  if (topesPorSegundoDeVideo(cruda)) {
+    const parte = await P.parte(v.sobre.parte_id, entrada.client_id)
+    duracion = duracionDeLaPieza(parte ? parsearBrief(parte.texto, v.sobre.brief_id) : null, cruda)
+  }
+  const topes = aplicarTopesPorDuracion(cruda)
   if (topes.errores.length) return r(409, { error: 'topes_invalidos', familia: dec.familia, detalle: topes.errores.join(' · ') })
   const plantillaDelEncargo = topes.plantilla
   const topeDelEncargo = Math.min(v.sobre.tope_usd ?? plantillaDelEncargo.limites.tope_encargo_usd, plantillaDelEncargo.limites.tope_encargo_usd)
-  const cobertura = coberturaDelTope(plantillaDelEncargo, topeDelEncargo)
+  const deLaPieza = duracion ? aplicarTopesPorDuracion(cruda, duracion.segundos).plantilla : plantillaDelEncargo
+  const cobertura = coberturaDelTope(deLaPieza, Math.min(topeDelEncargo, deLaPieza.limites.tope_encargo_usd))
   if (!cobertura.cubre) return r(409, { error: 'tope_no_cubre', familia: dec.familia, requerido_usd: cobertura.requerido, tope_usd: topeDelEncargo, detalle: `${cobertura.detalle}: el encargo no se abre para no cortarse a medias` })
   // 28-oct · CHEQUEO GRATIS de la puerta del portero: si el portero no contesta (llave rota tras una rotación, flujo apagado), el encargo NO se crea ni gasta; una sola alarma por incidente
   if (P.chequearPortero && pl.plantilla.pasos.some((x) => x.tipo === 'portero')) {
@@ -147,7 +158,8 @@ export async function abrirEncargo(P: Puertos, entrada: { cuerpo: unknown; clien
   }
   const s: Sobre = v.sobre
   const tope = topeDelEncargo
-  const c = await P.almacen.crearEncargo({ client_id: entrada.client_id, parte_id: s.parte_id, brief_id: s.brief_id, tipo_de_grupo: pl.plantilla.tipo, familia: ruta ? ruta.familia : dec.familia, tope_usd: tope, dry_run: s.dry_run, prueba: !!entrada.prueba, sala_ref: ruta ? { ...(salaRefConFila(entrada.sala_ref, s) ?? {}), con_mesa: { de: dec.familia, a: ruta.familia } } : salaRefConFila(entrada.sala_ref, s), estado_del_motor: estadoInicial(), ...(s.reabrir_causa_corregida ? { reabrir_causa: s.reabrir_causa_corregida } : {}), ...(s.cambios_del_dueno ? { cambios_del_dueno: s.cambios_del_dueno } : {}) })
+  const salaBase = ruta ? { ...(salaRefConFila(entrada.sala_ref, s) ?? {}), con_mesa: { de: dec.familia, a: ruta.familia } } : salaRefConFila(entrada.sala_ref, s)
+  const c = await P.almacen.crearEncargo({ client_id: entrada.client_id, parte_id: s.parte_id, brief_id: s.brief_id, tipo_de_grupo: pl.plantilla.tipo, familia: ruta ? ruta.familia : dec.familia, tope_usd: tope, dry_run: s.dry_run, prueba: !!entrada.prueba, sala_ref: duracion ? { ...(salaBase ?? {}), [CLAVE_DE_LA_DURACION]: duracion } : salaBase, estado_del_motor: estadoInicial(), ...(s.reabrir_causa_corregida ? { reabrir_causa: s.reabrir_causa_corregida } : {}), ...(s.cambios_del_dueno ? { cambios_del_dueno: s.cambios_del_dueno } : {}) })
   if (!c.ok) return r(500, { error: 'almacen_error', detalle: c.error })
   if (!c.nuevo) return r(200, { accion: 'ya_existia', encargo_id: c.encargo.id, estado: c.encargo.estado })
   const sal = await avanzar(P, c.encargo.id)
@@ -160,7 +172,9 @@ export async function plantillaDe(P: Puertos, enc: Encargo): Promise<Plantilla> 
   if (!p) throw new Error(`plantilla «${enc.familia}» no existe`)
   // el tope de ESTE encargo (el del sobre, nunca más que el de la plantilla) manda sobre el de la plantilla
   // 17-nov · T7a · idempotente (el almacén real ya los aplicó): un almacén que no los aplica no deja al motor con la parte fija sola
-  const pl = aplicarTopesPorDuracion(p.plantilla).plantilla
+  // 19-nov · G5b · los topes con la duración de ESTE encargo (la del brief, o la recalculada por el guion) sobre la plantilla cruda; sin cruda, como antes
+  const cruda = p.cruda ?? p.plantilla
+  const pl = aplicarTopesPorDuracion(cruda, segundosDelEncargo(enc, cruda)).plantilla
   return { ...pl, limites: { ...pl.limites, tope_encargo_usd: Math.min(pl.limites.tope_encargo_usd, enc.tope_usd) } }
 }
 
@@ -194,7 +208,7 @@ export async function avanzar(P: Puertos, encargoId: string): Promise<Respuesta>
       if (abierto.tipo === 'brazo') return r(200, { accion: 'esperar_brazo', reentrega: true, turno: { n: abierto.n, paso: abierto.paso, tipo: 'brazo', dispatch_key: abierto.dispatch_key } })
       // 16-nov · Sprint 2 · el encargo espera al DUEÑO (propuestas del video): la misma acción que al abrirlo; lo despierta el tablero cuando el dueño decide
       if (abierto.tipo === TURNO_DEL_DUENO) return r(200, { accion: 'esperar_dueno', reentrega: true, turno: { n: abierto.n, paso: abierto.paso, tipo: TURNO_DEL_DUENO, dispatch_key: abierto.dispatch_key } })
-      if (abierto.paso.startsWith('mesa:')) return (await import('./mesa/orquestador')).reentregaDelTurno(P, enc, abierto)
+      if (abierto.paso.startsWith('mesa:')) return (await import('./mesa/orquestador')).reentregaDelTurno(P, enc, abierto, pl.limites.tope_encargo_usd)
       const sg = siguientePaso(enc.estado_del_motor, pl)
       if (sg.accion === 'ejecutar' && (sg.paso.tipo === 'agente' || sg.paso.tipo === 'portero')) {
         const a = armarPedido(enc, pl, sg.paso, enc.estado_del_motor)
@@ -249,7 +263,10 @@ export async function avanzar(P: Puertos, encargoId: string): Promise<Respuesta>
         const hechos = contextoDeHechos(P.hechosDelNegocio ? await P.hechosDelNegocio(String(enc.client_id)).catch((x: unknown) => ({ no_se_pudo_leer: x instanceof Error ? x.message : String(x) })) : null)
         // cambio 4 · la ficha de la oferta, tal cual la trae la hoja: SOLO si la hay (sin ficha el pedido queda como antes)
         const ficha = contextoDeLaFicha(fichaDeLaHoja(briefDe(e)?.texto))
-        const sobre = sobreDeLaRevision(enc, pl, e, { pieza: material.pieza, imagenes: material.imagenes, contexto: [...material.contexto, ...carpeta, hechos, ...(ficha ? [ficha] : [])] })
+        // 19-nov · ADENDA 1 · P2b: el resumen del encargo (red, formato, objetivo, llamado) va al jefe como un documento más, en las tres familias
+        const hoja = briefDe(e)
+        const resumen = resumenParaElJefe(hoja)
+        const sobre = sobreDeLaRevision(enc, pl, e, { pieza: material.pieza, imagenes: material.imagenes, contexto: [...resumen, ...material.contexto, ...carpeta, hechos, ...(ficha ? [ficha] : [])] })
         const ap = P.jefatura ? await P.jefatura(sobre) : ({ estado: 'error', motivo: 'el puerto de la jefatura no está configurado' } as const)
         if (ap.estado === 'esperando') {
           const n = turnoDe(e)
@@ -431,7 +448,7 @@ export function pedidoDe(enc: Encargo, pl: Plantilla, paso: Paso, agente: string
     agent_name: agente, task: t!.task, images: t!.images.map((url) => ({ url })), esquema: t!.esquema,
     // 04-nov · de qué trabajo es la llamada: el encargo es la pieza (el mismo id que recibe la jefatura como `artifact_id`)
     trabajo_tipo: 'pieza', trabajo_id: enc.id,
-    extra: { indicacion_oficina: indicacionDe(pl, agente), paso_de_la_oficina: paso.clave, encargo_id: enc.id }, max_budget_usd: paso.tope_usd, thinking_mode: 'disabled', dry_run: enc.dry_run, client_id: enc.client_id,
+    extra: { indicacion_oficina: indicacionDe(pl, agente), paso_de_la_oficina: paso.clave, encargo_id: enc.id }, max_budget_usd: paso.tope_usd, thinking_mode: 'maximo', dry_run: enc.dry_run, client_id: enc.client_id,
     workflow_hint: 'oficina · turno',
     headers_requeridos: { [CABECERA_SALTAR_EDITOR]: '1' },
   }
@@ -1137,7 +1154,7 @@ export async function cerrar(P: Puertos, enc: Encargo, pl: Plantilla, parcial: b
     const nt = reglasDurasNoTomadas(e)
     const motivos = [...nt.map((h) => `${h.destino}: ${h.que}`), ...frenoDuro.filter((f) => !f.id.startsWith('sentido-no-tomada-')).map((f) => `${f.donde}: ${f.que ?? ''}`)]
     // 18-nov · GO Lenovo 13:52Z · ya no «frenada»: mientras cupo, la pieza volvió a su creador; aquí ya no cabe otra vuelta y queda EN CORRECCIÓN (la campaña sigue)
-    await P.avisar({ canal: parcial || enc.version_encargo >= 2 ? 'hilo' : 'alertas', encargo_id: enc.id, texto: `🔁 Pieza en corrección · ${enc.brief_id}: regla dura pendiente — ${motivos.slice(0, 3).join(' | ')}. No se publica ni va a la bandeja hasta cumplirla; su creador ya no tiene otra vuelta dentro del tope del encargo, así que espera tu criterio. Las demás piezas siguen.${textoDelGasto ? ` ${textoDelGasto}` : ''}`, dry_run: enc.dry_run })
+    await P.avisar({ canal: parcial || enc.version_encargo >= 2 ? 'hilo' : 'alertas', encargo_id: enc.id, texto: `🔁 Pieza en corrección · ${enc.brief_id}: regla dura pendiente — ${motivos.join(' | ')}. No se publica ni va a la bandeja hasta cumplirla; su creador ya no tiene otra vuelta dentro del tope del encargo, así que espera tu criterio. Las demás piezas siguen.${textoDelGasto ? ` ${textoDelGasto}` : ''}`, dry_run: enc.dry_run })
     return r(200, { accion: 'cerrado', estado: estadoFinal, con_desacuerdo: true, frenada: true, en_correccion: true, simulado: enc.dry_run, gasto_usd: e.gasto_usd, output_id: null, hitl_queue_id: null, resultado_para_la_sala: 'con_desacuerdo', sala_ref: enc.sala_ref, desacuerdos, ...(observaciones.length ? { observaciones } : {}) })
   }
   // la alarma de gasto sola (la pieza sigue): las versiones 2+ y el cierre por tope (ya avisó) van al hilo

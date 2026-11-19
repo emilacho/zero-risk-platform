@@ -13,7 +13,7 @@ vi.mock('../constantes', async (importOriginal) => {
 import { causaQueSigue, topeDeLaPlanificacion } from '../flujo-de-campana'
 import type { Almacen, Campana } from '../almacen'
 
-const campana = { id: 'c-1', client_id: 'k', estado: 'necesita_humano', estado_motivo: 'el presupuesto de planificación se agotó (US$ 5.00 de 6)', presupuesto_planificacion_usd: 6 } as unknown as Campana
+const campana = { id: 'c-1', client_id: 'k', estado: 'necesita_humano', estado_motivo: 'el presupuesto de planificación se agotó (US$ 5.00 de 6)', presupuesto_planificacion_usd: 6, tope_gasto_usd: 6 } as unknown as Campana // 18-nov (grupo A): el tope de la campaña en 6, para que la regla no agrande la bolsa y la prueba siga midiendo el tope mayor
 const almacen = (gastado: number) => ({ corridasDeCampana: async () => [{ paso: 'estrategia', costo_usd: gastado, estado: 'ok' }] }) as unknown as Almacen
 
 describe('el tope mayor de la planificación', () => {

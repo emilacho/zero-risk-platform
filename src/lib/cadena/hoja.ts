@@ -9,7 +9,7 @@
  */
 import type { ConceptoDeLaFila, DatoDeterminado, Fila, FormatosPorRed } from './tipos'
 import { PROPORCION_POR_FORMATO, proporcionDe, proporcionDeLaTabla } from './proporciones'
-import type { BriefCreativoLeido } from './brief-creativo'
+import { CAMPO_AVISOS_DEL_BRIEF_CREATIVO, PREFIJO_AVISO_DE_LA_MEJOR_VERSION, type BriefCreativoLeido } from './brief-creativo'
 import { comoSeVeSinPartes, decisionDeLaParte, ideaDelBanco, PARTES_DE_COMO_SE_VE, type CapituloDelConcepto, type ConceptoLeido, type IdeaDelBanco } from './conceptos'
 import { comoSeCompraParaLaRed, datosSinFuente, fichaDeLaOferta, fichaEnLineas, fichasConHechos, ofertaCerradaOInexistenteEn, type DatoDeFicha, type FichaDeOferta, type HechoDelNegocioPorOferta } from './ficha-de-oferta'
 
@@ -59,6 +59,11 @@ export interface InsumosDeLaHoja {
    * `undefined` = el almacén no los sabe leer (vale la ficha, como hoy) · `null` = no se pudieron leer (vale la ficha y se avisa).
    */
   hechos?: ReadonlyArray<HechoDelNegocioPorOferta> | null
+  /**
+   * 19-nov · ADENDA 1 · P2 (CC5 · «cada agente recibe los originales completos»): lo que el lector de fichas NO pudo saber (`cadena_fichas_de_oferta.pendientes`).
+   * Antes se quedaba en la ficha: en el reel auditado (INGENIERIA-INVERSA-CC7) el pendiente sobre el canal de pedidos no llegó a la mesa y las 3 propuestas lo afirmaron.
+   */
+  pendientes_de_las_fichas?: ReadonlyArray<string> | null
 }
 export interface BriefDeLaHoja { brief_id: string; fila_id: string | null; fila_ids: string[]; familia: string | null; red: string; formato: string; idea_ref: string | null }
 export interface ProcedenciaDeLaHoja {
@@ -204,6 +209,8 @@ export function loDecidido(c: Pick<ConceptoLeido, 'gran_idea' | 'como_se_ve_part
 }
 /** el campo de la hoja con la ficha de hechos de la oferta (lista); lo lee la mesa como texto */
 export const CAMPO_FICHA = 'FICHA DE LA OFERTA'
+export const CAMPO_TEMA_DE_LA_FILA = 'TEMA DE LA FILA'
+export const CAMPO_PENDIENTES_DE_LA_FICHA = 'LO QUE LA FICHA NO SABE (pendiente: no se afirma como hecho)'
 /**
  * 17-nov · Sprint 4 · A · la ficha de la oferta de la pieza, como lista de datos con fuente.
  * Sin fichas cargadas se DECLARA (🟡 2 de CC6 a #1131: nunca en silencio); con fichas pero sin la de esta oferta, se declara y se avisa.
@@ -272,6 +279,8 @@ function lineasDelBrief(ins: InsumosDeLaHoja, cab: { id: string; red: string; fo
     `### ${cab.id} · ${mayuscula(cab.red)} · ${cab.formato}`,
     campo('QUÉ ES', `${esKit ? `Kit semanal de historias y estados (${extra.elementos?.length ?? 0} ${extra.elementos?.length === 1 ? 'elemento' : 'elementos'})` : `${cab.formato} para ${mayuscula(cab.red)}`}${mensajeDeLaPieza ? ` · mensaje: ${mensajeDeLaPieza}` : ''}`),
     campo('DE QUÉ PARTE DEL PLAN SALE', b.de_que_parte_del_plan),
+    // 19-nov · ADENDA 1 · P2 (CC5): el tema y el pilar de la fila SIEMPRE (antes solo si no había idea del banco: en el reel auditado el tema de la semana no llegó)
+    campo(CAMPO_TEMA_DE_LA_FILA, `${limpio(f.tema) || '(la fila no trae tema)'} · pilar: ${limpio(f.pilar) || '(sin pilar)'}`),
     campo('GRAN IDEA', c.gran_idea ? `${c.gran_idea.nombre} · ${c.gran_idea.frase}` : '(sin gran idea)'),
     campo('CAPÍTULO DE LA FASE', cap ? `${cap.clave} · ${cap.nombre} · ${cap.que_cuenta}` : f.fase ? `${f.fase} · (sin capítulo en el concepto)` : '(sin fase)'),
     // 17-nov · Sprint 4 · F · la idea tal como la crearon los creativos (antes: solo el id y la descripción como sugerencia)
@@ -279,6 +288,7 @@ function lineasDelBrief(ins: InsumosDeLaHoja, cab: { id: string; red: string; fo
     // 17-nov · Sprint 4 · A · qué oferta vende la pieza y sus hechos (la orden de trabajo); sin ficha se declara, nada se bloquea
     campo('OFERTA', f.oferta ? limpio(f.oferta) : 'sin oferta en la fila · declarado'),
     ...fichaDeLaPieza(ins, f, cab.id, avisos),
+    ...(ins.pendientes_de_las_fichas?.length ? listaDe(CAMPO_PENDIENTES_DE_LA_FICHA, ins.pendientes_de_las_fichas) : []),
     campo('BRIEF DE CAMPAÑA', ins.brief_id),
     campo('MENSAJE DE CAMPAÑA', b.mensaje),
     campo('OBJETIVO', pz.objetivo || porRed?.objetivo || b.objetivo),
@@ -311,9 +321,17 @@ function lineasDelBrief(ins: InsumosDeLaHoja, cab: { id: string; red: string; fo
   const decidido = loDecidido(c, idea, cap, mensajeDeLaPieza)
   if (decidido.length) L.splice(L.findIndex((x) => x.startsWith('- VISUAL:')) + 1, 0, ...listaDe(CAMPO_LO_DECIDIDO, decidido))
   if (f.datos?.length && !esKit) L.push(campo('DATOS DEL CALENDARIO', datosEnTexto(f.datos)))
+  // 19-nov · G5b (A′ · CC1 03:47Z) · la duración de una pieza de video la razona quien escribe la IDEA del banco («duración: N s · porqué»; el campo lo suma CC1 en
+  //   `conceptos.ts`). La hoja la copia tal cual; sin ella no escribe nada y la oficina abre con la de por omisión Y lo avisa (`oficina/video/duracion-de-la-pieza.ts`)
+  const duracionDeLaIdea = (idea as { duracion?: unknown } | null)?.duracion
+  if (esFormatoDeVideo(cab.formato) && !esKit && typeof duracionDeLaIdea === 'string' && limpio(duracionDeLaIdea)) L.push(campo('DURACIÓN', limpio(duracionDeLaIdea)))
   if (extra.fila_ids) L.push(campo('FILAS', extra.fila_ids.join(', ')))
   if (extra.elementos) L.push(...listaDe('ELEMENTOS', extra.elementos))
   if (extra.cuadros?.length) L.push(...listaDe('CUADROS QUE PIDE LA IDEA', extra.cuadros.map((x) => `${x.cuando} (${x.fila_id}): ${x.cuadros} cuadros · idea ${x.idea}`)))
+  // 19-nov · grupo D (condición de Lenovo 08:00Z): el brief que quedó vigente al tope con bloqueos los trae como avisos; van en CADA pieza, y así la jefatura los recibe
+  //   en «El brief de este entregable» y mira justo esos puntos. Sin ellos (lo de siempre) la hoja no cambia
+  const delBrief = (ins.brief.avisos ?? []).filter((a) => typeof a === 'string' && a.startsWith(PREFIJO_AVISO_DE_LA_MEJOR_VERSION)).map((a) => a.slice(PREFIJO_AVISO_DE_LA_MEJOR_VERSION.length))
+  if (delBrief.length) L.push(...listaDe(CAMPO_AVISOS_DEL_BRIEF_CREATIVO, delBrief))
   return L
 }
 

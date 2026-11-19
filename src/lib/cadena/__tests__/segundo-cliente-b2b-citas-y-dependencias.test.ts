@@ -11,7 +11,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { citasQueNoAparecen, leerBriefCreativo, textoDelDocumento } from '../brief-creativo'
 import { afectados, LEE } from '../dependencias-de-documentos'
-import { marcoDelBrief, marcoDelConcepto } from '../mesas'
+import { marcoDelBrief, marcoDelConcepto, PLAN_EN_SU_LUGAR } from '../mesas'
 import { clienteA, clienteB, contextoDe } from '../__fixtures__/clientes'
 
 const fx = (n: string) => readFileSync(join(__dirname, '..', '__fixtures__', n), 'utf8')
@@ -123,7 +123,9 @@ describe('#983 con un segundo cliente: lo que la lista dice que se lee llega igu
       const objetivo = c.estrategia.fases[0].objetivo as string
       const b = marcoDelBrief({ ctx: c.ctx, estrategia: c.estrategia, version: 1, devolucion: null, nota: null })
       const g = marcoDelConcepto({ ctx: c.ctx, estrategia: c.estrategia, briefTexto: '## Mensaje\nMARCA-DEL-BRIEF', version: 1, nota: null })
-      expect(b).toContain(c.ctx.planTexto.slice(0, 40))
+      // 19-nov · G4 (CC5): el plan ya no va dentro del marco (viaja entero en `sobre.plan_texto`): el marco marca su lugar
+      expect(b).toContain(PLAN_EN_SU_LUGAR)
+      expect(b).not.toContain(c.ctx.planTexto.slice(0, 40))
       expect(b).toContain(objetivo)
       expect(b).toContain(prohibida)
       expect(g).toContain('MARCA-DEL-BRIEF')

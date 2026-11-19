@@ -24,6 +24,7 @@ import { SupabaseClient } from '@supabase/supabase-js'
 import { FeedbackCollector } from './feedback-collector'
 import { MissionControlBridge } from './mc-bridge'
 import { resolveModel } from './models'
+import { pedirMensajePorFlujo } from './anthropic-por-flujo'
 
 // ============================================================
 // Types
@@ -310,31 +311,11 @@ ${JSON.stringify(campaignPerf, null, 2).substring(0, 5000)}
 Analiza estos datos y genera tu reporte JSON con patterns y proposals.
 Si no hay suficientes datos para detectar patterns significativos, devuelve arrays vacíos y explícalo en el executive_summary.`
 
-    // Call Claude API directly
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': this.claudeApiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model,
-        max_tokens: 20000,
-        system: systemPrompt,
-        messages: [{ role: 'user', content: userMessage }],
-      }),
-    })
-
-    if (!response.ok) {
-      const errText = await response.text()
-      throw new Error(`Claude API error ${response.status}: ${errText.substring(0, 500)}`)
-    }
-
-    const data = await response.json()
-    const content = data.content?.[0]?.text || '{}'
-    const inputTokens = data.usage?.input_tokens || 0
-    const outputTokens = data.usage?.output_tokens || 0
+    // Call Claude API directly · 18-nov · G1 «nada se recorta» (CC5): al techo del modelo (128.000, antes 20.000) y por flujo continuo · `src/lib/anthropic-por-flujo.ts`
+    const r = await pedirMensajePorFlujo({ apiKey: this.claudeApiKey, model, system: systemPrompt, userMessage })
+    const content = r.text
+    const inputTokens = r.inputTokens
+    const outputTokens = r.outputTokens
 
     // Parse the JSON response
     let parsed: {

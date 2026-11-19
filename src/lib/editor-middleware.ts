@@ -439,7 +439,7 @@ ORIGINAL TASK:
 ${params.originalTask}
 
 YOUR PREVIOUS OUTPUT:
-${params.previousOutput.substring(0, 2000)}
+${params.previousOutput}
 
 EDITOR EN JEFE FEEDBACK:
 ${params.editorFeedback}
@@ -506,7 +506,8 @@ export async function escalateToHITL(params: {
       full_content: params.finalContent,
       editor_verdict: params.aggregateVerdict,
       revisions_attempted: params.revisionsAttempted,
-      original_task: params.originalTask.substring(0, 1000),
+      // 19-nov · G6 · «nada se recorta» (firma de Emilio 18-nov): la tarea original llega entera a la bandeja (antes 1000); `preview` es solo la vista corta y `full_content` va entero
+      original_task: params.originalTask,
       // Fix 8c · prefer caller-resolved clientId · fall back to legacy
       // path so existing escalations still land with attribution.
       client_id: (params.clientId ?? (params.originalContext?.client_id as string | undefined) ?? null) as string | null,
@@ -526,11 +527,12 @@ export async function escalateToHITL(params: {
   }
 }
 
-function parseEditorVerdict(rawResponse: string): EditorVerdict {
+export function parseEditorVerdict(rawResponse: string): EditorVerdict {
   const fallback: EditorVerdict = {
     status: 'escalated',
     issues: ['Could not parse reviewer response'],
-    feedback: rawResponse.substring(0, 500),
+    // 19-nov · G6 · la respuesta ilegible del revisor se guarda entera (antes 500): es lo único que explica la falla
+    feedback: rawResponse,
     severity: 'low',
     falla_tecnica: true,
   }
@@ -556,6 +558,9 @@ function parseEditorVerdict(rawResponse: string): EditorVerdict {
   }
 }
 
+// 19-nov · G6 · firma de Emilio «nada se recorta» (18-nov · GO Lenovo 15:52Z): los 3 revisores reciben la pieza y la tarea ENTERAS (antes 8000 y 500, sin aviso);
+//   al rehacer, el productor recibe su texto anterior entero (antes 2000). El pedido entero lo topa `TOPE_REAL_DEL_PEDIDO` del corredor, con un 400 que dice el motivo.
+//   `ragQueryFor` sigue usando 100 caracteres de la tarea: es la frase de búsqueda en el cerebro, no material que lea el revisor
 function buildEditorTaskWithAllLens(params: {
   content: string
   agentSlug: string
@@ -565,10 +570,10 @@ function buildEditorTaskWithAllLens(params: {
 }): string {
   return `## Content to Review (from ${params.agentSlug}):
 
-${params.content.substring(0, 8000)}
+${params.content}
 
 ## Original Task Context:
-${params.task.substring(0, 500)}
+${params.task}
 
 ## Lens Emphasis (per agent config):
 ${params.config.lens_emphasis || 'general'}
@@ -598,10 +603,10 @@ function buildClientSuccessTask(params: {
 }): string {
   return `## Content to Review (from ${params.agentSlug}):
 
-${params.content.substring(0, 8000)}
+${params.content}
 
 ## Original Task Context:
-${params.task.substring(0, 500)}
+${params.task}
 
 ## Your Role: CLIENT-SUCCESS REVIEW (Camino III · Reviewer 3 of 3)
 
@@ -658,10 +663,10 @@ function buildBrandStrategistTaskBrandDeep(params: {
 }): string {
   return `## Content to Review (from ${params.agentSlug}):
 
-${params.content.substring(0, 8000)}
+${params.content}
 
 ## Original Task Context:
-${params.task.substring(0, 500)}
+${params.task}
 
 ## Your Role: BRAND-DEEP REVIEW (Brand Strategist Reviewer)
 

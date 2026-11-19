@@ -10,6 +10,7 @@ import type { Estado, Plantilla } from '../tipos'
 import { VIDEO_POR_OMISION, type ParametrosDelVideo } from '../mesa/pedidos'
 import { limpiarTexto, separarTitulosPegados, traeCamposDeLaPieza } from '../mesa/traductor'
 import { traducirGuion, type TraduccionDeGuion } from './guion'
+import { TECHO_DE_LA_PIEZA_S } from './techo-de-la-pieza'
 
 export interface PropuestaDeVideo {
   /** «P1», «P2»…: el orden en que la mesa las escribió (la tarjeta del dueño las nombra así) */
@@ -41,8 +42,10 @@ const sinTildes = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLo
 export function parametrosDelVideo(pl: Pick<Plantilla, 'limites'>): ParametrosDelVideo {
   const v = (pl.limites?.video ?? {}) as Record<string, unknown>
   const ent = (x: unknown) => (typeof x === 'number' && Number.isFinite(x) && x > 0 ? Math.round(x) : null)
-  const min = ent(v.segundos_min) ?? VIDEO_POR_OMISION.segundos_min
-  const max = Math.max(min, ent(v.segundos_max) ?? VIDEO_POR_OMISION.segundos_max)
+  // 19-nov · G5b · 🟡 de CC6 (#1201): el mínimo tampoco pasa del techo (si no, el máximo quedaba por debajo del mínimo)
+  const min = Math.min(TECHO_DE_LA_PIEZA_S, ent(v.segundos_min) ?? VIDEO_POR_OMISION.segundos_min)
+  // 19-nov · G5 · nunca más que el techo de la pieza (lo que aguanta la cadena), aunque la base diga otra cosa
+  const max = Math.min(TECHO_DE_LA_PIEZA_S, Math.max(min, ent(v.segundos_max) ?? VIDEO_POR_OMISION.segundos_max))
   return { segundos_min: min, segundos_max: max, propuestas: ent(v.propuestas) ?? VIDEO_POR_OMISION.propuestas, ...(v.componer === true ? { componer: true } : {}) }
 }
 

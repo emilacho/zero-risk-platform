@@ -30,7 +30,8 @@ export interface EntornoDeRutas {
   /** el cliente de la base donde se anota el gasto de GPT en `agent_invocations` (condición 5, 13-oct); sin él se llama y se informa como siempre */
   libro?: ContextoDelLibro['supabase']
 }
-export const TOPE_POR_LLAMADA_AL_REVISOR_USD = 0.25
+// 18-nov · Emilio: topes = 3 × lo medido (GO Lenovo 16:17Z): la llamada más cara al revisor GPT costó 0,1277 → 0,39
+export const TOPE_POR_LLAMADA_AL_REVISOR_USD = 0.39
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const esObjeto = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 const err = (status: number, error: string, detalle: string): Respuesta => ({ status, body: { error, detalle } })

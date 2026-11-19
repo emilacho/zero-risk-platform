@@ -24,9 +24,9 @@ const F2 = '5a749707-0000-4000-8000-000000000002'
 const RAIZ = join(__dirname, '..')
 
 describe('sin topes de tamaño arbitrarios', () => {
-  it('el tope único es el real: cabe de sobra lo medido y queda bajo el 1 MB del corredor', () => {
+  it('el tope único es el real: cabe de sobra lo medido y, aun a 2 bytes por carácter, entra en los 4 MB del corredor (18-nov · G1)', () => {
     expect(TOPE_REAL_DEL_PEDIDO).toBeGreaterThan(125_108 * 4)
-    expect(TOPE_REAL_DEL_PEDIDO).toBeLessThan(1_000_000)
+    expect(TOPE_REAL_DEL_PEDIDO * 2).toBeLessThan(4 * 1024 * 1024)
   })
   it('todas las puertas y recortes usan ese mismo tope', () => {
     for (const t of [PEDIDO_MAXIMO, TOPE_DE_CARACTERES_DEL_PLAN, TOPE_DEL_MATERIAL, TOPE_DEL_INFORME, MAX_TAREA_RUN_SDK]) expect(t).toBe(TOPE_REAL_DEL_PEDIDO)
@@ -111,7 +111,8 @@ describe('las palabras del manual son contexto (ADENDA de Emilio)', () => {
     expect(REGLA_DE_LAS_PALABRAS_DEL_MANUAL).toMatch(/reseña de un cliente, citada y atribuida/)
     expect(REGLA_DE_LAS_PALABRAS_DEL_MANUAL).toMatch(/coincidir con la lista no basta/)
     const lee = (p: string) => readFileSync(join(RAIZ, p), 'utf8')
-    expect(lee('src/lib/jefatura/revision/pedidos.ts')).toMatch(/bloqueDeContexto\(a\.payload\.contexto \?\? \[\]\), REGLA_DE_LAS_PALABRAS_DEL_MANUAL/)
+    // 19-nov · ADENDA 1 · P1b: la regla sigue en el pedido del jefe, después de los documentos y de la línea del tipo
+    expect(lee('src/lib/jefatura/revision/pedidos.ts')).toMatch(/bloqueDeContexto\(a\.payload\.contexto \?\? \[\]\), cifras, linea, REGLA_DE_LAS_PALABRAS_DEL_MANUAL/)
   })
   it('ningún chequeo de la cadena bloquea por una palabra de la lista', () => {
     const lee = (p: string) => readFileSync(join(RAIZ, p), 'utf8')
@@ -136,7 +137,8 @@ describe('la jefatura de las piezas lleva la carpeta', () => {
   it('el orquestador la suma al contexto del revisor y, si falla, lo dice sin tumbar la revisión', () => {
     const o = readFileSync(join(RAIZ, 'src/lib/oficina/orquestador.ts'), 'utf8')
     // 17-nov · después de la carpeta puede ir el documento de hechos del negocio (coherencia con los hechos)
-    expect(o).toMatch(/contexto: \[\.\.\.material\.contexto, \.\.\.carpeta[,\]]/)
+    // 19-nov · ADENDA 1 · P2b: antes de todo va el resumen del encargo (para qué red, formato y objetivo es la pieza)
+    expect(o).toMatch(/contexto: \[\.\.\.resumen, \.\.\.material\.contexto, \.\.\.carpeta[,\]]/)
     expect(o).toMatch(/P\.carpetaParaRevisar\(String\(enc\.client_id\)\)\.catch\([^\n]*no se pudo leer[^\n]*No lo tomes como que no existe/)
     expect(readFileSync(join(RAIZ, 'src/lib/oficina/adaptadores.ts'), 'utf8')).toMatch(/carpetaParaRevisar: \(clientId\) => carpetaParaRevisar\(db, clientId\)/)
   })

@@ -246,7 +246,7 @@ describe('la puerta con el nuevo orden hace el PRÓXIMO paso que falta, contra l
     expect(String(r.item.nota)).toMatch(/la oficina no abre la mesa de brief \(familia no activa\)/)
   })
 
-  it('la cadena dice que ya no se puede reabrir (409 con necesita_humano): no se le lleva nada a la oficina', async () => {
+  it('la mesa llegó al tope sin texto (grupo D, 19-nov): la cadena contesta «ya_hecha · en_reintento», no se le lleva nada a la oficina y el flujo NO pide a una persona', async () => {
     const m = mundo()
     await desdeAbrir(m, 'brief')
     // la reapertura ya se gastó: DOS versiones de mesa descartadas (11-nov · el contador cuenta filas, no lee el número de versión)
@@ -255,7 +255,11 @@ describe('la puerta con el nuevo orden hace el PRÓXIMO paso que falta, contra l
     const antes = m.llamadas.length
     const r = await desdeAbrir(m, 'brief')
     expect(m.llamadas.slice(antes).map((l) => l.ruta)).toEqual(['/api/cadena/brief'])
-    expect(r.item).toMatchObject({ resultado: 'necesita_humano' })
+    expect(r.item.resultado).not.toBe('necesita_humano')
+    expect(r.item.sobre).toBeNull()
+    expect(String(r.item.nota)).toMatch(/la mesa de brief ya estaba hecha: no se repite/)
+    expect(m.al.campanas[0].estado).not.toBe('necesita_humano')
+    expect(m.al.briefsCreativos).toHaveLength(2)
   })
 
   it('T8 (CC1): los 409 `sin_sala` y `plantilla_inactiva` marcados `sin_pasarela` DETIENEN el flujo: no hay camino a ninguna pasarela', async () => {

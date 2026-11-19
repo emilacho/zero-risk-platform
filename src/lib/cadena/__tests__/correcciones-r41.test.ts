@@ -18,6 +18,8 @@ import type { Fila } from '../tipos'
 
 const A = clienteA()
 const AHORA = '2026-10-09T12:00:00Z'
+// 18-nov (día 1 = apertura): estas pruebas no son del día 1; la campaña se abre el lunes que antes ponía la regla, para que sus fechas sigan siendo las mismas
+const ABRE = '2026-10-12T12:00:00Z'
 const wf = (extra: Record<string, unknown> = {}) => ({ workflow_id: 'wf-cadena', workflow_execution_id: 'ex-1', ...extra })
 function almacen(extra: Partial<ConstructorParameters<typeof AlmacenMemoria>[0]> = {}, planes = [{ plan_id: 'plan-1', fecha: '2026-10-08' }]) {
   return new AlmacenMemoria({
@@ -25,7 +27,7 @@ function almacen(extra: Partial<ConstructorParameters<typeof AlmacenMemoria>[0]>
     config: { flujos: ['wf-cadena', 'wf-vigia'], puerta_workflow_id: 'wf-puerta' }, journeys: [{ journeyId: 'journey-1', clientId: A.clientId }], ...extra,
   })
 }
-const abrir = (al: AlmacenMemoria, extra: Record<string, unknown> = {}) => abrirCampana(al, { ...wf(), client_id: A.clientId, seco: true, ...extra }, AHORA)
+const abrir = (al: AlmacenMemoria, extra: Record<string, unknown> = {}) => abrirCampana(al, { ...wf(), client_id: A.clientId, seco: true, ...extra }, ABRE)
 const idDe = (r: { cuerpo: Record<string, unknown> }) => (r.cuerpo.campana as { id: string }).id
 const ok = (x: unknown, costo = 0.3) => ({ success: true, structured_output: x, cost_usd: costo })
 async function conEstrategia(al: AlmacenMemoria, e: Estrategia = A.estrategia) {
@@ -73,8 +75,8 @@ describe('#464 C2 · reemplazar o cerrar una campaña cancela todas sus esperas'
     await abrirEsperaDe(al, camp(al, a), 'dato_en_investigacion', 's1-d2-a', 'x', AHORA)
     const b = idDe(await abrir(al, { plan_id: 'plan-2' }))
     expect(camp(al, a).estado).toBe('reemplazada')
-    expect(al.esperas.filter((e) => e.campana_id === a).map((e) => e.estado)).toEqual(['cancelada', 'cancelada', 'cancelada']) // las 2 + la fecha de inicio
-    expect(al.esperas.filter((e) => e.campana_id === b && e.estado === 'viva')).toHaveLength(1) // la fecha de inicio de la nueva
+    expect(al.esperas.filter((e) => e.campana_id === a).map((e) => e.estado)).toEqual(['cancelada', 'cancelada']) // las 2 (18-nov: ya no hay espera de «fecha propuesta»)
+    expect(al.esperas.filter((e) => e.campana_id === b && e.estado === 'viva')).toHaveLength(0) // la nueva nace sin esperas
   })
   it('el vigía NO avisa ni vence nada de una campaña reemplazada', async () => {
     const al = almacen({ config: { estado_cadena: 'encendida', flujos: ['wf-cadena', 'wf-vigia'] } }, [{ plan_id: 'plan-1', fecha: '2026-10-08' }, { plan_id: 'plan-2', fecha: '2026-10-09' }])
@@ -118,6 +120,7 @@ describe('#464 C5 · bordes de abrirCampana', () => {
   it('si la inserción de la campaña nueva falla, la anterior VUELVE a como estaba (no queda el cliente sin campaña viva)', async () => {
     const al = almacen({}, dos)
     const a = idDe(await abrir(al, { plan_id: 'plan-1' }))
+    await abrirEsperaDe(al, camp(al, a), 'dato_en_investigacion', 's1-d2-a', 'x', AHORA) // 18-nov: la campaña ya no nace con espera; se le abre una para ver que no se cancela
     al.insertarCampana = async () => { throw new Error('la base se cayó') }
     await expect(abrir(al, { plan_id: 'plan-2' })).rejects.toThrow('la base se cayó')
     expect(camp(al, a).estado).toBe('abierta')
@@ -336,6 +339,7 @@ describe('mutantes vivos de la 1.ª corrida del mutador sobre #464 (relevo 41)',
     expect((await prepararCorrida(al, c, 'estrategia', 'P1', 'wf-cadena', 'e1', AHORA, 'm', 'h')).tipo).toBe('lista')
     const al2 = almacen(); const id2 = idDe(await abrir(al2)); const c2 = camp(al2, id2)
     c2.presupuesto_planificacion_usd = tope - 0.01
+    c2.tope_gasto_usd = tope - 0.01 // grupo A (18-nov): la bolsa se agranda sola al triple, pero nunca pasa el tope de la campaña · con el tope igual a la bolsa, el borde es el de siempre
     expect((await prepararCorrida(al2, c2, 'estrategia', 'P1', 'wf-cadena', 'e1', AHORA, 'm', 'h')).tipo).toBe('presupuesto_agotado')
   })
   it('avanzar exige campana_id Y a: con uno solo, 400', async () => {

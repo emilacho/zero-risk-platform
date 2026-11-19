@@ -5,7 +5,7 @@ import { borradorDeContentText, leerInsumos, prepararRevision, type Insumos } fr
 import { guardarBorrador, armarTarjeta } from '../borrador'
 import { cerrarRevision } from '../revision'
 import { promoverManualRevisado } from '../promover'
-import { rutaBorrador, rutaOpinion, validarCuerpo } from '../rutas'
+import { rutaBorrador, rutaOpinion, TOPE_POR_LLAMADA_AL_REVISOR_USD, validarCuerpo } from '../rutas'
 import { F, filaInstagram, filaSitio, PROPIOS } from './apoyo'
 
 const C = '11111111-1111-4111-8111-111111111111'
@@ -51,12 +51,14 @@ describe('rutas · bordes', () => {
   it('el cuerpo debe ser un objeto: lista, nulo o texto ⇒ 400', () => {
     for (const mal of [[], null, 'x', 5]) expect((validarCuerpo(mal, { exigeDryRun: false }) as { status: number }).status).toBe(400)
   })
-  it('costo exactamente en el tope NO lo supera; un centavo más sí', async () => {
+  it('costo exactamente en el tope (US$ 0,39 · 0,25 → 3 × lo medido, 18-nov) NO lo supera; un centavo más sí', async () => {
+    expect(TOPE_POR_LLAMADA_AL_REVISOR_USD).toBe(0.39)
+    const P = TOPE_POR_LLAMADA_AL_REVISOR_USD // precio por millón de tokens de entrada: 1.000.000 tokens = el tope justo
     const db = new DbFalsa().semilla('clients', [{ id: C, name: 'X', config: {} }]).semilla('client_brand_books', [{ id: 'b', client_id: C, version: 1, content_text: JSON.stringify({ brand_book_draft: { a: 'x' } }) }])
     const f = (entrada: number) => (async () => new Response(JSON.stringify({ output_text: 'o', usage: { input_tokens: entrada, output_tokens: 0 } }), { status: 200 })) as unknown as typeof fetch
-    const r1 = await rutaOpinion(db, { client_id: C, dry_run: false, workflow_id: 'w', workflow_execution_id: 'e' }, { f: f(1_000_000), openaiKey: 'k', modelo: 'm', precioEntrada: 0.25, precioSalida: 0 })
-    expect(r1.body).toMatchObject({ costo_usd: 0.25, supero_el_tope: false })
-    const r2 = await rutaOpinion(db, { client_id: C, dry_run: false, workflow_id: 'w', workflow_execution_id: 'e' }, { f: f(1_100_000), openaiKey: 'k', modelo: 'm', precioEntrada: 0.25, precioSalida: 0 })
+    const r1 = await rutaOpinion(db, { client_id: C, dry_run: false, workflow_id: 'w', workflow_execution_id: 'e' }, { f: f(1_000_000), openaiKey: 'k', modelo: 'm', precioEntrada: P, precioSalida: 0 })
+    expect(r1.body).toMatchObject({ costo_usd: 0.39, supero_el_tope: false })
+    const r2 = await rutaOpinion(db, { client_id: C, dry_run: false, workflow_id: 'w', workflow_execution_id: 'e' }, { f: f(1_026_000), openaiKey: 'k', modelo: 'm', precioEntrada: P, precioSalida: 0 }) // ≈ 0,40
     expect(r2.body).toMatchObject({ supero_el_tope: true })
   })
 })

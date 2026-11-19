@@ -12,7 +12,7 @@ import { puedeVolverALaMesa } from '../orquestador'
 import { VIDEO_MESA } from '../plantillas/video-mesa'
 import { KIT_MESA, VUELTA_DE_LA_JEFATURA_A_LA_MESA } from '../plantillas/mesa'
 import { FAMILIAS_CON_VUELTA_POR_REGLA_DURA, VUELTAS_POR_REGLA_DURA, VUELTA_POR_REGLA_DURA, conVueltaPorReglaDura } from '../plantillas/vuelta-por-regla-dura'
-import { CLAVE_DEL_PASO_JEFATURA } from '../paso-jefatura'
+import { CLAVE_DEL_PASO_JEFATURA, avisoDeLaJefaturaALaMesa } from '../paso-jefatura'
 import type { Estado, Plantilla } from '../tipos'
 import { crearMemoria } from './memoria'
 
@@ -104,5 +104,15 @@ describe('lo exacto se autocorrige también en el video (el pie y el llamado que
     const s = await ejecutarCodigoV(M.P, enc({ pie_de_foto: 'Pide al 0997 744 288', hashtags: [] }) as never, VIDEO_MESA, PASO)
     expect(s.res.otros_artefactos).toBeUndefined()
     expect((s.res.artefacto as { autocorregido?: string[] }).autocorregido).toBeUndefined()
+  })
+})
+
+describe('19-nov · «nada se recorta» (G6/G9) también en la vuelta por regla dura', () => {
+  it('🔴 30 reglas duras de 900 caracteres: van las 30, enteras, y sigue diciendo que la pieza queda en corrección', () => {
+    const d = Array.from({ length: 30 }, (_, i) => `R${i + 1} ${'x'.repeat(900)} R${i + 1}-FINAL`)
+    const t = avisoDeLaJefaturaALaMesa(d, true)
+    for (let i = 1; i <= 30; i++) expect(t).toContain(`R${i}-FINAL`)
+    expect(t).toMatch(/REGLAS DURAS siguen rotas/)
+    expect(t).toMatch(/queda en corrección/)
   })
 })

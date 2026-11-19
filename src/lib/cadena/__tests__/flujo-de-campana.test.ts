@@ -12,6 +12,7 @@ import {
 import { ACCIONES } from '../acciones'
 import { briefAbrir, conceptoAbrir, hojaEscribir, CODIGO_CAMPANA_PAUSADA } from '../mesas'
 import { fichasPreparar } from '../pasos'
+import { bolsaAgrandada } from '../nucleo'
 import { estrategiaPasar, calendarioPasar } from '../revision-jefatura'
 import { PASOS, PASOS_CON_PRESUPUESTO_PROPIO, topeDelPaso } from '../constantes'
 import { AlmacenMemoria } from '../__fixtures__/almacen-memoria'
@@ -166,7 +167,8 @@ describe('el rojo: intenta reanudar, revisando la causa ANTES', () => {
     const id = await activa(al)
     const gastado = (await al.corridasDeCampana(id)).reduce((s, c) => s + (c.costo_usd ?? 0), 0)
     // la bolsa queda por debajo de lo gastado + el tope de un calendario: exactamente lo que pone a la campaña en `necesita_humano` en `pasos.ts`
-    await al.actualizarCampana(id, { presupuesto_planificacion_usd: Math.floor(gastado), estado: 'necesita_humano', estado_motivo: `el presupuesto de planificación se agotó (US$ ${gastado.toFixed(2)} de ${Math.floor(gastado)})` })
+    // 18-nov (grupo A): el tope de la campaña igual a la bolsa, para que la regla no la agrande (`bolsaAgrandada` nunca pasa el tope): «ni la bolsa agrandada alcanza»
+    await al.actualizarCampana(id, { presupuesto_planificacion_usd: Math.max(0.5, Math.floor(gastado)), tope_gasto_usd: Math.max(0.5, Math.floor(gastado)), estado: 'necesita_humano', estado_motivo: `el presupuesto de planificación se agotó (US$ ${gastado.toFixed(2)} de ${Math.floor(gastado)})` })
     await al.abrirEspera({ campana_id: id, objeto_tipo: 'necesita_humano', objeto_id: id, motivo: 'bolsa', desde: AHORA, recordatorio_en: null, alerta_en: null, vence_en: '2026-12-01T00:00:00Z', estado: 'viva', rung_enviado: 0, dedup_key: `nh:${id}:bolsa`, accion_al_vencer: 'pausada', seco: true })
     return id
   }
@@ -184,7 +186,7 @@ describe('el rojo: intenta reanudar, revisando la causa ANTES', () => {
   })
   it('con la bolsa subida: vuelve a `activa`, resuelve la espera, y el reloj NO la devuelve sola a `necesita_humano` (pedido de CC7 para Náufrago)', async () => {
     const al = almacen(); const id = await sinBolsa(al)
-    await al.actualizarCampana(id, { presupuesto_planificacion_usd: 15 })
+    await al.actualizarCampana(id, { presupuesto_planificacion_usd: 15, tope_gasto_usd: 150 })
     expect(await causaQueSigue(al, await estado(al, id))).toBeNull()
     const r = await flujo(al, id, 'reanudar')
     expect(r.status).toBe(200)
@@ -196,12 +198,29 @@ describe('el rojo: intenta reanudar, revisando la causa ANTES', () => {
     expect((await estado(al, id)).estado).toBe('activa')
     expect((await al.corridasDeCampana(id)).length).toBe(corridas) // ni un calendario nuevo pedido
   })
+  it('🔴 18-nov · Lenovo 17:21Z: la campaña que nació con 6, con el rojo encendido, reactiva a `activa` sin E-CAUSA-SIGUE: el rojo mide con la bolsa que la regla le dará (`bolsaAgrandada`)', async () => {
+    const al = almacen(); const id = await activa(al)
+    const gastado = (await al.corridasDeCampana(id)).reduce((s, c) => s + (c.costo_usd ?? 0), 0)
+    const c0 = await estado(al, id)
+    const suya = bolsaAgrandada({ ...c0, presupuesto_planificacion_usd: 6, tope_gasto_usd: 150 }, 'calendario')
+    expect(suya).not.toBeNull(); expect(gastado + topeDeLaPlanificacion()).toBeLessThanOrEqual(suya as number)
+    // como Náufrago: bolsa guardada de 6 que no alcanza, detenida por la bolsa, con un tope de campaña holgado
+    const guardada = Math.max(0, Math.min(6, Math.floor(gastado)))
+    await al.actualizarCampana(id, { presupuesto_planificacion_usd: guardada, tope_gasto_usd: 150, estado: 'necesita_humano', estado_motivo: `el presupuesto de planificación se agotó (US$ ${gastado.toFixed(2)} de ${guardada})` })
+    await al.abrirEspera({ campana_id: id, objeto_tipo: 'necesita_humano', objeto_id: id, motivo: 'bolsa', desde: AHORA, recordatorio_en: null, alerta_en: null, vence_en: '2026-12-01T00:00:00Z', estado: 'viva', rung_enviado: 0, dedup_key: `nh:${id}:bolsa`, accion_al_vencer: 'pausada', seco: true })
+    expect(gastado + topeDeLaPlanificacion()).toBeGreaterThan(guardada) // con la bolsa guardada, el rojo de antes decía «sigue sin alcanzar»
+    expect(await causaQueSigue(al, await estado(al, id))).toBeNull()
+    const r = await flujo(al, id, 'reanudar')
+    expect(r.status).toBe(200); expect(r.cuerpo.code).not.toBe('E-CAUSA-SIGUE')
+    expect(await estado(al, id)).toMatchObject({ estado: 'activa', estado_motivo: null })
+    expect(await vivas(al, id, 'necesita_humano')).toHaveLength(0)
+  })
   it('la causa se mide con la MISMA regla que frena el paso (gastado + tope de un calendario > bolsa)', async () => {
     const al = almacen(); const id = await sinBolsa(al)
     const gastado = (await al.corridasDeCampana(id)).reduce((s, c) => s + (c.costo_usd ?? 0), 0)
-    await al.actualizarCampana(id, { presupuesto_planificacion_usd: gastado + topeDeLaPlanificacion() })
+    await al.actualizarCampana(id, { presupuesto_planificacion_usd: gastado + topeDeLaPlanificacion(), tope_gasto_usd: gastado + topeDeLaPlanificacion() })
     expect(await causaQueSigue(al, await estado(al, id))).toBeNull()
-    await al.actualizarCampana(id, { presupuesto_planificacion_usd: gastado + topeDeLaPlanificacion() - 0.01 })
+    await al.actualizarCampana(id, { presupuesto_planificacion_usd: gastado + topeDeLaPlanificacion() - 0.01, tope_gasto_usd: gastado + topeDeLaPlanificacion() - 0.01 })
     expect(await causaQueSigue(al, await estado(al, id))).toMatch(/sigue sin alcanzar/)
   })
   it('el tope que se mide es el MAYOR de los pasos que gastan de la bolsa de planificación (no solo el del calendario · CC3)', () => {
@@ -415,5 +434,45 @@ describe('🟡 de CC7 (a2): el botón respeta la compuerta de la cadena', () => 
     expect((await flujo(al, id, 'parar')).status).toBe(200)
     expect((await flujo(al, id, 'reanudar')).status).toBe(200)
     expect((await estado(al, id)).estado).toBe('activa')
+  })
+})
+
+describe('🟡 k1 de CC6: reanudar a activa ARRANCA la producción (como avanzar)', () => {
+  async function pausadaConArranque(al: AlmacenMemoria) {
+    const id = await activa(al)
+    await flujo(al, id, 'parar')
+    await al.escribirConfig('arranque_por_evento', true)
+    return id
+  }
+  it('desde el DORADO: reanudar deja activa, contesta el arranque hecho y deja sobres en la sala', async () => {
+    const al = almacen(); const id = await pausadaConArranque(al)
+    expect(al.sala.size).toBe(0)
+    const r = await flujo(al, id, 'reanudar')
+    expect(r.status).toBe(200); expect((await estado(al, id)).estado).toBe('activa')
+    expect(r.cuerpo.arranque).toMatchObject({ arranque: 'hecho' })
+    expect(al.sala.size).toBeGreaterThan(0)
+  })
+  it('desde el ROJO (sin causa que siga): reanudar a activa también arranca', async () => {
+    const al = almacen(); const id = await activa(al)
+    await al.actualizarCampana(id, { estado: 'necesita_humano', estado_motivo: 'el lector no encontró la fuente' })
+    await al.escribirConfig('arranque_por_evento', true)
+    const r = await flujo(al, id, 'reanudar')
+    expect(r.status).toBe(200); expect((await estado(al, id)).estado).toBe('activa')
+    expect(r.cuerpo.arranque).toMatchObject({ arranque: 'hecho' })
+    expect(al.sala.size).toBeGreaterThan(0)
+  })
+  it('reanudar a un estado que NO es activa (pausada en calendario) no arranca, aunque el interruptor esté encendido', async () => {
+    const al = almacen(); const id = await enCalendario(al)
+    await flujo(al, id, 'parar')
+    await al.escribirConfig('arranque_por_evento', true)
+    const r = await flujo(al, id, 'reanudar')
+    expect(r.status).toBe(200); expect((await estado(al, id)).estado).toBe('calendario')
+    expect(r.cuerpo).not.toHaveProperty('arranque'); expect(al.sala.size).toBe(0)
+  })
+  it('control: con el interruptor apagado, reanudar no deja sobres ni trae arranque (igual que avanzar)', async () => {
+    const al = almacen(); const id = await activa(al)
+    await flujo(al, id, 'parar')
+    const r = await flujo(al, id, 'reanudar')
+    expect(r.status).toBe(200); expect(r.cuerpo).not.toHaveProperty('arranque'); expect(al.sala.size).toBe(0)
   })
 })

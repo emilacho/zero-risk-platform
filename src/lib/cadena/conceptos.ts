@@ -498,6 +498,17 @@ export function insumosDesdeEstrategia(e: { fases: Fase[]; patron_semanal: Slot[
   }
 }
 
+/** 18-nov · relleno del banco (la (b) de Lenovo): lo que el banco necesita para contarse (fases con semanas, redes con huecos), sin el resto de los insumos del lector */
+export interface InsumosDelBanco { fases: Array<{ clave: string; semanas: number }>; redes: Array<{ red: string; huecos_por_semana: number }> }
+/**
+ * Lo que viaja en el sobre de la mesa de concepto para que la oficina cuente el banco con la MISMA lectura que la cadena (`leerConcepto` → `banco_parcial`).
+ * Sale de los mismos insumos que usa la cadena al recibir el concepto: no hay una segunda cuenta que pueda desalinearse.
+ */
+export function insumosDelBanco(e: { fases: Fase[]; patron_semanal: Slot[]; canales: Array<{ red: string; rol: string }> }): InsumosDelBanco {
+  const i = insumosDesdeEstrategia(e, [], [])
+  return { fases: i.fases.map((f) => ({ clave: f.clave, semanas: f.semanas })), redes: i.redes.map((r) => ({ red: r.red, huecos_por_semana: r.huecos_por_semana })) }
+}
+
 // ───────────────────────────────────────────────────────── salidas
 /** los hallazgos para `cadena_validaciones` (objeto `concepto`): los bloqueos bloquean; los avisos avisan */
 export function hallazgosDelConcepto(c: ConceptoLeido): Hallazgo[] {

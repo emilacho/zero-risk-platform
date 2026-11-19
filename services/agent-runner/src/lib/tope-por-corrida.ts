@@ -86,14 +86,32 @@ export function mensajeDeFalloDelSdk(causa: string, costoUsd: number): string {
 /**
  * RAZONAMIENTO INTERNO LIMITADO POR CORRIDA · CC#1 · 2026-09-30 · experimento autorizado por Emilio (Braintrust: ~90% de la salida del redactor es pensamiento que nadie lee,
  * y el fallo real es el máximo de 32.000 tokens POR RESPUESTA). OPT-IN igual que el tope: sin `thinking_mode` en el pedido, las opciones del SDK son las de siempre (ni existen las claves).
- *   · `disabled` → `thinking: {type:'disabled'}` (sin pensamiento extendido)
- *   · `low` | `medium` → `effort` (guía la profundidad del pensamiento adaptativo)
- * Un valor MAL ESCRITO se rechaza (400): ignorarlo dejaría correr con el razonamiento completo y pagar el fallo de siempre.
+ *   · `disabled` → `thinking: {type:'disabled'}` (sin pensamiento extendido) · en los modelos que NO dejan apagarlo (Opus 5.5, Sonnet 5.5, Haiku 5.5, Fable: dan 400) baja a `effort:'low'`
+ *   · `low` | `medium` | `high` | `xhigh` | `max` → `effort` (guía la profundidad del pensamiento adaptativo)
+ *   · `maximo` → el nivel más alto que admite el modelo de la corrida (`max`)
+ * 18-nov · firma de Emilio «nada se recorta» (G1 del barrido de topes · CC5): el razonamiento va al máximo de cada modelo. El nivel se AJUSTA al modelo
+ * (fuente: code.claude.com/docs/en/model-config «Adjust effort level», leída el 18-nov): Opus 4.6 y Sonnet 4.6 no tienen `xhigh` (baja a `high`) · Haiku 4.5 y los
+ * modelos anteriores no aceptan effort (se omite: el modelo razona como siempre).
+ * Un valor MAL ESCRITO se rechaza (400): ignorarlo dejaría correr con otro razonamiento sin que nadie lo sepa.
  */
-export const MODOS_DE_RAZONAMIENTO = ['disabled', 'low', 'medium'] as const
+export const MODOS_DE_RAZONAMIENTO = ['disabled', 'low', 'medium', 'high', 'xhigh', 'max', 'maximo'] as const
 export type ModoDeRazonamiento = (typeof MODOS_DE_RAZONAMIENTO)[number]
+export type NivelDeEsfuerzo = 'low' | 'medium' | 'high' | 'xhigh' | 'max'
 
 export type RazonamientoResuelto = { ok: true; valor: ModoDeRazonamiento | null } | { ok: false; motivo: string }
+
+/** techo de cada respuesta del modelo, en tokens · el máximo de los modelos de 1 M (el SDK lo baja solo al de cada modelo) · va como texto porque es una variable de entorno */
+export const TECHO_DE_RESPUESTA_TOKENS = '128000'
+
+/** qué admite cada modelo · por prefijo del id (el corredor usa ids completos, p. ej. `claude-haiku-4-5-20251001`) */
+// 19-nov · ajuste de precisión de G1 (🟡 de CC6 a #1183; referencia oficial de la API):
+//   · Opus 4.5 SÍ acepta `effort`, pero solo `low/medium/high` (no `xhigh` ni `max`) → sale de SIN_EFFORT y va en HASTA_HIGH;
+//   · Haiku 5.5 SÍ deja apagar el razonamiento (`thinking: disabled` con `low/medium/high`; su valor por omisión es `high`) → sale de NO_SE_APAGA
+const SIN_EFFORT = ['claude-haiku-4-5', 'claude-haiku-3', 'claude-sonnet-4-5', 'claude-opus-4-1', 'claude-opus-4-0', 'claude-sonnet-4-0']
+const SIN_XHIGH = ['claude-opus-4-6', 'claude-sonnet-4-6']
+const HASTA_HIGH = ['claude-opus-4-5']
+const NO_SE_APAGA = ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-fable']
+const empiezaCon = (modelo: string | undefined, prefijos: readonly string[]) => typeof modelo === 'string' && prefijos.some((p) => modelo.startsWith(p))
 
 /** toma el PRIMER candidato presente y lo valida · ninguno presente ⇒ sin límite (`valor:null`) · `null` explícito NO es «ausente» */
 export function resolverRazonamiento(...candidatos: unknown[]): RazonamientoResuelto {
@@ -103,9 +121,13 @@ export function resolverRazonamiento(...candidatos: unknown[]): RazonamientoResu
   return { ok: false, motivo: `thinking_mode debe ser uno de ${MODOS_DE_RAZONAMIENTO.join(' | ')} (llegó ${JSON.stringify(presente)})` }
 }
 
-/** la parte de las opciones del SDK · vacía sin modo (camino de siempre) */
-export function opcionDeRazonamiento(modo: ModoDeRazonamiento | null | undefined): { thinking?: { type: 'disabled' }; effort?: 'low' | 'medium' } {
-  if (modo === 'disabled') return { thinking: { type: 'disabled' } }
-  if (modo === 'low' || modo === 'medium') return { effort: modo }
-  return {}
+/** la parte de las opciones del SDK · vacía sin modo (camino de siempre) · el nivel se ajusta a lo que admite `modelo` (id completo de la corrida) */
+export function opcionDeRazonamiento(modo: ModoDeRazonamiento | null | undefined, modelo?: string): { thinking?: { type: 'disabled' }; effort?: NivelDeEsfuerzo } {
+  if (modo === null || modo === undefined) return {}
+  if (modo === 'disabled') return empiezaCon(modelo, NO_SE_APAGA) ? { effort: 'low' } : { thinking: { type: 'disabled' } }
+  if (empiezaCon(modelo, SIN_EFFORT)) return {}
+  const nivel: NivelDeEsfuerzo = modo === 'maximo' ? 'max' : modo
+  if ((nivel === 'xhigh' || nivel === 'max') && empiezaCon(modelo, HASTA_HIGH)) return { effort: 'high' }
+  if (nivel === 'xhigh' && empiezaCon(modelo, SIN_XHIGH)) return { effort: 'high' }
+  return { effort: nivel }
 }

@@ -25,9 +25,10 @@ import { fotosPropiasConPersonas, type PermisoDePersonaReal } from './video/perm
 import type { Estado, Ficha, Paso, Plantilla } from './tipos'
 import { CATALOGO_POR_OMISION, RELACIONES_PERMITIDAS, RELACION_POR_FORMATO, fichaPorOmision, type CatalogoDeModelos } from '../video/parametros'
 import { sessionIdDeVideo } from '../video/libro'
-import { guionLegible, type TraduccionDeGuion } from './video/guion'
+import { guionLegible, type PersonajeDeLaHoja, type TraduccionDeGuion } from './video/guion'
 import { LISTA_DE_FOTOS } from './mesa/pedidos'
-import { costoDeVolver } from './topes-por-duracion'
+import { aplicarTopesPorDuracion, costoDeVolver } from './topes-por-duracion'
+import { CLAVE_DE_LA_DURACION, duracionAbierta } from './video/duracion-de-la-pieza'
 import { armarPedidoDeLaOficina, buscarFotoPropia, formatoDeEntrega, formatoDeVideo, fotosPropiasConDireccion, pedidosParaCotizar, type PedidoDeVideoDeLaOficina } from './video/pedido'
 import { avisoDeLaMiradaALaMesa, leerMirada, miradaLegible, nombreDelCuadro, PASO_MIRAR_VIDEO, tareaDeLaMirada, type CuadroDelVideo, type MiradaDelVideo, type SenalesDelVideo } from './video/mirada'
 import { CONTRATOS_EN_TEXTO } from './pedidos'
@@ -104,8 +105,8 @@ type SalidaCodigoV = { res: ResultadoDePaso; gastos?: Cambios['gastos']; fallido
 export async function ejecutarCodigoV(P: Puertos, enc: Encargo, pl: Plantilla, paso: Paso): Promise<SalidaCodigoV> {
   switch (paso.funcion) {
     case 'abrir_video': return abrir(P, enc, pl)
-    case 'pedido_de_video': return pedido(enc, pl, enc.estado_del_motor)
-    case 'chequeos_video': return chequeos(enc.estado_del_motor, pl)
+    case 'pedido_de_video': return pedido(P, enc, pl, enc.estado_del_motor)
+    case 'chequeos_video': return chequeos(enc.estado_del_motor, pl, enc)
     case 'cuadros_video': return cuadrosDelVideo(P, enc)
     case 'imagenes_clave': return imagenesClave(P, enc, pl, paso)
     case 'empaquetar_entrega_video': return empaquetar(P, enc)
@@ -204,12 +205,29 @@ async function cotizarPrimero(P: Puertos, enc: Encargo, pl: Plantilla, brief: Br
 }
 
 /** el guion de la mesa → el pedido al brazo (sin red): la clave idempotente es `<encargo>:<brief>:v<versión del guion>` */
-function pedido(enc: Encargo, pl: Plantilla, e: Estado): SalidaCodigoV {
+async function pedido(P: Puertos, enc: Encargo, pl: Plantilla, e: Estado): Promise<SalidaCodigoV> {
   const b = baseV(e)
   const g = datos(e, 'guion') as unknown as GuionDeLaMesa | undefined
   // Sprint 2 · S2-1 · con propuestas, el guion es la ELEGIDA: sin aprobación todavía no hay qué filmar (una plantilla que pide propuestas necesita su paso de aprobación antes de este)
   if ((!g || !Array.isArray(g.planos) || !g.planos.length) && e.artefactos.propuestas_video) return { res: { costo_usd: 0 }, fallido: 'hay propuestas del video sin aprobar y no hay guion elegido que pedir (la plantilla pide propuestas pero no tiene el paso de aprobación del dueño antes del pedido)' }
   if (!g || !Array.isArray(g.planos) || !g.planos.length) return { res: { costo_usd: 0 }, fallido: 'no hay guion traducido que pedir (la mesa no dejó planos)' }
+  // 19-nov · G5b (A′ · GO Lenovo 03:41Z, cambio 2: «nada se recorta») · el guion dura MÁS que lo que abrió el brief: los topes de este encargo se recalculan con la
+  //   duración del guion, dentro del tope de la campaña (el del encargo), y se avisa. Solo si no cabe vuelve UNA vez a la mesa con el aviso; sin vuelta, no se recorta: queda para decidir
+  const abierta = duracionAbierta(enc)
+  let duracionNueva: { duracion_s: number; aviso_duracion: string } | undefined
+  if (abierta !== null && Number.isFinite(g.segundos) && g.segundos > abierta) {
+    const leida = await P.almacen.leerPlantilla(enc.familia)
+    const cruda = leida?.cruda ?? leida?.plantilla
+    const nueva = cruda ? aplicarTopesPorDuracion(cruda, g.segundos).plantilla : null
+    const segundos = Math.round(g.segundos)
+    if (nueva && nueva.limites.tope_encargo_usd <= enc.tope_usd + 1e-9) {
+      duracionNueva = { duracion_s: segundos, aviso_duracion: `el guion dura ${segundos} s y el brief abrió ${abierta} s: los topes se recalcularon para ${segundos} s (encargo hasta US$ ${nueva.limites.tope_encargo_usd}), dentro del tope de la campaña (US$ ${enc.tope_usd})` }
+    } else {
+      const porQue = nueva ? `con ${segundos} s el encargo pediría hasta US$ ${nueva.limites.tope_encargo_usd} y el tope de la campaña es US$ ${enc.tope_usd}` : 'no se pudo leer la plantilla para recalcular los topes'
+      if (quedaVueltaALaMesa(pl, e)) return { res: { costo_usd: 0, artefacto: { clave: `${enc.id}:${enc.brief_id}:v${e.artefactos['guion']?.version ?? 1}`, fotos_no_halladas: [], avisos_del_guion: g.avisos ?? [], vuelve_a_la_mesa: true, aviso_a_la_mesa: `El guion dura ${segundos} s y el brief de la pieza abrió ${abierta} s: ${porQue}. Rehaz el guion dentro de ${abierta} s, o escribe en el guion por qué esta pieza necesita más.` } } }
+      return { res: { costo_usd: 0 }, fallido: `el guion dura ${segundos} s y el brief abrió ${abierta} s: ${porQue}, y ya volvió a la mesa. No se recorta: hace falta subir el tope de la campaña o acortar el guion` }
+    }
+  }
   const lim = (pl.limites.video ?? {}) as { resolucion?: string }
   const clave = `${enc.id}:${enc.brief_id}:v${e.artefactos['guion']?.version ?? 1}`
   const a = armarPedidoDeLaOficina({ catalogo: catalogoDelEncargo(b), guion: g, brief: b.brief, fotos: b.F.fotos, clave, relacion: b.proporcion, ...(lim.resolucion ? { resolucion: lim.resolucion } : {}) })
@@ -233,7 +251,7 @@ function pedido(enc: Encargo, pl: Plantilla, e: Estado): SalidaCodigoV {
     if (!pp.ok) return { res: { costo_usd: 0 }, fallido: `los pedidos por plano no son válidos: ${pp.errores.join(' · ')}` }
     planos = pp.pedidos
   }
-  return { res: { costo_usd: 0, artefacto: { pedido: a.pedido, clave, fotos_no_halladas: a.pedido.fotos_no_halladas, avisos_del_guion: g.avisos ?? [], vuelve_a_la_mesa: false, ...(planos ? { planos } : {}) }, ...(fichas.length ? { fichas } : {}) } }
+  return { res: { costo_usd: 0, artefacto: { pedido: a.pedido, clave, fotos_no_halladas: a.pedido.fotos_no_halladas, avisos_del_guion: g.avisos ?? [], vuelve_a_la_mesa: false, ...(planos ? { planos } : {}), ...(duracionNueva ?? {}) }, ...(fichas.length ? { fichas } : {}) } }
 }
 
 /** ¿al paso del pedido le queda su vuelta a la mesa Y CABE en el tope? (dato de la plantilla: `vuelve_a` del paso `pedido_de_video`; sin él, nunca vuelve).
@@ -256,7 +274,7 @@ export function avisoDeFotosALaMesa(noHalladas: string[], ambiguas: string[], fo
   return `${cab}\nRehaz el guion con las fotos que sí hay (en «Foto:» va su nombre) o deja esos planos sin foto. Integra el guion completo otra vez.\nFotos propias disponibles:\n${LISTA_DE_FOTOS(propias)}`
 }
 
-function chequeos(e: Estado, pl: Plantilla): SalidaCodigoV {
+function chequeos(e: Estado, pl: Plantilla, enc?: Pick<Encargo, 'sala_ref'>): SalidaCodigoV {
   const b = baseV(e)
   const cv0 = datos(e, 'copy_video')
   if (!cv0) return { res: { costo_usd: 0, artefacto: { fichas: 0 } }, fallido: 'no hay pie ni etiquetas que chequear' }
@@ -284,6 +302,10 @@ function chequeos(e: Estado, pl: Plantilla): SalidaCodigoV {
     if (typeof lim.tope_por_video_usd === 'number' && v.costo_usd > lim.tope_por_video_usd + 1e-9) nueva('sugerencia', `el video cobró US$ ${v.costo_usd.toFixed(4)}, más que el tope por video (US$ ${lim.tope_por_video_usd})`, TOPE_POR_VIDEO, 'alarma de gasto al cierre: el dinero ya se gastó, la pieza sigue (Lenovo · revisión 2, pregunta 4: no bloquea)')
   }
   for (const a of arr(pv?.avisos_del_guion)) nueva('sugerencia', `el traductor del guion avisó: ${a}`, 'guion de la mesa', 'mirar el video con eso en mente')
+  // 19-nov · G5b (A′ · GO Lenovo 03:41Z) · la duración: la de por omisión (nadie la razonó) o la que el guion subió, a la vista del dueño; nunca callada
+  const dur = enc?.sala_ref?.[CLAVE_DE_LA_DURACION] as { aviso?: unknown } | undefined
+  if (typeof dur?.aviso === 'string' && dur.aviso) nueva('sugerencia', dur.aviso, 'duración del brief de la pieza', 'que quien escribe el brief declare la duración con su porqué')
+  if (typeof pv?.aviso_duracion === 'string' && pv.aviso_duracion) nueva('sugerencia', pv.aviso_duracion, 'duración del guion de la mesa', 'mirar que el largo del video lo justifique')
   return { res: { costo_usd: 0, artefacto: { fichas: fichas.length, ...(auto.declarado.length ? { autocorregido: auto.declarado } : {}) }, fichas, reemplazar_fichas: { origen: 'chequeo', donde: ['texto', 'hashtags', 'video'] }, ...(auto.declarado.length ? { otros_artefactos: { copy_video: cv } } : {}) } }
 }
 
@@ -395,9 +417,10 @@ async function imagenesClave(P: Puertos, enc: Encargo, pl: Plantilla, paso: Paso
   }
   // qué hojas: en final, la del guion; en propuestas, la de cada propuesta (id «P1»…)
   const g = datos(e, 'guion') as unknown as (GuionDeLaMesa & { planos: PlanoDeLaHoja[] }) | undefined
-  const hojas: Array<{ id: string | null; planos: PlanoDeLaHoja[] }> = fase === 'final'
-    ? [{ id: null, planos: Array.isArray(g?.planos) ? g.planos : [] }]
-    : (propuestasDe(e)?.propuestas ?? []).map((x) => ({ id: x.id, planos: (Array.isArray(x.guion?.planos) ? x.guion.planos : []) as PlanoDeLaHoja[] }))
+  // 18-nov · cada hoja trae también sus personajes (sus fotos viajan como referencia de la imagen clave)
+  const hojas: Array<{ id: string | null; planos: PlanoDeLaHoja[]; personajes: PersonajeDeLaHoja[] }> = fase === 'final'
+    ? [{ id: null, planos: Array.isArray(g?.planos) ? g.planos : [], personajes: Array.isArray(g?.personajes) ? g.personajes : [] }]
+    : (propuestasDe(e)?.propuestas ?? []).map((x) => ({ id: x.id, planos: (Array.isArray(x.guion?.planos) ? x.guion.planos : []) as PlanoDeLaHoja[], personajes: Array.isArray(x.guion?.personajes) ? x.guion.personajes : [] }))
   const vacio = (): SalidaCodigoV => ({ res: { costo_usd: 0, artefacto: { fase, calidad, planos: [], ...(fase === 'borrador' ? { propuestas: [] } : {}), hay_imagenes: false } as unknown as Record<string, unknown>, fichas: [fichaNueva(`${prefijo}-sin-planos`, 'chequeo', 'imagen_clave', 'sugerencia', fase === 'borrador' ? 'no hubo imágenes clave: las propuestas de la mesa no traen hojas de planos legibles' : 'no hubo imágenes clave: la hoja no trae planos', fase === 'borrador' ? 'propuestas de la mesa' : 'hoja de planos de la mesa', 'el video sale sin storyboard')], reemplazar_fichas: reemplazar } })
   if (!hojas.some((h) => h.planos.length)) return vacio()
   const propias = fotosPropiasConDireccion(b.F.fotos)
@@ -413,10 +436,12 @@ async function imagenesClave(P: Puertos, enc: Encargo, pl: Plantilla, paso: Paso
   const deLa = (id: string | null) => (id ? ` de la propuesta ${id}` : '')
   const clave = (id: string | null, resto: string) => `${prefijo}${id ? `-${id}` : ''}-${resto}`
   const tandas = hojas.map((h) => {
-    const planos: PlanoDeLaHoja[] = h.planos.map((x) => ({ ...x, foto_id: idCompleto(x.foto_id) }))
+    const planos: PlanoDeLaHoja[] = h.planos.map((x) => ({ ...x, foto_id: idCompleto(x.foto_id), ...(x.fotos_extra?.length ? { fotos_extra: x.fotos_extra.map((f) => idCompleto(f) ?? f) } : {}) }))
+    const personajes = h.personajes.map((c) => ({ ...c, fotos_ids: (c.fotos_ids ?? []).map((f) => idCompleto(f) ?? f) }))
     const nombradas = planos.flatMap((x) => (x.foto_id ? [{ id: x.foto_id }] : []))
     const aptas: FotoDeReferencia[] = fotosDeReferencia(propias, Array.isArray(cands) ? [...nombradas.filter((n) => cands.some((c) => c.id === n.id && !c.cercana)), ...cands] : nombradas)
-    const { pedidos, no_aptas } = pedidosDeImagenClave({ planos, aptas, proporcion: b.proporcion, rotar: Array.isArray(cands) })
+    const { pedidos, no_aptas } = pedidosDeImagenClave({ planos, aptas, proporcion: b.proporcion, rotar: Array.isArray(cands), personajes, propias: propias.map((f) => ({ id: f.id, url: f.url })) })
+    for (const q of pedidos) if (q.personajes_sin_foto?.length) fichas.push(fichaNueva(clave(h.id, `personaje-sin-foto-${q.n}`), 'chequeo', 'imagen_clave', 'sugerencia', `el plano ${q.n}${deLa(h.id)} muestra a ${q.personajes_sin_foto.map((x) => `«${x}»`).join(', ')} sin foto ni marca de creación nueva: se dibuja nuevo desde su descripción, no como uno que ya existe`, 'hoja de planos de la mesa', 'la mesa puede nombrar su foto o marcarlo «creación nueva»'))
     for (const x of no_aptas) {
       const otra = pedidos.find((q) => q.n === x.n)?.foto
       fichas.push(fichaNueva(clave(h.id, `foto-no-apta-${x.n}`), 'chequeo', 'imagen_clave', 'sugerencia', `la hoja${deLa(h.id)} pide la foto «${x.id}» para el plano ${x.n}, pero no sirve de referencia (no es propia, no tiene dirección o no muestra el producto): ${otra ? `se usa «${otra.id}»` : 'se genera desde la hoja'}`, 'fotos propias del cliente', 'mirar que el producto sea el real'))
@@ -430,9 +455,9 @@ async function imagenesClave(P: Puertos, enc: Encargo, pl: Plantilla, paso: Paso
   // el siguiente cuadro no se pide si ya no cabe otro como el más caro que salió (el primero se pide para medir su costo, SALVO que no quede nada:
   //   CC7 🟡 17-nov · con el tope en 0, el encargo ya gastó lo suyo y ninguna imagen se pide · regla «nada gasta sin dale»)
   const cabe = (): boolean => enc.dry_run || (tope > 0 && (pedidas === 0 || costo + masCara <= tope + 1e-9))
-  const pedir = async (prompt: string, foto: FotoDeReferencia | null) => {
+  const pedir = async (prompt: string, foto: FotoDeReferencia | null, otras?: FotoDeReferencia[]) => {
     pedidas++
-    const r = await P.imagen({ prompt, client_id: enc.client_id, encargo_id: enc.id, dry_run: enc.dry_run, foto, size: calidad.size, quality: calidad.quality })
+    const r = await P.imagen({ prompt, client_id: enc.client_id, encargo_id: enc.id, dry_run: enc.dry_run, foto, ...(foto && otras?.length ? { otras_fotos: otras } : {}), size: calidad.size, quality: calidad.quality })
     if (r.ok) {
       costo += r.costo_usd; masCara = Math.max(masCara, r.costo_usd)
       gastos.push({ concepto: 'imagen', ref_tabla: 'agent_image_generations', ref_id: r.generation_id, cost_usd: r.costo_usd, base: 'usage' })
@@ -443,11 +468,15 @@ async function imagenesClave(P: Puertos, enc: Encargo, pl: Plantilla, paso: Paso
   for (const t of tandas) {
     for (const ped of t.pedidos) {
       if (!cabe()) { fichas.push(fichaNueva(clave(t.id, `tope-${ped.n}`), 'chequeo', 'imagen_clave', 'sugerencia', `el plano ${ped.n}${deLa(t.id)} quedó sin imagen clave: no cabía otra imagen en el tope del paso (US$ ${tope.toFixed(2)}; van US$ ${costo.toFixed(4)})`, 'tope del paso', 'su clip sale desde su foto o su texto')); continue }
-      const r = await pedir(ped.prompt, ped.foto)
+      const r = await pedir(ped.prompt, ped.foto, ped.otras_fotos)
       if (!r.ok) { fichas.push(fichaNueva(clave(t.id, `falla-${ped.n}`), 'chequeo', 'imagen_clave', 'sugerencia', `el generador no devolvió la imagen clave del plano ${ped.n}${deLa(t.id)}: ${r.error}`, 'generador de imágenes', 'su clip sale desde su foto o su texto')); continue }
       const usada = !!ped.foto && r.referencia?.usada === true
       if (ped.foto && !usada) fichas.push(fichaNueva(clave(t.id, `sin-foto-${ped.n}`), 'chequeo', 'imagen_clave', 'sugerencia', `la imagen clave del plano ${ped.n}${deLa(t.id)} se generó sin la foto real «${ped.foto.id}» (${r.referencia?.motivo ?? 'sin motivo'}): el producto puede no ser el del cliente`, 'fotos propias del cliente', 'mirar que el producto sea el real'))
-      t.hechas.push({ n: ped.n, url: r.url, imagenes: [r.url], prompt: ped.prompt, foto_referencia_id: usada ? ped.foto!.id : null, referencia_usada: usada, costo_usd: r.costo_usd, generation_id: r.generation_id })
+      // 18-nov · las otras fotos del plano: cuáles viajaron (queda en la imagen) y cuáles no (con su motivo, como sugerencia: nunca frena)
+      const otrasUsadas = usada ? (ped.otras_fotos ?? []).filter((f) => r.referencia?.otras_usadas?.includes(f.url)).map((f) => f.id) : []
+      const omitidas = (ped.otras_fotos ?? []).filter((f) => !otrasUsadas.includes(f.id))
+      if (omitidas.length && !enc.dry_run) fichas.push(fichaNueva(clave(t.id, `otras-fotos-${ped.n}`), 'chequeo', 'imagen_clave', 'sugerencia', `la imagen clave del plano ${ped.n}${deLa(t.id)} salió sin ${omitidas.length} de sus fotos de referencia (${omitidas.map((f) => `«${f.id}»: ${r.referencia?.otras_omitidas?.find((o) => o.url === f.url)?.motivo ?? (usada ? 'la ruta no la usó' : 'no se usó la foto base')}`).join('; ')})`, 'fotos propias del cliente', 'el elemento puede no verse como el real'))
+      t.hechas.push({ n: ped.n, url: r.url, imagenes: [r.url], prompt: ped.prompt, foto_referencia_id: usada ? ped.foto!.id : null, referencia_usada: usada, ...(otrasUsadas.length ? { otras_referencias_ids: otrasUsadas } : {}), costo_usd: r.costo_usd, generation_id: r.generation_id })
     }
   }
   // 2 · el cierre de los planos largos (misma foto que su arranque; solo si el arranque salió)
@@ -457,7 +486,7 @@ async function imagenesClave(P: Puertos, enc: Encargo, pl: Plantilla, paso: Paso
       if (fase !== 'borrador' || !ped.prompt_cierre || !h) continue
       if (!cabe()) { fichas.push(fichaNueva(clave(t.id, `tope-cierre-${ped.n}`), 'chequeo', 'imagen_clave', 'sugerencia', `el plano ${ped.n}${deLa(t.id)} dura más de ${SEGUNDOS_PARA_DOS_CUADROS} s y quedó con un solo cuadro: no cabía el de cierre en el tope del paso (US$ ${tope.toFixed(2)})`, 'tope del paso', 'el borrador muestra solo cómo arranca')); continue }
       const foto = h.referencia_usada ? ped.foto : null
-      const r = await pedir(ped.prompt_cierre, foto)
+      const r = await pedir(ped.prompt_cierre, foto, foto ? ped.otras_fotos : undefined)
       if (!r.ok) { fichas.push(fichaNueva(clave(t.id, `falla-cierre-${ped.n}`), 'chequeo', 'imagen_clave', 'sugerencia', `el generador no devolvió el cuadro de cierre del plano ${ped.n}${deLa(t.id)}: ${r.error}`, 'generador de imágenes', 'el borrador muestra solo cómo arranca')); continue }
       ;(h.imagenes ??= [h.url]).push(r.url)
       h.costo_usd = +(h.costo_usd + r.costo_usd).toFixed(6)
@@ -522,7 +551,7 @@ export function armarPedidoV(paso: Paso, e: Estado, errorDeFormato?: string): { 
   const imagenes_clave = arr<{ n: number; url: string }>(imagenesClaveVigentes(e)?.planos)
   const senales = (cv?.senales ?? null) as SenalesDelVideo | null
   const esquema = paso.salida?.esquema ?? 'mirada_video.v1'
-  const t = tareaDeLaMirada({ cuadros, planos: g?.planos ?? [], segundos: g?.segundos ?? 0, brief_texto: b.brief.texto, red: b.brief.red, formato: b.brief.formato, contrato: CONTRATOS_EN_TEXTO[esquema] ?? '', imagenes_clave, senales, ...(errorDeFormato ? { errorDeFormato } : {}) })
+  const t = tareaDeLaMirada({ cuadros, planos: g?.planos ?? [], segundos: g?.segundos ?? 0, brief_texto: b.brief.texto, red: b.brief.red, formato: b.brief.formato, contrato: CONTRATOS_EN_TEXTO[esquema] ?? '', imagenes_clave, senales, manual_texto: b.F.manual_texto, plan_texto: b.F.plan_texto, ...(errorDeFormato ? { errorDeFormato } : {}) })
   return { ...t, esquema }
 }
 

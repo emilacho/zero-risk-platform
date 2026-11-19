@@ -53,7 +53,7 @@ export interface SobreDeRevisionDePieza {
 /** las marcas de los chequeos duros que siguen abiertas: viajan como DATO (regla 10), no entran en el pedido de nadie */
 const marcasHeredadas = (e: Estado): string[] => e.fichas.filter((f) => f.origen === 'chequeo' && f.estado === 'abierta').map((f) => `${f.donde}: ${f.que ?? ''}`.trim())
 
-export function sobreDeLaRevision(enc: Pick<Encargo, 'id' | 'client_id' | 'familia' | 'tope_usd' | 'dry_run' | 'sala_ref'>, pl: Pick<Plantilla, 'familia' | 'clase'>, e: Estado, m: MaterialDeLaRevision): SobreDeRevisionDePieza {
+export function sobreDeLaRevision(enc: Pick<Encargo, 'id' | 'client_id' | 'familia' | 'tope_usd' | 'dry_run' | 'sala_ref'>, pl: Pick<Plantilla, 'familia' | 'clase'> & Partial<Pick<Plantilla, 'limites'>>, e: Estado, m: MaterialDeLaRevision): SobreDeRevisionDePieza {
   const familia = familiaDePieza(pl)
   const heredadas = marcasHeredadas(e)
   const journey = enc.sala_ref && typeof enc.sala_ref._journey_id === 'string' && enc.sala_ref._journey_id ? enc.sala_ref._journey_id : null
@@ -72,7 +72,8 @@ export function sobreDeLaRevision(enc: Pick<Encargo, 'id' | 'client_id' | 'famil
       marcas_heredadas: heredadas,
       contexto: m.contexto,
       // lo que le queda al encargo: la jefatura nunca gasta más de lo que el encargo todavía tiene
-      tope_restante_usd: Math.max(0, +(enc.tope_usd - e.gasto_usd).toFixed(6)),
+      // 19-nov · G5b · 🔴 de CC7: lo que le queda a ESTA pieza (el tope de `plantillaDe`: min(su duración, el encargo)), no al sobre de la campaña
+      tope_restante_usd: Math.max(0, +(Math.min(enc.tope_usd, pl.limites?.tope_encargo_usd ?? enc.tope_usd) - e.gasto_usd).toFixed(6)),
       dry_run: enc.dry_run,
       version: e.artefactos[nombreDeLaPieza]?.version ?? 1,
       generado_por_jefatura: null,
@@ -287,12 +288,14 @@ export function avisoDeLaJefaturaALaMesa(desacuerdos: string[], soloReglasDuras 
   // 18-nov · GO Lenovo 13:52Z · la regla dura vuelve las veces que haga falta (con el tope de dinero del encargo): ya no se dice «es la única vuelta»
   if (soloReglasDuras) return [
     'La jefatura volvió a revisar la pieza y estas REGLAS DURAS siguen rotas. Se toman sí o sí: corrígelas en la pieza (usa solo lo que dice la ficha; si un dato no está, quítalo y no lo inventes):',
-    ...desacuerdos.slice(0, 8).map((d) => `- ${d.slice(0, 400)}`),
+    // 19-nov · G6 · firma de Emilio «nada se recorta» (18-nov): van TODAS las reglas duras, enteras
+    ...desacuerdos.map((d) => `- ${d}`),
     'Mientras sigan rotas, la pieza no se publica ni va a la bandeja: queda en corrección.',
   ].join('\n')
   return [
     'La jefatura revisó la pieza y quedaron estos desacuerdos sin resolver. Corrígelos en la pieza (si falta un dato que el brief pide, inclúyelo; si no lo tienes, dilo en la pieza y no lo inventes):',
-    ...desacuerdos.slice(0, 8).map((d) => `- ${d.slice(0, 400)}`),
+    // 19-nov · G6 · firma de Emilio «nada se recorta» (18-nov): van TODOS los desacuerdos, enteros (antes 8 de 400, sin aviso)
+    ...desacuerdos.map((d) => `- ${d}`),
     'Lo de criterio tiene esta sola vuelta: después, la pieza va a la bandeja con lo que quede marcado. Las reglas duras se toman sí o sí: si siguen rotas, la pieza vuelve otra vez.',
   ].join('\n')
 }

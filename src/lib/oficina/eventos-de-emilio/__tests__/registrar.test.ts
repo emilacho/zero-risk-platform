@@ -96,6 +96,13 @@ describe('el evento crudo de Emilio', () => {
     expect(slack.tablas.notas_del_dueno).toHaveLength(0)
     expect(slack.tablas.eventos_de_emilio).toHaveLength(1)
   })
+  it('🔴 (G2a · c1 y c2 de CC7) un comentario de 5000 caracteres con láminas llega ENTERO al evento y a la nota del dueño', async () => {
+    const largo = 'z'.repeat(5000)
+    const { db, tablas } = baseFalsa()
+    await registrarEventoDeEmilio(db, { ...base, comentario: largo, laminas: [2, 7] }, { espejo: true })
+    expect((tablas.eventos_de_emilio[0] as any).comentario).toBe(largo)
+    expect((tablas.notas_del_dueno[0] as any).comentario).toBe(`${largo} [láminas: 2, 7]`)
+  })
   it('aprobar sin comentario deja nota «aprobada» sin texto', async () => {
     const { db, tablas } = baseFalsa()
     await registrarEventoDeEmilio(db, { ...base, accion: 'aprobar' }, { espejo: true })

@@ -71,7 +71,7 @@ export async function leerInsumos(db: Db, clientId: string, opciones: { sinManua
   if (rr.error) return falla('apify_raw', rr.error.message)
   const filas = lista(rr.data).filter((f) => f.ensayo !== true) as unknown as FilaDeRaspado[]
 
-  const ic = await db.from('client_icp_documents').select('id, audience_segment, objections, decision_criteria, key_messages_for_segment, content_text').eq('client_id', clientId)
+  const ic = await db.from('client_icp_documents').select('id, audience_segment, objections, decision_criteria, key_messages_for_segment, content_text').eq('client_id', clientId).is('fusionado_en', null) // 19-nov · solo públicos vigentes (aviso de CC1)
   if (ic.error) return falla('client_icp_documents', ic.error.message)
   const icps = lista(ic.data)
 

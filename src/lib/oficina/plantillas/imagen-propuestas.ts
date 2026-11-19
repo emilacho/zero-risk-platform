@@ -20,7 +20,8 @@ export const PROPUESTAS_DE_IMAGEN = 3
  *  video con 3 propuestas 2,0–2,6 (mediana 2,34, máx. 2,56). Tres propuestas de imagen escriben como el video.
  *  🟡 CC6 #1129: la cota es el MÁXIMO medido de una pasada + un turno de reserva (nunca la mediana): 2,558 + 0,6 ≈ 3,2. Con 2,5 la pasada real `2ed549cc`
  *  (2,558) se habría cerrado antes de la revisión de citas del director: cortar a medias */
-export const COTA_DE_LA_MESA_CON_PROPUESTAS_USD = 3.2
+// 18-nov · Emilio: topes = 3 × lo medido (GO Lenovo 16:17Z): la pasada más cara costó 3,18 → 9,54 (las filas vivas cambian con la migración 202611181700)
+export const COTA_DE_LA_MESA_CON_PROPUESTAS_USD = 9.54
 
 export const topeDelBorradorDeImagenDe = (pl: Pick<Plantilla, 'limites'>): number =>
   Math.round(PROPUESTAS_DE_IMAGEN * Number(pl.limites.imagenes_generadas_max ?? 2) * COSTO_ESTIMADO_POR_IMAGEN_DEL_BORRADOR_USD.low * 100) / 100

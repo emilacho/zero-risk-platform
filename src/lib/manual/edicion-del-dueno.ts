@@ -271,7 +271,7 @@ const recortar = (s: string, n: number): string => (s.length <= n ? s : `${s.sli
 /** el cuerpo exacto que pide Cerebro para la puerta del dueño (§1): dato del manual por campo, SIN `acumula` (reemplaza al anterior del mismo campo) */
 export function cuerpoParaElCerebro(x: { client_id: string; version: number; cambio: Cambio; reviewer: string; en: string }): Record<string, unknown> {
   return {
-    evento: 'respuesta', client_id: x.client_id, tema: `manual · ${x.cambio.clave}`, pregunta: x.cambio.etiqueta, respuesta: recortar(x.cambio.valor, 2000),
+    evento: 'respuesta', client_id: x.client_id, tema: `manual · ${x.cambio.clave}`, pregunta: x.cambio.etiqueta, respuesta: recortar(x.cambio.valor, TOPE_DEL_TEXTO_DEL_DUENO), // 18-nov · G2 (antes 2000)
     canal: CANAL_DEL_MANUAL, mensaje_ref: `manual:${x.client_id}:v${x.version}:${x.cambio.clave}`, respondido_en: x.en,
     preguntado_por: { oficina: 'dashboard', agente: 'emilio' },
     dry_run: false, workflow_id: FLUJO_DEL_DASHBOARD_MANUAL, workflow_execution_id: `dashboard:manual:${x.client_id}:v${x.version}`,

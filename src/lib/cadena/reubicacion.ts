@@ -9,14 +9,14 @@
  * Este módulo es PURO: no lee la base ni la red.
  */
 import { createHash } from 'node:crypto'
-import { diaSemanaIso, diasEntre, esFechaIso, lunesDe, minutos, sumarDias } from './fechas'
+import { diaSemanaIso, diasEntre, esFechaIso, fechaDeFila, lunesDe, minutos, sumarDias } from './fechas'
 import { leadDeFormato } from './lotes'
 import type { Fila, FormatosPorRed, SedeInfo } from './tipos'
 
 /** los estados de una fila que todavía esperan producirse (los mismos que toma el reparto en lotes) */
 export const ESTADOS_SIN_PRODUCIR: readonly Fila['estado'][] = ['validada', 'lista_para_brief']
 /** los estados que ya no cuentan para el máximo por día ni para las dependencias */
-const ESTADOS_FUERA: readonly Fila['estado'][] = ['cancelada', 'perdio_su_fecha', 'descartada_sin_fuente', 'vencida_sin_brazo']
+const ESTADOS_FUERA: readonly Fila['estado'][] = ['cancelada', 'perdio_su_fecha', 'descartada_sin_fuente', 'descartada_por_bloqueo', 'vencida_sin_brazo']
 /** el tope de intentos de una misma decisión (misma huella): después, un solo aviso y nada más (sin bucle) */
 export const MAX_INTENTOS_DE_REUBICACION = 2
 export const PREFIJO_REUBICACION = 'reubicación: '
@@ -195,4 +195,65 @@ export function marcoDeReubicacion(pasadas: readonly Fila[], x: ContextoDeReubic
     'Una fecha nueva tiene que caer dentro de la campaña, a partir de hoy más el plazo de producción de su formato, en un día abierto si exige local, sin pasar el máximo por día y sin romper dependencias. El código lo verifica: lo que no cumpla se descarta.',
     'Al reubicar, propón también la HORA. Mira las horas de las filas que vienen y el orden de la historia de la campaña: la pieza reubicada es parte de esa historia y no debe pisar a otra pieza (misma red, mismo día, misma hora). Si exige local abierto, la hora tiene que caer dentro del horario de su sede.',
   ].join('\n')
+}
+
+/**
+ * 19-nov · grupo C2 · EL CALENDARIO MÓVIL (V04 · firma de Emilio · plan C GO de Lenovo 04:29Z · D1 (a) y D2 (a) 06:54Z). Lo llama `cerrarTanda`, antes de dejar una fila `perdio_su_fecha`:
+ *   · la fila que ya no alcanza su plazo se MUEVE a la próxima fecha libre de SU slot (el mismo día de la semana y la misma hora) en las semanas que siguen DE SU MISMA TANDA
+ *     (D1 a: las tandas siguientes todavía no existen y su slot lo va a ocupar su propia fila; D2 a: se respeta el patrón semanal de la estrategia);
+ *   · cada candidata pasa por la MISMA verificación de la mesa de reubicación (`razonContraLaFecha`: plazo, día abierto, máximo por día, dependencias) y además tiene que estar LIBRE
+ *     (ninguna otra fila viva en esa fecha y ese slot);
+ *   · se mueve con la marca de la mesa (`MARCA_DE_REUBICADA`): si vuelve a quedar atrás, la regla de siempre (`yaReubicada` → `descarteDeSegundaVez`) la descarta sin moverla dos veces;
+ *   · sin fecha libre, sale como hoy (`perdio_su_fecha`) con su aviso y, por la condición de Lenovo (06:54Z: «que nada se pierda»), SU IDEA VUELVE AL BANCO con la marca
+ *     `MARCA_IDEA_DE_VUELTA`: la tarea de la tanda siguiente la ofrece primero (`ideasQueVolvieronAlBanco`). El banco no se escribe: una idea nunca sale del banco al citarse.
+ * PURO: no lee la base ni la red.
+ */
+export const PREFIJO_CALENDARIO_MOVIL = 'el calendario móvil: '
+export const MARCA_IDEA_DE_VUELTA = 'su idea vuelve al banco: '
+const slotDeId = (id: string): string => id.slice(id.lastIndexOf('-') + 1)
+
+export function moverAlSlotLibre(vencidas: readonly Fila[], semanasDeLaTanda: readonly number[], x: ContextoDeReubicacion): Cambio[] {
+  const ids = new Set(vencidas.map((f) => f.id))
+  const ocupacion = new Map<string, number>()
+  const ocupados = new Set<string>()
+  for (const f of x.filas) {
+    if (!activa(f) || ids.has(f.id)) continue
+    ocupacion.set(`${f.fecha}|${f.red}|${f.formato}`, (ocupacion.get(`${f.fecha}|${f.red}|${f.formato}`) ?? 0) + 1)
+    ocupados.add(`${f.fecha}|${slotDeId(f.id)}`)
+  }
+  const fechaFinal = new Map(x.filas.filter(activa).map((f) => [f.id, f.fecha]))
+  for (const id of ids) fechaFinal.delete(id)
+  const semanas = [...new Set(semanasDeLaTanda)].sort((a, b) => a - b)
+  const cambios: Cambio[] = []
+  for (const f of [...vencidas].sort((a, b) => a.fecha.localeCompare(b.fecha) || a.id.localeCompare(b.id))) {
+    const idea = f.idea_ref ? ` · ${MARCA_IDEA_DE_VUELTA}«${f.idea_ref}»` : ''
+    if (yaReubicada(f)) { cambios.push({ fila_id: f.id, tipo: 'descartar', rechazo: null, aviso: `${descarteDeSegundaVez(f).aviso}${idea}` }); continue }
+    const slot = slotDeId(f.id)
+    let ultima = 'no quedan semanas después de la suya en esta tanda'
+    let movida: Cambio | null = null
+    for (const s of semanas.filter((n) => n > f.semana)) {
+      const fecha = fechaDeFila(x.campana.fecha_inicio, s, f.dia_semana)
+      const no = ocupados.has(`${fecha}|${slot}`) ? `el ${fecha} ya tiene su propia pieza en el slot ${slot}` : razonContraLaFecha(f, fecha, f.hora, x, ocupacion, fechaFinal)
+      if (no) { ultima = no; continue }
+      const clave = `${fecha}|${f.red}|${f.formato}`
+      ocupacion.set(clave, (ocupacion.get(clave) ?? 0) + 1)
+      ocupados.add(`${fecha}|${slot}`)
+      fechaFinal.set(f.id, fecha)
+      movida = { fila_id: f.id, tipo: 'reubicar', fecha, hora: f.hora, semana: s, dia_semana: f.dia_semana, aviso: `${MARCA_DE_REUBICADA}${f.fecha} al ${fecha} · ${PREFIJO_CALENDARIO_MOVIL}la fecha ya no alcanzaba su plazo; el mismo día y la misma hora, en la semana ${s}` }
+      break
+    }
+    cambios.push(movida ?? { fila_id: f.id, tipo: 'descartar', rechazo: ultima, aviso: `${PREFIJO_REUBICACION}perdió su fecha (${f.fecha}) · ${PREFIJO_CALENDARIO_MOVIL}no hay fecha libre en su slot dentro de la tanda (${ultima})${idea}` })
+  }
+  return cambios
+}
+
+/**
+ * 19-nov · C2 · las ideas que VOLVIERON al banco: las que citaba una fila que salió por el calendario móvil (su aviso trae la marca) y que ninguna fila viva cita todavía.
+ * Las lee la tarea de la tanda siguiente. Solo las que siguen en el banco (una idea retirada desde el tablero ya no está: no vuelve).
+ */
+export function ideasQueVolvieronAlBanco<T extends { id: string }>(previas: readonly Fila[], banco: readonly T[]): T[] {
+  const vuelven = new Set<string>()
+  for (const f of previas) if (f.estado === 'perdio_su_fecha' && f.idea_ref && (f.avisos ?? []).some((a) => typeof a === 'string' && a.includes(`${MARCA_IDEA_DE_VUELTA}«${f.idea_ref}»`))) vuelven.add(f.idea_ref)
+  for (const f of previas) if (activa(f) && f.idea_ref) vuelven.delete(f.idea_ref)
+  return banco.filter((i) => vuelven.has(i.id))
 }

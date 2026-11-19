@@ -10,10 +10,15 @@ import {
 } from '../index'
 import { AlmacenMemoria } from '../__fixtures__/almacen-memoria'
 import { siguienteDespuesDe } from '../mesas'
+import { bolsaDePlanificacion, medidaDeCampana } from '../constantes'
+import { MOTIVO_DE_SALIDA, resolverTrasLaUltimaRonda } from '../ciclo'
+import type { Hallazgo } from '../tipos'
 import { clienteA, clienteB, contextoDe, piezaBuena, tandaBuena } from '../__fixtures__/clientes'
 
 const A = clienteA()
 const AHORA = '2026-10-09T12:00:00Z'
+// 18-nov (día 1 = apertura): estas pruebas no son del día 1; la campaña se abre el lunes que antes ponía la regla, para que sus fechas sigan siendo las mismas
+const ABRE = '2026-10-12T12:00:00Z'
 const wf = (extra: Record<string, unknown> = {}) => ({ workflow_id: 'wf-cadena', workflow_execution_id: 'ex-1', ...extra })
 
 function almacen(extra: Partial<ConstructorParameters<typeof AlmacenMemoria>[0]> = {}) {
@@ -25,7 +30,7 @@ function almacen(extra: Partial<ConstructorParameters<typeof AlmacenMemoria>[0]>
     ...extra,
   })
 }
-const abrir = async (al: AlmacenMemoria, extra: Record<string, unknown> = {}) => abrirCampana(al, { ...wf(), client_id: A.clientId, seco: true, ...extra }, AHORA)
+const abrir = async (al: AlmacenMemoria, extra: Record<string, unknown> = {}) => abrirCampana(al, { ...wf(), client_id: A.clientId, seco: true, ...extra }, ABRE)
 const idCampana = (r: { cuerpo: Record<string, unknown> }) => (r.cuerpo.campana as { id: string }).id
 const ok = (estrategia: unknown, costo = 0.3) => ({ success: true, structured_output: estrategia, cost_usd: costo })
 
@@ -43,6 +48,20 @@ async function tandaDe(al: AlmacenMemoria, id: string, tanda: number, objeto: un
   const g = await calendarioGuardar(al, { ...wf(), campana_id: id, tanda, corrida_id: p.cuerpo.corrida_id, resultado: ok(objeto), ...extra }, AHORA)
   return { p, g }
 }
+
+/** 19-nov · grupo C · las 3 rondas de corrección de la tanda 1 con la misma pieza mala (4b con un formato que no existe); devuelve la última respuesta */
+const tresRondasMalas = async (al: ReturnType<typeof almacen>, id: string, g0: { cuerpo: Record<string, unknown> }) => {
+  let g = g0
+  for (const ronda of [1, 2, 3]) {
+    expect(g.cuerpo.correccion).toBe(true)
+    expect(g.cuerpo.ronda ?? 1).toBe(ronda)
+    const p = await calendarioPreparar(al, { ...wf(), campana_id: id, tanda: 1, correccion: { fichas: g.cuerpo.fichas, fila_ids: g.cuerpo.fila_ids, modo: 'filas' } }, AHORA)
+    expect(al.corridas.find((c) => c.id === p.cuerpo.corrida_id)!.clave_idempotencia).toBe(`t1:v1:c${ronda}`)
+    g = await calendarioGuardar(al, { ...wf(), campana_id: id, tanda: 1, corrida_id: p.cuerpo.corrida_id, correccion: true, modo: 'filas', resultado: ok({ piezas: [{ ...piezaBuena(A, 4, 'b', 'Tema'), formato: 'formato-inexistente' }], ajustes_al_patron: [] }) }, AHORA)
+  }
+  return g
+}
+const fila4b = (al: ReturnType<typeof almacen>) => al.filasGuardadas.find((f) => f.tanda === 1 && f.semana === 4 && f.id.endsWith('-b'))!
 
 describe('la medida de la campaña (01-nov · firma de Emilio)', () => {
   it('🔴 sin pedirla: 90 días y sin columna escrita, como siempre', async () => {
@@ -116,29 +135,29 @@ describe('los pilares que no suman 100 se corrigen por código (01-nov · firma 
 describe('autorización y compuerta', () => {
   it('🔴 sin workflow_id o sin workflow_execution_id: 400 (la causa del 403 conocido de la revisión de agentes)', async () => {
     const al = almacen()
-    expect((await abrirCampana(al, { client_id: A.clientId, seco: true }, AHORA)).status).toBe(400)
-    expect((await abrirCampana(al, { client_id: A.clientId, seco: true, workflow_id: 'wf-cadena' }, AHORA)).cuerpo.code).toBe('E-WORKFLOW-CTX')
-    expect((await abrirCampana(al, { client_id: A.clientId, seco: true, workflow_execution_id: 'x' }, AHORA)).status).toBe(400)
+    expect((await abrirCampana(al, { client_id: A.clientId, seco: true }, ABRE)).status).toBe(400)
+    expect((await abrirCampana(al, { client_id: A.clientId, seco: true, workflow_id: 'wf-cadena' }, ABRE)).cuerpo.code).toBe('E-WORKFLOW-CTX')
+    expect((await abrirCampana(al, { client_id: A.clientId, seco: true, workflow_execution_id: 'x' }, ABRE)).status).toBe(400)
   })
   it('un workflow_id que no es flujo de la cadena ni viaje de la sala de ESE cliente: 403; un viaje real vale', async () => {
     const al = almacen()
-    expect((await abrirCampana(al, { client_id: A.clientId, seco: true, workflow_id: 'wf-ajeno', workflow_execution_id: '1' }, AHORA)).status).toBe(403)
-    expect((await abrirCampana(al, { client_id: A.clientId, seco: true, workflow_id: 'journey-1', workflow_execution_id: '1' }, AHORA)).status).toBe(201)
+    expect((await abrirCampana(al, { client_id: A.clientId, seco: true, workflow_id: 'wf-ajeno', workflow_execution_id: '1' }, ABRE)).status).toBe(403)
+    expect((await abrirCampana(al, { client_id: A.clientId, seco: true, workflow_id: 'journey-1', workflow_execution_id: '1' }, ABRE)).status).toBe(201)
     const otro = almacen({ journeys: [{ journeyId: 'journey-1', clientId: 'otro-cliente' }] })
-    expect((await abrirCampana(otro, { client_id: A.clientId, seco: true, workflow_id: 'journey-1', workflow_execution_id: '1' }, AHORA)).status).toBe(403)
+    expect((await abrirCampana(otro, { client_id: A.clientId, seco: true, workflow_id: 'journey-1', workflow_execution_id: '1' }, ABRE)).status).toBe(403)
   })
   it('apagada: solo corre en seco; ensayo: solo clientes de ensayo; encendida: todo', async () => {
     const al = almacen()
-    expect((await abrirCampana(al, { ...wf(), client_id: A.clientId }, AHORA)).cuerpo.code).toBe('E-CADENA-APAGADA')
+    expect((await abrirCampana(al, { ...wf(), client_id: A.clientId }, ABRE)).cuerpo.code).toBe('E-CADENA-APAGADA')
     expect(al.campanas).toHaveLength(0)
     al.config.set('estado_cadena', 'ensayo')
-    expect((await abrirCampana(al, { ...wf(), client_id: A.clientId }, AHORA)).cuerpo.code).toBe('E-CADENA-NO-ADMITIDO')
+    expect((await abrirCampana(al, { ...wf(), client_id: A.clientId }, ABRE)).cuerpo.code).toBe('E-CADENA-NO-ADMITIDO')
     al.config.set('clientes_ensayo', [A.clientId])
-    expect((await abrirCampana(al, { ...wf(), client_id: A.clientId }, AHORA)).status).toBe(201)
+    expect((await abrirCampana(al, { ...wf(), client_id: A.clientId }, ABRE)).status).toBe(201)
   })
   it('🔴 seco mal escrito se detiene antes de escribir (ni «true» como texto ni null)', async () => {
     const al = almacen()
-    for (const seco of ['true', null, 1]) expect((await abrirCampana(al, { ...wf(), client_id: A.clientId, seco }, AHORA)).cuerpo.code).toBe('E-SECO-INVALIDO')
+    for (const seco of ['true', null, 1]) expect((await abrirCampana(al, { ...wf(), client_id: A.clientId, seco }, ABRE)).cuerpo.code).toBe('E-SECO-INVALIDO')
     expect(al.campanas).toHaveLength(0)
   })
 })
@@ -152,18 +171,23 @@ describe('abrir la campaña', () => {
     expect(al.campanas).toHaveLength(0)
     expect(al.esperas).toHaveLength(0)
   })
-  it('abre con la fecha de inicio por regla (primer lunes), fin a 90 días, zona del cliente y su espera con reloj', async () => {
+  it('🔴 18-nov (DECISIÓN DE EMILIO): abre con el día 1 = el día de apertura, fin a 90 días (el plan no declara ventana), sin aviso ni espera de «fecha propuesta»', async () => {
     const al = almacen()
     const r = await abrir(al)
     expect(r.status).toBe(201)
     const c = r.cuerpo.campana as Record<string, unknown>
-    expect(c.fecha_inicio).toBe('2026-10-12')
+    expect(c.fecha_inicio).toBe(ABRE.slice(0, 10))
     expect(c.fecha_fin).toBe('2027-01-09')
+    expect(c.fecha_inicio_origen).toBe('regla')
     expect(c.estado).toBe('abierta')
-    expect(r.cuerpo.aviso_fecha_inicio).toMatch(/sin descontar feriados/)
-    expect(al.esperas).toHaveLength(1)
-    expect(al.esperas[0]).toMatchObject({ objeto_tipo: 'fecha_inicio_propuesta', estado: 'viva' })
-    expect(al.esperas[0].vence_en).toBe('2026-10-11T00:00:00.000Z')
+    expect(r.cuerpo.aviso_fecha_inicio).toBeNull()
+    expect(al.esperas).toEqual([])
+  })
+  it('🔴 18-nov: el día 1 es el de la ZONA del cliente, no el de UTC (las 03:00 UTC del 12 son todavía el 11 en Guayaquil)', async () => {
+    const ctx = { ...contextoDe(A), zonaHoraria: 'America/Guayaquil' }
+    const al = new AlmacenMemoria({ contextos: { [A.clientId]: ctx }, planes: { [A.clientId]: [{ plan_id: 'plan-1', fecha: '2026-10-08' }] }, config: { flujos: ['wf-cadena'] } })
+    const r = await abrirCampana(al, { ...wf(), client_id: A.clientId, seco: true }, '2026-10-12T03:00:00Z')
+    expect((r.cuerpo.campana as { fecha_inicio: string }).fecha_inicio).toBe('2026-10-11')
   })
   it('el mismo sobre dos veces no abre dos campañas', async () => {
     const al = almacen()
@@ -184,10 +208,10 @@ describe('abrir la campaña', () => {
     // y la espera de la campaña vieja se resolvió: nada espera sobre algo reemplazado
     expect(al.esperas.filter((e) => e.campana_id === idCampana(r1) && e.estado === 'viva')).toHaveLength(0)
   })
-  it('con feriados nacionales verificados la fecha de inicio cuenta días hábiles y no avisa', async () => {
+  it('🔴 18-nov: un feriado nacional verificado ya no corre el día 1: la campaña empieza el día en que se abre', async () => {
     const al = almacen({ fechasEspeciales: [{ id: 'f', fecha: '2026-10-12', nombre: 'x', tipo: 'feriados', ambito: 'nacional', alcance: 'nacional', estado: 'verificada' }] })
     const r = await abrir(al)
-    expect((r.cuerpo.campana as { fecha_inicio: string }).fecha_inicio).toBe('2026-10-19')
+    expect((r.cuerpo.campana as { fecha_inicio: string }).fecha_inicio).toBe('2026-10-12')
     expect(r.cuerpo.aviso_fecha_inicio).toBeNull()
   })
 })
@@ -243,7 +267,7 @@ describe('la estrategia: preparar y guardar', () => {
     expect(run.output_schema.type).toBe('object')
     expect(run.output_schema.additionalProperties).toBe(false)
     expect(run.max_budget_usd).toBeGreaterThanOrEqual(1)
-    expect(run.thinking_mode).toBe('low')
+    expect(run.thinking_mode).toBe('maximo')
     expect(run.model_override).toBe('claude-opus-5-5')
     expect(run.task).toContain(A.planTexto)
     expect(r.cuerpo.headers).toEqual({ 'x-skip-editor-middleware': '1' })
@@ -279,38 +303,108 @@ describe('la estrategia: preparar y guardar', () => {
     const otra = await estrategiaPreparar(al, { ...wf(), campana_id: id }, AHORA)
     expect(otra.status === 200 || otra.status === 409).toBe(true)
   })
-  it('la llamada que no entrega el objeto: reintentar; a la tercera, necesita_humano con su reloj (nada queda colgado)', async () => {
+  it('la llamada que no entrega el objeto: reintentar; a la tercera, el fin declarado · 18-nov grupo A: sin necesita_humano, el reintento es del tramo siguiente (nada queda colgado)', async () => {
     const al = almacen()
     const id = idCampana(await abrir(al))
     for (let i = 1; i <= 3; i++) {
       const p = await estrategiaPreparar(al, { ...wf(), campana_id: id }, AHORA)
       const g = await estrategiaGuardar(al, { ...wf(), campana_id: id, corrida_id: p.cuerpo.corrida_id, resultado: { success: false, error: 'E-OUTPUT-SCHEMA-MISSING', cost_usd: 0.2 } }, AHORA)
-      if (i < 3) expect(g.cuerpo.reintentar).toBe(true)
-      else expect(g.cuerpo.necesita_humano).toBe(true)
+      expect(g.cuerpo.reintentar).toBe(true)
+      expect(g.cuerpo.necesita_humano).toBeUndefined()
     }
-    expect(al.campanas[0].estado).toBe('necesita_humano')
-    expect(al.esperas.some((e) => e.objeto_tipo === 'necesita_humano' && e.estado === 'viva')).toBe(true)
+    // la vuelta del flujo después del tercero: `preparar` contesta el fin declarado (en este tramo no se insiste)
+    const cuarta = await estrategiaPreparar(al, { ...wf(), campana_id: id }, AHORA)
+    expect(cuarta.status).toBe(409)
+    expect(cuarta.cuerpo.error).toBe('intentos_agotados')
+    expect(cuarta.cuerpo.reintenta).toBe(true)
+    expect(al.campanas[0].estado).not.toBe('necesita_humano')
+    expect(al.esperas.some((e) => e.objeto_tipo === 'necesita_humano')).toBe(false)
+    expect(al.corridas).toHaveLength(3)
     expect(al.corridas.every((c) => c.estado === 'fallida')).toBe(true)
   })
-  it('una estrategia inválida: UNA corrección con sus fichas; si sigue mal, necesita_humano (la estrategia no tiene «filas que salen»)', async () => {
+  it('19-nov · grupo C · una estrategia inválida: hasta 3 rondas de corrección con sus fichas; si sigue mal, queda vigente la MEJOR con avisos y la campaña sigue (ya no necesita_humano)', async () => {
     const al = almacen()
     const id = idCampana(await abrir(al))
     const mala = { ...A.estrategia, fases: A.estrategia.fases.map((f) => ({ ...f, dia_hasta: 9999 })) }
     const p1 = await estrategiaPreparar(al, { ...wf(), campana_id: id }, AHORA)
-    const g1 = await estrategiaGuardar(al, { ...wf(), campana_id: id, corrida_id: p1.cuerpo.corrida_id, resultado: ok(mala) }, AHORA)
-    expect(g1.cuerpo.correccion).toBe(true)
-    expect((g1.cuerpo.fichas as unknown[]).length).toBeGreaterThan(0)
-    const p2 = await estrategiaPreparar(al, { ...wf(), campana_id: id, correccion: { fichas: g1.cuerpo.fichas } }, AHORA)
-    expect((p2.cuerpo.run_sdk as { task: string }).task).toContain('CORRECCIÓN')
-    const g2 = await estrategiaGuardar(al, { ...wf(), campana_id: id, corrida_id: p2.cuerpo.corrida_id, correccion: true, resultado: ok(mala) }, AHORA)
-    expect(g2.cuerpo.necesita_humano).toBe(true)
-    expect(al.estrategias).toHaveLength(0)
-    expect(al.validaciones.map((v) => v.intento)).toEqual([1, 2])
+    let g = await estrategiaGuardar(al, { ...wf(), campana_id: id, corrida_id: p1.cuerpo.corrida_id, resultado: ok(mala) }, AHORA)
+    for (const ronda of [1, 2, 3]) {
+      expect(g.cuerpo.correccion).toBe(true)
+      expect(g.cuerpo.ronda).toBe(ronda)
+      expect((g.cuerpo.fichas as unknown[]).length).toBeGreaterThan(0)
+      const p = await estrategiaPreparar(al, { ...wf(), campana_id: id, correccion: { fichas: g.cuerpo.fichas } }, AHORA)
+      expect((p.cuerpo.run_sdk as { task: string }).task).toContain('CORRECCIÓN')
+      expect(al.corridas.find((c) => c.id === p.cuerpo.corrida_id)!.clave_idempotencia).toBe(`v1:c${ronda}`)
+      // CC1 (04:31Z): mientras dura la ronda, NINGÚN lector de la estrategia ve la ronda (no hay borrador en cadena_estrategias)
+      expect(await al.ultimaEstrategia(id)).toBeNull()
+      g = await estrategiaGuardar(al, { ...wf(), campana_id: id, corrida_id: p.cuerpo.corrida_id, correccion: true, resultado: ok(mala) }, AHORA)
+    }
+    // CC1 · Lenovo 04:45Z: las rondas no consumen números de versión; viven solo en su tabla, con su llave (campaña, versión, ronda)
+    expect(al.estrategias.map((e) => e.version)).toEqual([1])
+    expect((await al.estrategiaEnVersion(id, 1))!.estado).toBe('validada')
+    expect(await al.estrategiaEnVersion(id, 2)).toBeNull()
+    expect(al.rondasDeLaEstrategia.every((x) => x.version === 1)).toBe(true)
+    expect(g.cuerpo.version).toBe(1)
+    expect(g.cuerpo.necesita_humano).toBeUndefined()
+    expect(g.cuerpo.ok).toBe(true)
+    expect(al.estrategias).toHaveLength(1)
+    expect(al.estrategias[0].estado).toBe('validada')
+    expect((g.cuerpo.avisos as string[]).length).toBeGreaterThan(0)
+    expect((g.cuerpo.avisos as string[]).every((a) => a.includes('quedó vigente la mejor versión'))).toBe(true)
+    expect(al.rondasDeLaEstrategia.map((x) => x.ronda)).toEqual([0, 1, 2, 3])
+    expect(al.campanas[0].estado).toBe('calendario')
+    expect(al.esperas.some((e) => e.objeto_tipo === 'necesita_humano')).toBe(false)
+    expect(al.validaciones.map((v) => v.intento)).toEqual([1, 2, 2, 2])
   })
-  it('🔴 el presupuesto de planificación se respeta: sin presupuesto no se llama (necesita_humano) y un corte con costo 0 en el libro cuenta el tope', async () => {
+  it('19-nov · C1 · DECISIÓN Lenovo 05:00Z · la campaña abierta por el camino real nace con la bolsa de planificación de SUS tandas (no 6)', async () => {
+    const al = almacen()
+    const id = idCampana(await abrir(al))
+    const c = al.campanas.find((x) => x.id === id)!
+    expect(c.presupuesto_planificacion_usd).toBe(bolsaDePlanificacion(medidaDeCampana(c).totalTandas))
+    expect(c.presupuesto_planificacion_usd).toBeGreaterThan(6)
+  })
+  it('🔴 19-nov · C1 · m15 de CC6 · la ronda 2 de la estrategia REENVIADA sin `correccion` (r74) sigue siendo corrección: valida a nivel 2 y pide la ronda 3', async () => {
+    const al = almacen()
+    const id = idCampana(await abrir(al))
+    const mala = { ...A.estrategia, fases: A.estrategia.fases.map((f) => ({ ...f, dia_hasta: 9999 })) }
+    const p1 = await estrategiaPreparar(al, { ...wf(), campana_id: id }, AHORA)
+    let g = await estrategiaGuardar(al, { ...wf(), campana_id: id, corrida_id: p1.cuerpo.corrida_id, resultado: ok(mala) }, AHORA)
+    for (const ronda of [1, 2]) {
+      expect(g.cuerpo).toMatchObject({ correccion: true, ronda })
+      const p = await estrategiaPreparar(al, { ...wf(), campana_id: id, correccion: { fichas: g.cuerpo.fichas } }, AHORA)
+      expect(al.corridas.find((c) => c.id === p.cuerpo.corrida_id)!.clave_idempotencia).toBe(`v1:c${ronda}`)
+      // la ronda 2 llega como el reenvío tras una llamada vencida: SIN `correccion`
+      g = await estrategiaGuardar(al, { ...wf(), campana_id: id, corrida_id: p.cuerpo.corrida_id, ...(ronda === 1 ? { correccion: true } : {}), resultado: ok(mala) }, AHORA)
+    }
+    expect(g.cuerpo).toMatchObject({ correccion: true, ronda: 3 })
+    const intentos = al.validaciones.filter((v) => v.objeto === 'estrategia').map((v) => v.intento)
+    expect(intentos).toEqual([1, 2, 2])
+  })
+  it('19-nov · grupo C · la mejor versión es la de MENOS bloqueos (no la última), y sus bloqueos son los avisos', async () => {
+    const al = almacen()
+    const id = idCampana(await abrir(al))
+    // muy mala: la fase fuera de la campaña + una red excluida sin cita (S03); poco mala: solo la fase
+    const pocoMala = { ...A.estrategia, fases: A.estrategia.fases.map((f) => ({ ...f, dia_hasta: 9999 })) }
+    const muyMala = { ...pocoMala, excluidos: [...A.estrategia.excluidos, { red: 'red-sin-cita', cita_plan: '' }] }
+    const respuestas = [muyMala, pocoMala, muyMala, muyMala]
+    const p1 = await estrategiaPreparar(al, { ...wf(), campana_id: id }, AHORA)
+    let g = await estrategiaGuardar(al, { ...wf(), campana_id: id, corrida_id: p1.cuerpo.corrida_id, resultado: ok(respuestas[0]) }, AHORA)
+    for (const r of respuestas.slice(1)) {
+      const p = await estrategiaPreparar(al, { ...wf(), campana_id: id, correccion: { fichas: g.cuerpo.fichas } }, AHORA)
+      g = await estrategiaGuardar(al, { ...wf(), campana_id: id, corrida_id: p.cuerpo.corrida_id, correccion: true, resultado: ok(r) }, AHORA)
+    }
+    const bloqueos = al.rondasDeLaEstrategia.map((x) => x.bloqueos)
+    expect(bloqueos[1]).toBeLessThan(bloqueos[0]) // el control: la poco mala de verdad tiene menos
+    expect(al.estrategias[0].contenido).toEqual(al.rondasDeLaEstrategia[1].contenido)
+    expect(al.estrategias[0].contenido).not.toEqual(al.rondasDeLaEstrategia[3].contenido)
+    expect(g.cuerpo.avisos as string[]).toHaveLength(bloqueos[1])
+    expect((g.cuerpo.avisos as string[])[0]).toContain('ronda 1')
+  })
+  it('🔴 el presupuesto de planificación se respeta: sin presupuesto no se llama (18-nov grupo A: sin necesita_humano) y un corte con costo 0 en el libro cuenta el tope', async () => {
     const al = almacen()
     const id = idCampana(await abrir(al))
     al.campanas[0].presupuesto_planificacion_usd = 1.5
+    al.campanas[0].tope_gasto_usd = 1.5 // la bolsa se agrandaría sola al triple; el tope de la campaña la deja donde está
     const p = await estrategiaPreparar(al, { ...wf(), campana_id: id }, AHORA)
     await estrategiaGuardar(al, { ...wf(), campana_id: id, corrida_id: p.cuerpo.corrida_id, resultado: { success: false, cost_usd: 0, cerrada_por_tope: true, error: 'cortada' } }, AHORA)
     expect(al.corridas[0].estado).toBe('cerrada_por_tope')
@@ -319,7 +413,8 @@ describe('la estrategia: preparar y guardar', () => {
     const otra = await estrategiaPreparar(al, { ...wf(), campana_id: id }, AHORA)
     expect(otra.status).toBe(409)
     expect(otra.cuerpo.error).toBe('presupuesto_agotado')
-    expect(al.campanas[0].estado).toBe('necesita_humano')
+    expect(al.campanas[0].estado).not.toBe('necesita_humano')
+    expect(al.campanas[0].presupuesto_planificacion_usd).toBe(1.5)
   })
   it('la corrida de otra campaña o inexistente es 404; guardar dos veces la misma no la duplica', async () => {
     const al = almacen()
@@ -383,17 +478,19 @@ describe('el calendario: preparar, guardar, una corrección, filas que salen', (
     expect(g2.cuerpo).toMatchObject({ ok: true, validadas: 16 })
     expect(g2.cuerpo.salieron_sin_fuente).toEqual([])
   })
-  it('🔴 un bloqueo que NO es de dato (una revisión inventada) tras la corrección detiene la campaña en la bandeja de Emilio', async () => {
+  it('🔴 19-nov · grupo C · un bloqueo que NO es de dato vuelve al creador hasta 3 rondas; tras la última la FILA sale (descartada_por_bloqueo) y la campaña sigue', async () => {
     const al = almacen()
     const { id } = await conEstrategia(al)
     const mala = { ...tandaBuena(A), piezas: tandaBuena(A).piezas.map((p) => (p.semana === 4 && p.slot === 'b' ? { ...p, formato: 'formato-inexistente' } : p)) }
     const { g } = await tandaDe(al, id, 1, mala)
-    expect(g!.cuerpo.correccion).toBe(true)
-    const p2 = await calendarioPreparar(al, { ...wf(), campana_id: id, tanda: 1, correccion: { fichas: g!.cuerpo.fichas, fila_ids: g!.cuerpo.fila_ids, modo: 'filas' } }, AHORA)
-    const g2 = await calendarioGuardar(al, { ...wf(), campana_id: id, tanda: 1, corrida_id: p2.cuerpo.corrida_id, correccion: true, modo: 'filas', resultado: ok({ piezas: [{ ...piezaBuena(A, 4, 'b', 'Tema'), formato: 'formato-inexistente' }], ajustes_al_patron: [] }) }, AHORA)
-    expect(g2.cuerpo.necesita_humano).toBe(true)
-    expect(al.campanas.find((c) => c.id === id)!.estado).toBe('necesita_humano')
-    expect(al.esperas.some((e) => e.objeto_tipo === 'necesita_humano' && e.estado === 'viva')).toBe(true)
+    const g4 = await tresRondasMalas(al, id, g!)
+    expect(g4.cuerpo.necesita_humano).toBeUndefined()
+    expect(g4.cuerpo.ok).toBe(true)
+    expect(g4.cuerpo.salieron_por_bloqueo).toEqual([fila4b(al).id])
+    expect(g4.cuerpo.salieron_sin_fuente).toEqual([])
+    expect(fila4b(al).estado).toBe('descartada_por_bloqueo')
+    expect(al.campanas.find((c) => c.id === id)!.estado).not.toBe('necesita_humano')
+    expect(al.esperas.some((e) => e.objeto_tipo === 'necesita_humano')).toBe(false)
   })
   it('una pieza de video nace espera_video con su reloj (fecha − lead) y no entra a ningún lote', async () => {
     const al = almacen()
@@ -633,14 +730,86 @@ describe('afinando lo que las mutaciones dejaron vivo (manejadores)', () => {
     al.campanas[0].estado = 'calendario'
     expect((await calendarioPreparar(al, { ...wf(), campana_id: id, tanda: 1 }, AHORA)).cuerpo.code).toBe('E-SIN-ESTRATEGIA')
   })
-  it('un bloqueo que no es de dato deja dicho POR QUÉ la campaña necesita a Emilio', async () => {
+  it('🔴 19-nov · grupo C · un bloqueo de CONJUNTO que sigue tras la última ronda (V11 · «9 posts del grid antes del primer anuncio») no detiene: la tanda se cierra y queda como AVISO con el hueco anotado', async () => {
+    const al = almacen()
+    const { id } = await conEstrategia(al)
+    const t = tandaBuena(A)
+    // un anuncio en la semana 1: antes de él no hay 9 piezas del grid (bloqueo de la tanda, sin fila: sacar filas no lo arregla)
+    const anuncio = { ...piezaBuena(A, 1, 'a', 'Anuncio de apertura'), slot: 'z', pieza_fija: 'anuncio-1', formato: 'anuncio_imagen' }
+    const mala = { ...t, piezas: [...t.piezas, anuncio] }
+    let { g } = await tandaDe(al, id, 1, mala)
+    expect(JSON.stringify(g!.cuerpo.fichas)).toContain('antes solo hay') // el control: el bloqueo es el V11 de conjunto
+    for (let ronda = 1; ronda <= 3; ronda++) {
+      expect(g!.cuerpo.correccion).toBe(true)
+      const p = await calendarioPreparar(al, { ...wf(), campana_id: id, tanda: 1, correccion: { fichas: g!.cuerpo.fichas, fila_ids: g!.cuerpo.fila_ids, modo: g!.cuerpo.modo } }, AHORA)
+      g = await calendarioGuardar(al, { ...wf(), campana_id: id, tanda: 1, corrida_id: p.cuerpo.corrida_id, correccion: true, modo: g!.cuerpo.modo, resultado: ok(mala) }, AHORA)
+    }
+    expect(g!.cuerpo.ok).toBe(true)
+    expect(al.campanas.find((c) => c.id === id)!.estado).not.toBe('necesita_humano')
+    const ultima = al.validaciones.filter((v) => v.objeto === 'calendario' && v.tanda === 1).at(-1)!
+    const hueco = ultima.hallazgos.find((h) => h.chequeo === 'V11' && h.fila_id === null)
+    expect(hueco).toBeDefined()
+    expect(hueco!.severidad).toBe('aviso')
+    expect(hueco!.ficha.gravedad).toBe('aviso')
+    expect(hueco!.ficha.que).toContain('quedó anotado tras la última ronda de corrección')
+    expect(ultima.hallazgos.some((h) => h.severidad === 'bloquea')).toBe(false)
+    expect(await al.hallazgosQueBloquean(id, 1)).toEqual([])
+  })
+  it('🔴 19-nov · C1 · m14 de CC6 · la ronda 2 del calendario REENVIADA sin `correccion` (r74) sigue siendo corrección: valida a nivel 2, sobre las filas guardadas, y pide la ronda 3', async () => {
+    const al = almacen()
+    const { id } = await conEstrategia(al)
+    const mala = { ...tandaBuena(A), piezas: tandaBuena(A).piezas.map((p) => (p.semana === 4 && p.slot === 'b' ? { ...p, formato: 'formato-inexistente' } : p)) }
+    let { g } = await tandaDe(al, id, 1, mala)
+    for (const ronda of [1, 2]) {
+      expect(g!.cuerpo.correccion).toBe(true)
+      const p = await calendarioPreparar(al, { ...wf(), campana_id: id, tanda: 1, correccion: { fichas: g!.cuerpo.fichas, fila_ids: g!.cuerpo.fila_ids, modo: 'filas' } }, AHORA)
+      expect(al.corridas.find((c) => c.id === p.cuerpo.corrida_id)!.clave_idempotencia).toBe(`t1:v1:c${ronda}`)
+      g = await calendarioGuardar(al, { ...wf(), campana_id: id, tanda: 1, corrida_id: p.cuerpo.corrida_id, ...(ronda === 1 ? { correccion: true } : {}), modo: 'filas', resultado: ok({ piezas: [{ ...piezaBuena(A, 4, 'b', 'Tema'), formato: 'formato-inexistente' }], ajustes_al_patron: [] }) }, AHORA)
+    }
+    expect(g!.cuerpo).toMatchObject({ correccion: true, ronda: 3, modo: 'filas', fila_ids: [fila4b(al).id] })
+    expect(al.validaciones.filter((v) => v.objeto === 'calendario').map((v) => v.intento)).toEqual([1, 2, 2])
+    // sobre las filas guardadas: la tanda sigue entera (16 filas), no solo la pieza que volvió
+    expect(al.filasGuardadas.filter((f) => f.tanda === 1 && f.estado !== 'esquema')).toHaveLength(16)
+  })
+  it('🔴 19-nov · C1 · m3 de CC6 · tras la última ronda, en filas distintas, un dato SIN FUENTE y otro bloqueo: cada fila sale con SU estado y SU motivo', async () => {
+    const al = almacen()
+    const { id } = await conEstrategia(al)
+    const t = tandaBuena(A)
+    const sinFuente = { dato: 'peso del pan', valor: '45 g', clase: 'alto' as const, ref: 'no-existe', nivel: 'F1' as const, opcional: false }
+    const malas = (p: (typeof t.piezas)[number]) => (p.semana === 1 && p.slot === 'a' ? { ...p, datos: [sinFuente] } : p.semana === 4 && p.slot === 'b' ? { ...p, formato: 'formato-inexistente' } : p)
+    const mala = { ...t, piezas: t.piezas.map(malas) }
+    let { g } = await tandaDe(al, id, 1, mala)
+    for (let ronda = 1; ronda <= 3; ronda++) {
+      expect(g!.cuerpo.correccion).toBe(true)
+      const p = await calendarioPreparar(al, { ...wf(), campana_id: id, tanda: 1, correccion: { fichas: g!.cuerpo.fichas, fila_ids: g!.cuerpo.fila_ids, modo: 'filas' } }, AHORA)
+      g = await calendarioGuardar(al, { ...wf(), campana_id: id, tanda: 1, corrida_id: p.cuerpo.corrida_id, correccion: true, modo: 'filas', resultado: ok({ piezas: t.piezas.filter((x) => (x.semana === 1 && x.slot === 'a') || (x.semana === 4 && x.slot === 'b')).map(malas), ajustes_al_patron: [] }) }, AHORA)
+    }
+    expect(g!.cuerpo.ok).toBe(true)
+    const fila = (semana: number, slot: string) => al.filasGuardadas.find((f) => f.tanda === 1 && f.semana === semana && f.id.endsWith(`-${slot}`))!
+    expect(fila(1, 'a').estado).toBe('descartada_sin_fuente')
+    expect(fila(4, 'b').estado).toBe('descartada_por_bloqueo')
+    expect(g!.cuerpo.salieron_sin_fuente).toEqual([fila(1, 'a').id])
+    expect(g!.cuerpo.salieron_por_bloqueo).toEqual([fila(4, 'b').id])
+    expect(fila(1, 'a').avisos.some((a) => a.includes('siguió bloqueada'))).toBe(false)
+    expect(fila(4, 'b').avisos.some((a) => a.startsWith('la fila salió: siguió bloqueada tras la última ronda de corrección'))).toBe(true)
+  })
+  it('19-nov · C1 · m3 · `resolverTrasLaUltimaRonda` (pura): el dato faltante sale sin fuente y el otro bloqueo por bloqueo, cada uno con su motivo en el ajuste', () => {
+    const h = (chequeo: string, fila_id: string): Hallazgo => ({ chequeo, severidad: 'bloquea', fila_id, alcance: 'fila', ficha: { que: chequeo, donde: fila_id, contra_que: 'x', gravedad: 'bloquea', propuesta: 'x' } })
+    const r = resolverTrasLaUltimaRonda([h('V06', 's1-d1-a'), h('V02', 's4-d4-b')], () => 1)
+    expect(r.porBloqueo).toEqual(['s4-d4-b'])
+    expect(r.filasQueSalen.sort()).toEqual(['s1-d1-a', 's4-d4-b'])
+    expect(Object.fromEntries(r.ajustes.map((a) => [a.slot, a.motivo]))).toEqual({ a: MOTIVO_DE_SALIDA.descartada_sin_fuente, b: MOTIVO_DE_SALIDA.descartada_por_bloqueo })
+  })
+  it('19-nov · grupo C · la fila que sale por bloqueo deja dicho POR QUÉ (el motivo y lo que la bloqueaba), y lo viejo no queda como bloqueo abierto', async () => {
     const al = almacen()
     const { id } = await conEstrategia(al)
     const mala = { ...tandaBuena(A), piezas: tandaBuena(A).piezas.map((p) => (p.semana === 4 && p.slot === 'b' ? { ...p, formato: 'formato-inexistente' } : p)) }
     const { g } = await tandaDe(al, id, 1, mala)
-    const p2 = await calendarioPreparar(al, { ...wf(), campana_id: id, tanda: 1, correccion: { fichas: g!.cuerpo.fichas, fila_ids: g!.cuerpo.fila_ids, modo: 'filas' } }, AHORA)
-    await calendarioGuardar(al, { ...wf(), campana_id: id, tanda: 1, corrida_id: p2.cuerpo.corrida_id, correccion: true, modo: 'filas', resultado: ok({ piezas: [{ ...piezaBuena(A, 4, 'b', 'Tema'), formato: 'formato-inexistente' }], ajustes_al_patron: [] }) }, AHORA)
-    expect(al.campanas[0].estado_motivo).toMatch(/tras la única corrección/)
+    await tresRondasMalas(al, id, g!)
+    expect(fila4b(al).avisos.some((a) => a.startsWith('la fila salió: siguió bloqueada tras la última ronda de corrección: ') && a.includes('formato-inexistente'))).toBe(true)
+    // las rondas 1 y 2 también guardaron sus bloqueos en el intento 2: vale solo el último guardado, que ya no bloquea nada
+    expect(al.validaciones.filter((v) => v.objeto === 'calendario' && v.intento === 2).length).toBeGreaterThanOrEqual(3)
+    expect(await al.hallazgosQueBloquean(id, 1)).toEqual([])
   })
   it('una fila con un dato declarado PENDIENTE no sale a producción: queda en investigación con su reloj', async () => {
     const al = almacen()
@@ -694,7 +863,7 @@ describe('r74 · F3 · una llamada de corrección vencida no deja la campaña at
     for (const [nombre, cli] of [['negocio local sin sede declarada', A], ['servicio a empresas', clienteB()]] as const) {
       it(`${nombre}: sin sedes las filas «requiere_abierto» NO se frenan (ninguna queda en investigación por falta de horario) y la campaña lo declara`, async () => {
         const al = almacen({ contextos: { [cli.clientId]: sinSedes(cli) }, planes: { [cli.clientId]: [{ plan_id: 'plan-1', fecha: '2026-10-08' }] }, journeys: [{ journeyId: 'journey-1', clientId: cli.clientId }] })
-        const c = await abrirCampana(al, { ...wf(), client_id: cli.clientId, seco: true }, AHORA)
+        const c = await abrirCampana(al, { ...wf(), client_id: cli.clientId, seco: true }, ABRE)
         const id = idCampana(c)
         expect(al.recolectadas).toEqual([]) // r75 · en SECO no se recolecta: un ensayo no escribe sedes reales (nota A.4-1 de CC#3)
         expect(String(al.campanas.find((x) => x.id === id)!.estado_motivo)).toContain('sin sede declarada')
@@ -709,10 +878,10 @@ describe('r74 · F3 · una llamada de corrección vencida no deja la campaña at
     }
     it('la recolección de sedes ESCRIBE datos del cliente: se hace en lo REAL y NO en seco', async () => {
       const real = almacen({ config: { flujos: ['wf-cadena', 'wf-vigia'], puerta_workflow_id: 'wf-puerta', estado_cadena: 'encendida' } })
-      const c = await abrirCampana(real, { ...wf(), client_id: A.clientId, seco: false }, AHORA)
+      const c = await abrirCampana(real, { ...wf(), client_id: A.clientId, seco: false }, ABRE)
       expect(c.status).toBe(201); expect(real.recolectadas).toEqual([A.clientId])
       const seco = almacen()
-      await abrirCampana(seco, { ...wf(), client_id: A.clientId, seco: true }, AHORA)
+      await abrirCampana(seco, { ...wf(), client_id: A.clientId, seco: true }, ABRE)
       expect(seco.recolectadas).toEqual([])
     })
     it('con sede y horario la regla sigue igual: una hora fuera del horario BLOQUEA; sin horario de la sede, aviso y la fila queda en investigación', async () => {

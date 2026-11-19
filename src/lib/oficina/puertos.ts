@@ -96,7 +96,8 @@ export interface Cambios {
 export interface Almacen {
   leerConfig(): Promise<ConfigDeOficina>
   /** la plantilla de una familia y si está activa */
-  leerPlantilla(familia: string): Promise<{ plantilla: Plantilla; activo: boolean } | null>
+  /** 19-nov · G5b · `cruda` = la plantilla tal como está en la base (con los topes por segundo sin calcular): con ella `plantillaDe` calcula los de la duración de cada encargo */
+  leerPlantilla(familia: string): Promise<{ plantilla: Plantilla; activo: boolean; cruda?: Plantilla } | null>
   leerFormato(red: string, formato: string): Promise<FilaDeFormato | null>
   crearEncargo(n: NuevoEncargo): Promise<{ ok: true; encargo: Encargo; nuevo: boolean } | { ok: false; error: string }>
   leerEncargo(id: string): Promise<Encargo | null>
@@ -115,7 +116,7 @@ export interface Almacen {
 }
 
 /** `referencia` (sprint 1 · mejora 3): si se pidió editar sobre una foto del cliente, si se usó y, si no, por qué (la imagen se generó igual) */
-export type ResultadoImagen = { ok: true; url: string; generation_id: string; costo_usd: number; referencia?: { usada: boolean; motivo?: string } } | { ok: false; error: string }
+export type ResultadoImagen = { ok: true; url: string; generation_id: string; costo_usd: number; referencia?: { usada: boolean; motivo?: string; /** 18-nov · las otras fotos que sí viajaron, y las que no (con su motivo) */ otras_usadas?: string[]; otras_omitidas?: Array<{ url: string; motivo: string }> } } | { ok: false; error: string }
 /** un intento al revisor GPT y el resultado: viven en el módulo común `src/lib/revisor-gpt.ts` (los comparte la revisión del manual) */
 export type { IntentoDelRevisor } from '../revisor-gpt'
 export type ResultadoRevisor = import('../revisor-gpt').ResultadoDelRevisor
@@ -255,7 +256,7 @@ export interface Puertos {
   plan(planId: string, clientId: string): Promise<string | null>
   /** genera UNA imagen (1024×1024, calidad explícita); con `foto` (una foto PROPIA del cliente, sprint 1 · mejora 3) la edita sobre ella para conservar el producto real; en dry_run NO llama al proveedor */
   /** S2-3 · `size` y `quality` son opcionales (sin ellos, 1024x1024 · medium, como siempre): la imagen clave del video los pide por fase (borrador / final) */
-  imagen(p: { prompt: string; client_id: string; encargo_id: string; dry_run: boolean; foto?: import('./foto-de-referencia').FotoDeReferencia | null; size?: string; quality?: string }): Promise<ResultadoImagen>
+  imagen(p: { prompt: string; client_id: string; encargo_id: string; dry_run: boolean; foto?: import('./foto-de-referencia').FotoDeReferencia | null; /** 18-nov · las otras fotos reales que siguen a `foto` (personajes, productos, lugares), en orden */ otras_fotos?: import('./foto-de-referencia').FotoDeReferencia[]; size?: string; quality?: string }): Promise<ResultadoImagen>
   /** J8a · abre UNA revisión de la pieza en la jefatura (misma función que la ruta `/api/jefatura/revisiones`, con `devolver_a` = la ruta de vuelta de la oficina). Opcional: sin él, el paso `jefatura` deja la pieza «sin revisar» */
   jefatura?(sobre: SobreDeRevisionDePieza): Promise<AperturaDeJefatura>
   /** el revisor ciego (otro proveedor); en dry_run NO llama al proveedor */

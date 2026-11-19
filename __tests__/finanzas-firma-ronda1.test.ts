@@ -134,19 +134,21 @@ describe('cerrar por plazo · la ronda 1 se firma «con alerta»', () => {
 })
 
 describe('cerrar por TOPE (el motor) · lo que se perdía', () => {
-  it('🔴 con el estado real: `avanzar` hace `calculo_2` y el `cierre_2` NO cabe (1,2188 + 0,40 > 1,50) ⇒ cierra por tope Y firma la ronda 1 (antes: terminal sin firma)', async () => {
+  // 18-nov · la base pasó de 1,50 a 11,10 (Lenovo 21:07Z). El estado real trae su tope de PRUEBA de 1,50 en la semilla: ese es el que ahora no deja caber el cierre_2
+  it('🔴 con el estado real: `avanzar` hace `calculo_2` y el `cierre_2` NO cabe (1,2188 + 0,40 > 1,50 del tope de prueba) ⇒ cierra por tope Y firma la ronda 1 (antes: terminal sin firma)', async () => {
     const m = mundo({ arts: sinCriticos })
     const dos = await avanzar(m.P, 'enc-1')
     expect(dos.cuerpo).toMatchObject({ paso: 'calculo_2' }); expect(m.e.estado).toBe('en_curso')
     const r = await avanzar(m.P, 'enc-1')
-    expect(r.cuerpo).toMatchObject({ estado: 'cierre_por_tope', terminado: true, razon: 'tope_de_gasto', firma: 'firmado', ronda_2_incompleta: true })
+    expect(r.cuerpo).toMatchObject({ estado: 'cierre_por_tope', terminado: true, razon: 'tope_de_prueba', firma: 'firmado', ronda_2_incompleta: true })
     expect(m.c.tableros).toHaveLength(1); expect(m.c.tableros[0].huella).toBe(FX.artefactos.bloque.huella); expect(m.c.invocaciones).toEqual(['enc-1:cierre']); expect(m.c.modelo).toBe(0)
     expect(m.turnos.find((t) => t.paso === 'firma')?.salida).toMatchObject({ estado: 'firmado', ronda_2_incompleta: true })
     expect(m.e.gasto_usd).toBeCloseTo(FX.encargo.gasto_usd, 4)
   })
-  it('el tope del encargo NO se tocó: sigue siendo US$ 1,50', async () => {
+  // 18-nov · Lenovo 21:07Z: la base pasa al techo (TOPE_DEL_ENCARGO_USD, 11,10); este cierre no la cambia
+  it('el tope del encargo NO se tocó: sigue siendo el techo (TOPE_DEL_ENCARGO_USD)', async () => {
     const src = fs.readFileSync(path.resolve(__dirname, '../src/lib/finanzas/conversa/plantilla.ts'), 'utf8')
-    expect(src).toMatch(/tope_encargo_usd: 1\.5,/); expect(src).toMatch(/tope_encargo_usd > 1\.5\)/)
+    expect(src).toMatch(/tope_encargo_usd: TOPE_DEL_ENCARGO_USD,/); expect(src).toMatch(/tope_encargo_usd > TOPE_DEL_ENCARGO_USD\)/)
   })
   it('un cierre normal (la firma llega por su paso) no cambia: `cerrar` sin la opción firma la ronda 2 como siempre', async () => {
     const m = mundo({ arts: (a) => { a = sinCriticos(a); a.bloque_2 = { ...a.bloque, huella: 'h2', hay_bloque: true, cambio: false }; a.acuerdo_2 = { ...a.acuerdo, hallazgos: [], salida: 'sale' }; a.planteo_fijado_2 = a.planteo_fijado_2; return a } })

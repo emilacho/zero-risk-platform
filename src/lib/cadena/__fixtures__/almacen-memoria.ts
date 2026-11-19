@@ -4,7 +4,7 @@
  */
 import type { ResultadoDeAbrirMesa, SobreDeReubicacion } from '../reubicar'
 import type { EncargoDeLaCampana, LecturaDeArreglos, ResultadoDeAbrirMesaDeFallidos, SobreDeFallidos } from '../rehacer-fallidos'
-import type { Almacen, BriefCreativoGuardado, Campana, ConceptoGuardado, ContextoDelCliente, Corrida, EntradaDeRegistro, EsperaFila, EstrategiaGuardada, FechaCobertura, FichasGuardadas, ObjetoDeValidacion, ParteSecoAGuardar, PreguntaAlDueno, ResultadoDeAbrirRegistro } from '../almacen'
+import type { Almacen, BriefCreativoGuardado, Campana, ConceptoGuardado, ContextoDelCliente, Corrida, EntradaDeRegistro, EsperaFila, EstrategiaGuardada, RondaDeEstrategia, FechaCobertura, FichasGuardadas, ObjetoDeValidacion, ParteSecoAGuardar, PreguntaAlDueno, ResultadoDeAbrirRegistro } from '../almacen'
 import type { HechoDelNegocioPorOferta } from '../ficha-de-oferta'
 import type { LlaveDeFecha } from '../indicaciones'
 import { claveDeFecha, ordenarLlaves } from '../fechas-del-cliente'
@@ -61,6 +61,7 @@ export class AlmacenMemoria implements Almacen {
   ])
   campanas: Campana[] = []
   estrategias: EstrategiaGuardada[] = []
+  rondasDeLaEstrategia: RondaDeEstrategia[] = []
   fichasDeOferta: FichasGuardadas[] = []
   /** los hechos del cerebro que sirve este doble; undefined = el almacén no los sabe leer (aún no disponibles) */
   hechos?: HechoDelNegocioPorOferta[]
@@ -209,6 +210,8 @@ export class AlmacenMemoria implements Almacen {
   async campanasActivas() { return structuredClone(this.campanas.filter((c) => c.estado === 'activa')) }
   async ultimaEstrategia(campanaId: string) { return this.estrategias.filter((e) => e.campana_id === campanaId).sort((a, b) => b.version - a.version)[0] ?? null }
   async insertarEstrategia(e: EstrategiaGuardada) { this.estrategias.push(e) }
+  async guardarRondaDeEstrategia(r: RondaDeEstrategia) { if (!this.rondasDeLaEstrategia.some((x) => x.campana_id === r.campana_id && x.version === r.version && x.ronda === r.ronda)) this.rondasDeLaEstrategia.push(structuredClone(r)) }
+  async rondasDeEstrategia(campanaId: string, version: number) { return structuredClone(this.rondasDeLaEstrategia.filter((x) => x.campana_id === campanaId && x.version === version)) }
   async ultimasFichas(campanaId: string) { return this.fichasDeOferta.filter((f) => f.campana_id === campanaId).sort((a, b) => b.version - a.version)[0] ?? null }
   async insertarFichas(f: FichasGuardadas) { if (!this.fichasDeOferta.some((x) => x.campana_id === f.campana_id && x.version === f.version)) this.fichasDeOferta.push(f) }
   async hechosDelNegocio(_clientId: string) { return this.hechos ?? null }
@@ -219,6 +222,19 @@ export class AlmacenMemoria implements Almacen {
   async correccionesPendientes() { return structuredClone(this.correcciones.filter((x) => x.estado !== 'respondida')) }
   /** sin fijar = el almacén no sabe si se publicó (la cadena lo da por publicado) */
   piezaPublicada?: (campanaId: string, filaId: string) => Promise<boolean>
+  // 19-nov · #1195 · la bandeja de la oficina, reducida a lo que mira el archivo de la pieza vieja (la regla real vive en oficina/archivar-piezas-de-filas.ts y se prueba allá)
+  piezasEnBandeja: Array<{ campana_id: string; fila_id: string; hitl_id: string; status: string; archivada_en: string | null; archivo_motivo: string | null }> = []
+  archivosDePiezas: Array<{ campana_id: string; fila_ids: string[]; motivo: string }> = []
+  async archivarPiezasDeFilas(campanaId: string, filaIds: readonly string[], motivo: string, ahora: string): Promise<import('../../oficina/archivar-piezas-de-filas').ResultadoDelArchivoDeFilas> {
+    this.archivosDePiezas.push({ campana_id: campanaId, fila_ids: [...filaIds], motivo })
+    const r = { ok: true as const, archivadas: [] as Array<{ fila_id: string; hitl_id: string; encargo_ids: string[] }>, ya_archivadas: [] as string[], no_archivadas: [] as Array<{ fila_id: string; hitl_id: string; encargo_id: string; motivo: 'decidida_por_emilio'; estado: string }> }
+    for (const p of this.piezasEnBandeja.filter((x) => x.campana_id === campanaId && filaIds.includes(x.fila_id))) {
+      if (p.archivada_en) r.ya_archivadas.push(p.hitl_id)
+      else if (p.status !== 'pending') r.no_archivadas.push({ fila_id: p.fila_id, hitl_id: p.hitl_id, encargo_id: p.hitl_id, motivo: 'decidida_por_emilio', estado: p.status })
+      else { Object.assign(p, { archivada_en: ahora, archivo_motivo: motivo }); r.archivadas.push({ fila_id: p.fila_id, hitl_id: p.hitl_id, encargo_ids: [p.hitl_id] }) }
+    }
+    return r
+  }
   async alarmasPendientes() { return structuredClone(this.correcciones.filter((x) => x.estado === 'respondida' && x.frena && !x.alarma_en).sort((a, b) => String(a.respondida_en).localeCompare(String(b.respondida_en))).slice(0, 50)) }
   async correccionesDeEncargo(encargoId: string) { return structuredClone(this.correcciones.filter((x) => x.encargo_id === encargoId || (x.encargos_cubiertos ?? []).includes(encargoId))) }
   async correccionActualizar(llave: string, cambios: Partial<import('../correcciones').Correccion>, estadoEsperado: import('../correcciones').EstadoDeCorreccion) { const c = this.correcciones.find((x) => x.llave === llave); if (!c || c.estado !== estadoEsperado) return false; Object.assign(c, structuredClone(cambios)); return true }
@@ -310,7 +326,8 @@ export class AlmacenMemoria implements Almacen {
   async hallazgosQueBloquean(campanaId: string, tanda: number) {
     const v = this.validaciones.filter((x) => x.campana_id === campanaId && x.objeto === 'calendario' && x.tanda === tanda)
     const ultimo = v.reduce((m, x) => Math.max(m, x.intento), 0)
-    return v.filter((x) => x.intento === ultimo).flatMap((x) => x.hallazgos).filter((h) => h.severidad === 'bloquea').map((h) => ({ ficha: h.ficha, fila_id: h.fila_id, chequeo: h.chequeo }))
+    // 19-nov · grupo C · igual que Supabase: vale solo el ÚLTIMO guardado del intento más alto (las rondas viejas no cuentan); un guardado sin hallazgos no escribe filas allá
+    return v.filter((x) => x.intento === ultimo && x.hallazgos.length > 0).slice(-1).flatMap((x) => x.hallazgos).filter((h) => h.severidad === 'bloquea').map((h) => ({ ficha: h.ficha, fila_id: h.fila_id, chequeo: h.chequeo }))
   }
   async corridaPorClave(campanaId: string, paso: string, clave: string, intento: number) { return this.corridas.find((c) => c.campana_id === campanaId && c.paso === paso && c.clave_idempotencia === clave && c.intento === intento) ?? null }
   async abrirCorrida(c: Omit<Corrida, 'id'>) {
