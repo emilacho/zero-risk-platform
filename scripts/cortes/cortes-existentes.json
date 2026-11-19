@@ -25826,13 +25826,6 @@
    "clase": "fecha-o-id"
   },
   {
-   "archivo": "src/lib/portero-alimenta/puente.ts",
-   "huella": "9b3e1ef07cc94d86",
-   "n": 65,
-   "veces": 1,
-   "clase": "por-revisar-en-G8"
-  },
-  {
    "archivo": "src/lib/portero-alimenta/pulido-aparte.ts",
    "huella": "c408c6b3bdb918a9",
    "n": 59,
@@ -26438,69 +26431,6 @@
    "archivo": "src/lib/portero-alimenta/unidades.ts",
    "huella": "86808f1f75d89015",
    "n": 63,
-   "veces": 1,
-   "clase": "por-revisar-en-G8"
-  },
-  {
-   "archivo": "src/lib/portero-alimenta/unidades.ts",
-   "huella": "48761d01243e6c7c",
-   "n": 96,
-   "veces": 1,
-   "clase": "por-revisar-en-G8"
-  },
-  {
-   "archivo": "src/lib/portero-alimenta/unidades.ts",
-   "huella": "e8a0e538b2eac09f",
-   "n": 136,
-   "veces": 1,
-   "clase": "por-revisar-en-G8"
-  },
-  {
-   "archivo": "src/lib/portero-alimenta/unidades.ts",
-   "huella": "4a7355c2e8c3743e",
-   "n": 155,
-   "veces": 1,
-   "clase": "por-revisar-en-G8"
-  },
-  {
-   "archivo": "src/lib/portero-alimenta/unidades.ts",
-   "huella": "858a64f4b1559c08",
-   "n": 160,
-   "veces": 1,
-   "clase": "por-revisar-en-G8"
-  },
-  {
-   "archivo": "src/lib/portero-alimenta/unidades.ts",
-   "huella": "a744683d6274f265",
-   "n": 166,
-   "veces": 1,
-   "clase": "por-revisar-en-G8"
-  },
-  {
-   "archivo": "src/lib/portero-alimenta/unidades.ts",
-   "huella": "4a059d3bef3fdb88",
-   "n": 171,
-   "veces": 1,
-   "clase": "por-revisar-en-G8"
-  },
-  {
-   "archivo": "src/lib/portero-alimenta/unidades.ts",
-   "huella": "c9926018cc5dd0c3",
-   "n": 176,
-   "veces": 1,
-   "clase": "por-revisar-en-G8"
-  },
-  {
-   "archivo": "src/lib/portero-alimenta/unidades.ts",
-   "huella": "177086260398dbda",
-   "n": 182,
-   "veces": 1,
-   "clase": "por-revisar-en-G8"
-  },
-  {
-   "archivo": "src/lib/portero-alimenta/unidades.ts",
-   "huella": "defce028c38c9051",
-   "n": 193,
    "veces": 1,
    "clase": "por-revisar-en-G8"
   },
