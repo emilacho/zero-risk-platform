@@ -13,6 +13,7 @@ import { relojDeLaCadena } from '../reloj'
 import { INTERRUPTOR_DEL_BANCO, recibirCorreccionDelBanco } from '../banco-correcciones'
 import { ACCIONES } from '../acciones'
 import { bloqueaLaPieza } from '../correcciones'
+import { bancoRetirar, motivoDePiezaVieja } from '../banco-de-ideas'
 
 const A = clienteA()
 const CAMP = '28de888e-b3f2-4aca-86b3-2c7f7bf6685a'
@@ -90,8 +91,10 @@ describe('19-nov · 🔴 condición de CC3 (00:21Z): el retiro se corta DESPUÉS
     al.actualizarConceptoSiSello = async (...a: Parameters<typeof real>) => { if (cortado) throw new Error('corte'); return real(...a) }
     const texto = bloque({ respuesta: 'tomada', accion: 'retirar', explicacion: 'la idea vende Olón abierto en una fecha en que está cerrado' })
     await expect(entrega(texto, mas(5))).rejects.toThrow('corte')
+    // 19-nov · CC3 00:59Z · la vuelta va primero: tras el corte la fila ya está SIN brief (con la idea nueva y la marca del receptor), nunca brief viejo + idea nueva
     expect(filaDe(al, FILA).idea_ref).not.toBe(IDEA)
-    expect(filaDe(al, FILA).estado).toBe('briefeada')
+    expect(filaDe(al, FILA).estado).toBe('lista_para_brief')
+    expect(filaDe(al, FILA).avisos.some((x) => x.includes(`corrección ${al.correcciones[0].llave}`))).toBe(true)
     // vuelve la escritura: la entrega se repite (la ruta respondió 500 y n8n reintenta) y la fila con brief NO se pierde
     cortado = false
     expect(await entrega(texto, mas(6))).toMatchObject({ ok: true })
@@ -104,5 +107,61 @@ describe('19-nov · 🔴 condición de CC3 (00:21Z): el retiro se corta DESPUÉS
     expect(f.avisos.some((x) => x.includes(`corrección ${c.llave}`))).toBe(true)
     expect((c.version_nueva as { filas_al_brief: string[]; con_brief_sin_tocar: string[] }).filas_al_brief).toEqual([FILA])
     expect(await paraLaPiezaDe(al)).toEqual(['reemplazada'])
+  })
+})
+
+describe('19-nov · decisión A de Lenovo (🔴 de CC7): la pieza vieja de una fila que volvió al brief se ARCHIVA sola, nunca una que Emilio ya decidió', () => {
+  const pieza = (fila_id: string, hitl_id: string, status: string) => ({ campana_id: CAMP, fila_id, hitl_id, status, archivada_en: null as string | null, archivo_motivo: null as string | null })
+  it('🔴 por la CORRECCIÓN: se archiva la pieza de la OTRA fila que volvió; la de la fila corregida no (la maneja la oficina: «reemplazada»); la aprobada no se toca', async () => {
+    const { al, entrega } = almacen()
+    al.filasGuardadas.push(fila('s2-otra-con-brief', 'briefeada', IDEA, '2026-11-20'), fila('s2-aprobada', 'aprobada', IDEA, '2026-11-21'))
+    al.piezasEnBandeja.push(pieza(FILA, 'h-fila', 'pending'), pieza('s2-otra-con-brief', 'h-otra', 'pending'), pieza('s2-aprobada', 'h-aprobada', 'approved'))
+    await devolver(al)
+    await relojDeLaCadena(al, VIGIA, T0)
+    expect(await entrega(bloque({ respuesta: 'tomada', accion: 'retirar', explicacion: 'la idea vende Olón abierto en una fecha en que está cerrado' }), mas(5))).toMatchObject({ ok: true })
+    await relojDeLaCadena(al, VIGIA, mas(6))
+    const c = al.correcciones[0]
+    expect(c).toMatchObject({ estado: 'respondida', respuesta: 'tomada' })
+    const vn = c.version_nueva as { filas_al_brief: string[]; piezas_viejas: { archivadas: string[] } }
+    expect([...vn.filas_al_brief].sort()).toEqual([FILA, 's2-otra-con-brief'].sort())
+    expect(vn.piezas_viejas).toMatchObject({ archivadas: ['h-otra'], ya_archivadas: [], no_archivadas: [] })
+    const porId = (id: string) => al.piezasEnBandeja.find((p) => p.hitl_id === id)!
+    expect(porId('h-otra')).toMatchObject({ archivada_en: mas(6), archivo_motivo: motivoDePiezaVieja(IDEA) })
+    expect(porId('h-otra').archivo_motivo).toBe('reemplazada: la idea «C1-I16» se retiró del banco')
+    expect(porId('h-fila')).toMatchObject({ archivada_en: null, status: 'pending' })
+    expect(porId('h-aprobada')).toMatchObject({ archivada_en: null, status: 'approved' })
+    expect(await paraLaPiezaDe(al)).toEqual(['reemplazada'])
+    // la oficina solo recibió las filas que volvieron, sin la corregida
+    expect(al.archivosDePiezas).toEqual([{ campana_id: CAMP, fila_ids: ['s2-otra-con-brief'], motivo: motivoDePiezaVieja(IDEA) }])
+  })
+  it('🔴 por el TABLERO: se archiva la pieza pendiente de la fila que volvió; la que Emilio ya decidió se declara y no se toca; repetir no duplica', async () => {
+    const { al } = almacen()
+    // «s2-sin-marca» volvió al brief por OTRA razón (sin la marca de este retiro): su pieza no es de este retiro y no se toca
+    al.filasGuardadas.push(fila('s2-decidida', 'en_oficina', IDEA, '2026-11-20'), { ...fila('s2-sin-marca', 'lista_para_brief', 'C1-I07', '2026-11-22'), avisos: ['volvió al brief por otra cosa'] })
+    al.piezasEnBandeja.push(pieza(FILA, 'h-fila', 'pending'), pieza('s2-decidida', 'h-decidida', 'edited'), pieza('s1-otra', 'h-ajena', 'pending'), pieza('s2-sin-marca', 'h-sin-marca', 'pending'))
+    const tablero = { workflow_id: 'tablero', workflow_execution_id: 'tablero:banco:1', campana_id: CAMP, version: 4, idea_id: IDEA }
+    const r = await bancoRetirar(al, tablero, mas(1))
+    expect(r.status).toBe(200)
+    expect(r.cuerpo.piezas_viejas).toEqual({ archivadas: ['h-fila'], ya_archivadas: [], no_archivadas: [{ fila_id: 's2-decidida', hitl_id: 'h-decidida', motivo: 'decidida_por_emilio', estado: 'edited' }] })
+    expect((r.cuerpo.historial as Array<Record<string, unknown>>).at(-1)!.piezas_viejas).toEqual(r.cuerpo.piezas_viejas)
+    const porId = (id: string) => al.piezasEnBandeja.find((p) => p.hitl_id === id)!
+    expect(porId('h-fila')).toMatchObject({ archivada_en: mas(1), archivo_motivo: 'reemplazada: la idea «C1-I16» se retiró del banco' })
+    expect(porId('h-decidida')).toMatchObject({ archivada_en: null, status: 'edited' })
+    expect(porId('h-ajena')).toMatchObject({ archivada_en: null })
+    expect(porId('h-sin-marca')).toMatchObject({ archivada_en: null })
+    expect(al.archivosDePiezas.map((a) => [...a.fila_ids].sort())).toEqual([[FILA, 's2-decidida'].sort()])
+    for (const id of [FILA, 's2-decidida']) expect(filaDe(al, id).estado).toBe('lista_para_brief')
+    // repetir: la idea ya salió; lo archivado se cuenta como ya archivado, nada se escribe dos veces
+    const r2 = await bancoRetirar(al, tablero, mas(2))
+    expect(r2.cuerpo).toMatchObject({ code: 'E-IDEA-RETIRADA', piezas_viejas: { archivadas: [], ya_archivadas: ['h-fila'] } })
+    expect(porId('h-fila').archivada_en).toBe(mas(1))
+  })
+  it('🔴 si la oficina no contesta, NADA se da por archivado y se dice; el retiro sigue', async () => {
+    const { al } = almacen()
+    al.archivarPiezasDeFilas = async () => ({ ok: false, motivo: 'no se pudo leer la bandeja: caída' })
+    const r = await bancoRetirar(al, { workflow_id: 'tablero', workflow_execution_id: 'tablero:banco:2', campana_id: CAMP, version: 4, idea_id: IDEA }, mas(1))
+    expect(r.status).toBe(200)
+    expect(r.cuerpo.piezas_viejas).toEqual({ archivadas: [], ya_archivadas: [], no_archivadas: [], error: 'no se pudo leer la bandeja: caída' })
+    expect(filaDe(al, FILA).estado).toBe('lista_para_brief')
   })
 })

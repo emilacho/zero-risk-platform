@@ -12,6 +12,7 @@
  */
 import type { Almacen } from './almacen'
 import { CAMPOS_EDITABLES, editarEnElBanco, leerCambios, retirarDelBanco, type CampoEditable, type Reasignada } from './banco-de-ideas'
+import { avisoDeLaVuelta } from './correcciones'
 import type { IdeaDelBanco } from './conceptos'
 
 /** las reglas duras firmadas que alcanzan a una idea del banco (hechos de la oferta, cambio 4): con ellas `no_tomada` no vale */
@@ -118,7 +119,8 @@ export async function aplicarCorreccionDelBanco(al: Almacen, c: CorreccionAlBanc
   const ctx = { campana_id: c.campana_id, version: v.version!, autor: quienCorrige(c.correccion_id) }
   const w = final.accion === 'editar'
     ? await editarEnElBanco(al, ctx, [{ idea_id: c.idea_id, campos: final.cambios ?? {} }], ahora, { [c.idea_id]: c.idea_sello })
-    : await retirarDelBanco(al, ctx, c.idea_id, ahora, c.idea_sello)
+    // 19-nov · CC3 00:59Z: la vuelta al brief va ANTES de la idea nueva, con la marca del receptor (su conteo por estado + marca no cambia); la pieza vieja la archiva el receptor
+    : await retirarDelBanco(al, ctx, c.idea_id, ahora, c.idea_sello, { avisoDeLaVuelta: avisoDeLaVuelta(c.correccion_id) })
   // otra edición (el tablero) cambió la idea entre la lectura y la escritura: la corrección es vieja, no se pisa
   if (w.status === 409 && w.cuerpo.code === 'E-IDEA-CAMBIADA') return { ...vacio, respuesta: { respuesta: 'no_tomada', explicacion: IDEA_CAMBIADA }, reasignadas: Array.isArray(w.cuerpo.reasignadas) ? (w.cuerpo.reasignadas as Reasignada[]) : [] }
   if (w.status !== 200) return { ...vacio, respuesta: noDicha(`no se pudo escribir el banco: ${String(w.cuerpo.code ?? w.status)} · ${String(w.cuerpo.detalle ?? '')}`.slice(0, LARGO_MAXIMO_DE_EXPLICACION)) }
