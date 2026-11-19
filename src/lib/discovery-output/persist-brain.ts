@@ -24,6 +24,7 @@
  */
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { persistChunks } from '@/lib/brain/persist-chunks'
+import { guardarPublico, type Db as DbDePublicos } from './guardar-publico'
 import type {
   DiscoveredCompetitor,
   DiscoveredIcpSegment,
@@ -115,10 +116,14 @@ export async function persistDiscoveryToBrain(
       : []
   for (const seg of icpSegments) {
     try {
-      const sourceId = await upsertIcpRow(input.supabase, input.discovery.client_id, seg)
+      const guardado = await upsertIcpRow(input.supabase, input.discovery.client_id, seg)
+      if (!guardado.ok) errors.push(`icp_${seg.audience_segment}: ${guardado.motivo}`)
+      else if (guardado.aviso) errors.push(`icp_fusion_${seg.audience_segment}: ${guardado.aviso}`)
+      const sourceId = guardado.ok ? guardado.id : null
       if (sourceId) {
         icpRows++
-        const chunks = icpChunks(seg)
+        // 19-nov · un público ABSORBIDO (`mismo_que`) no se indexa: el cerebro ya tiene al que lo absorbió
+        const chunks = guardado.ok && guardado.vigente ? icpChunks(seg) : []
         if (chunks.length > 0) {
           const r = await persistChunks(input.supabase, {
             clientId: input.discovery.client_id,
@@ -237,7 +242,7 @@ async function upsertIcpRow(
   supabase: SupabaseClient,
   clientId: string,
   seg: DiscoveredIcpSegment,
-): Promise<string | null> {
+): Promise<import('./guardar-publico').ResultadoDeGuardar> {
   const row: Record<string, unknown> = {
     client_id: clientId,
     audience_segment: seg.audience_segment,
@@ -267,13 +272,8 @@ async function upsertIcpRow(
   if (seg.goals?.length) parts.push(`Goals: ${seg.goals.join(' · ')}`)
   row.content_text = parts.join('\n')
 
-  const { data, error } = await supabase
-    .from('client_icp_documents')
-    .upsert(row, { onConflict: 'client_id,audience_segment' })
-    .select('id')
-    .maybeSingle()
-  if (error || !data) return null
-  return (data as { id: string }).id
+  // 19-nov · la escritura pasa por la función ÚNICA de los dos caminos (juntar públicos · entrega 1)
+  return guardarPublico(supabase as unknown as DbDePublicos, { client_id: clientId, fila: row, decision: seg.fusion, modo: 'upsert' })
 }
 
 /**
