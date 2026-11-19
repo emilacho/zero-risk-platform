@@ -132,7 +132,8 @@ describe('T7a · condición 1 de CC6 · el invariante está en el CÓDIGO', () =
   it('🔴 un encargo cuyo tope no cubre la pasada NO abre (409 claro, sin crear nada)', async () => {
     const mal = copia(VIDEO_MESA_POR_SEGUNDO); mal.limites.tope_encargo_usd_por_segundo = 0 // encargo 43 · video 15 → cubre (32,6)
     const peor = conSegundos(mal, 120) // encargo 43 y video 120 → requerido 166,5 (lo que guarda la mesa): NO cubre
-    const M = crearMemoria({ plantilla: peor })
+    // 19-nov · G5b (A′): la cobertura se mide con la duración que DECLARA el brief (sin declararla serían 15 s y cubriría): este brief declara 120 s
+    const M = crearMemoria({ plantilla: peor, parte: '## Briefs\n\n### BRF-T7A · Instagram · reel\n- QUÉ ES: un reel\n- DURACIÓN: 120 s · la pieza más larga\n' })
     const r = await abrirEncargo(M.P, { cuerpo: { parte_id: PARTE, brief_id: 'BRF-T7A', dry_run: true, familia: peor.familia }, client_id: CLIENTE, target_step_id: TARGET_STEP_PRODUCIR })
     expect(r.status).toBe(409)
     expect(r.cuerpo).toMatchObject({ error: 'tope_no_cubre', requerido_usd: 166.5, tope_usd: 43 })

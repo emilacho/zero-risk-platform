@@ -90,3 +90,10 @@ export function segundosDelEncargo(enc: { sala_ref?: Record<string, unknown> | n
   const s = entero(abierta?.segundos)
   return Math.min(max, s ?? duracionPorOmision(pl))
 }
+
+/** la duración con que va ESTE encargo, si se guardó (la recalculada por el guion o la que abrió el brief) · null en un encargo abierto antes de G5b · pura */
+export function duracionAbierta(enc: { sala_ref?: Record<string, unknown> | null; estado_del_motor?: { artefactos?: Record<string, { datos?: Record<string, unknown> }> } | null }): number | null {
+  const recalculada = entero(enc.estado_del_motor?.artefactos?.pedido_video?.datos?.duracion_s)
+  if (recalculada) return recalculada
+  return entero((enc.sala_ref?.[CLAVE_DE_LA_DURACION] as { segundos?: unknown } | undefined)?.segundos)
+}
