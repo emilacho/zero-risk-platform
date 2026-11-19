@@ -6,6 +6,7 @@
  */
 import type { Db } from '../alimentar'
 import { paisIsoDe } from '../../cerebro/zona'
+import type { PruebasDelCliente } from '../otro-negocio'
 import { archivarFichasDeBrazos, type ResultadoDeArchivo, type RetiroDeBrazo } from './archivo'
 import { accionesDeCompetencia, competidoresConfirmados, competidoresVigilados, fichasDeCompetencia } from './competencia'
 import { fichasDeContexto } from './contexto'
@@ -110,6 +111,8 @@ export function accionesDeBrazos(e: EntradaDeAccionesDeBrazos): { acciones: Acci
 
 export interface EntradaDeCorrerBrazos {
   db: Db
+  /** encargo 10 · las pruebas «¿es del cliente?» ya leídas (van al archivo: no se vuelven a leer) */
+  pruebas?: { client_id: string; pruebas: PruebasDelCliente }
   brazos: BrazosActivos
   cliente: Record<string, unknown>
   client_id: string
@@ -221,7 +224,7 @@ export async function correrBrazos(e: EntradaDeCorrerBrazos): Promise<ResultadoD
     }
   }
   if (fichas.length || retiros.length) {
-    salida.archivo = await archivarFichasDeBrazos({ db: e.db, fichas, retiros, ahora: e.ahora, dry_run: e.dry_run, workflow_id: e.workflow_id, workflow_execution_id: e.workflow_execution_id, nuevoId: e.nuevoId })
+    salida.archivo = await archivarFichasDeBrazos({ db: e.db, fichas, retiros, ahora: e.ahora, dry_run: e.dry_run, workflow_id: e.workflow_id, workflow_execution_id: e.workflow_execution_id, nuevoId: e.nuevoId, pruebas: e.pruebas })
     salida.errores.push(...salida.archivo.errores)
   }
   return salida

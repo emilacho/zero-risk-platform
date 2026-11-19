@@ -11,6 +11,7 @@ import type { Db } from '../alimentar'
 import type { FichaDeBrazo } from './tipos'
 import { claveDeAlcance, sedesDeFicha } from '../sedes-fuentes'
 import { leerTodas } from '../paginar'
+import { cargarPruebasDelCliente, columnasDeLaMarca, marcaDeOtroNegocio, type PruebasDelCliente } from '../otro-negocio'
 
 type Fila = Record<string, unknown>
 export interface ResultadoDeArchivo {
@@ -26,7 +27,7 @@ export const huellaDeFicha = (contenido: string): string => createHash('sha256')
 /** retirar sin reemplazo (un competidor que cerró, bajó o dejó de competir): la ficha queda con su motivo; nada se borra */
 export interface RetiroDeBrazo { client_id: string; atributo: string; motivo: string }
 
-export async function archivarFichasDeBrazos(o: { db: Db; fichas: FichaDeBrazo[]; ahora: Date; dry_run: boolean; workflow_id?: string; workflow_execution_id?: string; nuevoId?: () => string; retiros?: RetiroDeBrazo[] }): Promise<ResultadoDeArchivo> {
+export async function archivarFichasDeBrazos(o: { db: Db; fichas: FichaDeBrazo[]; ahora: Date; dry_run: boolean; workflow_id?: string; workflow_execution_id?: string; nuevoId?: () => string; retiros?: RetiroDeBrazo[]; /** encargo 10 · las pruebas «¿es del cliente?» que quien llama ya leyó (si no, se leen aquí) */ pruebas?: { client_id: string; pruebas: PruebasDelCliente } }): Promise<ResultadoDeArchivo> {
   const r: ResultadoDeArchivo = { escritas: 0, iguales: 0, retiradas: 0, errores: [], plan: [] }
   const id = o.nuevoId ?? randomUUID
   const iso = o.ahora.toISOString()
@@ -41,6 +42,9 @@ export async function archivarFichasDeBrazos(o: { db: Db; fichas: FichaDeBrazo[]
     const porRef = new Map(vigentes.map((x) => [String(x.ref), x]))
     const porAtributo = new Map(vigentes.filter((x) => typeof x.atributo === 'string' && x.atributo).map((x) => [String(x.atributo), x]))
     const ingresoDe = new Map<string, string>()
+    // encargo 10 · lo de OTRO negocio se guarda con su marca; sin con qué comprobar, este cliente no se escribe a ciegas (se DICE)
+    const pruebas = o.dry_run ? null : o.pruebas && o.pruebas.client_id === cid ? { ok: true as const, pruebas: o.pruebas.pruebas } : await cargarPruebasDelCliente(o.db, cid)
+    if (pruebas && !pruebas.ok) { r.errores.push(`no es de este cliente (${cid}): ${pruebas.error}`); continue }
 
     for (const f of fichas) {
       const huella = huellaDeFicha(f.contenido)
@@ -80,6 +84,7 @@ export async function archivarFichasDeBrazos(o: { db: Db; fichas: FichaDeBrazo[]
         provenance_tag: { type: 'evidence', source: `brazo_${f.brazo}`, trust_level: 'untrusted', alcance: f.alcance, ingress_route: '/api/brain/alimentar/procesar', ...(f.datos ? { datos: f.datos } : {}), ...(f.metrica ? { metrica: f.metrica } : {}) },
         fuente_url: f.fuente_url, observado_en: f.observado_en, atributo: f.atributo, decision: f.decision, razon_de_decision: reemplaza ? 'la lectura nueva reemplaza a la vigente del mismo atributo' : 'dato nuevo',
         alcance: f.alcance, descartada: false,
+        ...columnasDeLaMarca(pruebas && pruebas.ok ? marcaDeOtroNegocio({ propiedad: f.alcance === 'cliente' ? 'propia' : 'ajena', fuente_url: f.fuente_url, sede: claveDeAlcance(sedesDeFicha({ datos: f.datos })) || null }, pruebas.pruebas) : null, o.ahora),
       })
       if (w.error) { r.errores.push(`ficha ${f.ref}: ${w.error.message}`); continue }
       r.escritas++

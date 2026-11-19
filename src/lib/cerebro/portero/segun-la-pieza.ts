@@ -61,8 +61,8 @@ export function leerFila(v: unknown): { ok: true; fila: string | null; objeto: R
 /** de dónde salió una ficha, como dato (no como juicio) */
 export const fuenteDe = (f: Ficha): string => f.origen
 
-/** la sede, la fecha y la fuente de una ficha como DATO, igual en la lista, en la base y en la entrega */
-export const datosDeLaFicha = (f: Ficha) => ({ sede: txt(f.sede) ?? null, fecha_fuente: f.fecha_fuente, fuente: fuenteDe(f) })
+/** la sede, la fecha y la fuente de una ficha como DATO, igual en la lista, en la base y en la entrega (y, encargo 10, la marca de OTRO negocio si la tiene) */
+export const datosDeLaFicha = (f: Ficha) => ({ sede: txt(f.sede) ?? null, fecha_fuente: f.fecha_fuente, fuente: fuenteDe(f), no_es_de_este_cliente: f.otro_negocio ?? null })
 
 /** la línea del índice para el empleado: la de siempre más su sede y su fuente como dato (nada se marca ni se reordena) */
 export const lineaConDatos = (l: LineaNumerada): string => {

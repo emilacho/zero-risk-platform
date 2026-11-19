@@ -13,6 +13,8 @@ export const COLUMNAS_DE_CEREBRO_FICHAS = new Set([
   'id', 'client_id', 'ingreso_id', 'ref', 'clase', 'titulo', 'que_es', 'contenido', 'archivo_nombre', 'archivo_tipo', 'archivo_enlace', 'archivo_bytes', 'firmas', 'origen', 'fecha_fuente',
   'reconfirmado_en', 'plazo', 'vigente_hasta', 'version_de', 'retirada_en', 'motivo_retirada', 'huella', 'producto', 'sede', 'propiedad', 'porque', 'descartada', 'motivo_descarte',
   'juzgado_por', 'residual', 'creado_en', 'provenance_tag', 'prueba', 'fuente_url', 'observado_en', 'atributo', 'decision', 'razon_de_decision', 'reemplazada_por', 'alcance', 'indice_rechazado_en', 'indice_rechazo',
+  // 202611191600 · encargo 10 · la marca «no es de este cliente»
+  'otro_negocio_motivo', 'otro_negocio_prueba', 'otro_negocio_como', 'otro_negocio_nivel', 'otro_negocio_por', 'otro_negocio_en',
 ])
 
 const RAIZ = path.resolve(__dirname, '..')
