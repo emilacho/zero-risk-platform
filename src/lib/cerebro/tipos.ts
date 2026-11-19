@@ -69,6 +69,8 @@ export interface Ficha {
   publicado_en?: string | null
   datos?: { precio?: number | null; moneda?: string | null; familia?: string | null }
   sobre_terceros?: boolean
+  /** encargo 10 · la ficha es de OTRO negocio (con prueba): va CON esta marca, como dato; nunca como del cliente. `mercado` = sirve solo de referencia, con su nivel */
+  otro_negocio?: { motivo: string; prueba: string; como: 'mercado' | 'nada'; nivel: string | null }
   /** «tokens» aproximados del contenido (2,8 caracteres por «token», medido por CC#2) */
   peso_estimado: number
 }

@@ -138,11 +138,32 @@ describe('eslabón 1 · el llamado', () => {
     expect(m.rec!.llamadas).toHaveLength(1)
     expect(m.rec!.llamadas[0]).toMatchObject({ accion: 'recibir', campana_id: CAMPANA, fila_id: 'F-0300', destino: 'calendario', regla: 'D1', dura: true, llave: 'F-0300:calendario', encargo_id: m.id })
   })
-  it('🔴 parte sin campaña: no se llama al receptor, la pieza queda frenada y avisa UNA vez (aunque el vigía pase 3 veces)', async () => {
+  it('🔴 19-nov · caso 3 · parte sin campaña (real): no se llama al receptor; la regla dura vuelve al creador DE LA PIEZA (la mesa se reabre) y, si sigue rota, queda en corrección con UNA alarma · nunca frenada por la cadena', async () => {
     const m = await correr({ campana: null })
     expect(m.rec!.llamadas).toEqual([])
-    expect(m.r.cuerpo).toMatchObject({ frenada: true, para_la_pieza: 'frenada', output_id: null, hitl_queue_id: null })
+    // no esperó a la cadena: las correcciones no fueron allá
+    expect(m.espera()).toBeUndefined()
+    // la mesa volvió a abrirse con la regla dura (la vuelta de #1182): devuelve → responde → integra
+    expect(m.MS.filas.filter((f) => f.encargo_id === m.id).map((f) => f.tipo)).toEqual(['dirige', 'aporta', 'integra', 'devuelve', 'responde', 'integra'])
+    expect(m.r.cuerpo).toMatchObject({ en_correccion: true, output_id: null, hitl_queue_id: null })
+    expect(m.r.cuerpo).not.toHaveProperty('para_la_pieza')
+    expect(m.alertas().filter((a) => /Pieza en corrección/.test(a.texto))).toHaveLength(1)
+    expect(m.M.llamadas.avisos.filter((a) => /ninguna campaña|Pieza frenada/.test(a.texto))).toEqual([])
+  })
+  it('🔴 19-nov · caso 3 · si una pieza sin campaña llega igual a la espera (encargo de antes): ESPERA, no frena, con UNA alarma «🔁» aunque el vigía pase 3 veces', async () => {
+    const m = await correr({ rec: receptor({ para: () => 'esperando' }) })
+    // la campaña desaparece después de mandar: la vuelta siguiente del vigía ya no la encuentra
+    const parte = m.M.P.parte
+    m.M.P.parte = async (id, c) => { const p = await parte(id, c); return p ? { ...p, campana_id: null } : p }
+    for (let i = 0; i < 3; i++) {
+      const v = await m.vigia()
+      expect(v.cuerpo).toMatchObject({ resultado_para_la_sala: 'esperando_a_la_cadena', para_la_pieza: 'esperando' })
+      expect(v.cuerpo).not.toHaveProperty('frenada')
+    }
     expect(m.alertas().filter((a) => /ninguna campaña/.test(a.texto))).toHaveLength(1)
+    expect(m.alertas().filter((a) => /ninguna campaña/.test(a.texto))[0].texto).toContain('🔁 Pieza en corrección')
+    expect(m.espera()!.pendiente).toBe(true)
+    expect(m.M.llamadas.bandeja).toEqual([])
   })
   it('🔴 medida 6 · si el receptor falla para una llamada, la vuelta siguiente reintenta SOLO esa y la llave no la duplica', async () => {
     const rec = receptor({ recibir: (_l, vez) => (vez === 1 ? { status: 500, cuerpo: { ok: false, error: 'caído' } } : null), para: () => 'sigue' })
@@ -328,16 +349,26 @@ describe('las medidas de CC7', () => {
     expect(m.M.llamadas.bandeja.length).toBe(bandejaAntes)
     expect(m.M.llamadas.salidas.length).toBe(salidasAntes)
   })
-  it('🔴 CC7 punto 3 · la misma fila ya tiene la corrección de OTRO encargo (`ya_estaba` y no está en la lectura de este): FRENA con UNA alarma, nunca espera para siempre', async () => {
+  it('🔴 19-nov · CC7 punto 3 · la misma fila ya tiene la corrección de OTRO encargo (`ya_estaba` y no está en la lectura de este): NO frena · se vuelve a mandar en cada vuelta, la pieza espera con UNA alarma y sigue la respuesta que le toque', async () => {
     const rec = receptor({ para: () => 'reemplazada' })
     // el encargo 1 de la fila dejó su corrección: el receptor la tiene con OTRO encargo_id
     rec.guardadas.set('F-0300:calendario', { llave: 'F-0300:calendario', destino: 'calendario', encargo_id: 'encargo-anterior' })
     const m = await correr({ rec })
-    expect(m.r.cuerpo).toMatchObject({ frenada: true, para_la_pieza: 'frenada', output_id: null, hitl_queue_id: null })
+    expect(m.r.cuerpo).toMatchObject({ resultado_para_la_sala: 'esperando_a_la_cadena', para_la_pieza: 'esperando', output_id: null, hitl_queue_id: null })
+    expect(m.r.cuerpo).not.toHaveProperty('frenada')
     await m.vigia(); await m.vigia()
+    // cada vuelta la vuelve a mandar (el receptor real la cubre o abre una nueva para este encargo)
+    expect(rec.llamadas.filter((c) => c.llave === 'F-0300:calendario')).toHaveLength(3)
     expect(m.M.llamadas.bandeja).toEqual([])
     expect(m.alertas().filter((a) => /de otro encargo/.test(a.texto))).toHaveLength(1)
+    expect(m.alertas().filter((a) => /Pieza frenada/.test(a.texto))).toEqual([])
+    expect(m.espera()!.pendiente).toBe(true)
+    // el receptor abre la corrección para ESTE encargo: la pieza sigue su respuesta (aquí, reemplazada) y deja de esperar
+    rec.guardadas.set('F-0300:calendario', { llave: 'F-0300:calendario', destino: 'calendario', encargo_id: m.id })
+    const v = await m.vigia()
+    expect(v.cuerpo).toMatchObject({ para_la_pieza: 'reemplazada' })
     expect(m.espera()!.pendiente).toBe(false)
+    expect(m.M.llamadas.bandeja).toEqual([])
   })
   it('🔴 mi propio reintento que vuelve `ya_estaba` SÍ está en la lectura: no es de otro encargo, se lee su `para_la_pieza`', async () => {
     const rec = receptor({ recibir: (_l, vez) => (vez === 1 ? { status: 500, cuerpo: { ok: false } } : null), para: () => 'sigue' })

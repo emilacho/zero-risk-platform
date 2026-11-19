@@ -487,8 +487,7 @@ export async function conceptoAbrir(al: Almacen, cuerpo: Record<string, unknown>
     // hueco 1 de CC3: el mismo sobre otra vez (la oficina es idempotente); el marco se rearma con la nota persistida en la fila
     const sobre: SobreParaLaOficina = {
       tipo_de_mesa: 'concepto', client_id: campana.client_id, campana_id: campana.id, version: ultimo.version, dry_run: campana.seco,
-      // 19-nov · ADENDA 1 · P2 (CC5): la gran idea también recibe el plan ENTERO (antes no: «el brief ya es su lectura», y así la hipótesis B se acortó en el reel auditado)
-      plan_texto: ctx.planTexto,
+      // 19-nov · GO Lenovo (firma de Emilio 20:39): la gran idea NO recibe el plan · parte del brief, que ya es su lectura; el plan entero va a la jefatura (deshace esa parte de #1207)
       marco_texto: marcoDelConcepto({ fichas: await fichasDeLaCampana(al, campana.id), ctx, estrategia, briefTexto: brief.texto_md ?? '', version: ultimo.version, nota: texto(ultimo.nota_de_emilio), inicio: campana.fecha_inicio, hoy: ahora.slice(0, 10), anterior: anteriorConCambios(todos, ultimo.version), perfil: await perfilParaLaMesa(al, campana.client_id, 'gran_idea') }), condiciones: condicionesDe(estrategia, await al.formatos()), insumos_del_banco: insumosDelBanco(estrategia),
     }
     return { status: 200, cuerpo: { ya_abierta: true, version: ultimo.version, concepto_id: idDeConcepto(campana.id, ultimo.version), brief_version: brief.version, sobre } }
@@ -512,8 +511,7 @@ export async function conceptoAbrir(al: Almacen, cuerpo: Record<string, unknown>
   await al.insertarConcepto(fila)
   const sobre: SobreParaLaOficina = {
     tipo_de_mesa: 'concepto', client_id: campana.client_id, campana_id: campana.id, version, dry_run: campana.seco,
-      // 19-nov · ADENDA 1 · P2 (CC5): la gran idea también recibe el plan ENTERO (antes no: «el brief ya es su lectura», y así la hipótesis B se acortó en el reel auditado)
-      plan_texto: ctx.planTexto,
+    // 19-nov · GO Lenovo (firma de Emilio 20:39): la gran idea NO recibe el plan (ver el sobre de rescate de arriba)
     marco_texto: marcoDelConcepto({ fichas: await fichasDeLaCampana(al, campana.id), ctx, estrategia, briefTexto: brief.texto_md ?? '', version, nota, inicio: campana.fecha_inicio, hoy: ahora.slice(0, 10), anterior: anteriorConCambios([...todos, fila], version), perfil: await perfilParaLaMesa(al, campana.client_id, 'gran_idea') }), condiciones: condicionesDe(estrategia, await al.formatos()), insumos_del_banco: insumosDelBanco(estrategia),
   }
   return { status: 200, cuerpo: { version, concepto_id: idDeConcepto(campana.id, version), brief_version: brief.version, plazo_mesa_min: plazoMin, sobre } }

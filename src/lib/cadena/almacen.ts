@@ -42,6 +42,10 @@ export interface Campana {
   tope_gasto_usd?: number | null
   sala_ref: Record<string, unknown>
   reemplaza_a: string | null
+  /** 19-nov · VARIAS CAMPAÑAS POR CLIENTE (firma de Emilio): la campaña que nace con su llave es independiente de las demás; sin llave (null) nace del plan, como siempre (una por plan · una viva por cliente) */
+  llave_de_campana?: string | null
+  /** 19-nov · el NOMBRE de la campaña (lo lleva el botón «Flujo de la Campaña»): se pone al abrirla; sin valor, la campaña no tiene nombre todavía */
+  nombre_de_campana?: string | null
   seco: boolean
 }
 
@@ -316,7 +320,11 @@ export interface Almacen {
   journeyExiste(journeyId: string, clientId: string): Promise<boolean>
   // campañas
   campana(id: string): Promise<Campana | null>
+  /** la campaña que nació de ESE plan (solo las SIN llave: las que tienen llave no cuentan) */
   campanaPorPlan(clientId: string, planId: string, seco: boolean): Promise<Campana | null>
+  /** 19-nov · la campaña que nació con ESA llave (idempotencia de la apertura de una campaña nueva) */
+  campanaPorLlave(clientId: string, llave: string, seco: boolean): Promise<Campana | null>
+  /** la campaña viva que nació del plan (solo las SIN llave: una campaña con llave nunca la reemplaza un plan) */
   campanaViva(clientId: string, seco: boolean): Promise<Campana | null>
   insertarCampana(c: Omit<Campana, 'id'>): Promise<Campana>
   actualizarCampana(id: string, patch: Partial<Campana>): Promise<Campana>

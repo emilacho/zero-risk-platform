@@ -184,11 +184,16 @@ export class AlmacenMemoria implements Almacen {
   // 🔴 la base devuelve COPIAS: un manejador que lee una campaña y luego la actualiza no ve su propio cambio (con referencias compartidas las pruebas mentirían)
   private copia<T>(x: T | undefined | null): T | null { return x ? structuredClone(x) : null }
   async campana(id: string) { return this.copia(this.campanas.find((c) => c.id === id)) }
-  async campanaPorPlan(clientId: string, planId: string, seco: boolean) { return this.copia(this.campanas.find((c) => c.client_id === clientId && c.plan_id === planId && c.seco === seco)) }
-  async campanaViva(clientId: string, seco: boolean) { return this.copia(this.campanas.find((c) => c.client_id === clientId && c.seco === seco && c.estado !== 'cerrada' && c.estado !== 'reemplazada')) }
+  async campanaPorPlan(clientId: string, planId: string, seco: boolean) { return this.copia(this.campanas.find((c) => c.client_id === clientId && c.plan_id === planId && c.seco === seco && !c.llave_de_campana)) }
+  async campanaPorLlave(clientId: string, llave: string, seco: boolean) { return this.copia(this.campanas.find((c) => c.client_id === clientId && c.llave_de_campana === llave && c.seco === seco)) }
+  async campanaViva(clientId: string, seco: boolean) { return this.copia(this.campanas.find((c) => c.client_id === clientId && c.seco === seco && !c.llave_de_campana && c.estado !== 'cerrada' && c.estado !== 'reemplazada')) }
   async insertarCampana(c: Omit<Campana, 'id'>) {
-    if (this.campanas.some((x) => x.client_id === c.client_id && x.plan_id === c.plan_id)) throw new Error('23505 un plan, una campaña')
-    if (c.estado !== 'cerrada' && c.estado !== 'reemplazada' && this.campanas.some((x) => x.client_id === c.client_id && x.seco === c.seco && x.estado !== 'cerrada' && x.estado !== 'reemplazada')) throw new Error('23505 una campaña viva por cliente')
+    // 19-nov · los mismos únicos que la base: los dos de siempre valen SOLO para las campañas sin llave; las que tienen llave, una por (cliente, seco, llave)
+    if (c.llave_de_campana) { if (this.campanas.some((x) => x.client_id === c.client_id && x.seco === c.seco && x.llave_de_campana === c.llave_de_campana)) throw new Error('23505 una campaña por llave') }
+    else {
+      if (this.campanas.some((x) => !x.llave_de_campana && x.client_id === c.client_id && x.plan_id === c.plan_id)) throw new Error('23505 un plan, una campaña')
+      if (c.estado !== 'cerrada' && c.estado !== 'reemplazada' && this.campanas.some((x) => !x.llave_de_campana && x.client_id === c.client_id && x.seco === c.seco && x.estado !== 'cerrada' && x.estado !== 'reemplazada')) throw new Error('23505 una campaña viva por cliente')
+    }
     const n = { ...c, id: `camp-${++this.seq.campana}` } as Campana
     this.campanas.push(n)
     return structuredClone(n)
