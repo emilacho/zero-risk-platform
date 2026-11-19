@@ -46,6 +46,8 @@ export async function GET(_req: Request, { params }: RouteContext) {
       .from('client_icp_documents')
       .select('*')
       .eq('client_id', clientId)
+      // 19-nov · juntar públicos: solo los VIGENTES (un absorbido por otro no se muestra dos veces)
+      .is('fusionado_en', null)
       .order('segment_priority', { ascending: true }),
   ])
 
