@@ -108,6 +108,30 @@ describe('LA MESA · herramientas del tablero', () => {
     expect(MS.filas.at(-1)!.texto).toBe(justo)
   })
 
+  // 19-nov · las 3 pruebas que pidió CC6 en #1222 (sus sabotajes m1, m4 y m7 sobrevivían)
+  it('m1 · un pedido de puros espacios no se anota, por ninguno de los dos caminos', async () => {
+    const { M, MS, id, turno } = await preparado()
+    const r1 = await llamar(M, { herramienta: 'mesa_pedir', encargo_id: id, de: turno.agente, a: 'content-creator', que: '     ' })
+    expect(r1.cuerpo).toMatchObject({ ok: false, motivo: 'di qué le pides' })
+    const r2 = await llamar(M, { herramienta: 'pedir_material', encargo_id: id, de: turno.agente, que: '     ' })
+    expect(r2.cuerpo).toMatchObject({ ok: false, motivo: 'di qué material necesitas' })
+    expect(MS.filas).toHaveLength(0)
+  })
+  it('m4 · mesa_pedir sin «para qué» anota exactamente el pedido, sin « (para: )»', async () => {
+    const { M, MS, id, turno } = await preparado()
+    expect((await llamar(M, { herramienta: 'mesa_pedir', encargo_id: id, de: turno.agente, a: 'content-creator', que: '  tres titulares para el hook  ' })).cuerpo).toMatchObject({ ok: true })
+    expect(MS.filas.at(-1)!.texto).toBe('tres titulares para el hook')
+    expect((await llamar(M, { herramienta: 'mesa_pedir', encargo_id: id, de: turno.agente, a: 'carousel-designer', que: 'el ritmo de las láminas', para_que: '   ' })).cuerpo).toMatchObject({ ok: true })
+    expect(MS.filas.at(-1)!.texto).toBe('el ritmo de las láminas')
+  })
+  it('m7 · el motivo del rechazo dice cuánto mide el texto y cuál es el tope (para que el agente sepa cuánto acortar)', async () => {
+    const { M, id, turno } = await preparado()
+    const r = await llamar(M, { herramienta: 'mesa_pedir', encargo_id: id, de: turno.agente, a: 'content-creator', que: 'x'.repeat(TOPE_DE_LO_ESCRITO + 1) })
+    expect(String(r.cuerpo.motivo)).toContain(String(TOPE_DE_LO_ESCRITO + 1))
+    expect(String(r.cuerpo.motivo)).toContain(`el tope es ${TOPE_DE_LO_ESCRITO}`)
+    expect(String(r.cuerpo.motivo)).toContain('«que»')
+  })
+
   it('un encargo de la oficina de siempre (familia v1) no tiene tablero: 409', async () => {
     const M = crearMemoria({ parte })
     M.P.mesa = crearMesaEnMemoria()
