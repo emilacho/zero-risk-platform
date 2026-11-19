@@ -11,7 +11,7 @@ import { TOPE_DEL_TEXTO_DEL_DUENO } from '../limites-de-tamano'
 export const TARGET_STEP_PRODUCIR = 'router.dispatch.brief/parte-listo.producir'
 
 /** r79 · D5 · `fila_id`, `fecha` y `hora` son del calendario (la fila que originó el brief): la entrega los usa para nombrar, fechar y vencer la pieza */
-export interface Sobre { /** 29-oct · el dueño devolvió una pieza cerrada con cambios: abre la versión siguiente SIN gastar el tope de 3 versiones (límite propio de 5 rondas) */ cambios_del_dueno?: CambiosDelDueno; /** la causa de un fallo que ya se corrigió: permite reabrir un encargo que ya gastó (tope de versiones intacto) */ reabrir_causa_corregida?: string; parte_id: string; brief_id: string; dry_run: boolean; tope_usd?: number; familia?: string; fila_id?: string; fecha?: string; hora?: string }
+export interface Sobre { /** 29-oct · el dueño devolvió una pieza cerrada con cambios: abre la versión siguiente SIN gastar el tope de 3 versiones (límite propio de 5 rondas) */ cambios_del_dueno?: CambiosDelDueno; /** la causa de un fallo que ya se corrigió: permite reabrir un encargo que ya gastó (tope de versiones intacto) */ reabrir_causa_corregida?: string; parte_id: string; brief_id: string; dry_run: boolean; tope_usd?: number; familia?: string; fila_id?: string; fecha?: string; hora?: string; /** 19-nov · VARIAS CAMPAÑAS · de qué campaña es el encargo (null = sin saberlo: los viejos, o un sobre sin campaña ni fila) */ campana_id?: string }
 /** 11-nov · el techo de lo que un sobre puede PEDIR: el mismo que las reglas de la base (`oficina_encargos_tope_valido` / `oficina_tipos_tope_valido`, 202611111930).
  *  No es lo que se gasta: la oficina abre con el MENOR entre lo pedido y el tope de la familia (`orquestador.ts`). Antes era 10 y dejaba sin rehacer un video de tope 35. */
 /** 17-nov · 50 → 60 (202611170930 · RESPUESTA Lenovo «check-base-60»): el techo técnico de la base; ninguna familia pasa de su propio tope */
@@ -38,10 +38,12 @@ export function validarSobre(cuerpo: unknown): { ok: true; sobre: Sobre; ignorad
   if (b.fecha !== undefined && !(typeof b.fecha === 'string' && RE_FECHA.test(b.fecha) && esFechaReal(b.fecha))) errores.push('`fecha` debe ser una fecha real aaaa-mm-dd')
   if (b.hora !== undefined && !(typeof b.hora === 'string' && RE_HORA.test(b.hora) && esHoraReal(b.hora.slice(0, 5)))) errores.push('`hora` debe ser una hora real hh:mm')
   if (errores.length) return { ok: false, codigo: 'entrada_invalida', errores }
-  const ignorados = ['client_id', 'tenant_id'].filter((k) => k in b)
+  // 19-nov · la campaña es una ETIQUETA del encargo, no una puerta: si no es un uuid se ignora (y se dice) y la pieza sigue igual
+  const campanaValida = typeof b.campana_id === 'string' && RE_UUID.test(b.campana_id)
+  const ignorados = [...['client_id', 'tenant_id'].filter((k) => k in b), ...(b.campana_id !== undefined && b.campana_id !== null && !campanaValida ? ['campana_id'] : [])]
   return {
     ok: true, ignorados,
-    sobre: { parte_id: b.parte_id as string, brief_id: b.brief_id as string, dry_run: b.dry_run, ...(b.tope_usd !== undefined ? { tope_usd: b.tope_usd as number } : {}), ...(b.familia !== undefined ? { familia: b.familia as string } : {}), ...(b.reabrir_causa_corregida !== undefined ? { reabrir_causa_corregida: (b.reabrir_causa_corregida as string).trim() } : {}), ...(b.cambios_del_dueno !== undefined ? { cambios_del_dueno: b.cambios_del_dueno as CambiosDelDueno } : {}), ...(b.fila_id !== undefined ? { fila_id: b.fila_id as string } : {}), ...(b.fecha !== undefined ? { fecha: b.fecha as string } : {}), ...(b.hora !== undefined ? { hora: (b.hora as string).slice(0, 5) } : {}) },
+    sobre: { parte_id: b.parte_id as string, brief_id: b.brief_id as string, dry_run: b.dry_run, ...(b.tope_usd !== undefined ? { tope_usd: b.tope_usd as number } : {}), ...(b.familia !== undefined ? { familia: b.familia as string } : {}), ...(b.reabrir_causa_corregida !== undefined ? { reabrir_causa_corregida: (b.reabrir_causa_corregida as string).trim() } : {}), ...(b.cambios_del_dueno !== undefined ? { cambios_del_dueno: b.cambios_del_dueno as CambiosDelDueno } : {}), ...(b.fila_id !== undefined ? { fila_id: b.fila_id as string } : {}), ...(b.fecha !== undefined ? { fecha: b.fecha as string } : {}), ...(b.hora !== undefined ? { hora: (b.hora as string).slice(0, 5) } : {}), ...(campanaValida ? { campana_id: b.campana_id as string } : {}) },
   }
 }
 

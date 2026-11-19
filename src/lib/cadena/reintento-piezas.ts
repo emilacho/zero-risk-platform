@@ -147,7 +147,7 @@ export async function reintentarPiezas(P: PuertosDeReintento, o: { ejecutar: boo
         if (!o.ejecutar) continue
         cuando ??= await P.cuando(c.id)
         const corr = typeof c.sala_ref?._sala_correlation_id === 'string' ? (c.sala_ref._sala_correlation_id as string) : null
-        const { sobres } = sobresDeProducir({ id: parte.id, client_id: c.client_id, valido: true, briefs: [{ ...b, brief_id: briefId }] }, { dry_run: false, correlation_id: corr, desde_worker: 'cadena-reintento-de-piezas', cuando })
+        const { sobres } = sobresDeProducir({ id: parte.id, client_id: c.client_id, valido: true, briefs: [{ ...b, brief_id: briefId }] }, { dry_run: false, campana_id: c.id, correlation_id: corr, desde_worker: 'cadena-reintento-de-piezas', cuando })
         if (!sobres.length) continue
         const sobre: SobreDeProducir = { ...sobres[0], idempotency_key: llaveDeReintento(parte.id, briefId, n + 1) }
         let e: ResultadoDeEmision
