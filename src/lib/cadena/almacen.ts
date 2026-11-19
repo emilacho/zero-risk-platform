@@ -253,6 +253,8 @@ export interface Almacen {
   correccionesDeEncargo?(encargoId: string): Promise<import('./correcciones').Correccion[]>
   /** ¿la pieza de esta fila ya se publicó? Sin este método la cadena la da por publicada (una fila aprobada no vuelve atrás) */
   piezaPublicada?(campanaId: string, filaId: string): Promise<boolean>
+  /** 19-nov · #1195 (decisión A de Lenovo) · archiva la pieza PENDIENTE de cada fila que volvió al brief (la oficina decide: nunca una que Emilio ya decidió). Nunca lanza */
+  archivarPiezasDeFilas?(campanaId: string, filaIds: readonly string[], motivo: string, ahora: string): Promise<import('../oficina/archivar-piezas-de-filas').ResultadoDelArchivoDeFilas>
   /** las cerradas FRENADAS (`frena`, guardado al cerrar) cuya alarma no salió (alarma_en vacío), las más viejas primero */
   alarmasPendientes?(): Promise<import('./correcciones').Correccion[]>
   correccionActualizar?(llave: string, cambios: Partial<import('./correcciones').Correccion>, estadoEsperado: import('./correcciones').EstadoDeCorreccion): Promise<boolean>

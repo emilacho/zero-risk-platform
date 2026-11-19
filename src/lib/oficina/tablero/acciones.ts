@@ -17,6 +17,7 @@ import { rutaDecidirPalabra, rutaValidarCampo, rutaValidarManual } from '../../m
 import { soltarEsperaYPedirPlan } from '../../manual/pedir-plan'
 import { confirmarGasto, esObjeto, rechazo, textoEntre, UUID, type Fila, type Manejador } from './comun'
 import { propuestasAprobar, propuestasCambios } from './propuestas'
+import { TOPE_DEL_TEXTO_DEL_DUENO } from '../../limites-de-tamano'
 
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null)
 
@@ -36,8 +37,8 @@ async function topeDeLaFamilia(db: Parameters<Manejador>[0]['db'], familia: unkn
 /** Reabre un encargo que FALLÓ (o se cortó por tope) con la causa declarada. Respeta el tope de 3 versiones por brief: si ya se agotó, lo dice (la salida es «Pieza nueva»). */
 export const rehacerPieza: Manejador = async ({ db, puertos }, { cuerpo }) => {
   if (typeof cuerpo.encargo_id !== 'string' || !UUID.test(cuerpo.encargo_id)) return rechazo(400, 'entrada_invalida', '`encargo_id` debe ser un uuid')
-  const comentario = cuerpo.comentario === undefined || cuerpo.comentario === null || cuerpo.comentario === '' ? null : textoEntre(cuerpo.comentario, 1, 300)
-  if (cuerpo.comentario && !comentario) return rechazo(400, 'entrada_invalida', '`comentario` debe tener hasta 300 caracteres')
+  const comentario = cuerpo.comentario === undefined || cuerpo.comentario === null || cuerpo.comentario === '' ? null : textoEntre(cuerpo.comentario, 1, TOPE_DEL_TEXTO_DEL_DUENO) // 18-nov · G2b «nada se recorta» (CC5): lo que escribe Emilio desde el tablero llega entero, hasta el tope único del texto del dueño (antes 300)
+  if (cuerpo.comentario && !comentario) return rechazo(400, 'entrada_invalida', `\`comentario\` debe tener hasta ${TOPE_DEL_TEXTO_DEL_DUENO} caracteres`)
   const toca = { encargo_id: cuerpo.encargo_id, comentario }
   // sin confirmar el gasto y sin tope no se lee nada; el MÁXIMO no es fijo (GO Lenovo 11-nov 17:50, opción A): es el tope por pieza de la familia de ESA pieza, el mismo con que la abre la oficina
   const g = confirmarGasto(cuerpo, Number.POSITIVE_INFINITY)
@@ -135,9 +136,9 @@ export const clienteEditar: Manejador = async ({ db }, { cuerpo }) => {
 
 export const clienteBaja: Manejador = async ({ db, ahora }, { cuerpo }) => {
   if (typeof cuerpo.client_id !== 'string' || !UUID.test(cuerpo.client_id)) return rechazo(400, 'entrada_invalida', '`client_id` debe ser un uuid')
-  const comentario = textoEntre(cuerpo.comentario, 3, 500)
+  const comentario = textoEntre(cuerpo.comentario, 3, TOPE_DEL_TEXTO_DEL_DUENO) // 18-nov · G2b «nada se recorta» (CC5): lo que escribe Emilio desde el tablero llega entero, hasta el tope único del texto del dueño (antes 500)
   const toca = { client_id: cuerpo.client_id, comentario }
-  if (!comentario) return rechazo(400, 'entrada_invalida', '`comentario` (el motivo de la baja) debe tener de 3 a 500 caracteres', toca)
+  if (!comentario) return rechazo(400, 'entrada_invalida', `\`comentario\` (el motivo de la baja) debe tener de 3 a ${TOPE_DEL_TEXTO_DEL_DUENO} caracteres`, toca)
   const r = await db.from('clients').select('id, status').eq('id', cuerpo.client_id).limit(1)
   if (r.error) return rechazo(500, 'clientes_error', r.error.message, toca)
   const cli = ((r.data as Fila[] | null) ?? [])[0]

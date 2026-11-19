@@ -23,7 +23,7 @@ import { avisosDeCitasBajadas, bajarCitasNoLiterales, hallazgosDelBrief, insumos
 import { escribirHoja } from './hoja'
 import { fichasEnTexto as fichasDeOfertaEnTexto, type FichaDeOferta } from './ficha-de-oferta'
 import { filaSinFamilia, notaSinFamilia } from './sin-familia'
-import { hallazgosDelConcepto, idDeBrief, idDeConcepto, insumosDesdeEstrategia, leerConcepto, resumenDelBanco, resumenDeLaVersionAnterior, type ConceptoLeido, type InsumosDelConcepto } from './conceptos'
+import { hallazgosDelConcepto, idDeBrief, idDeConcepto, insumosDelBanco, insumosDesdeEstrategia, leerConcepto, resumenDelBanco, resumenDeLaVersionAnterior, type ConceptoLeido, type InsumosDelBanco, type InsumosDelConcepto } from './conceptos'
 import { sumarDias } from './fechas'
 import { medidaDeCampana } from './constantes'
 import { metodoDe } from './metodos'
@@ -72,7 +72,7 @@ export const HOLGURA_DE_MESA_MIN = 30
 export const TIPO_DE_ESPERA_DE_CONCEPTO = 'aprobacion_concepto'
 export const objetoDeEsperaDeConcepto = (version: number): string => `concepto:v${version}`
 
-export interface SobreParaLaOficina { tipo_de_mesa: 'brief' | 'concepto'; client_id: string; campana_id: string; version: number; dry_run: boolean; marco_texto: string; condiciones: string[] }
+export interface SobreParaLaOficina { tipo_de_mesa: 'brief' | 'concepto'; client_id: string; campana_id: string; version: number; dry_run: boolean; marco_texto: string; condiciones: string[]; /** 19-nov · G4 (CC5 · Lenovo 01:00Z): solo en la mesa del brief, el plan ENTERO en su campo propio; el marco ya no lo repite (antes iba al final del marco y el corte de 40 000 se lo comía) */ plan_texto?: string; /** 18-nov · relleno del banco: solo en la mesa de concepto; la oficina cuenta el banco con esto antes de entregar */ insumos_del_banco?: InsumosDelBanco }
 /**
  * El SOBRE con el que la puerta vuelve a entrar (31-oct · respuesta a CC2 «quién vuelve a entrar»): quien SABE del evento lo arma aquí y el flujo que ya corre lo lleva a la sala;
  * el vigía reemite el MISMO sobre de respaldo. La clave lleva la ETAPA (`campana:tanda-N:<etapa>`) para que la sala no lo trague como repetido cuando la pieza que faltaba ya está.
@@ -146,6 +146,9 @@ const reglaDeLengua = (ctx: ContextoDelCliente): string => [reglaDeRegistro(ctx.
  * El bloque `# FICHAS DE LAS OFERTAS` sale de `fichasEnTexto` de CC3, tal cual; sin fichas, el mismo bloque lo DICE (nunca falta en silencio).
  * Quién trae las fichas aquí lo cablea la entrega 2 de A (el lector y su tabla); hasta entonces los llamadores no las pasan y el bloque declara que no hay.
  */
+/** lo que el marco del brief dice donde antes iba el plan · el plan viaja en `sobre.plan_texto` y la oficina lo pone en «## 3 · El plan de trabajo» */
+export const PLAN_EN_SU_LUGAR = '(el plan de la campaña va ENTERO más abajo, en «## 3 · El plan de trabajo»: léelo ahí; no se repite en este marco)'
+
 export function marcoDelBrief(a: { ctx: ContextoDelCliente; estrategia: Estrategia; version: number; devolucion: string | null; nota: string | null; informeDeMercado?: string | null; metodo?: string | null; anterior?: string | null; perfil?: PerfilParaLectores | null; fichas?: ReadonlyArray<FichaDeOferta> | null; hoy?: string | null }): string {
   const perfil = a.perfil ? bloqueDelPerfil(a.perfil) : ''
   return [
@@ -178,7 +181,8 @@ export function marcoDelBrief(a: { ctx: ContextoDelCliente; estrategia: Estrateg
     ...(a.ctx.eslogan ? [`# UNA FRASE QUE EL CLIENTE USA (contexto)\n«${a.ctx.eslogan.texto}»: ${a.ctx.eslogan.regla}`] : []),
     `# PALABRAS QUE LA MARCA EVITA (contexto, no prohibición: razona la intención; un claim propio sin prueba no va, una reseña citada y atribuida sí)\n${a.ctx.forbiddenWords.length ? a.ctx.forbiddenWords.map((w) => `- ${w}`).join('\n') : '(ninguna)'}${a.ctx.palabrasDuras?.length ? `\n\n# PROHIBIDAS DE VERDAD (una norma o una orden declarada, con su cita): estas no se usan\n${a.ctx.palabrasDuras.map((w) => `- ${w}`).join('\n')}` : ''}`,
     '',
-    `# PLAN\n${a.ctx.planTexto}`,
+    // 19-nov · G4 (CC5): el plan va ENTERO en su lugar propio del pedido («## 3 · El plan de trabajo»), no aquí: así entra una sola vez y no lo corta el tope del marco
+    `# PLAN\n${PLAN_EN_SU_LUGAR}`,
   ].join('\n')
 }
 
@@ -292,6 +296,7 @@ export async function briefAbrir(al: Almacen, cuerpo: Record<string, unknown>, a
         metodo: await metodoDe(al, 'brief'),
       }),
       condiciones: condicionesDe(estrategia, await al.formatos()),
+      plan_texto: ctx.planTexto,
     }
     return { status: 200, cuerpo: { ya_abierta: true, version: ultimo.version, brief_id: idDeBrief(campana.id, ultimo.version), plazo_mesa_min: PLAZO_DE_MESA_MIN.brief, sobre } }
   }
@@ -312,6 +317,7 @@ export async function briefAbrir(al: Almacen, cuerpo: Record<string, unknown>, a
     tipo_de_mesa: 'brief', client_id: campana.client_id, campana_id: campana.id, version, dry_run: campana.seco,
     marco_texto: marcoDelBrief({ fichas: await fichasDeLaCampana(al, campana.id), ctx, estrategia, version, hoy: ahora.slice(0, 10), devolucion: ultimo?.estado === 'devuelta' && ultimo.motivo !== MOTIVO_CAMBIOS_DE_EMILIO ? ultimo.devolucion_texto : null, nota, informeDeMercado: texto(cuerpo.informe_de_mercado), metodo: await metodoDe(al, 'brief'), anterior: pedido.base ? briefAnteriorParaElMarco(pedido.base) : null, perfil: await perfilParaLaMesa(al, campana.client_id, 'brief') }),
     condiciones: condicionesDe(estrategia, await al.formatos()),
+    plan_texto: ctx.planTexto,
   }
   return { status: 200, cuerpo: { version, brief_id: idDeBrief(campana.id, version), plazo_mesa_min: plazoMin, sobre } }
 }
@@ -391,7 +397,7 @@ export async function conceptoAbrir(al: Almacen, cuerpo: Record<string, unknown>
     // hueco 1 de CC3: el mismo sobre otra vez (la oficina es idempotente); el marco se rearma con la nota persistida en la fila
     const sobre: SobreParaLaOficina = {
       tipo_de_mesa: 'concepto', client_id: campana.client_id, campana_id: campana.id, version: ultimo.version, dry_run: campana.seco,
-      marco_texto: marcoDelConcepto({ fichas: await fichasDeLaCampana(al, campana.id), ctx, estrategia, briefTexto: brief.texto_md ?? '', version: ultimo.version, nota: texto(ultimo.nota_de_emilio), inicio: campana.fecha_inicio, hoy: ahora.slice(0, 10), anterior: anteriorConCambios(todos, ultimo.version), perfil: await perfilParaLaMesa(al, campana.client_id, 'gran_idea') }), condiciones: condicionesDe(estrategia, await al.formatos()),
+      marco_texto: marcoDelConcepto({ fichas: await fichasDeLaCampana(al, campana.id), ctx, estrategia, briefTexto: brief.texto_md ?? '', version: ultimo.version, nota: texto(ultimo.nota_de_emilio), inicio: campana.fecha_inicio, hoy: ahora.slice(0, 10), anterior: anteriorConCambios(todos, ultimo.version), perfil: await perfilParaLaMesa(al, campana.client_id, 'gran_idea') }), condiciones: condicionesDe(estrategia, await al.formatos()), insumos_del_banco: insumosDelBanco(estrategia),
     }
     return { status: 200, cuerpo: { ya_abierta: true, version: ultimo.version, concepto_id: idDeConcepto(campana.id, ultimo.version), brief_version: brief.version, sobre } }
   }
@@ -412,7 +418,7 @@ export async function conceptoAbrir(al: Almacen, cuerpo: Record<string, unknown>
   await al.insertarConcepto(fila)
   const sobre: SobreParaLaOficina = {
     tipo_de_mesa: 'concepto', client_id: campana.client_id, campana_id: campana.id, version, dry_run: campana.seco,
-    marco_texto: marcoDelConcepto({ fichas: await fichasDeLaCampana(al, campana.id), ctx, estrategia, briefTexto: brief.texto_md ?? '', version, nota, inicio: campana.fecha_inicio, hoy: ahora.slice(0, 10), anterior: anteriorConCambios([...todos, fila], version), perfil: await perfilParaLaMesa(al, campana.client_id, 'gran_idea') }), condiciones: condicionesDe(estrategia, await al.formatos()),
+    marco_texto: marcoDelConcepto({ fichas: await fichasDeLaCampana(al, campana.id), ctx, estrategia, briefTexto: brief.texto_md ?? '', version, nota, inicio: campana.fecha_inicio, hoy: ahora.slice(0, 10), anterior: anteriorConCambios([...todos, fila], version), perfil: await perfilParaLaMesa(al, campana.client_id, 'gran_idea') }), condiciones: condicionesDe(estrategia, await al.formatos()), insumos_del_banco: insumosDelBanco(estrategia),
   }
   return { status: 200, cuerpo: { version, concepto_id: idDeConcepto(campana.id, version), brief_version: brief.version, plazo_mesa_min: plazoMin, sobre } }
 }

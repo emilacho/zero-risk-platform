@@ -49,23 +49,27 @@ export const MAX_LARGO_DE_UNA_VOZ = 600
 
 // ─────────────────────────────────────────────────────────── el público y sus fuentes
 export type TipoDePublico = 'consumo' | 'profesional'
-/** las clases del cerebro donde vive el habla del público (las que lee el perfil por la consulta) */
-export const CLASES_DE_HABLA = ['comentarios', 'resenas', 'mencion', 'foro', 'competidor_comentarios'] as const
-/** la voz que cada TIPO de público necesita, por clase del cerebro: la que falte se declara (ADENDA 2 del T0: sale del TIPO, no del cliente) */
+/** la voz que cada TIPO de público necesita, por clase del cerebro: la que falte se declara (ADENDA 2 del T0: sale del TIPO, no del cliente).
+ *  18-nov · desde #1167 las clases las fija el cerebro (`publico=` en la consulta) y las DECLARA; esta tabla queda solo de respaldo si una respuesta no trae su declaración */
 export const VOZ_POR_TIPO: Readonly<Record<TipoDePublico, ReadonlyArray<string>>> = {
   consumo: ['resenas', 'comentarios', 'mencion', 'competidor_comentarios'],
   profesional: ['resenas', 'comentarios', 'mencion', 'foro'],
 }
-/** las voces que sirven a ESTE tipo de público: las de sus clases (los foros no hablan como el público de consumo, y al revés) */
-export const vocesDelTipo = <V extends Pick<Voz, 'fuente'>>(voces: ReadonlyArray<V>, tipo: TipoDePublico): V[] =>
-  voces.filter((v) => VOZ_POR_TIPO[tipo].some((c) => v.fuente === `cerebro:${c}`))
 /** lo que el cerebro no tiene como clase y el público necesitaría: se DECLARA, no se rellena con otra fuente */
 export const FUENTES_SIN_CLASE: Readonly<Record<TipoDePublico, ReadonlyArray<string>>> = { consumo: [], profesional: ['linkedin'] }
-/** las fuentes que le faltan a ESTE público en lo que el cerebro entregó (agnóstico: solo el tipo y las clases) */
-export function fuentesFaltantes(tipo: TipoDePublico, voces: ReadonlyArray<Pick<Voz, 'fuente'>>): string[] {
+/** lo que el cerebro declaró para ESTE público al consultarlo (`voz_del_publico`): qué clases leyó y qué fuentes no junta todavía */
+export interface DeclaracionDelCerebro { readonly clases: ReadonlyArray<string>; readonly no_junta: ReadonlyArray<string> }
+/** las fuentes que le faltan a ESTE público en lo que el cerebro entregó (agnóstico: solo el tipo y las clases).
+ *  Las clases y lo que no junta salen de la DECLARACIÓN del cerebro. Se cuentan sobre TODAS las páginas leídas (el cerebro no declara faltantes en una lectura por páginas) */
+export function fuentesFaltantes(tipo: TipoDePublico, voces: ReadonlyArray<Pick<Voz, 'fuente'>>, declara?: DeclaracionDelCerebro | null): string[] {
   const hay = new Set(voces.map((v) => v.fuente))
-  return [...VOZ_POR_TIPO[tipo].filter((c) => !hay.has(`cerebro:${c}`)).map((c) => `cerebro:${c}`), ...FUENTES_SIN_CLASE[tipo]]
+  const clases = declara ? declara.clases : VOZ_POR_TIPO[tipo]
+  const noJunta = declara ? declara.no_junta : FUENTES_SIN_CLASE[tipo]
+  return [...clases.filter((c) => !hay.has(`cerebro:${c}`)).map((c) => `cerebro:${c}`), ...noJunta]
 }
+/** 18-nov · en las menciones el portero guarda el @usuario con el guion bajo cambiado por espacio («@viteri rivera»): el @ se omite, pero la segunda
+ *  palabra del usuario quedaba suelta. Se quita también la palabra que sigue a «[usuario omitido]» cuando empieza en minúscula (no es inicio de frase ni signo) */
+export const sinColaDeUsuario = (t: string): string => t.replace(/\[usuario omitido\]\s+(?=\p{Ll})[\p{L}\p{N}._-]+/gu, '[usuario omitido]')
 
 export interface PublicoObjetivo { readonly id: string; readonly nombre: string; readonly tipo: TipoDePublico; readonly geografia: string | null; readonly prioridad: number }
 const lista = (x: unknown): unknown[] => (Array.isArray(x) ? x : [])
@@ -144,7 +148,8 @@ export function vozDelCerebro(x: unknown): VozConId | null {
   if (!x || typeof x !== 'object' || Array.isArray(x)) return null
   const f = x as Record<string, unknown>
   const id = txt(f.ficha_id)
-  const limpio = sinDatosPersonales(txt(f.contenido).replace(/\s+/g, ' ')).texto.slice(0, MAX_LARGO_DE_UNA_VOZ).trim()
+  const sinDatos = sinDatosPersonales(txt(f.contenido).replace(/\s+/g, ' ')).texto
+  const limpio = (txt(f.clase) === 'mencion' ? sinColaDeUsuario(sinDatos) : sinDatos).slice(0, MAX_LARGO_DE_UNA_VOZ).trim()
   if (!id || !normalizar(limpio).trim()) return null
   const cuando = txt(f.fecha_de_la_fuente) || txt(f.fecha)
   return { id, texto: limpio, fuente: `cerebro:${txt(f.clase) || 'ficha'}`, enlace: null, fecha: cuando && !Number.isNaN(Date.parse(cuando)) ? cuando : null, huella: huellaDeVoz(limpio) }

@@ -16,8 +16,9 @@ import { tareaDelIngeniero, type ImagenARedactar } from './prompts'
 import { seccionDeLaCriticaParaLaDireccion, tareaDeLaCritica } from './critica'
 import { fotosALaVista, fotosDeLaLista, REGLA_DE_LOS_ELEMENTOS_REALES, rotuloDeLaFoto } from './fotos-a-la-vista'
 import type { ImagenDelPedido } from '../../imagenes-del-pedido'
+import type { RellenoPendiente } from './de-la-cadena'
 
-export type TipoDeTurno = 'dirigir' | 'aportar' | 'responder' | 'integrar' | 'devolver_citas' | 'redactar_prompts' | 'criticar'
+export type TipoDeTurno = 'dirigir' | 'aportar' | 'responder' | 'integrar' | 'devolver_citas' | 'rellenar_banco' | 'redactar_prompts' | 'criticar'
 
 export interface ContextoDeTurno {
   cliente_nombre: string
@@ -46,7 +47,8 @@ export const DIETA: Record<TipoDePieza, { manual: number; marco: number; plan: n
   carrusel: { manual: 7000, marco: 5000, plan: 3000 },
   kit: { manual: 7000, marco: 5000, plan: 3000 },
   post: { manual: 7000, marco: 5000, plan: 3000 },
-  brief: { manual: 120000, marco: 40000, plan: 120000 },
+  // 19-nov · G4 (CC5 · Lenovo 01:00Z): el marco del brief ENTERO (antes 40 000 cortaba el plan, que iba al final: llegaba el 48,6 %); el plan va aparte, en su lugar propio
+  brief: { manual: 120000, marco: 120000, plan: 120000 },
   concepto: { manual: 120000, marco: 60000, plan: 0 },
   video: { manual: 7000, marco: 5000, plan: 3000 },
   // la reubicación decide fechas: el marco (las filas, plazos y horarios) completo; el manual y el plan solo como contexto
@@ -330,7 +332,26 @@ const HERRAMIENTAS = (tipo: TipoDePieza): string => [
   `Máximo ${profundidadMaximaDe(tipo)} niveles de pedidos encadenados y ${COTAS.MAX_IDAS_VUELTAS_POR_PAREJA} idas y vueltas con un mismo compañero: después decide la dirección creativa con lo que haya.`,
 ].join('\n')
 
-export function armarTarea(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarjeta | undefined; est: EstadoMesa; libro: Aporte[]; c: ContextoDeTurno; pedido?: Aporte; faltanCitas?: string; extra?: string; metodo?: string; /** Sprint 1 · mejora 4 · las imágenes a generar de la pieza integrada (turno del ingeniero de prompts) */ imagenesARedactar?: ImagenARedactar[] }): string {
+/**
+ * 18-nov · RELLENO DEL BANCO (CC1 · la (b) de Lenovo): la dirección ya integró la gran idea; el banco no llega a la cuota del plan en UN capítulo. Escribe solo las que faltan.
+ * No reescribe la integración: lo que escriba se suma al banco detrás de las ideas del equipo (con ids únicos).
+ */
+export function tareaDelRelleno(r: RellenoPendiente | undefined): string {
+  if (!r) return '## Tu turno · DIRECCIÓN CREATIVA: relleno del banco\nNo hay capítulo pendiente: contesta «Sin aporte: el banco ya llega a la cuota».'
+  const total = r.redes.reduce((n, x) => n + x.faltan, 0)
+  return [
+    `## Tu turno · DIRECCIÓN CREATIVA: completa el banco del capítulo «${r.capitulo}»`,
+    `Tu gran idea ya está integrada y no se toca. Al banco de este capítulo le faltan **${total} ideas** para cubrir el calendario del plan:`,
+    ...r.redes.map((x) => `- ${x.red}: faltan ${x.faltan} (la cuota es ${x.esperadas})`),
+    '',
+    `Escribe SOLO las ideas que faltan, una por línea, con el formato del banco y numeradas desde **C${r.prefijo}-I${String(r.desde).padStart(2, '0')}**:`,
+    `- C${r.prefijo}-I${String(r.desde).padStart(2, '0')} · <red> · <formato> · <idea> · mensaje: <mensaje propio> · gancho: <gancho>`,
+    'Cada idea cuenta lo que dice el capítulo en tu gran idea, con un mensaje y un gancho que no repiten los de las ideas que ya están. No inventes datos del cliente: usa lo que está en el tablero y en el marco.',
+    ...(r.ya_estan.length ? ['', '## Ya están en el banco de este capítulo (no las repitas)', ...r.ya_estan.slice(0, 60).map((i) => `- ${i.id} · ${i.red} · ${i.mensaje.slice(0, 140)}`)] : []),
+  ].join('\n')
+}
+
+export function armarTarea(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarjeta | undefined; est: EstadoMesa; libro: Aporte[]; c: ContextoDeTurno; pedido?: Aporte; faltanCitas?: string; extra?: string; metodo?: string; /** Sprint 1 · mejora 4 · las imágenes a generar de la pieza integrada (turno del ingeniero de prompts) */ imagenesARedactar?: ImagenARedactar[]; /** 18-nov · relleno del banco: qué capítulo y cuántas faltan por red (lo calcula de-la-cadena con la lectura de la cadena) */ relleno?: RellenoPendiente }): string {
   if (o.c.tipo === 'reubicacion') return tareaDeReubicacion(o)
   if (o.c.tipo === 'fallidos') return tareaDeFallidos(o)
   if (o.c.tipo === 'banco') return tareaDelBanco(o)
@@ -412,10 +433,14 @@ export function armarTarea(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarj
     ].join('\n'),
     devolver_citas: [
       '## Tu turno · DIRECCIÓN CREATIVA: completa las citas',
-      `Tu integración anterior no citó a: ${o.faltanCitas ?? '(ver abajo)'}. Entrega la pieza completa otra vez (la misma convención) y, en “Citas”, di qué usaste y qué descartaste —con motivo— de cada aporte del tablero.`,
-      CONVENCION_DE_LA_PIEZA(c.tipo, c.video),
-      ...(laCritica ? ['', laCritica] : []),
+      // 18-nov · la devolución NO reescribe la pieza (Emilio 14:00, Lenovo 13:08Z opción 1): el director escribe solo las citas que faltan y el código las pega
+      'Tu integración anterior queda guardada y **no se reescribe**. Al revisar sus citas, el código encontró esto:',
+      o.faltanCitas ?? '- algunas especialidades del equipo no están citadas (revisa cada aporte del tablero)',
+      '',
+      '**Escribe SOLO las líneas de cita que faltan**, una por línea, con el formato de siempre: `A<n> usé: <por qué>` o `A<n> descarté: <por qué>`. Tú decides, con criterio, si cada aporte lo usaste o lo descartaste; el motivo dice algo concreto.',
+      'No repitas la pieza ni agregues nada más: el código pega tus líneas dentro de «## Citas» de tu integración, y una línea nueva de un A<n> reemplaza la que ya tenía.',
     ].join('\n'),
+    rellenar_banco: tareaDelRelleno(o.relleno),
     redactar_prompts: tareaDelIngeniero(o.imagenesARedactar ?? []),
     criticar: tareaDeLaCritica(agente),
   }

@@ -218,7 +218,7 @@ const integracionCon = (libro: Array<{ n: number; de: string; tipo: string }>, c
 
 type Entregas = { briefs: Array<Parameters<PuertoDeLaCadena['entregarBrief']>[0]>; conceptos: Array<Parameters<PuertoDeLaCadena['entregarConcepto']>[0]>; pedidosAlPortero: Array<Record<string, unknown>> }
 
-async function montar(tipo: 'brief' | 'concepto', o: { directorio?: Tarjeta[]; cerebro?: boolean; cadenaFalla?: boolean; plantillaActiva?: boolean; condiciones?: string[]; dry?: boolean } = {}) {
+async function montar(tipo: 'brief' | 'concepto', o: { directorio?: Tarjeta[]; cerebro?: boolean; cadenaFalla?: boolean; plantillaActiva?: boolean; condiciones?: string[]; dry?: boolean; insumos?: SobreDeLaCadena['insumos_del_banco']; extra?: Partial<SobreDeLaCadena> } = {}) {
   const pl = tipo === 'brief' ? BRIEF_MESA : CONCEPTO_MESA
   const M = crearMemoria({ plantilla: pl, config: { familias_activas: [pl.familia] } })
   if (o.plantillaActiva === false) M.plantilla = { plantilla: M.plantilla!.plantilla, activo: false }
@@ -237,7 +237,7 @@ async function montar(tipo: 'brief' | 'concepto', o: { directorio?: Tarjeta[]; c
     }
     M.P.cerebro = cerebro
   }
-  const a = await abrirMesaDeLaCadena(M.P, sobre(tipo, { dry_run: o.dry ?? false, condiciones: o.condiciones ?? [] }), avanzar)
+  const a = await abrirMesaDeLaCadena(M.P, sobre(tipo, { dry_run: o.dry ?? false, condiciones: o.condiciones ?? [], ...(o.insumos ? { insumos_del_banco: o.insumos } : {}), ...(o.extra ?? {}) }), avanzar)
   return { M, MS, hecho, a, id: String(a.cuerpo.encargo_id ?? '') }
 }
 
@@ -298,7 +298,49 @@ describe('la mesa del BRIEF de punta a punta', () => {
     expect(m.M.llamadas.avisos).toHaveLength(0)
   })
 
+  // 19-nov · G4 (CC5 · Lenovo 01:00Z · REVISION-CC6 del agente del brief): el plan llegaba al 48,6 % (iba al final del marco y el marco se cortaba a 40 000)
+  it('🔴 G4 · el brief recibe el plan ENTERO en su lugar propio, UNA vez, y el marco largo entero (sin aviso de recorte)', async () => {
+    const PLAN = 'INICIO-DEL-PLAN\n' + '## Semana a semana\n'.repeat(1) + 'p'.repeat(60_000) + '\n## Hoja de ruta de 12 semanas · FIN-DEL-PLAN'
+    const MARCO = '# Marco de la campaña\n' + 'm'.repeat(50_000) + '\nFIN-DEL-MARCO'
+    const m = await montar('brief', { extra: { plan_texto: PLAN, marco_texto: MARCO } })
+    const { turnos } = await jugar(m)
+    const t = turnos[0].task
+    expect(turnos[0].agente).toBe('campaign-brief-agent')
+    expect(t).toContain(PLAN)
+    expect(t.split('INICIO-DEL-PLAN')).toHaveLength(2)
+    expect(t.indexOf('## 3 · El plan de trabajo')).toBeLessThan(t.indexOf('INICIO-DEL-PLAN'))
+    expect(t).toContain(MARCO)
+    expect(t).not.toMatch(/recort/i)
+    for (const x of turnos) expect(x.task, x.paso).toContain('FIN-DEL-PLAN')
+  })
+  it('🔴 G4 · sin plan en el sobre (un sobre viejo), el pedido usa el plan de las fuentes, como antes', async () => {
+    const m = await montar('brief')
+    const { turnos } = await jugar(m)
+    expect(turnos[0].task).toContain('Plan de 90 días: serie de posts de producto antes de la pauta.')
+  })
+  it('🔴 G4 · h2 de CC6 · un plan en blanco del sobre NO pisa el de las fuentes', async () => {
+    const m = await montar('brief', { extra: { plan_texto: '   ' } })
+    const { turnos } = await jugar(m)
+    expect(turnos[0].task).toContain('Plan de 90 días: serie de posts de producto antes de la pauta.')
+  })
+  it('🔴 G4 · la puerta de la oficina guarda el plan del sobre y rechaza un plan que no es texto', () => {
+    const valido = { ...sobre('brief'), client_id: '11111111-1111-4111-8111-111111111111' } // la puerta exige uuid; CLIENTE de la memoria no lo es
+    expect(validarSobreDeLaCadena(valido).ok).toBe(true)
+    const v = validarSobreDeLaCadena({ ...valido, plan_texto: 'el plan' })
+    expect(v.ok && v.sobre.plan_texto).toBe('el plan')
+    expect(validarSobreDeLaCadena({ ...valido, plan_texto: 42 })).toMatchObject({ ok: false })
+    const sin = validarSobreDeLaCadena(valido)
+    expect(sin.ok && 'plan_texto' in sin.sobre).toBe(false)
+    // h3 de CC6: un plan_texto null (sin plan) se acepta y no se guarda; uno en blanco tampoco se guarda
+    const nulo = validarSobreDeLaCadena({ ...valido, plan_texto: null })
+    expect(nulo.ok).toBe(true)
+    expect(nulo.ok && 'plan_texto' in nulo.sobre).toBe(false)
+    const blanco = validarSobreDeLaCadena({ ...valido, plan_texto: '  ' })
+    expect(blanco.ok && 'plan_texto' in blanco.sobre).toBe(false)
+  })
+
   it('el manual y el plan llegan COMPLETOS al brief (dieta de la cadena) y la dieta de las piezas sigue siendo la de hoy', () => {
+    expect(DIETA.brief.marco).toBeGreaterThanOrEqual(100_000)
     expect(DIETA.carrusel).toEqual({ manual: 7000, marco: 5000, plan: 3000 })
     expect(DIETA.kit).toEqual({ manual: 7000, marco: 5000, plan: 3000 })
     expect(DIETA.brief.manual).toBeGreaterThanOrEqual(100_000)
@@ -577,7 +619,11 @@ describe('09-nov · la entrega de la mesa de CONCEPTO lleva las líneas de idea 
     expect(texto).toContain('## Banco de ideas · líneas de los aportes del equipo')
     const aportes = m.MS.filas.filter((x) => x.encargo_id === m.id && x.tipo === 'aporta')
     expect(aportes.length).toBeGreaterThan(0)
-    for (const a of aportes) expect(texto).toContain(limpia(a.de))
+    // 18-nov · ids únicos: todos escriben C1-I01; el primero lo conserva y los demás entran renumerados (C1-I02, …), con el resto de su línea igual
+    for (const a of aportes) expect(texto).toContain(limpia(a.de).replace(/^- C1-I01 · /, ''))
+    const enTexto = [...texto.matchAll(/^- (C1-I\d{2,}) · instagram · foto · la idea de /gm)].map((x) => x[1])
+    expect(new Set(enTexto).size).toBe(enTexto.length)
+    expect(enTexto).toContain('C1-I01')
     expect(texto).not.toContain('## Mi banco')
   })
   it('cerrada por tope con integración: también lleva las líneas de idea de los aportes', async () => {
@@ -590,5 +636,41 @@ describe('09-nov · la entrega de la mesa de CONCEPTO lleva las líneas de idea 
     const m = await montar('brief')
     await jugar(m, (t) => (t.tipo === 'integrar' ? { texto: '## Insight\nlo que sea\n## Mensaje\nuno' } : undefined))
     expect(m.hecho.briefs[0].texto).toBe('## Insight\nlo que sea\n## Mensaje\nuno')
+  })
+})
+
+// 18-nov · RELLENO DEL BANCO de punta a punta (CC1 · la (b) de Lenovo): el sobre trae la cuota, la dirección rellena UNA vez lo que falta y la cadena lo recibe
+describe('la mesa del CONCEPTO · relleno del banco hasta la cuota', () => {
+  const linea = (id: string, t: string) => `- ${id} · instagram · post · ${t} · mensaje: m ${t} · gancho: g ${t}`
+  const responder = (t: Turno): Dado => t.tipo === 'aportar' ? { texto: linea('C1-I01', `de ${t.agente}`) } : t.tipo === 'rellenar_banco' ? { texto: linea('C1-I03', 'la que faltaba') } : undefined
+
+  it('🔴 cuota 3 y el equipo trae 2: un solo turno de relleno (después de integrar), con lo que falta y desde qué id; se anota con su cabecera y la cadena recibe las 3', async () => {
+    const m = await montar('concepto', { insumos: { fases: [{ clave: 'abrir', semanas: 1 }], redes: [{ red: 'instagram', huecos_por_semana: 3 }] } })
+    const { ultima, turnos } = await jugar(m, responder)
+    const tipos = turnos.map((t) => t.tipo)
+    expect(tipos.filter((x) => x === 'rellenar_banco')).toHaveLength(1)
+    expect(tipos.lastIndexOf('integrar')).toBeLessThan(tipos.indexOf('rellenar_banco'))
+    // el relleno NO dispara otra integración
+    expect(tipos.slice(tipos.indexOf('rellenar_banco'))).not.toContain('integrar')
+    const tarea = turnos.find((t) => t.tipo === 'rellenar_banco')!.task
+    expect(tarea).toContain('«abrir»')
+    expect(tarea).toContain('- instagram: faltan 1 (la cuota es 3)')
+    expect(tarea).toContain('**C1-I03**')
+    const fila = m.MS.filas.filter((x) => x.encargo_id === m.id).find((x) => x.texto.includes('la que faltaba'))!
+    expect(fila).toMatchObject({ tipo: 'aporta', de: 'creative-director-mesa' })
+    expect(fila.texto.startsWith('## Relleno del banco · abrir')).toBe(true)
+    expect(ultima.cuerpo).toMatchObject({ accion: 'cerrado', estado: 'cerrado', resultado_para_la_sala: 'concepto_mesa' })
+    const entregado = m.hecho.conceptos[0].texto ?? ''
+    expect(entregado).toContain(linea('C1-I03', 'la que faltaba'))
+    expect(entregado).toContain(linea('C1-I01', 'de content-creator'))
+    expect(entregado).toContain(linea('C1-I02', 'de design-visual-storyteller'))
+  })
+  it('🔴 sin insumos en el sobre (o con la cuota cumplida) la mesa es la de siempre: ningún turno de relleno', async () => {
+    for (const insumos of [undefined, { fases: [{ clave: 'abrir', semanas: 1 }], redes: [{ red: 'instagram', huecos_por_semana: 2 }] }]) {
+      const m = await montar('concepto', insumos ? { insumos } : {})
+      const { turnos, ultima } = await jugar(m, responder)
+      expect(turnos.map((t) => t.tipo)).not.toContain('rellenar_banco')
+      expect(ultima.cuerpo).toMatchObject({ accion: 'cerrado', estado: 'cerrado' })
+    }
   })
 })

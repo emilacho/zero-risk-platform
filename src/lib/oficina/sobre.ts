@@ -7,6 +7,7 @@
  */
 import { erroresDeCambios, type CambiosDelDueno } from './cambios-del-dueno'
 import { esFechaReal, esHoraReal } from './texto'
+import { TOPE_DEL_TEXTO_DEL_DUENO } from '../limites-de-tamano'
 export const TARGET_STEP_PRODUCIR = 'router.dispatch.brief/parte-listo.producir'
 
 /** r79 · D5 · `fila_id`, `fecha` y `hora` son del calendario (la fila que originó el brief): la entrega los usa para nombrar, fechar y vencer la pieza */
@@ -31,7 +32,7 @@ export function validarSobre(cuerpo: unknown): { ok: true; sobre: Sobre; ignorad
   if (typeof b.brief_id !== 'string' || !RE_BRIEF.test(b.brief_id)) errores.push('`brief_id` inválido')
   if (b.tope_usd !== undefined && !(typeof b.tope_usd === 'number' && b.tope_usd > 0 && b.tope_usd <= TOPE_MAXIMO_DEL_SOBRE_USD)) errores.push(`\`tope_usd\` debe ser un número mayor que 0 y no más de ${TOPE_MAXIMO_DEL_SOBRE_USD}`)
   if (b.familia !== undefined && !(typeof b.familia === 'string' && RE_FAMILIA.test(b.familia))) errores.push('`familia` inválida')
-  if (b.reabrir_causa_corregida !== undefined && !(typeof b.reabrir_causa_corregida === 'string' && b.reabrir_causa_corregida.trim().length >= 1 && b.reabrir_causa_corregida.trim().length <= 300)) errores.push('`reabrir_causa_corregida` debe tener texto (hasta 300 caracteres)')
+  if (b.reabrir_causa_corregida !== undefined && !(typeof b.reabrir_causa_corregida === 'string' && b.reabrir_causa_corregida.trim().length >= 1 && b.reabrir_causa_corregida.trim().length <= TOPE_DEL_TEXTO_DEL_DUENO)) errores.push(`\`reabrir_causa_corregida\` debe tener texto (hasta ${TOPE_DEL_TEXTO_DEL_DUENO} caracteres)`) // 18-nov · G2b «nada se recorta» (CC5): lo que escribe Emilio desde el tablero llega entero, hasta el tope único del texto del dueño (antes 300)
   if (b.cambios_del_dueno !== undefined) errores.push(...erroresDeCambios(b.cambios_del_dueno))
   if (b.fila_id !== undefined && !(typeof b.fila_id === 'string' && RE_BRIEF.test(b.fila_id))) errores.push('`fila_id` inválido')
   if (b.fecha !== undefined && !(typeof b.fecha === 'string' && RE_FECHA.test(b.fecha) && esFechaReal(b.fecha))) errores.push('`fecha` debe ser una fecha real aaaa-mm-dd')

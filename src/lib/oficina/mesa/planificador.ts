@@ -17,10 +17,11 @@
 import { especialistasPertinentes, direccionDe, ingenieroDePrompts } from './directorio'
 import { aporteDePrompts, esAporteDePrompts } from './prompts'
 import { criticaPendiente } from './critica'
-import { idasYVueltas, participacion, pedidosSinContestar, verificarCitas } from './libro'
+import { esRellenoDelBanco, type RellenoPendiente } from './de-la-cadena'
+import { faltanCitasDe, idasYVueltas, participacion, pedidosSinContestar, verificarCitas } from './libro'
 import { COTAS, profundidadMaximaDe, turnosMaximosDe, type Accion, type Aporte, type EstadoMesa, type TipoDePieza } from './tipos'
 
-export interface ContextoDeLaMesa { gasto_usd: number; tope_usd: number; hayImagenGenerada: boolean; /** 17-nov · GO Lenovo · la cota de la mesa (dato de la plantilla): lo gastado por sus turnos y lo permitido (cota × pasadas) */ cota_de_la_mesa?: { gastado: number; permitido: number }; /** 17-nov · T7b · lo que sigue es EXACTO (sale de los pasos de la plantilla, como en el video): la integración final tampoco pasa del TOPE (el motor frena en el tope, no en el techo; pasarlo cortaría el encargo después) */ techo_es_el_tope?: boolean; /** lo que queda por gastar DESPUÉS de la mesa; el calendario no dibuja ni pasa por la jefatura de la pieza: 0 */ reserva_posterior_usd?: number; /** 31-oct · la mesa de concepto: cuántas integraciones mínimas (rondas) antes de dar por buena la pieza; por omisión 1 (las demás mesas) */ rondas_minimas?: number; /** T8 · el tipo de pieza (el video reserva lo del brazo); sin él, carrusel/kit */ tipo?: TipoDePieza; /** 17-nov · «creativos en cada paso» · cuántas RONDAS de aportes tiene la mesa (dato `limites.rondas_de_la_mesa`): hechas esas integraciones, los especialistas ya no aportan ni contestan pedidos; la dirección sí cierra (citas, prompts, pregunta del traductor). Sin él, sin límite de rondas (lo de siempre) */ rondas_max?: number }
+export interface ContextoDeLaMesa { gasto_usd: number; tope_usd: number; hayImagenGenerada: boolean; /** 18-nov · relleno del banco (CC1): el capítulo de la gran idea que no llega a su cuota (null/ausente = nada que rellenar) */ relleno_del_banco?: RellenoPendiente | null; /** 17-nov · GO Lenovo · la cota de la mesa (dato de la plantilla): lo gastado por sus turnos y lo permitido (cota × pasadas) */ cota_de_la_mesa?: { gastado: number; permitido: number }; /** 17-nov · T7b · lo que sigue es EXACTO (sale de los pasos de la plantilla, como en el video): la integración final tampoco pasa del TOPE (el motor frena en el tope, no en el techo; pasarlo cortaría el encargo después) */ techo_es_el_tope?: boolean; /** lo que queda por gastar DESPUÉS de la mesa; el calendario no dibuja ni pasa por la jefatura de la pieza: 0 */ reserva_posterior_usd?: number; /** 31-oct · la mesa de concepto: cuántas integraciones mínimas (rondas) antes de dar por buena la pieza; por omisión 1 (las demás mesas) */ rondas_minimas?: number; /** T8 · el tipo de pieza (el video reserva lo del brazo); sin él, carrusel/kit */ tipo?: TipoDePieza; /** 17-nov · «creativos en cada paso» · cuántas RONDAS de aportes tiene la mesa (dato `limites.rondas_de_la_mesa`): hechas esas integraciones, los especialistas ya no aportan ni contestan pedidos; la dirección sí cierra (citas, prompts, pregunta del traductor). Sin él, sin límite de rondas (lo de siempre) */ rondas_max?: number }
 
 export const techoDe = (tope: number): number => +(tope * COTAS.TECHO_SOBRE_TOPE).toFixed(6)
 const fallosDe = (libro: Aporte[], agente: string): number => libro.filter((a) => a.tipo === 'nota' && a.de === agente && a.texto.startsWith('turno_fallido')).length
@@ -70,7 +71,7 @@ export function siguienteDeLaMesa(est: EstadoMesa, libro: Aporte[], ctx: Context
   const porteroNombre = est.directorio_congelado.find((t) => t.rol === 'portero' && t.activo)?.agente ?? null
   // el texto del ingeniero de prompts sobre la pieza integrada no es un «aporte nuevo» que obligue a integrar otra vez
   const ingeniero = ingenieroDePrompts(est.directorio_congelado, est.tipo)?.agente ?? null
-  const esNuevo = (a: Aporte, ult: Aporte | null): boolean => ['aporta', 'responde', 'material'].includes(a.tipo) && (!ult || a.n > ult.n) && !esAporteDePrompts(a, ingeniero, ult)
+  const esNuevo = (a: Aporte, ult: Aporte | null): boolean => ['aporta', 'responde', 'material'].includes(a.tipo) && (!ult || a.n > ult.n) && !esAporteDePrompts(a, ingeniero, ult) && !(a.tipo === 'aporta' && a.de === dir.agente && esRellenoDelBanco(a.texto))
 
   // 2 · la dirección abre
   if (!libro.some((a) => a.tipo === 'dirige')) {
@@ -130,8 +131,13 @@ export function siguienteDeLaMesa(est: EstadoMesa, libro: Aporte[], ctx: Context
   const pertinentes = especialistasPertinentes(est.directorio_congelado, est.tipo, ctx.hayImagenGenerada, est.condiciones ?? [])
   const v = verificarCitas(ult.texto, libro, pertinentes)
   if (!v.ok && est.devoluciones_por_citas < COTAS.MAX_DEVOLUCIONES_POR_CITAS && fallosDe(libro, dir.agente) < COTAS.REINTENTOS_DE_TURNO) {
-    return { accion: 'turno', agente: dir.agente, tipo: 'devolver_citas', responde_a: ult.id, motivo: 'faltan citas de aportes usados o descartados' }
+    return { accion: 'turno', agente: dir.agente, tipo: 'devolver_citas', responde_a: ult.id, motivo: 'faltan citas de aportes usados o descartados', faltan_citas: faltanCitasDe(v, libro) }
   }
+
+  // 7b · 18-nov · relleno del banco (CC1 · la (b) de Lenovo): con la gran idea integrada y sus citas al día, la dirección completa UN capítulo que no llega a la cuota del plan.
+  //   Un turno por capítulo (de-la-cadena no lo vuelve a pedir) · solo si la cota no se agotó (el paso 3 ya cortó) · si la dirección falla los reintentos, la mesa entrega lo que hay
+  const rp = ctx.relleno_del_banco
+  if (rp && fallosDe(libro, dir.agente) < COTAS.REINTENTOS_DE_TURNO) return { accion: 'turno', agente: dir.agente, tipo: 'rellenar_banco', responde_a: ult.id, motivo: `el banco del capítulo ${rp.capitulo} no llega a la cuota: faltan ${rp.redes.reduce((n, x) => n + x.faltan, 0)}` }
 
   // 8 · Sprint 1 · mejora 4 · la pieza integrada pide imágenes generadas: el ingeniero de prompts traduce el concepto de cada una a la instrucción exacta del modelo
   const ingP = ingenieroPendiente(est, libro, ctx.hayImagenGenerada)

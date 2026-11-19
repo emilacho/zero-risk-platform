@@ -11,6 +11,7 @@ import type { Estado, Paso, Plantilla } from '../tipos'
 import type { ResultadoDePaso } from '../motor'
 import type { AprobacionDePropuestas, PropuestaDeVideo, PropuestasDelVideo } from './propuestas'
 import { ARTEFACTO_PROPUESTAS_IMAGEN, type PropuestaDeImagen, type PropuestasDeImagen } from '../mesa/propuestas-imagen'
+import { TOPE_DEL_TEXTO_DEL_DUENO } from '../../limites-de-tamano'
 
 /** la función de código del paso (registrada en `plantilla.ts`) */
 export const FUNCION_APROBAR_PROPUESTAS = 'aprobar_propuestas'
@@ -18,7 +19,8 @@ export const FUNCION_APROBAR_PROPUESTAS = 'aprobar_propuestas'
 export const ARTEFACTO_APROBACION = 'aprobacion_propuestas'
 /** el tipo de turno mientras el encargo espera al dueño (el vigía no lo da por muerto; el flujo termina sin error y despierta el tablero) */
 export const TURNO_DEL_DUENO = 'dueno'
-export const OBSERVACIONES_MAX = 2000
+// 18-nov · G2b «nada se recorta» (CC5): lo que escribe Emilio desde el tablero llega entero, hasta el tope único del texto del dueño (antes 2000)
+export const OBSERVACIONES_MAX = TOPE_DEL_TEXTO_DEL_DUENO
 
 export type DecisionDelDueno =
   | { decision: 'aprobar'; ronda: number; propuesta_id: string }

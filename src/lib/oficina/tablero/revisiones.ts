@@ -4,6 +4,7 @@
  */
 import { rechazo, textoEntre, UUID, type Fila, type Manejador } from './comun'
 import { firmarConCambios } from './firmar-con-cambios'
+import { TOPE_DEL_TEXTO_DEL_DUENO } from '../../limites-de-tamano'
 
 /** tipos de revisión que el tablero sabe resolver · aprobar=approved · rechazar=rejected (la bandeja solo admite pending/approved/rejected/edited) */
 export const TIPOS_RESOLUBLES = ['confirm_competitor_list', 'editor_escalation', 'plan_con_pendientes'] as const
@@ -17,8 +18,8 @@ export const revisionResolver: Manejador = async ({ db, ahora }, { cuerpo, revie
   if (typeof cuerpo.hitl_id !== 'string' || !UUID.test(cuerpo.hitl_id)) return rechazo(400, 'entrada_invalida', '`hitl_id` debe ser un uuid')
   if (cuerpo.decision !== 'aprobar' && cuerpo.decision !== 'rechazar') return rechazo(400, 'entrada_invalida', '`decision` debe ser aprobar o rechazar')
   const decision: 'aprobar' | 'rechazar' = cuerpo.decision
-  const comentario = cuerpo.comentario === undefined || cuerpo.comentario === null || cuerpo.comentario === '' ? null : textoEntre(cuerpo.comentario, 1, 1000)
-  if (cuerpo.comentario && !comentario) return rechazo(400, 'entrada_invalida', '`comentario` debe tener hasta 1000 caracteres')
+  const comentario = cuerpo.comentario === undefined || cuerpo.comentario === null || cuerpo.comentario === '' ? null : textoEntre(cuerpo.comentario, 1, TOPE_DEL_TEXTO_DEL_DUENO) // 18-nov · G2b «nada se recorta» (CC5): lo que escribe Emilio desde el tablero llega entero, hasta el tope único del texto del dueño (antes 1000)
+  if (cuerpo.comentario && !comentario) return rechazo(400, 'entrada_invalida', `\`comentario\` debe tener hasta ${TOPE_DEL_TEXTO_DEL_DUENO} caracteres`)
   const toca = { hitl_id: cuerpo.hitl_id, comentario }
   if (decision === 'rechazar' && !comentario) return rechazo(400, 'falta_el_comentario', 'al rechazar hace falta decir por qué', toca)
   const r = await db.from('hitl_queue').select('id, type, status, client_id').eq('id', cuerpo.hitl_id).limit(1)

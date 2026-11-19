@@ -84,6 +84,10 @@ export const PUEDEN_NOMBRARLAS = [
   /^src\/lib\/planeacion\/__tests__\/(brazo-cerebro-carpeta|mesa-de-analisis-ruta)\.test\.ts$/,
   // 28-oct · LA MESA: el tablero del equipo MUESTRA al compañero la lista de fotos propias del cliente (solo LECTURA de las columnas de etiqueta ya cargadas); no escribe nada
   /^src\/lib\/oficina\/mesa\/pedidos\.ts$/,
+  // 19-nov · LA MESA CREATIVA DEL MANUAL VE LAS FOTOS (n8n `ssLtwYPt7zxuvnM2`, vivo `c745d997`): el nodo LEE `etiqueta_confianza` (orden) y `que_muestra` (rótulo) de las fotos propias, como la oficina; no escribe nada.
+  // La copia versionada de sus 2 nodos y su prueba (base falsa; no toca la real)
+  /^scripts\/ops\/oficina-marketing\/vivo\/ssLtwYPt7zxuvnM2-mesa-creativa-ve-las-fotos\.json$/,
+  /^__tests__\/flujos-oficina-marketing-manual-ve-las-fotos\.test\.ts$/,
   /^src\/app\/api\/brain\/portero\//,
   // 14-oct · EL PORTERO QUE ALIMENTA (firma de Emilio 14-oct): el MISMO portero del cerebro, en su propia carpeta (fuera de `src/lib/cerebro/` porque la vigilancia de la condición 1 prohíbe
   // partir textos del PEDIDO en esa carpeta; aquí se filtra material raspado, no el pedido). Escribe `cerebro_fichas`/`cerebro_ingresos` y las 2 tablas nuevas de su migración (SIN APLICAR).
@@ -148,6 +152,9 @@ export const PUEDEN_NOMBRARLAS = [
   /^src\/lib\/oficina\/mesa\/fotos-a-la-vista\.ts$/,
   /^src\/lib\/oficina\/__tests__\/mesa-ve-las-fotos\.test\.ts$/,
   /^src\/lib\/oficina\/__fixtures__\/mesa-reel-olon-57101e2a-fotos-real\.json$/,
+  // 19-nov · G2c (CC5): copias del flujo VIVO del manual (ensayo de G2c, las aplica CC7); desde c745d997 (CC2) la mesa creativa del manual LEE
+  // `etiqueta_confianza` y `que_muestra` de las fotos del cliente para ponerlas a la vista. Solo SELECT: el flujo no escribe esas columnas
+  /^scripts\/worker-staging\/g2c-enteros\/(vivo|nuevo)\/ssLtwYPt7zxuvnM2\.json$/,
   // 17-nov · Sprint 3 · T1b (decisión Lenovo B · persona real solo con permiso registrado): la sala de video LEE `con_personas` de las fotos propias que ya trae
   //   `fuentes` para pedir permiso; no escribe ni consulta el cerebro. Solo la regla pura y su prueba (bases falsas)
   /^src\/lib\/oficina\/video\/permisos\.ts$/,
