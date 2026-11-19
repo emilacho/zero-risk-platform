@@ -20,12 +20,13 @@ const AsyncFunction = Object.getPrototypeOf(async function () { /* */ }).constru
 type Fila = Record<string, unknown>
 const foto = (n: number, extra: Fila = {}): Fila => ({ id: `f-${n}`, url: `https://almacen.test/client-social-images/c-1/propio/f-${n}.jpg`, estado: 'ok', owner_role: 'propio', duplicado_de: null, etiqueta_confianza: 'media', que_muestra: `la foto ${n}`, ...extra })
 
-async function preparar(o: { filas?: Fila[]; falla?: boolean; grounding?: Record<string, unknown>; draft?: Record<string, unknown> } = {}) {
+async function preparar(o: { filas?: Fila[]; falla?: boolean; respuesta?: unknown; grounding?: Record<string, unknown>; draft?: Record<string, unknown> } = {}) {
   const lecturas: string[] = []
   const helpers = {
     httpRequest: async (r: { url: string; method: string }) => {
       lecturas.push(`${r.method} ${r.url}`)
       if (o.falla) throw new Error('base caída')
+      if ('respuesta' in o) return o.respuesta
       return o.filas ?? []
     },
   }
@@ -97,6 +98,16 @@ describe('la mesa creativa del manual ve las fotos (código vivo)', () => {
     expect(body!.images).toBeUndefined()
     expect(body!.task).toContain('No se pudieron leer las fotos del cliente')
   })
+
+  // m9 de CC6: una respuesta que no es lista (un error en cuerpo 200, un objeto) es «no se pudieron leer», nunca «no tiene fotos»
+  for (const respuesta of [{ message: 'JWT expired' }, null, 'texto', { data: [] }]) {
+    it(`la base contesta algo que no es una lista (${JSON.stringify(respuesta)}): se declara «no se pudieron leer»`, async () => {
+      const { body } = await preparar({ respuesta })
+      expect(body!.images).toBeUndefined()
+      expect(body!.task).toContain('No se pudieron leer las fotos del cliente')
+      expect(body!.task).not.toContain('todavía no tiene fotos propias')
+    })
+  }
 
   it('la evidencia y las partes creativas van ENTERAS (sin el tope viejo de 6 500)', async () => {
     const largo = (k: string) => `${k}:${'x'.repeat(30000)}:FIN-${k}`
