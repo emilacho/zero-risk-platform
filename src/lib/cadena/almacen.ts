@@ -44,6 +44,8 @@ export interface Campana {
   reemplaza_a: string | null
   /** 19-nov · VARIAS CAMPAÑAS POR CLIENTE (firma de Emilio): la campaña que nace con su llave es independiente de las demás; sin llave (null) nace del plan, como siempre (una por plan · una viva por cliente) */
   llave_de_campana?: string | null
+  /** 19-nov · el NOMBRE de la campaña (lo lleva el botón «Flujo de la Campaña»): se pone al abrirla; sin valor, la campaña no tiene nombre todavía */
+  nombre_de_campana?: string | null
   seco: boolean
 }
 

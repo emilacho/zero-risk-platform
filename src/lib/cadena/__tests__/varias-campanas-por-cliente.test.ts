@@ -12,7 +12,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { describe, it, expect } from 'vitest'
 import { abrirCampana } from '../index'
-import { leerLlaveDeCampana, LARGO_DE_LLAVE, sobreDeReintento } from '../campanas'
+import { leerLlaveDeCampana, leerNombreDeCampana, LARGO_DE_LLAVE, LARGO_DE_NOMBRE, sobreDeReintento } from '../campanas'
 import { AlmacenMemoria } from '../__fixtures__/almacen-memoria'
 import { clienteA, contextoDe } from '../__fixtures__/clientes'
 import type { Campana } from '../almacen'
@@ -132,6 +132,41 @@ describe('varias campañas · con llave, nace al lado', () => {
   })
 })
 
+describe('varias campañas · el nombre de la campaña (lo lleva el botón «Flujo de la Campaña»)', () => {
+  it('🔴 se guarda al abrir, con llave o sin llave; sin pedirlo, la campaña queda sin nombre', async () => {
+    const al = almacen()
+    const a = idDe(await abrir(al, { nombre_de_campana: '  Impulso del producto estrella  ' }))
+    const b = idDe(await abrir(al, { llave_de_campana: 'k1', nombre_de_campana: 'Lanzamiento de temporada' }))
+    const c = idDe(await abrir(al, { llave_de_campana: 'k2' }))
+    expect(camp(al, a).nombre_de_campana).toBe('Impulso del producto estrella')
+    expect(camp(al, b).nombre_de_campana).toBe('Lanzamiento de temporada')
+    expect(camp(al, c).nombre_de_campana ?? null).toBeNull()
+  })
+  it('🔴 «ya abierta» y retomar NO cambian el nombre (solo cuenta al nacer)', async () => {
+    const al = almacen()
+    const b = idDe(await abrir(al, { llave_de_campana: 'k1', nombre_de_campana: 'Primero' }))
+    await abrir(al, { llave_de_campana: 'k1', nombre_de_campana: 'Otro' })
+    await abrir(al, { campana_id: b, nombre_de_campana: 'Otro más' })
+    expect(camp(al, b).nombre_de_campana).toBe('Primero')
+  })
+  it('🔴 un nombre mal formado no escribe nada (400): no es texto, varias líneas o más largo que el tope', async () => {
+    const al = almacen(); const antes = foto(al)
+    for (const v of [7, ['x'], 'dos\nlíneas', 'con\ttab', 'x'.repeat(LARGO_DE_NOMBRE + 1)]) {
+      const r = await abrir(al, { llave_de_campana: 'k1', nombre_de_campana: v })
+      expect(r.status, JSON.stringify(v)).toBe(400)
+      expect(r.cuerpo).toMatchObject({ code: 'E-NOMBRE-DE-CAMPANA' })
+    }
+    expect(foto(al)).toBe(antes)
+  })
+  it('🔴 la regla del nombre: recorta los lados, acepta tildes y signos, vacío es «sin nombre»', () => {
+    expect(leerNombreDeCampana(undefined)).toBeNull()
+    expect(leerNombreDeCampana('')).toBeNull()
+    expect(leerNombreDeCampana('  Firmas para limpiar la playa · 2027  ')).toBe('Firmas para limpiar la playa · 2027')
+    expect(leerNombreDeCampana('x'.repeat(LARGO_DE_NOMBRE))).toBe('x'.repeat(LARGO_DE_NOMBRE))
+    expect(leerNombreDeCampana('   ')).toBe(false)
+  })
+})
+
 describe('varias campañas · con campana_id se retoma ESA campaña', () => {
   it('🔴 el sobre del reintento de la campaña con llave la retoma a ELLA, no a la del plan', async () => {
     const al = almacen()
@@ -202,11 +237,13 @@ describe('varias campañas · la base', () => {
     expect(M).toContain("CREATE UNIQUE INDEX IF NOT EXISTS cadena_campanas_una_viva_por_cliente ON public.cadena_campanas (client_id, seco) WHERE estado NOT IN ('cerrada','reemplazada') AND llave_de_campana IS NULL;")
     expect(M).toContain('CREATE UNIQUE INDEX IF NOT EXISTS cadena_campanas_una_por_llave ON public.cadena_campanas (client_id, seco, llave_de_campana) WHERE llave_de_campana IS NOT NULL;')
     expect(M).toMatch(/IF n <> 3 THEN RAISE EXCEPTION/)
-    expect(M).toMatch(/WHERE llave_de_campana IS NOT NULL\) THEN\s+RAISE EXCEPTION 'llave_de_campana: una campaña que ya existía tiene llave'/)
+    expect(M).toContain('ALTER TABLE public.cadena_campanas ADD COLUMN IF NOT EXISTS nombre_de_campana text;')
+    expect(M).toMatch(/WHERE llave_de_campana IS NOT NULL OR nombre_de_campana IS NOT NULL\) THEN\s+RAISE EXCEPTION 'llave_de_campana: una campaña que ya existía tiene llave o nombre'/)
     expect(M).not.toMatch(/\b(DELETE|TRUNCATE|DROP TABLE|UPDATE)\b/i)
   })
   it('🔴 la reversa: se niega si hay campañas con llave y no borra ninguna; vuelve los dos únicos de siempre', () => {
-    expect(R).toMatch(/IF EXISTS \(SELECT 1 FROM public\.cadena_campanas WHERE llave_de_campana IS NOT NULL\) THEN\s+RAISE EXCEPTION/)
+    expect(R).toMatch(/IF EXISTS \(SELECT 1 FROM public\.cadena_campanas WHERE llave_de_campana IS NOT NULL OR nombre_de_campana IS NOT NULL\) THEN\s+RAISE EXCEPTION/)
+    expect(R).toContain('ALTER TABLE public.cadena_campanas DROP COLUMN IF EXISTS nombre_de_campana;')
     expect(R.indexOf('RAISE EXCEPTION')).toBeLessThan(R.indexOf('DROP INDEX'))
     expect(R).toContain("CREATE UNIQUE INDEX cadena_campanas_una_viva_por_cliente ON public.cadena_campanas (client_id, seco) WHERE estado NOT IN ('cerrada','reemplazada');")
     expect(R).toContain('ALTER TABLE public.cadena_campanas ADD CONSTRAINT cadena_campanas_un_plan UNIQUE (client_id, plan_id);')

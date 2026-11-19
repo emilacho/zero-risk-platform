@@ -3,13 +3,17 @@
 --   · columna `llave_de_campana`: la campaña que nace con su llave es independiente. Sin llave (NULL) nace del plan, como siempre;
 --     todas las campañas que ya existen quedan sin llave y nada de lo suyo cambia;
 --   · los dos únicos de siempre (un plan, una campaña · una viva por cliente) pasan a valer SOLO para las campañas sin llave;
---   · un único nuevo (cliente, seco, llave): la idempotencia de la apertura de una campaña nueva.
+--   · un único nuevo (cliente, seco, llave): la idempotencia de la apertura de una campaña nueva;
+--   · columna `nombre_de_campana` (Lenovo 20:46Z): el nombre que lleva el botón «Flujo de la Campaña»; se pone al abrir; las de hoy quedan sin nombre.
 -- Reversa: supabase/reversas/202611192130_cadena_campanas_llave_de_campana_REVERSA.sql
 BEGIN;
 
 ALTER TABLE public.cadena_campanas ADD COLUMN IF NOT EXISTS llave_de_campana text;
 COMMENT ON COLUMN public.cadena_campanas.llave_de_campana IS
   'VARIAS CAMPAÑAS (19-nov): la llave con que nació una campaña independiente. NULL = nació del plan (una por plan y una viva por cliente, entre las sin llave).';
+ALTER TABLE public.cadena_campanas ADD COLUMN IF NOT EXISTS nombre_de_campana text;
+COMMENT ON COLUMN public.cadena_campanas.nombre_de_campana IS
+  'VARIAS CAMPAÑAS (19-nov): el nombre de la campaña (lo muestra el botón «Flujo de la Campaña»). Se pone al abrirla; NULL = todavía sin nombre.';
 
 -- los dos únicos de siempre, solo entre las campañas sin llave
 ALTER TABLE public.cadena_campanas DROP CONSTRAINT IF EXISTS cadena_campanas_un_plan;
@@ -32,8 +36,8 @@ BEGIN
   IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'cadena_campanas_un_plan' AND conrelid = 'public.cadena_campanas'::regclass) THEN
     RAISE EXCEPTION 'llave_de_campana: el único viejo (constraint) sigue en pie';
   END IF;
-  IF EXISTS (SELECT 1 FROM public.cadena_campanas WHERE llave_de_campana IS NOT NULL) THEN
-    RAISE EXCEPTION 'llave_de_campana: una campaña que ya existía tiene llave';
+  IF EXISTS (SELECT 1 FROM public.cadena_campanas WHERE llave_de_campana IS NOT NULL OR nombre_de_campana IS NOT NULL) THEN
+    RAISE EXCEPTION 'llave_de_campana: una campaña que ya existía tiene llave o nombre';
   END IF;
 END $$;
 

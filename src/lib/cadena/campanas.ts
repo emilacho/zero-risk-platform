@@ -41,6 +41,9 @@ export async function abrirCampana(al: Almacen, cuerpo: Record<string, unknown>,
   if (campanaPedida === null && !(cuerpo.campana_id === undefined || cuerpo.campana_id === null || cuerpo.campana_id === '')) return err(400, 'E-CAMPANA-ID', 'campana_id debe ser un texto')
   const llavePedida = campanaPedida ? null : leerLlaveDeCampana(cuerpo.llave_de_campana)
   if (llavePedida === false) return err(400, 'E-LLAVE-DE-CAMPANA', `llave_de_campana debe ser un texto de 1 a ${LARGO_DE_LLAVE} letras, números, «-», «_», «.» o «:»`)
+  // 19-nov · el nombre se pone al ABRIR (Lenovo 20:46Z): solo cuenta cuando nace una campaña; retomar o «ya abierta» no lo cambian
+  const nombrePedido = leerNombreDeCampana(cuerpo.nombre_de_campana)
+  if (nombrePedido === false) return err(400, 'E-NOMBRE-DE-CAMPANA', `nombre_de_campana debe ser un texto de 1 a ${LARGO_DE_NOMBRE} caracteres, en una sola línea`)
   const noAut = await autorizarLlamada(al, cuerpo, clientId)
   if (noAut) return noAut
   const cerrada = await compuerta(al, clientId, s.seco)
@@ -105,6 +108,7 @@ export async function abrirCampana(al: Almacen, cuerpo: Record<string, unknown>,
     ...(topeInicial !== null ? { tope_gasto_usd: topeInicial } : {}),
     sala_ref: typeof cuerpo.sala_ref === 'object' && cuerpo.sala_ref ? (cuerpo.sala_ref as Record<string, unknown>) : {}, reemplaza_a: reemplaza, seco: s.seco,
     ...(llavePedida ? { llave_de_campana: llavePedida } : {}),
+    ...(nombrePedido ? { nombre_de_campana: nombrePedido } : {}),
   }) } catch (e) {
     const duplicado = (e as { code?: string })?.code === '23505' || /23505|duplicate key|un_plan/i.test(String((e as Error)?.message ?? ''))
     const ganadora = duplicado ? (llavePedida ? await al.campanaPorLlave(clientId, llavePedida, s.seco) : await al.campanaPorPlan(clientId, plan.plan_id, s.seco)) : null
@@ -126,6 +130,16 @@ export function leerLlaveDeCampana(v: unknown): string | null | false {
   if (typeof v !== 'string') return false
   const t = v.trim()
   return t.length >= 1 && t.length <= LARGO_DE_LLAVE && /^[A-Za-z0-9._:-]+$/.test(t) ? t : false
+}
+
+/** 19-nov · el nombre de una campaña: sin valor = null · válido = el texto sin espacios a los lados, de una línea, sin caracteres de control · inválido = false */
+export const LARGO_DE_NOMBRE = 120
+export function leerNombreDeCampana(v: unknown): string | null | false {
+  if (v === undefined || v === null || v === '') return null
+  if (typeof v !== 'string') return false
+  const t = v.trim()
+  // eslint-disable-next-line no-control-regex
+  return t.length >= 1 && t.length <= LARGO_DE_NOMBRE && !/[\u0000-\u001f\u007f]/.test(t) ? t : false
 }
 
 /**
