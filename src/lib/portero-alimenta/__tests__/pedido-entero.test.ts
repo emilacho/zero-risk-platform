@@ -68,7 +68,7 @@ describe('ADENDA 1 · techo que rechaza, nunca corta', () => {
   it('🔴 un campo de más del tope se rechaza con su nombre, su largo y el tope; justo el tope entra', () => {
     const r = normalizarPedido({ client_id: CL, dry_run: true, pedido_por: { oficina: 'x', agente: 'y' }, para: 'z', huecos: [{ objetivo: 'a', motivo: 'm'.repeat(TOPE_DE_LO_ESCRITO + 1) }] })
     expect(r).toMatchObject({ status: 400, body: { error: 'pedido_demasiado_largo' } })
-    const det = String((r as { body: { detalle: string } }).body.detalle)
+    const det = String((r as unknown as { body: { detalle: string } }).body.detalle)
     expect(det).toContain('«huecos[0].motivo»')
     expect(det).toContain(String(TOPE_DE_LO_ESCRITO + 1))
     expect(det).toContain(`el tope es ${TOPE_DE_LO_ESCRITO}`)
