@@ -313,3 +313,33 @@ describe('entrega 2 · un público que vuelve no hereda marcas; «mismo_que» nu
     expect(r).toMatchObject({ ok: true, vigente: false, aplicada: { tipo: 'mismo_que' } })
   })
 })
+
+// 19-nov · 🟡 CC6 #1211 ADENDA 1 · idempotencia (regla 3 del lazo coherente): la MISMA decisión dos veces deja lo mismo
+describe('idempotencia · la misma decisión dos veces', () => {
+  for (const [tipo, marca, vigenteEsperado] of [
+    ['mismo_que', 'fusionado_en', false],
+    ['dentro_de', 'segmento_de', true],
+    ['posible_duplicado_de', 'posible_duplicado_de', true],
+  ] as const) {
+    it(`🔴 «X ${tipo} P1» repetido: X sigue con ${marca} = P1, vigente ${vigenteEsperado}, sin aviso, y la fila no cambia en la 2.ª`, async () => {
+      const { db, filas } = base({ filas: [vigente(P1, 'Turistas de playa')] })
+      const decision = { [tipo]: P1, porque: 'mismo público' }
+      const r1 = await guardarPublico(db, { client_id: CLIENTE, fila: publico('Turista playero'), decision, modo: 'upsert' })
+      const tras1 = { ...filas.find((f) => f.audience_segment === 'Turista playero') }
+      const r2 = await guardarPublico(db, { client_id: CLIENTE, fila: publico('Turista playero'), decision, modo: 'upsert' })
+      const tras2 = filas.find((f) => f.audience_segment === 'Turista playero')
+      expect(r1).toMatchObject({ ok: true, vigente: vigenteEsperado, aviso: null })
+      expect(r2).toMatchObject({ ok: true, id: r1.ok ? r1.id : '', vigente: vigenteEsperado, aviso: null })
+      expect(tras2).toMatchObject({ [marca]: P1 })
+      expect(tras2).toEqual(tras1)
+      expect(filas).toHaveLength(2)
+    })
+  }
+  it('🟢 «X mismo_que P1» cuando X está absorbido en OTRO destino (P3): sí cambia, baja a duda y se dice que se deshizo', async () => {
+    const { db, filas } = base({ filas: [vigente(P1, 'Turistas de playa'), vigente(P3, 'Costa'), { ...vigente(P2, 'Turista playero'), fusionado_en: P3 }] })
+    const r = await guardarPublico(db, { client_id: CLIENTE, fila: publico('Turista playero'), decision: { mismo_que: P1, porque: 'p' }, modo: 'upsert' })
+    expect(r).toMatchObject({ ok: true, vigente: true, aplicada: { tipo: 'posible_duplicado_de', id: P1 } })
+    expect((r as { aviso: string }).aviso).toContain(`se deshizo la fusión de «Turista playero» (estaba absorbido en ${P3})`)
+    expect(filas.find((f) => f.id === P2)).toMatchObject({ fusionado_en: null, posible_duplicado_de: P1 })
+  })
+})

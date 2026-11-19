@@ -84,7 +84,10 @@ export async function guardarPublico(
       const r = await db.from(TABLA).select('id, fusionado_en').eq('client_id', p.client_id).eq('audience_segment', nombre).maybeSingle()
       const ya = (r.data ?? null) as { id?: unknown; fusionado_en?: unknown } | null
       if (r.error) d = sinTocar(`no se pudo ver si el público «${nombre}» ya existe: ${r.error.message}`, d.tipo)
-      else if (ya) {
+      else if (ya && d.tipo === 'mismo_que' && typeof ya.fusionado_en === 'string' && ya.fusionado_en.toLowerCase() === d.id) {
+        // 🟡 CC6 #1211 ADENDA 1 · idempotencia: ya está absorbido en ESE destino = lo mismo que ya está → no se toca (sigue absorbido, sin bajada ni aviso)
+        d = null
+      } else if (ya) {
         // condición 2 de CC6 (#1208): «mismo_que» sobre otra fila ya existente sería un UPDATE de fusión (trozos viejos en el cerebro + re-embebido) → queda en duda
         if (d.tipo === 'mismo_que') {
           avisos.push(`el público «${nombre}» ya existe; no se absorbe al actualizarlo: queda como posible duplicado de ${d.id}`)
