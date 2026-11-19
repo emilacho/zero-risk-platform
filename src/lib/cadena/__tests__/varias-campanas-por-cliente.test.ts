@@ -195,24 +195,34 @@ describe('varias campañas · con campana_id se retoma ESA campaña', () => {
     expect(al.campanas).toHaveLength(1)
   })
   it('🔴 una campaña que no existe, de otro cliente, de otro plan o de otro modo: 409 y no se escribe nada', async () => {
-    const al = almacen([{ plan_id: 'plan-1', fecha: '2026-10-08' }, { plan_id: 'plan-2', fecha: '2026-10-10' }])
-    const a = idDe(await abrir(al, { plan_id: 'plan-1' }))
-    const b = idDe(await abrir(al, { plan_id: 'plan-1', llave_de_campana: 'k1' }))
-    const casos: Array<[string, Record<string, unknown>, (al: AlmacenMemoria) => void]> = [
-      ['no existe', { campana_id: 'camp-999' }, () => {}],
-      ['otro plan', { campana_id: b, plan_id: 'plan-2' }, () => {}],
-      ['otro cliente', { campana_id: b }, (x) => { camp(x, b).client_id = OTRO }],
-      ['otro modo', { campana_id: b }, (x) => { camp(x, b).seco = false }],
+    // 🟡 de CC7 (k5 y k10): cada caso arma SU almacén y SU campaña, así cada regla (cliente, plan, modo) tiene que caer sola
+    const preparar = async () => {
+      const al = almacen([{ plan_id: 'plan-1', fecha: '2026-10-08' }, { plan_id: 'plan-2', fecha: '2026-10-10' }])
+      const a = idDe(await abrir(al, { plan_id: 'plan-1' }))
+      const b = idDe(await abrir(al, { plan_id: 'plan-1', llave_de_campana: 'k1' }))
+      return { al, a, b }
+    }
+    const casos: Array<[string, (b: string) => Record<string, unknown>, (al: AlmacenMemoria, b: string) => void]> = [
+      ['no existe', () => ({ campana_id: 'camp-999', plan_id: 'plan-1' }), () => {}],
+      ['otro plan', (b) => ({ campana_id: b, plan_id: 'plan-2' }), () => {}],
+      ['otro cliente', (b) => ({ campana_id: b, plan_id: 'plan-1' }), (x, b) => { camp(x, b).client_id = OTRO }],
+      ['otro modo', (b) => ({ campana_id: b, plan_id: 'plan-1' }), (x, b) => { camp(x, b).seco = false }],
     ]
-    for (const [nombre, extra, preparar] of casos) {
-      preparar(al)
+    for (const [nombre, pedir, cambiar] of casos) {
+      const { al, a, b } = await preparar()
+      cambiar(al, b)
       const antes = foto(al)
-      const r = await abrir(al, extra)
+      const r = await abrir(al, pedir(b))
       expect(r.status, nombre).toBe(409)
       expect(r.cuerpo, nombre).toMatchObject({ code: 'E-CAMPANA-NO-COINCIDE' })
       expect(foto(al), nombre).toBe(antes)
+      expect(camp(al, a).estado, nombre).toBe('abierta')
     }
-    expect(camp(al, a).estado).toBe('abierta')
+    // control: la misma campaña, con cliente, plan y modo que coinciden, SÍ se retoma (el 409 de arriba lo da solo la regla cambiada)
+    const { al, b } = await preparar()
+    const r = await abrir(al, { campana_id: b, plan_id: 'plan-1' })
+    expect(r.status).toBe(200)
+    expect(idDe(r)).toBe(b)
   })
   it('🔴 un campana_id que no es texto: 400, sin escribir', async () => {
     const al = almacen(); await abrir(al); const antes = foto(al)
