@@ -181,9 +181,13 @@ describe('los pasos: rastro, una vez por corrida', () => {
   })
   it('en días con corrida corren todos; en días sin corrida solo los de redes (no gastan)', () => {
     const env = { PORTERO_CORRIDAS_CADA_DIAS: '2', PORTERO_CORRIDAS_CADA_DIAS_HASTA: '2026-11-25' }
-    expect(pasosDelDia(new Date('2026-11-04T00:05:00Z'), env)).toEqual(PASOS)
+    // los comentarios de la industria (encargo 6) tienen su propio interruptor, apagado por omisión
+    const sinIndustria = PASOS.filter((p) => p !== 'comentarios_industria')
+    expect(pasosDelDia(new Date('2026-11-04T00:05:00Z'), env)).toEqual(sinIndustria)
     expect(pasosDelDia(new Date('2026-11-05T00:05:00Z'), env)).toEqual(PASOS_DE_REDES)
-    expect(pasosDelDia(new Date('2026-11-26T00:05:00Z'), env)).toEqual(PASOS)
+    expect(pasosDelDia(new Date('2026-11-26T00:05:00Z'), env)).toEqual(sinIndustria)
+    expect(pasosDelDia(new Date('2026-11-26T00:05:00Z'), { ...env, PORTERO_COMENTARIOS_INDUSTRIA: 'on' })).toEqual(PASOS)
+    expect(pasosDelDia(new Date('2026-11-05T00:05:00Z'), { ...env, PORTERO_COMENTARIOS_INDUSTRIA: 'on' })).toEqual(PASOS_DE_REDES)
   })
   it('el interruptor apaga solo las fuentes nuevas (por omisión encendidas)', () => {
     expect(fuentesNuevasEncendidas({})).toBe(true); expect(fuentesNuevasEncendidas({ PORTERO_FUENTES_NUEVAS: 'off' })).toBe(false)
@@ -227,7 +231,9 @@ describe('el paso de punta a punta (actor falso → ficha en el cerebro)', () =>
     expect(t.cerebro_fichas[0]).toMatchObject({ clase: 'horas_de_mas_gente', alcance: 'cliente', propiedad: 'propia' })
   })
   it('comentarios IG/FB: lee lo nuevo, y luego fichea TODO lo guardado de la competencia; el costo de leer suma al paso', async () => {
-    const t = { ...tablas(), cerebro_comentarios_competencia: [{ client_id: ZR, red: 'instagram', cuenta: 'veseind.sa', post_ref: 'P1', post_url: 'https://www.instagram.com/p/P1/', comentario_ref: 'a', texto: 'Muy buen servicio de recarga de extintores', me_gusta: 1, fecha_comentario: '2026-10-30T10:00:00Z' }] }
+    const t = { ...tablas(), cerebro_comentarios_competencia: [{ client_id: ZR, red: 'instagram', cuenta: 'veseind.sa', post_ref: 'P1', post_url: 'https://www.instagram.com/p/P1/', comentario_ref: 'a', texto: 'Muy buen servicio de recarga de extintores', me_gusta: 1, fecha_comentario: '2026-10-30T10:00:00Z', nivel: 'competencia' },
+      // encargo 6: un comentario de la INDUSTRIA en la misma tabla no se fichea como de la competencia
+      { client_id: ZR, red: 'tiktok', cuenta: 'industria:pais', post_ref: 'T9', post_url: 'https://www.tiktok.com/@x/video/T9', comentario_ref: 'tiktok:b', texto: 'Comentario del rubro que no es de ningún competidor', me_gusta: 3, fecha_comentario: '2026-10-30T10:00:00Z', nivel: 'industria' }] }
     const r = await correrFuenteNueva({ db: crearBaseFalsa(t).db, fuente: 'comentarios_ig_fb', cliente: ZERO_RISK, clientId: ZR, ciudadesDeSedes: [], ahora: AHORA, ejecutar: async () => ({ items: [], costo_usd: 0 }), leerComentarios: async () => ({ costo_usd: 0.12, resumen: { estado: 'corrida' } }) })
     expect(r.gasto_usd).toBeCloseTo(0.12, 6); expect(t.cerebro_fichas).toHaveLength(1)
     expect(t.cerebro_fichas[0]).toMatchObject({ clase: 'competidor_comentarios', alcance: 'competidor' })
@@ -250,8 +256,11 @@ describe('la base acepta lo que las fuentes escriben', () => {
     const dir = path.join(process.cwd(), 'supabase', 'migrations')
     const sqls = fs.readdirSync(dir).filter((f) => /alcance/.test(f) || /fuentes_nuevas|alcance_pais/.test(f)).map((f) => fs.readFileSync(path.join(dir, f), 'utf8')).join('\n')
     expect(sqls).toMatch(/cerebro_fichas_alcance_valido[\s\S]*'pais'/)
-    const pasos = fs.readFileSync(path.join(dir, '202611021800_pasos_de_las_fuentes_nuevas.sql'), 'utf8')
-    for (const f of FUENTES_NUEVAS) expect(pasos).toContain(`'${f}'`)
+    // la ÚLTIMA migración que redefine la lista de pasos es la que manda (encargo 6 la amplió con `comentarios_industria`)
+    const ultima = fs.readdirSync(dir).filter((f) => f.endsWith('.sql')).sort().filter((f) => fs.readFileSync(path.join(dir, f), 'utf8').includes('cerebro_pasos_diarios_paso_check')).pop()!
+    expect(ultima).toBe('202611181400_cerebro_comentarios_de_la_industria.sql')
+    const pasos = fs.readFileSync(path.join(dir, ultima), 'utf8')
+    for (const f of [...PASOS_DE_REDES, ...FUENTES_NUEVAS]) expect(pasos).toContain(`'${f}'`)
   })
 })
 

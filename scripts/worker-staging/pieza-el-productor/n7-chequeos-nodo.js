@@ -124,7 +124,7 @@ const fila_pieza = {
     no_pude_cumplir: Array.isArray(pieza.no_pude_cumplir) ? pieza.no_pude_cumplir : [],
     sedes: c.sedes_resumen || null,
     voz: c.voz_resumen || null,
-    thinking_mode: 'disabled',
+    thinking_mode: 'maximo',
     tope_usd: c.tope_usd,
     costo_usd: c.vuelta_costo_usd === undefined ? null : c.vuelta_costo_usd,
     dry_run: c.dry_run === true,

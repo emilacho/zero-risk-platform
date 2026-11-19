@@ -51,12 +51,13 @@ describe('mesa de análisis · la palanca (apagada por omisión)', () => {
 
 describe('mesa de análisis · los topes', () => {
   it('US$ 1 por analista por omisión, nunca más de 2; la mesa no pasa de US$ 5 (FIRMA 01-nov: los 5 tipos caben): el que no cabe queda en 0; un tipo inválido no gasta', () => {
-    expect(TOPE_POR_ANALISTA_USD).toBe(1); expect(TOPE_DE_LA_MESA_USD).toBe(5)
-    expect(repartirTopes([{ tipo: 'mercado' }, { tipo: 'competencia', tope_usd: 0.5 }, { tipo: 'retencion', tope_usd: 9 }])).toEqual([1, 0.5, 1])
-    expect(repartirTopes(TIPOS_DE_ANALISIS.map((tipo) => ({ tipo })))).toEqual([1, 1, 1, 1, 1])
-    expect(repartirTopes(TIPOS_DE_ANALISIS.map((tipo) => ({ tipo })).concat({ tipo: 'mercado' }))).toEqual([1, 1, 1, 1, 1, 0])
-    expect(repartirTopes([{ tipo: 'mercado', tope_usd: 2 }, { tipo: 'competencia', tope_usd: 2 }, { tipo: 'voz_del_publico' }, { tipo: 'retencion' }])).toEqual([2, 2, 1, 0])
-    expect(repartirTopes([{ tipo: null, tope_usd: 1 }, { tipo: 'mercado' }])).toEqual([0, 1])
+    // 18-nov · topes = 3 × lo medido: el analista sube a 1,08 y el sobre a 5 × 1,08 = 5,40 (los 5 tipos siguen cabiendo)
+    expect(TOPE_POR_ANALISTA_USD).toBe(1.08); expect(TOPE_DE_LA_MESA_USD).toBe(5.4)
+    expect(repartirTopes([{ tipo: 'mercado' }, { tipo: 'competencia', tope_usd: 0.5 }, { tipo: 'retencion', tope_usd: 9 }])).toEqual([1.08, 0.5, 1.08])
+    expect(repartirTopes(TIPOS_DE_ANALISIS.map((tipo) => ({ tipo })))).toEqual([1.08, 1.08, 1.08, 1.08, 1.08])
+    expect(repartirTopes(TIPOS_DE_ANALISIS.map((tipo) => ({ tipo })).concat({ tipo: 'mercado' }))).toEqual([1.08, 1.08, 1.08, 1.08, 1.08, 0])
+    expect(repartirTopes([{ tipo: 'mercado', tope_usd: 2 }, { tipo: 'competencia', tope_usd: 2 }, { tipo: 'voz_del_publico' }, { tipo: 'retencion' }])).toEqual([2, 2, 1.08, 0])
+    expect(repartirTopes([{ tipo: null, tope_usd: 1 }, { tipo: 'mercado' }])).toEqual([0, 1.08])
   })
 })
 

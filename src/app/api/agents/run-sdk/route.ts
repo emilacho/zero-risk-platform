@@ -68,6 +68,7 @@ import { pideLatido, responderConLatido } from '@/lib/latido-hacia-quien-llama'
 import { MODELOS_POR_CORRIDA, modeloPorCorridaValido } from '@/lib/modelo-por-corrida'
 import { resolverEsquema } from '@/lib/salida-estructurada'
 import { TOPE_REAL_DEL_PEDIDO } from '@/lib/limites-de-tamano'
+import { MODOS_DE_RAZONAMIENTO_DEL_PEDIDO } from '@/lib/razonamiento'
 
 export const runtime = 'nodejs'
 // Sprint 12 Track U · P0 #2 bump 300→800s · Track R audit identified Journey B
@@ -350,6 +351,10 @@ const RAILWAY_FETCH_TIMEOUT_MS = 790_000
  * ── 200.000 (01-nov · corrida 210273) ── el pedido real del plan ya mide 86.000 y la corrección de la jefatura suma el plan y sus fichas: midió 125.108 y este
  * tope la rechazó, así que la revisión se cerró «fallida» sin corregir nada. Una reescritura suma además el plan anterior (~165.000 en el peor caso). 200.000 sigue
  * **5× por debajo** del 1 MB medido, y es la misma firma de Emilio: «no se recorta, se recibe». El rechazo por encima sigue siendo el 400 gratis.
+ *
+ * ── 1.500.000 (18-nov · firma de Emilio «nada se recorta» · G1 · CC5) ── los modelos de hoy tienen 1 M de tokens, no 200 k; medido con `count_tokens`
+ * (Opus 5.5 ≈ 2,1 caracteres por token en español). El «1 MB del corredor» de arriba era el `express.json({limit:'1mb'})` del 12-sep: hoy es 4 MB.
+ * La cuenta completa está en `src/lib/limites-de-tamano.ts`.
  */
 export const TASK_MAX_CHARS = TOPE_REAL_DEL_PEDIDO
 
@@ -983,9 +988,10 @@ async function atender(request: Request) {
     const razCrudo = razArriba !== undefined ? razArriba : ctx.thinking_mode
     let razonamientoDelPedido: string | null = null
     if (razCrudo !== undefined) {
-      if (razCrudo !== 'disabled' && razCrudo !== 'low' && razCrudo !== 'medium') {
+      // 18-nov · G1 «nada se recorta» (CC5): suman los niveles altos y `maximo` (el corredor ajusta el nivel a lo que admite cada modelo · `tope-por-corrida.ts`)
+      if (typeof razCrudo !== 'string' || !(MODOS_DE_RAZONAMIENTO_DEL_PEDIDO as readonly string[]).includes(razCrudo)) {
         return NextResponse.json(
-          { error: 'thinking_mode_invalid', code: 'E-THINKING-INVALID', detail: 'thinking_mode debe ser disabled | low | medium · un valor mal escrito no se ignora' },
+          { error: 'thinking_mode_invalid', code: 'E-THINKING-INVALID', detail: `thinking_mode debe ser ${MODOS_DE_RAZONAMIENTO_DEL_PEDIDO.join(' | ')} · un valor mal escrito no se ignora` },
           { status: 400 },
         )
       }

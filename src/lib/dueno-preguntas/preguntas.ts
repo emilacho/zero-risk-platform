@@ -16,14 +16,17 @@
  */
 import { randomUUID } from 'node:crypto'
 import { esElMismoTema, esTemaParecido, palabrasDelTema, temaNormal } from '../portero-alimenta/dueno'
+import { TOPE_DEL_TEXTO_DEL_DUENO } from '../limites-de-tamano'
 
 export const TABLA = 'dueno_preguntas'
 /** una pregunta pendiente deja de bloquear a otra oficina pasadas estas horas (el dueño puede no haber contestado) */
 export const HORAS_DE_UNA_PREGUNTA_PENDIENTE = 72
-export const MAX_TEMA = 80
-export const MAX_PREGUNTA = 600
-export const MAX_RESPUESTA = 2000
-export const MAX_MOTIVO = 300
+// 18-nov · G2 «nada se recorta» (CC5): lo que escribe Emilio llega entero, hasta el tope único del texto del dueño (antes tema 80, pregunta 600, respuesta 2000; la LLAVE del tema sigue en 80 con `temaNormal`)
+export const MAX_TEMA = TOPE_DEL_TEXTO_DEL_DUENO
+export const MAX_PREGUNTA = TOPE_DEL_TEXTO_DEL_DUENO
+export const MAX_RESPUESTA = TOPE_DEL_TEXTO_DEL_DUENO
+// 18-nov · G2b «nada se recorta» (CC5): lo que escribe Emilio desde el tablero llega entero, hasta el tope único del texto del dueño (antes 300)
+export const MAX_MOTIVO = TOPE_DEL_TEXTO_DEL_DUENO
 export const TOPE_DE_LECTURA = 500
 
 type Fila = Record<string, unknown>

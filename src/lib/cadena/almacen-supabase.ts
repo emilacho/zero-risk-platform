@@ -22,7 +22,7 @@ import { crearPuertos as crearPuertosDeLaJefatura, entornoDeProceso as entornoDe
 import { resolverCierre } from '../jefatura/revision/cierre'
 import { N8N_POR_OMISION, VERCEL_DE_LA_PLATAFORMA } from '../jefatura/revision/contrato'
 import { ESTADOS_TERMINALES } from '../jefatura/revision/puertos'
-import type { Almacen, BriefCreativoGuardado, Campana, ConceptoGuardado, ContextoDelCliente, Corrida, EntradaDeRegistro, EsperaFila, EstrategiaGuardada, FechaCobertura, FichasGuardadas, ResultadoDeAbrirRegistro } from './almacen'
+import type { Almacen, BriefCreativoGuardado, Campana, ConceptoGuardado, ContextoDelCliente, Corrida, EntradaDeRegistro, EsperaFila, EstrategiaGuardada, RondaDeEstrategia, FechaCobertura, FichasGuardadas, ResultadoDeAbrirRegistro } from './almacen'
 import { horarioDeNorm } from './horario'
 import { registroDelCliente } from './registro'
 import { zonaDelCliente } from '@/lib/zona-horaria/por-pais'
@@ -48,6 +48,9 @@ import { baseDeRunSdk } from '@/lib/finanzas/conversa/modelo-run-sdk'
 import { perfilPorHttp } from '@/lib/perfil-del-publico/por-http'
 import { aperturaDeLasSedes, estadoDeLasSedes } from '../sedes/por-abrir'
 import { esloganDelCliente, reglaDelEslogan } from '../manual/campos-del-manual'
+
+/** la forma de un id de viaje de la sala (`sala_event_log.stream_id` es uuid) */
+export const UUID_DEL_VIAJE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 /** las tablas de la cadena que usa el archivo de una campaña (`oficina/archivo-de-campana.ts`): solo este archivo las nombra */
 export const tablasDelArchivo = <D>(db: { from(t: string): D }) => ({
@@ -270,6 +273,17 @@ export function almacenDeSupabase(): Almacen {
       // solo los partes (las piezas): las mesas de la cadena tienen como parte a la campaña misma y no se rehacen por aquí
       return encargosParaRehacerDe(db as unknown as DbDeGasto, [...new Set(partes)])
     },
+    // 19-nov · #1195 (decisión A de Lenovo) · la pieza vieja de una fila que volvió al brief: la archiva la oficina, dentro de los partes de ESTA campaña (nunca lanza)
+    async archivarPiezasDeFilas(campanaId, filaIds, motivo, ahora) {
+      try {
+        const tag = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {})
+        const partes = (await lista<{ id: string; provenance_tag: unknown }>(db.from('client_historical_outputs').select('id, provenance_tag').eq('output_type', 'campaign_brief_pack').eq('provenance_tag->>campana_id', campanaId).limit(500)))
+          .filter((f) => tag(f.provenance_tag).seco !== true && tag(f.provenance_tag).prueba_seco !== true).map((f) => String(f.id))
+        // la oficina se importa en el acto (la oficina ya importa este archivo: así no hay ciclo al cargar)
+        const { archivarPiezasDeFilas } = await import('@/lib/oficina/archivar-piezas-de-filas')
+        return await archivarPiezasDeFilas(db as never, { parte_ids: partes, fila_ids: filaIds, motivo }, new Date(ahora))
+      } catch (e) { return { ok: false as const, motivo: `no se pudieron leer los partes de la campaña: ${e instanceof Error ? e.message : String(e)}`.slice(0, 300) } }
+    },
     arreglosPublicados: (desde) => arreglosPublicadosReal(desde),
     abrirMesaDeFallidos: (sobre) => abrirMesaDeReubicacionReal(sobre),
     // 17-nov · la corrección del banco (nace apagada): la misma apertura en proceso
@@ -316,6 +330,9 @@ export function almacenDeSupabase(): Almacen {
       return planParaLaCadena(planes, clientId)
     },
     async journeyExiste(journeyId, clientId) {
+      // 18-nov · HALLAZGO CC6 en T7: `sala_event_log.stream_id` es uuid. Un id que no lo es (p. ej. el id de un flujo de n8n que falta en `flujos`) NO es un viaje:
+      // se contesta «no existe» sin preguntar. Antes Postgres cortaba con 22P02, salía el 500 genérico y no el 403 E-WORKFLOW-DESCONOCIDO / E-VIAJE.
+      if (!UUID_DEL_VIAJE.test(journeyId)) return false
       return (await lista<{ stream_id: string }>(db.from('sala_event_log').select('stream_id').eq('stream_id', journeyId).eq('client_id', clientId).limit(1))).length > 0
     },
     // el estado del brazo lo lee el almacén de la sala (el ÚNICO que nombra esas tablas: lo vigila una prueba permanente)
@@ -389,6 +406,9 @@ export function almacenDeSupabase(): Almacen {
 
     async ultimaEstrategia(campanaId) { return (await lista<EstrategiaGuardada>(db.from('cadena_estrategias').select('*').eq('campana_id', campanaId).order('version', { ascending: false }).limit(1)))[0] ?? null },
     async insertarEstrategia(e) { const { error } = await db.from('cadena_estrategias').insert(e); if (error) fallo(error) },
+    // 19-nov · grupo C · las pasadas bloqueadas de la estrategia (tabla aparte: migración 202611190600) · única por (campaña, versión, ronda): un reenvío no duplica
+    async guardarRondaDeEstrategia(r) { const { error } = await db.from('cadena_estrategia_rondas').upsert(r, { onConflict: 'campana_id,version,ronda', ignoreDuplicates: true }); if (error) fallo(error) },
+    async rondasDeEstrategia(campanaId, version) { return lista<RondaDeEstrategia>(db.from('cadena_estrategia_rondas').select('*').eq('campana_id', campanaId).eq('version', version).order('ronda', { ascending: true })) },
     // 17-nov · Sprint 4 · A entrega 2 · las fichas de hechos por oferta (una fila por campaña y versión · único en la base: la primera que cierra gana)
     // la tabla puede no existir todavía (código publicado antes que la migración): leer = «sin fichas» (la hoja lo declara) · escribir sí falla ruidoso
     async ultimasFichas(campanaId) {
@@ -540,9 +560,13 @@ export function almacenDeSupabase(): Almacen {
     },
 
     async hallazgosQueBloquean(campanaId, tanda) {
-      const filas = await lista<{ intento: number; severidad: string; fila_id: string | null; ficha: Ficha; chequeo: string }>(db.from('cadena_validaciones').select('intento, severidad, fila_id, ficha, chequeo').eq('campana_id', campanaId).eq('objeto', 'calendario').eq('tanda', tanda).limit(1000))
+      // 19-nov · grupo C: con varias rondas de corrección hay varias tandas de validaciones en el intento 2; vale SOLO la última guardada
+      // (un insert = una transacción = una sola `creada_en`): los bloqueos de una ronda vieja ya no cuentan como abiertos
+      const filas = await lista<{ intento: number; severidad: string; fila_id: string | null; ficha: Ficha; chequeo: string; creada_en: string }>(db.from('cadena_validaciones').select('intento, severidad, fila_id, ficha, chequeo, creada_en').eq('campana_id', campanaId).eq('objeto', 'calendario').eq('tanda', tanda).limit(1000))
       const ultimo = filas.reduce((m, x) => Math.max(m, x.intento), 0)
-      return filas.filter((x) => x.intento === ultimo && x.severidad === 'bloquea').map((x) => ({ ficha: x.ficha, fila_id: x.fila_id, chequeo: x.chequeo }))
+      const delUltimo = filas.filter((x) => x.intento === ultimo)
+      const ultimaVez = delUltimo.reduce((m, x) => (Date.parse(x.creada_en) > Date.parse(m) ? x.creada_en : m), delUltimo[0]?.creada_en ?? '')
+      return delUltimo.filter((x) => x.creada_en === ultimaVez && x.severidad === 'bloquea').map((x) => ({ ficha: x.ficha, fila_id: x.fila_id, chequeo: x.chequeo }))
     },
 
     async corridaPorClave(campanaId, paso, k, intento) { return uno<Corrida>(db.from('cadena_corridas').select('*').eq('campana_id', campanaId).eq('paso', paso).eq('clave_idempotencia', k).eq('intento', intento).maybeSingle()) },

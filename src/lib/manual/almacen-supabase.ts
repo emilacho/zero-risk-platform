@@ -37,7 +37,7 @@ const cortar = (s: unknown) => String(s ?? '')
 /** lo que escribieron los agentes del descubrimiento (documentos de ICP y panorama competitivo): sirve para detectar dudas, jamás como respaldo */
 export async function sintesisDelCliente(clientId: string): Promise<SintesisDeAgente[]> {
   const db = getSupabaseAdmin()
-  const a = await db.from('client_icp_documents').select('id,audience_segment,content_text').eq('client_id', clientId).limit(20)
+  const a = await db.from('client_icp_documents').select('id,audience_segment,content_text').eq('client_id', clientId).is('fusionado_en', null).limit(20)
   if (a.error) fallo(a.error)
   const b = await db.from('client_competitive_landscape').select('id,competitor_name,content_text').eq('client_id', clientId).limit(40)
   if (b.error) fallo(b.error)

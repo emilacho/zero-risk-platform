@@ -2,7 +2,7 @@
  * F8 · la plantilla `financiera.v1` (DATO) sobre el motor puro de la oficina (`src/lib/oficina/motor.ts`, sin tocarlo). Diseño v2 rev. 9 §6b.3 y §6b.4.
  * Turnos: apertura (código) → planteo (el plan) → los 4 especialistas «en paralelo» (en fila: cada uno lee SOLO el planteo y el expediente) → ajuste (el plan) → cálculo (código) → cierre (el jefe)
  *        → [ronda 2, UNA sola vuelta: solo los especialistas aludidos → ajuste → cálculo → cierre si la huella cambió] → firma (código).
- * Tope de rondas = 2 · tope de la plantilla US$ 1,50 (el piso; el plan abre cada encargo con su tope propio de US$ 5, ver `TOPE_DEL_ENCARGO_USD`) · un solo turno por agente por ronda (cada paso corre una vez; la ronda 2 usa pasos propios).
+ * Tope de rondas = 2 · tope de la plantilla = el techo, US$ 11,10 (18-nov, Lenovo 21:07Z: antes 1,50 de piso y 5 de techo; ver `TOPE_DEL_ENCARGO_USD`) · un solo turno por agente por ronda (cada paso corre una vez; la ronda 2 usa pasos propios).
  */
 import type { Paso, Plantilla } from '../../oficina/tipos'
 
@@ -35,7 +35,8 @@ export const MAXIMO_OBSERVADO_DEL_CIERRE_USD = 0.25
 export const FACTOR_DE_RESERVA_DEL_CIERRE = 1.3
 const redondeaArriba = (x: number) => Math.ceil(x * 100 - 1e-9) / 100
 // 05-nov (GO de Lenovo): 0,45. El 04-nov el cierre costó 0,349 sobre una reserva de 0,33: el medido de arriba ya quedó corto
-export const RESERVA_DEL_CIERRE_USD = 0.45
+// 18-nov · Emilio: topes = 3 × lo medido (GO Lenovo 16:17Z): el cierre de la ronda 1 llegó a 0,6444 (06-nov) sobre la reserva de 0,45 → 3 × 0,6444 = 1,94
+export const RESERVA_DEL_CIERRE_USD = 1.94
 // el piso es la reserva general: el cierre de la ronda 2 trae más entradas (acuerdo + bloque_2 + planteo fijado 2) y la reserva es también el máximo que esa llamada puede cobrar
 export const PISO_DE_RESERVA_DEL_CIERRE_USD = RESERVA_DEL_CIERRE_USD
 // RE-CIERRE (19-oct): el cierre de la ronda 2 llega con hallazgos resueltos y el jefe los desglosa: medido, la MISMA entrada (~38-40 mil tokens) dio 5.293 tokens de salida en la v1 y 11.528 en la v2
@@ -50,7 +51,8 @@ export function reservaDelCierre2(costoDelCierre1?: number | null): number {
 
 const R1 = ['expediente']
 /** 04-nov · el techo del tope propio de un encargo; el plan lo abre con este valor en `semilla.tope_encargo_usd` (Emilio vía Lenovo: límites al máximo, ronda 2 incluida): las dos rondas con el mayor costo medido suman ≈ US$ 3 antes de leer el manual completo */
-export const TOPE_DEL_ENCARGO_USD = 5
+// 18-nov · Emilio: topes = 3 × lo medido (GO Lenovo 16:17Z): un encargo real llegó a 3,70 → 11,10
+export const TOPE_DEL_ENCARGO_USD = 11.1
 export const PLANTILLA_FINANCIERA: Plantilla = {
   tipo: 'financiera.v1',
   familia: 'financiera',
@@ -75,7 +77,8 @@ export const PLANTILLA_FINANCIERA: Plantilla = {
     agente('cierre_2', AGENTES.jefe, ['expediente', 'planteo_fijado_2', 'bloque_2', 'acuerdo'], 'acuerdo_2', PISO_DE_RESERVA_DEL_RECIERRE_USD, si('bloque_2', 'cambio'), 2, 'acuerdo.v1'),
     codigo('firma', 'cierre_financiero', ['expediente', 'bloque', 'acuerdo', 'bloque_2', 'acuerdo_2'], 'cierre'),
   ],
-  limites: { margen: 3, tope_encargo_usd: 1.5, max_rondas: 2 },
+  // 18-nov · Lenovo 21:07Z (opción a): la base pasa al mismo techo, 11,10 (3 × el encargo más caro medido, 3,70). Con 1,50 la reserva del cierre (1,94) ya no cabía y todo encargo sin tope propio cerraba sin la palabra del jefe
+  limites: { margen: 3, tope_encargo_usd: TOPE_DEL_ENCARGO_USD, max_rondas: 2 },
   indicaciones: {},
 }
 
@@ -111,7 +114,9 @@ export function validarPlantillaFinanciera(p: Plantilla = PLANTILLA_FINANCIERA):
   const claves = p.pasos.map((x) => x.clave)
   if (new Set(claves).size !== claves.length) e.push('claves de paso repetidas')
   if (p.limites.max_rondas !== 2) e.push('max_rondas debe ser 2')
-  if (p.limites.tope_encargo_usd > 1.5) e.push('el tope del encargo no puede pasar de US$ 1,50')
+  if (p.limites.tope_encargo_usd > TOPE_DEL_ENCARGO_USD) e.push(`el tope del encargo no puede pasar de US$ ${TOPE_DEL_ENCARGO_USD}`)
+  // 18-nov · Lenovo: nunca una reserva más alta que el tope que la contiene (si no, ese paso no cabe jamás)
+  for (const x of p.pasos) if (x.tipo === 'agente' && x.tope_usd > p.limites.tope_encargo_usd) e.push(`${x.clave}: su reserva (US$ ${x.tope_usd}) pasa del tope del encargo (US$ ${p.limites.tope_encargo_usd})`)
   const proponente = proponenteDe(p)
   const permitidos = new Set<string>([...Object.values(AGENTES), proponente])
   const salidas = new Set<string>()

@@ -20,6 +20,8 @@ import { prepararCorrida } from '../nucleo'
 
 const RAIZ = resolve(__dirname, '..', '..', '..', '..')
 const AHORA = '2026-10-09T12:00:00Z'
+// 18-nov (día 1 = apertura): estas pruebas no son del día 1; la campaña se abre el lunes que antes ponía la regla, para que sus fechas sigan siendo las mismas
+const ABRE = '2026-10-12T12:00:00Z'
 const UUID = '11111111-1111-4111-8111-111111111111'
 const IDS = { estrategia: 'F-EST', calendario: 'F-CAL', fechas: 'F-FEC', puerta: 'F-PUE', fichas: 'F-FIC' }
 const ID_VIGIA = 'F-VIG', ID_PARTE = 'F-PAR'
@@ -82,7 +84,7 @@ async function mundo(opts: { agente?: (b: any) => RespuestaHttp; agenteFalla?: (
   }
   const sim = new SimuladorN8n({ flujos: POR_ID, env: ENV, http })
   // la campaña: abierta → estrategia validada → calendario tanda 1 (todo por los manejadores reales)
-  const ab = await abrirCampana(al, { ...wf(), client_id: UUID, seco: true }, AHORA)
+  const ab = await abrirCampana(al, { ...wf(), client_id: UUID, seco: true }, ABRE)
   const id = (ab.cuerpo.campana as { id: string }).id
   const p = await estrategiaPreparar(al, { ...wf(), campana_id: id }, AHORA)
   await estrategiaGuardar(al, { ...wf(), campana_id: id, corrida_id: p.cuerpo.corrida_id, resultado: { success: true, structured_output: cliente.estrategia, cost_usd: 0.3 } }, AHORA)
@@ -215,7 +217,7 @@ describe('C4 · una llamada al agente que se corta no mata el flujo ni deja la c
     // una campaña nueva en armado para probar la estrategia con el agente cortado una vez
     const cliente = clienteUuid()
     const al2 = new AlmacenMemoria({ contextos: { [UUID]: contextoDe(cliente) }, planes: { [UUID]: [{ plan_id: 'plan-1', fecha: '2026-10-08' }] }, config: { flujos: [...Object.values(IDS), ID_VIGIA, ID_PARTE], puerta_workflow_id: IDS.puerta, estado_cadena: 'ensayo', clientes_ensayo: [UUID] } })
-    const ab = await abrirCampana(al2, { ...wf(), client_id: UUID, seco: false }, AHORA)
+    const ab = await abrirCampana(al2, { ...wf(), client_id: UUID, seco: false }, ABRE)
     const id = (ab.cuerpo.campana as { id: string }).id
     let llamadas = 0
     const http = async (p: PeticionHttp): Promise<RespuestaHttp> => {
@@ -242,12 +244,12 @@ describe('C4 · una llamada al agente que se corta no mata el flujo ni deja la c
     expect(al2.corridas[0].error).toContain('socket hang up')
     void m
   })
-  it('un corte que se repite 3 veces termina en necesita_humano (nunca un bucle)', async () => {
+  it('un corte que se repite 3 veces termina el flujo (nunca un bucle) · 18-nov grupo A: la campaña NO se detiene, queda para el reintento del tramo siguiente', async () => {
     const m = await mundo({ soloArmado: true })
     void m
     const cliente = clienteUuid()
     const al2 = new AlmacenMemoria({ contextos: { [UUID]: contextoDe(cliente) }, planes: { [UUID]: [{ plan_id: 'plan-1', fecha: '2026-10-08' }] }, config: { flujos: [...Object.values(IDS), ID_VIGIA, ID_PARTE], puerta_workflow_id: IDS.puerta, estado_cadena: 'encendida' } })
-    const ab = await abrirCampana(al2, { ...wf(), client_id: UUID, seco: false }, AHORA)
+    const ab = await abrirCampana(al2, { ...wf(), client_id: UUID, seco: false }, ABRE)
     const id = (ab.cuerpo.campana as { id: string }).id
     const http = async (p: PeticionHttp): Promise<RespuestaHttp> => {
       const u = new URL(p.url)
@@ -255,9 +257,12 @@ describe('C4 · una llamada al agente que se corta no mata el flujo ni deja la c
       throw new Error('ECONNRESET')
     }
     const salida = await new SimuladorN8n({ flujos: POR_ID, env: ENV, http }).ejecutar(IDS.estrategia, entradaSub(id))
+    // la etiqueta del fin en la puerta sigue llamándose así (es n8n); lo que cuenta es que la campaña no cambió de estado
     expect(salida[0].json.resultado).toBe('necesita_humano')
     expect(al2.corridas).toHaveLength(3)
-    expect(al2.campanas[0].estado).toBe('necesita_humano')
+    expect(al2.campanas[0].estado).not.toBe('necesita_humano')
+    expect(al2.campanas[0].estado_motivo).toMatch(/^reintento automático · estrategia · /)
+    expect(al2.esperas.filter((e) => e.objeto_tipo === 'necesita_humano')).toHaveLength(0)
   })
 })
 
@@ -311,7 +316,7 @@ describe('C3 · campañas atascadas: el reloj avisa con «qué hacer» y el sobr
   const vig = { workflow_id: ID_VIGIA, workflow_execution_id: 'v1' }
   async function atascada(estadoUltima: 'vencida' | 'fallida' | 'cerrada_por_tope' | 'ok' | 'en_curso') {
     const al = new AlmacenMemoria({ contextos: { [UUID]: contextoDe(clienteUuid()) }, planes: { [UUID]: [{ plan_id: 'plan-1', fecha: '2026-10-08' }] }, config: { flujos: [ID_VIGIA, ...Object.values(IDS)], puerta_workflow_id: IDS.puerta, estado_cadena: 'encendida' } })
-    const ab = await abrirCampana(al, { ...wf({ workflow_id: IDS.puerta }), client_id: UUID, seco: false }, AHORA)
+    const ab = await abrirCampana(al, { ...wf({ workflow_id: IDS.puerta }), client_id: UUID, seco: false }, ABRE)
     const id = (ab.cuerpo.campana as { id: string }).id
     const c = al.campanas[0]
     const prep = await prepararCorrida(al, c, 'estrategia', 'v1:c0', IDS.puerta, 'e1', AHORA, 'm', 'h')
@@ -336,7 +341,7 @@ describe('C3 · campañas atascadas: el reloj avisa con «qué hacer» y el sobr
       void id
     }
     const al = new AlmacenMemoria({ contextos: { [UUID]: contextoDe(clienteUuid()) }, planes: { [UUID]: [{ plan_id: 'plan-1', fecha: '2026-10-08' }] }, config: { flujos: [ID_VIGIA, ...Object.values(IDS)], puerta_workflow_id: IDS.puerta, estado_cadena: 'encendida' } })
-    await abrirCampana(al, { ...wf({ workflow_id: IDS.puerta }), client_id: UUID, seco: false }, AHORA)
+    await abrirCampana(al, { ...wf({ workflow_id: IDS.puerta }), client_id: UUID, seco: false }, ABRE)
     expect(JSON.stringify((await relojDeLaCadena(al, vig, '2026-10-10T00:00:00Z')).cuerpo.alertas)).not.toContain('quedó en «')
   })
   it('una campaña ACTIVA con una corrida fallida vieja no es un atasco (ya terminó de armarse)', async () => {
@@ -348,7 +353,7 @@ describe('C3 · campañas atascadas: el reloj avisa con «qué hacer» y el sobr
     const cliente = clienteUuid()
     const al = new AlmacenMemoria({ contextos: { [UUID]: contextoDe(cliente) }, planes: { [UUID]: [{ plan_id: 'plan-1', fecha: '2026-10-08' }] }, journeys: [{ journeyId: 'viaje-1', clientId: UUID }], config: { flujos: [...Object.values(IDS), ID_VIGIA, ID_PARTE], puerta_workflow_id: IDS.puerta, estado_cadena: 'ensayo', clientes_ensayo: [UUID] } })
     // el primer intento murió a mitad: campaña en «estrategia», una corrida vencida
-    const ab = await abrirCampana(al, { ...wf({ workflow_id: IDS.puerta }), client_id: UUID, seco: true, sala_ref: { _journey_id: 'viaje-1', _sala_correlation_id: 'corr' } }, AHORA)
+    const ab = await abrirCampana(al, { ...wf({ workflow_id: IDS.puerta }), client_id: UUID, seco: true, sala_ref: { _journey_id: 'viaje-1', _sala_correlation_id: 'corr' } }, ABRE)
     const id = (ab.cuerpo.campana as { id: string }).id
     const prep = await prepararCorrida(al, al.campanas[0], 'estrategia', 'v1:c0', IDS.puerta, 'e0', AHORA, 'm', 'h')
     if (prep.tipo === 'lista') await al.cerrarCorrida(prep.corrida.id, { estado: 'vencida', plazo_en: null })
@@ -384,7 +389,7 @@ describe('huecos de prueba de CC#3 sobre los flujos', () => {
   it('el estado HTTP de `guardar`: un 500 detiene el flujo con su motivo (no se lee como «hecho»)', async () => {
     const cliente = clienteUuid()
     const al = new AlmacenMemoria({ contextos: { [UUID]: contextoDe(cliente) }, planes: { [UUID]: [{ plan_id: 'plan-1', fecha: '2026-10-08' }] }, config: { flujos: [...Object.values(IDS), ID_VIGIA, ID_PARTE], puerta_workflow_id: IDS.puerta, estado_cadena: 'encendida' } })
-    const ab = await abrirCampana(al, { ...wf(), client_id: UUID, seco: false }, AHORA)
+    const ab = await abrirCampana(al, { ...wf(), client_id: UUID, seco: false }, ABRE)
     const id = (ab.cuerpo.campana as { id: string }).id
     const http = async (p: PeticionHttp): Promise<RespuestaHttp> => {
       const u = new URL(p.url)

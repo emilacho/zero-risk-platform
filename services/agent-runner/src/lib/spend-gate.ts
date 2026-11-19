@@ -20,8 +20,9 @@
  * §148 safety-net · a query failure NEVER blocks legit traffic.
  */
 
-const CAP_USD_DEFAULT = 8.0
-const ONBOARDING_CAP_USD_DEFAULT = 13.0
+// 18-nov · Emilio: topes = 3 × lo medido (PARA-LENOVO-de-CC3-barrido-de-topes-de-gasto-medido-y-su-triple, GO 16:17Z): 24 h de un cliente, máx. medido 8,01 sin el que trae tope propio (el cliente que trae 60 en su ficha) → 24,05; el arranque, 8,01 → 24,05
+const CAP_USD_DEFAULT = 24.05
+const ONBOARDING_CAP_USD_DEFAULT = 24.05
 const ONBOARDING_DIAS_DEFAULT = 7
 const WINDOW_MS = 24 * 60 * 60 * 1000
 

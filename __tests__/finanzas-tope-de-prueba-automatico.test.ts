@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { estadoInicial } from '../src/lib/oficina/tipos'
-import { abrirConversacion, avanzar, topeDePruebaAutomatico, topeEfectivoDelEncargo } from '../src/lib/finanzas/conversa/orquestador'
+import { abrirConversacion, avanzar, TOPE_MAXIMO_POR_ENCARGO_USD, topeDePruebaAutomatico, topeEfectivoDelEncargo } from '../src/lib/finanzas/conversa/orquestador'
 import { almacenDeConversa } from '../src/lib/finanzas/conversa/almacen-supabase'
 import type { AlmacenDeConversa, EncargoDeConversa, PedidoAlModelo, PuertosDeConversa, Semilla } from '../src/lib/finanzas/conversa/puertos'
 import type { ConfigDeFinanzas } from '../src/lib/finanzas/ruta'
@@ -51,32 +51,32 @@ describe('la fórmula del tope de prueba · POR PEDIDO', () => {
   it('con firma válida el límite es lo firmado; sin firma, el tope del encargo; mal formada = sin firma', () => {
     // por pedido: la base es lo gastado por el encargo, NO el pasado del cliente (2)
     expect(topeDePruebaAutomatico({ tope_encargo_usd: 3.2, firma_tope: FIRMA }, 2, 0.5)).toEqual({ limite_usd: 3.2, base_usd: 0.5, encargo_base_usd: 0.5 })
-    expect(topeDePruebaAutomatico({ firma_tope: FIRMA }, 0, 0).limite_usd).toBe(3.2) // lo firmado manda aunque el tope del encargo sea otro (aquí el de la plantilla, 1,50)
+    expect(topeDePruebaAutomatico({ firma_tope: FIRMA }, 0, 0).limite_usd).toBe(3.2) // lo firmado manda aunque el tope del encargo sea otro (aquí el de la plantilla, 11,10)
     expect(topeDePruebaAutomatico({ tope_encargo_usd: 2, firma_tope: { ...FIRMA, valor: 2.5 } }, 0, 0).limite_usd).toBe(2.5)
-    expect(topeDePruebaAutomatico({}, 0, 0).limite_usd).toBe(1.5) // nunca «sin tope»: el de la plantilla
-    expect(topeDePruebaAutomatico({ tope_encargo_usd: 2.5 }, 0, 0).limite_usd).toBe(2.5)
-    expect(topeDePruebaAutomatico({ tope_encargo_usd: 9 }, 0, 0).limite_usd).toBe(5) // sin firma, el techo
+    expect(topeDePruebaAutomatico({}, 0, 0).limite_usd).toBe(11.1) // nunca «sin tope»: el de la plantilla (11,10 desde el 18-nov, Lenovo 21:07Z)
+    expect(topeDePruebaAutomatico({ tope_encargo_usd: 2.5 }, 0, 0).limite_usd).toBe(11.1) // el propio solo sube y la base ya es el techo: uno menor sin firma no cambia nada
+    expect(topeDePruebaAutomatico({ tope_encargo_usd: 20 }, 0, 0).limite_usd).toBe(TOPE_MAXIMO_POR_ENCARGO_USD) // sin firma, el techo (US$ 11,10 desde el 18-nov)
     for (const f of [{ ...FIRMA, quien: '' }, { ...FIRMA, valor: Number.NaN }, { ...FIRMA, papel: ' ' }, null]) {
-      expect(topeDePruebaAutomatico({ tope_encargo_usd: 9, firma_tope: f as never }, 0, 0).limite_usd).toBe(5)
+      expect(topeDePruebaAutomatico({ tope_encargo_usd: 20, firma_tope: f as never }, 0, 0).limite_usd).toBe(TOPE_MAXIMO_POR_ENCARGO_USD)
     }
   })
   it('el TOTAL del cliente solo con firma_tope_total válida: límite = lo firmado y base = todo lo cobrado al cliente', () => {
     expect(topeDePruebaAutomatico({ firma_tope_total: { ...FIRMA, valor: 5 } }, 4.7519, 3.1456)).toEqual({ limite_usd: 5, base_usd: 4.7519, encargo_base_usd: 3.1456 })
     // mal formada = no hay total: vuelve a por pedido
     for (const f of [{ ...FIRMA, quien: '' }, { ...FIRMA, papel: '' }, { ...FIRMA, valor: Number.POSITIVE_INFINITY }, { ...FIRMA, valor: '5' }, null]) {
-      expect(topeDePruebaAutomatico({ firma_tope_total: f as never }, 4.7519, 0)).toEqual({ limite_usd: 1.5, base_usd: 0, encargo_base_usd: 0 })
+      expect(topeDePruebaAutomatico({ firma_tope_total: f as never }, 4.7519, 0)).toEqual({ limite_usd: 11.1, base_usd: 0, encargo_base_usd: 0 })
     }
   })
   it('el caso real: un cliente con 4,7519 cobrados y un encargo NUEVO arranca con holgura = su tope (no negativa)', () => {
     const holgura = (t: ReturnType<typeof topeDePruebaAutomatico>, gastoAhora: number) => t.limite_usd - t.base_usd - Math.max(0, gastoAhora - t.encargo_base_usd)
-    expect(holgura(topeDePruebaAutomatico({}, 4.7519, 0), 0)).toBe(1.5)
+    expect(holgura(topeDePruebaAutomatico({}, 4.7519, 0), 0)).toBe(11.1)
     expect(holgura(topeDePruebaAutomatico({ tope_encargo_usd: 3.2, firma_tope: FIRMA }, 4.7519, 0), 0)).toBe(3.2)
     expect(holgura(topeDePruebaAutomatico({ tope_encargo_usd: 3.2, firma_tope: FIRMA }, 4.7519, 0), 0.5)).toBeCloseTo(2.7, 9) // y baja con lo que el pedido gasta
   })
   it('lo negativo se vuelve 0 y el tope efectivo del encargo es el de la plantilla si no hay nada', () => {
-    expect(topeDePruebaAutomatico({}, -1, -2)).toEqual({ limite_usd: 1.5, base_usd: 0, encargo_base_usd: 0 })
+    expect(topeDePruebaAutomatico({}, -1, -2)).toEqual({ limite_usd: 11.1, base_usd: 0, encargo_base_usd: 0 })
     expect(topeDePruebaAutomatico({ firma_tope_total: FIRMA }, -1, -2)).toEqual({ limite_usd: 3.2, base_usd: 0, encargo_base_usd: 0 })
-    expect(topeEfectivoDelEncargo(undefined)).toBe(1.5)
+    expect(topeEfectivoDelEncargo(undefined)).toBe(11.1)
   })
 })
 
@@ -90,11 +90,12 @@ describe('al CREAR el encargo', () => {
   })
   it('sin firma: el límite es el tope del encargo', async () => {
     const m = mundo({ libro: { total_usd: 0.4, por_encargo: {} } })
+    // 18-nov · la base es el techo (11,10): un tope propio menor sin firma deja el de la plantilla
     await abrir(m, { tope_encargo_usd: 2.5 })
-    expect(m.creados[0].semilla.tope_de_prueba).toEqual({ limite_usd: 2.5, base_usd: 0, encargo_base_usd: 0 })
+    expect(m.creados[0].semilla.tope_de_prueba).toEqual({ limite_usd: 11.1, base_usd: 0, encargo_base_usd: 0 })
     const m2 = mundo()
     await abrir(m2, {})
-    expect(m2.creados[0].semilla.tope_de_prueba?.limite_usd).toBe(1.5)
+    expect(m2.creados[0].semilla.tope_de_prueba?.limite_usd).toBe(11.1)
   })
   it('un tope de prueba válido que ya viene se respeta; uno mal formado se reemplaza', async () => {
     const dado = { limite_usd: 4, base_usd: 1, encargo_base_usd: 0 }
@@ -104,7 +105,7 @@ describe('al CREAR el encargo', () => {
     expect(m.lecturas.n).toBe(0)
     const m2 = mundo({ libro: { total_usd: 0.5, por_encargo: {} } })
     await abrir(m2, { tope_de_prueba: { limite_usd: Number.POSITIVE_INFINITY, base_usd: 0, encargo_base_usd: 0 } })
-    expect(m2.creados[0].semilla.tope_de_prueba).toEqual({ limite_usd: 1.5, base_usd: 0, encargo_base_usd: 0 })
+    expect(m2.creados[0].semilla.tope_de_prueba).toEqual({ limite_usd: 11.1, base_usd: 0, encargo_base_usd: 0 })
   })
   it('si el libro no se puede leer, NO se crea el encargo (falla cerrado: la guarda no desaparece en silencio)', async () => {
     const m = mundo({ libro: null })

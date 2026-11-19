@@ -12,7 +12,8 @@
 import { MAX_IMAGENES } from '../../imagenes-del-pedido'
 import { fotosPorImagen, type FotoDeReferencia } from '../foto-de-referencia'
 import type { Estado } from '../tipos'
-import type { Plano } from './guion'
+import type { PersonajeDeLaHoja, Plano } from './guion'
+import { MAX_FOTOS_POR_IMAGEN } from '../../imagen-sobre-foto'
 import { faseDeLaProduccion } from './propuestas'
 
 export const PASO_IMAGENES_CLAVE = 'imagenes_clave'
@@ -99,7 +100,9 @@ export function promptDeImagenClave(p: PlanoDeLaHoja, o: { total: number; propor
   return [
     `Key frame for shot ${p.n} of ${o.total} of a short vertical video (${o.proporcion}). It will be the first frame of the clip of this shot.${esTexto(p.rol) ? ` Narrative role of the shot: ${p.rol.trim()}.` : ''}`,
     cuerpo,
-    'Photographic, realistic and premium. A pose or moment that can continue in motion.',
+    // 18-nov · segunda opinión de GPT (CC6): «premium» estaba en el envoltorio de TODOS los prompts y es palabra prohibida de un manual. El envoltorio fijo no
+    //   lleva adjetivos de marca: el estilo lo pone la hoja de la mesa (que sí lee el manual del cliente)
+    'Photographic and realistic. A pose or moment that can continue in motion.',
     'No text, letters, captions, logos or watermarks in the image: any text is added later in editing.',
   ].filter(Boolean).join('\n')
 }
@@ -112,6 +115,10 @@ export interface PedidoDeImagenClave {
   sin_foto_apta: boolean
   /** solo los planos largos (`llevaDosCuadros`): el prompt del cuadro de cierre, con la MISMA foto */
   prompt_cierre?: string
+  /** 18-nov · las OTRAS fotos reales del plano, detrás de `foto` (las extra que nombra el plano y las de sus personajes), en el orden que explica el prompt */
+  otras_fotos?: FotoDeReferencia[]
+  /** 18-nov · personajes del plano que no traen foto (ni marca de creación nueva): el prompt pide un diseño nuevo, no uno «real» */
+  personajes_sin_foto?: string[]
 }
 
 /**
@@ -122,7 +129,53 @@ export interface PedidoDeImagenClave {
 /** 17-nov · fila 3 de CC1: el plano de ambiente que nombra una foto propia APTA la lleva (no rota: solo la que nombra) */
 const fotoNombradaApta = (p: PlanoDeLaHoja, aptas: FotoDeReferencia[]): FotoDeReferencia | null => (esTexto(p.foto_id) ? aptas.find((f) => f.id === p.foto_id!.trim()) ?? null : null)
 
-export function pedidosDeImagenClave(o: { planos: PlanoDeLaHoja[]; aptas: FotoDeReferencia[]; proporcion: string; rotar?: boolean }): { pedidos: PedidoDeImagenClave[]; no_aptas: Array<{ n: number; id: string }> } {
+export interface FotosDelPlano {
+  /** la imagen 1 (la base): la foto del plano; sin ella, la primera foto de sus personajes o de lo que nombra */
+  base: FotoDeReferencia | null
+  /** las que siguen a la base, en orden */
+  otras: FotoDeReferencia[]
+  /** lo que el prompt dice de cada imagen y de cada personaje (vacío si el plano no trae nada más que su foto) */
+  texto: string
+  /** personajes sin foto y sin marca de creación nueva */
+  sin_foto: string[]
+}
+
+/**
+ * 18-nov · GO Lenovo «los creativos ven las fotos» (firma de Emilio 14:16): las fotos reales que lleva la imagen clave de UN plano y lo que es cada una.
+ *  · la foto del plano (base) · las otras que el plano nombra (`fotos_extra`) · las de cada personaje que sale (`personajes` → su línea de «## Personajes»).
+ *  · un personaje «creación nueva» NO es uno real: su foto es base de estilo y el prompt lo dice.
+ *  · un personaje sin foto ni marca: el prompt pide diseñarlo nuevo desde su descripción, sin presentarlo como uno que ya existe (no se inventa lo real).
+ * Cada foto va una vez; hasta MAX_FOTOS_POR_IMAGEN con la base. Solo fotos propias con dirección (`propias`). Puro y agnóstico: no sabe de clientes ni de rubros.
+ */
+export function fotosDelPlano(p: Pick<PlanoDeLaHoja, 'fotos_extra' | 'personajes'>, base: FotoDeReferencia | null, personajes: PersonajeDeLaHoja[], propias: FotoDeReferencia[]): FotosDelPlano {
+  const items: Array<{ foto: FotoDeReferencia; que: string }> = []
+  const lineas: string[] = []
+  const sin_foto: string[] = []
+  const de = (id: string): FotoDeReferencia | null => propias.find((f) => f.id === id.trim()) ?? null
+  const poner = (f: FotoDeReferencia | null, que: string): boolean => {
+    if (!f || items.length >= MAX_FOTOS_POR_IMAGEN || items.some((x) => x.foto.id === f.id)) return false
+    items.push({ foto: f, que }); return true
+  }
+  if (base) poner(base, 'the real photo chosen for this shot')
+  for (const id of p.fotos_extra ?? []) poner(de(id), 'another real element of the client that this shot shows: keep it exactly as in the photo')
+  for (const pid of p.personajes ?? []) {
+    const c = personajes.find((x) => x.id === pid)
+    if (!c) continue
+    const como = c.descripcion ? ` (${c.descripcion})` : ''
+    let suyas = 0
+    for (const id of c.fotos_ids) if (poner(de(id), c.creacion_nueva ? `only a STYLE base for «${c.nombre}», a NEW character created for this piece: not an existing one` : `the reference of the real character «${c.nombre}»: same face, body, colors, clothing and details`)) suyas++
+    if (!suyas && !c.fotos_ids.some((id) => items.some((x) => x.foto.id === id.trim()))) {
+      if (c.creacion_nueva) lineas.push(`«${c.nombre}»${como} is a NEW character created for this piece, designed from this description.`)
+      else { sin_foto.push(c.nombre); lineas.push(`«${c.nombre}»${como}: there is no photo of this character, so design it new from this description and do not present it as an existing character of the brand.`) }
+    }
+  }
+  const [primera, ...otras] = items
+  const roles = items.length > 1 || (items.length === 1 && items[0].foto.id !== base?.id) ? items.map((x, i) => `Image ${i + 1} is ${x.que}.`) : []
+  const texto = [...(roles.length ? [`Reference images, in order: ${roles.join(' ')}`] : []), ...lineas].join('\n')
+  return { base: primera?.foto ?? null, otras: otras.map((x) => x.foto), texto, sin_foto }
+}
+
+export function pedidosDeImagenClave(o: { planos: PlanoDeLaHoja[]; aptas: FotoDeReferencia[]; proporcion: string; rotar?: boolean; /** 18-nov · los personajes de la hoja */ personajes?: PersonajeDeLaHoja[]; /** 18-nov · las fotos propias con dirección (para las extra y las de los personajes) */ propias?: FotoDeReferencia[] }): { pedidos: PedidoDeImagenClave[]; no_aptas: Array<{ n: number; id: string }> } {
   const deProducto = o.planos.filter(esPlanoDeProducto)
   const pedidas = deProducto.map((p) => (esTexto(p.foto_id) ? p.foto_id.trim() : null))
   const porFoto = fotosPorImagen(o.aptas, pedidas)
@@ -130,9 +183,15 @@ export function pedidosDeImagenClave(o: { planos: PlanoDeLaHoja[]; aptas: FotoDe
   const fotoDe = new Map(deProducto.map((p, i) => [p.n, porFoto.fotos[i] ?? null]))
   const pedidos = o.planos.map((p) => {
     const producto = esPlanoDeProducto(p)
-    const foto = producto ? fotoDe.get(p.n) ?? null : fotoNombradaApta(p, o.aptas)
+    const fotoDelPlano = producto ? fotoDe.get(p.n) ?? null : fotoNombradaApta(p, o.aptas)
     const forma = { total: o.planos.length, proporcion: o.proporcion }
-    return { n: p.n, prompt: promptDeImagenClave(p, forma), foto, sin_foto_apta: producto && !foto, ...(llevaDosCuadros(p) ? { prompt_cierre: promptDelCierre(p, forma) } : {}) }
+    const r = fotosDelPlano(p, fotoDelPlano, o.personajes ?? [], o.propias ?? [])
+    const mas = (s: string) => (r.texto ? `${s}\n${r.texto}` : s)
+    return {
+      n: p.n, prompt: mas(promptDeImagenClave(p, forma)), foto: r.base, sin_foto_apta: producto && !fotoDelPlano,
+      ...(llevaDosCuadros(p) ? { prompt_cierre: mas(promptDelCierre(p, forma)) } : {}),
+      ...(r.otras.length ? { otras_fotos: r.otras } : {}), ...(r.sin_foto.length ? { personajes_sin_foto: r.sin_foto } : {}),
+    }
   })
   return { pedidos, no_aptas: porFoto.no_aptas.map(({ i, id }) => ({ n: deProducto[i].n, id })) }
 }
@@ -146,6 +205,8 @@ export interface ImagenClaveDelPlano {
   prompt: string
   foto_referencia_id: string | null
   referencia_usada: boolean
+  /** 18-nov · las otras fotos reales que viajaron con la base (personajes, productos, lugares) */
+  otras_referencias_ids?: string[]
   /** lo que costaron TODOS los cuadros del plano */
   costo_usd: number
   generation_id: string

@@ -54,6 +54,12 @@ async function detenidaPorElBrief(texto: string, o: { falsoRojo?: boolean } = {}
     const b = al.briefsCreativos.find((x) => x.campana_id === id && x.version === 2)!
     Object.assign(b, { estado: 'devuelta', leido: { ...b.leido, bloqueos: [BLOQUEO_VIEJO] }, devolucion_texto: `- ${BLOQUEO_VIEJO}` })
     await ponerNecesitaHumano(al, al.campanas.find((x) => x.id === id)!, `el brief creativo se devolvió por código dos veces: ${BLOQUEO_VIEJO}`, AHORA)
+  } else if ((r as { estado?: string }).estado === 'devuelta') {
+    // 19-nov · grupo D: la cadena ya no detiene aquí (la próxima apertura deja la mejor versión). Las campañas que la regla de antes SÍ detuvo siguen en la
+    // base y revalidar existe para ellas: el estado de entonces se arma a mano, con el motivo que escribía la cadena
+    expect(al.campanas.find((x) => x.id === id)!.estado).toBe('calendario')
+    const b = al.briefsCreativos.find((x) => x.campana_id === id && x.version === 2)!
+    await ponerNecesitaHumano(al, al.campanas.find((x) => x.id === id)!, `el brief creativo se devolvió por código dos veces: ${((b.leido as { bloqueos: string[] }).bloqueos).slice(0, 3).join(' · ')}`, AHORA)
   }
   expect(al.campanas.find((x) => x.id === id)!.estado).toBe('necesita_humano')
   return { al, id }
@@ -264,11 +270,11 @@ describe('revalidar · las pruebas de CC7 (CERTIFICACIÓN 20:09Z · raw/evidenci
     expect(await recibirBrief(al, entrega(id, 2, BRIEF), AHORA)).toMatchObject({ estado: 'validada' })
     return { al, id }
   }
-  it('camino REAL: la dirección devuelve la v2 → necesita_humano → revalidar se niega y no escribe', async () => {
+  it('camino REAL: la dirección devuelve la v2 → (grupo D, 19-nov) la campaña sigue en calendario → revalidar se niega y no escribe', async () => {
     const { al, id } = await base()
     expect((await conceptoAbrir(al, wf({ campana_id: id }), AHORA)).status).toBe(200)
     await recibirConcepto(al, { campana_id: id, version: 1, encargo_id: 'e', texto: '## Devolución del brief\n- el insight no se sostiene', costo_usd: 0.1, motivo: null, brief_devuelto: '- el insight no se sostiene' }, AHORA)
-    expect(al.campanas[0].estado).toBe('necesita_humano')
+    expect(al.campanas[0].estado).toBe('calendario')
     const f = JSON.stringify([al.campanas, al.briefsCreativos, al.esperas])
     // aunque el motivo dijera lo del brief (camino briefAbrir), las guardas la frenan
     for (const motivo of [al.campanas[0].estado_motivo, 'el brief creativo ya se devolvió 2 veces']) {

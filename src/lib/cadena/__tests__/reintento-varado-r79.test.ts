@@ -11,13 +11,15 @@ import { clienteA, contextoDe, tandaBuena } from '../__fixtures__/clientes'
 
 const A = clienteA()
 const AHORA = '2026-10-09T12:00:00Z'
+// 18-nov (día 1 = apertura): estas pruebas no son del día 1; la campaña se abre el lunes que antes ponía la regla, para que sus fechas sigan siendo las mismas
+const ABRE = '2026-10-12T12:00:00Z'
 const wf = (extra: Record<string, unknown> = {}) => ({ workflow_id: 'wf-cadena', workflow_execution_id: 'ex-1', ...extra })
 const almacen = () => new AlmacenMemoria({
   contextos: { [A.clientId]: contextoDe(A) }, planes: { [A.clientId]: [{ plan_id: 'plan-1', fecha: '2026-10-08' }] },
   config: { flujos: ['wf-cadena', 'wf-vigia'], puerta_workflow_id: 'wf-puerta' }, journeys: [{ journeyId: 'journey-1', clientId: A.clientId }],
 })
 const ok = (x: unknown) => ({ success: true, structured_output: x, cost_usd: 0.3 })
-const abrir = async (al: AlmacenMemoria) => ((await abrirCampana(al, { ...wf(), client_id: A.clientId, seco: true }, AHORA)).cuerpo.campana as { id: string }).id
+const abrir = async (al: AlmacenMemoria) => ((await abrirCampana(al, { ...wf(), client_id: A.clientId, seco: true }, ABRE)).cuerpo.campana as { id: string }).id
 
 describe('D1 · reintento varado', () => {
   it('estrategia: la llamada cerró `ok` pero se cayó antes de guardar → el reintento NO contesta ya_hecha: abre el intento 2 y avanza', async () => {

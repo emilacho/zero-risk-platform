@@ -11,7 +11,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { AlmacenMemoria } from '../__fixtures__/almacen-memoria'
 import { clienteA, clienteB, contextoDe, type ClienteFixture } from '../__fixtures__/clientes'
 import type { BriefCreativoGuardado, Campana, EntradaDeRegistro, EstrategiaGuardada, ResultadoDeAbrirRegistro } from '../almacen'
-import { briefAbrir, cerrarMesasVencidas, conceptoAbrir, EN_REVISION_DE_REGISTRO, HOLGURA_DE_MESA_MIN, recibirBrief, recibirConcepto, recibirVueltaDeRegistro, seguirSinRevisionDeRegistro } from '../mesas'
+import { briefAbrir, cerrarMesasVencidas, conceptoAbrir, EN_REVISION_DE_REGISTRO, HOLGURA_DE_MESA_MIN, marcaDeMesaEnReintento, recibirBrief, recibirConcepto, recibirVueltaDeRegistro, seguirSinRevisionDeRegistro } from '../mesas'
 import { relojDeLaCadena } from '../reloj'
 import { artifactIdDeRegistro, leerArtifactIdDeRegistro, leerObjetoDeRegistro, objetoDeRegistro, sobreDeRegistro, textoDeLaVuelta } from '../registro-en-jefatura'
 import { TIPO_DE_ESPERA } from '../revision-jefatura'
@@ -280,6 +280,17 @@ describe.each(CASOS)('$nombre', (k) => {
       const av = (brief(al, k).leido as { avisos: string[] }).avisos
       expect(av.some((a) => a.includes('la jefatura no abrió la revisión: tipo_no_activo') && k.formasMal.every((f) => a.includes(f)))).toBe(true)
       expect(esperaDe(al, k, objetoDeRegistro('brief', 1))?.estado).toBe('resuelta')
+    })
+    it('🔴 grupo D · 🟡 1 de CC7: la mesa que se cierra por la revisión de registro también borra SU marca de reintento (brief y gran idea)', async () => {
+      const al = almacen(k, { puerto: async () => ({ estado: 'no_abre', motivo: 'tipo_no_activo' }) })
+      al.campanas[0].estado_motivo = marcaDeMesaEnReintento('brief', '2026-10-01am')
+      await briefAbrir(al, wf(k), AHORA)
+      expect(await recibirBrief(al, entrega(k, 1, briefDe(k, k.tonoMal)), AHORA)).toMatchObject({ ok: true, estado: 'validada' })
+      expect(al.campanas[0].estado_motivo).toBeNull()
+      al.campanas[0].estado_motivo = marcaDeMesaEnReintento('concepto', '2026-10-01am')
+      await conceptoAbrir(al, wf(k), AHORA)
+      expect(await recibirConcepto(al, entrega(k, 1, conceptoDe(k.suenaMal)), AHORA)).toMatchObject({ ok: true, estado: 'lista' })
+      expect(al.campanas[0].estado_motivo).toBeNull()
     })
     it('🔴 el puerto lanza: igual que «no abre» (nunca tumba la entrega)', async () => {
       const al = almacen(k, { puerto: async () => { throw new Error('se cayó la base') } })

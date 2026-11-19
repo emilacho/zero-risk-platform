@@ -19,15 +19,15 @@ import type { Almacen, BriefCreativoGuardado, Campana, ConceptoGuardado, Context
 import { autorizarLlamada, cadena, err, WORKFLOW_DEL_TABLERO, type Respuesta } from './autorizar'
 import type { ResultadoDeEmision } from './autoproducir'
 import { briefAnteriorParaElMarco, ordenDeAnalisisDeImpacto } from './cambios-pedidos'
-import { avisosDeCitasBajadas, bajarCitasNoLiterales, hallazgosDelBrief, insumosDelBrief, leerBriefCreativo, REFERENCIA_DEL_BRIEF_CREATIVO, type BriefCreativoLeido } from './brief-creativo'
+import { avisosDeCitasBajadas, bajarCitasNoLiterales, hallazgosDelBrief, insumosDelBrief, leerBriefCreativo, PREFIJO_AVISO_DE_LA_MEJOR_VERSION, REFERENCIA_DEL_BRIEF_CREATIVO, type BriefCreativoLeido } from './brief-creativo'
 import { escribirHoja } from './hoja'
 import { fichasEnTexto as fichasDeOfertaEnTexto, type FichaDeOferta } from './ficha-de-oferta'
 import { filaSinFamilia, notaSinFamilia } from './sin-familia'
-import { hallazgosDelConcepto, idDeBrief, idDeConcepto, insumosDesdeEstrategia, leerConcepto, resumenDelBanco, resumenDeLaVersionAnterior, type ConceptoLeido, type InsumosDelConcepto } from './conceptos'
+import { hallazgosDelConcepto, idDeBrief, idDeConcepto, insumosDelBanco, insumosDesdeEstrategia, leerConcepto, resumenDelBanco, resumenDeLaVersionAnterior, type ConceptoLeido, type InsumosDelBanco, type InsumosDelConcepto } from './conceptos'
 import { sumarDias } from './fechas'
 import { medidaDeCampana } from './constantes'
 import { metodoDe } from './metodos'
-import { abrirEsperaDe, ponerNecesitaHumano, resolverEsperas } from './nucleo'
+import { abrirEsperaDe, PREFIJO_DE_REINTENTO, resolverEsperas, tramoDeReintento } from './nucleo'
 import { reglaDeIdioma, reglaDeRegistro } from './registro'
 import { abrirRegistro, avisoDePistas, avisosDeLaSalida, esperaDeRegistroViva, leerArtifactIdDeRegistro, leerObjetoDeRegistro, objetoDeRegistro, pistasDeRegistro, registroFijado, seRevisaElRegistro, textoDeLaVuelta, type DocDeRegistro } from './registro-en-jefatura'
 import { TIPO_DE_ESPERA as TIPO_DE_ESPERA_DE_JEFATURA } from './revision-jefatura'
@@ -39,8 +39,8 @@ import type { Estrategia, FormatosPorRed } from './tipos'
 import { contextoDeLaMesa } from '../sedes/por-abrir'
 import { bloqueDelPerfil, type PerfilParaLectores } from '../perfil-del-publico/lectores'
 
-export const CAP_DE_VUELTAS_DE_CAMBIOS = 2
-/** versión 1 + UNA reapertura (brief devuelto · concepto sin_mesa); a la siguiente, necesita_humano */
+export const CAP_DE_VUELTAS_DE_CAMBIOS = 3 // 19-nov · grupo D · D2 (c): el 3 que firmó Emilio (antes 2: cortaba en el 3.er pedido)
+/** versión 1 + UNA reapertura (brief devuelto · concepto sin_mesa); a la siguiente, la mejor versión o la reapertura en la vuelta siguiente (grupo D · 19-nov) */
 export const MAX_VERSIONES_POR_REAPERTURA = 2
 /**
  * 11-nov · colaterales · la marca de una versión del brief que NO hizo una mesa: la escribió el motor de colaterales (un retoque aprobado o su
@@ -67,12 +67,96 @@ export function versionesDeMesaHasta(briefs: Pick<BriefCreativoGuardado, 'versio
 async function agotoLaReapertura(al: Almacen, campanaId: string, version: number): Promise<boolean> {
   return versionesDeMesaHasta(await al.briefsDe(campanaId), version) >= MAX_VERSIONES_POR_REAPERTURA
 }
+
+/**
+ * 19-nov · GRUPO D (ADENDA de Lenovo 18-nov 17:22Z, punto 2 · D1 (a) y D2 (c) 19-nov 08:00Z): los topes de las mesas quedan como guardas contra lazos, pero al llegar
+ * la campaña YA NO pasa a `necesita_humano`:
+ *   · si hay un brief con texto, queda vigente el de MENOS bloqueos (empate: el más nuevo), validado, con sus bloqueos escritos como avisos con esta marca. La hoja los copia
+ *     en CADA pieza (`AVISOS DEL BRIEF CREATIVO`), y así llegan a la jefatura dentro de «El brief de este entregable»: el revisor mira justo esos puntos (condición de Lenovo);
+ *   · si no hay texto que elegir, la mesa se reabre en la vuelta siguiente del vigía, nunca dos veces en el mismo tramo de medio día (como los reintentos del grupo A).
+ */
+export const MOTIVO_MEJOR_VERSION_DEL_BRIEF = 'mejor_version_al_tope'
+export { PREFIJO_AVISO_DE_LA_MEJOR_VERSION }
+export const esMejorVersionDelBrief = (b: Pick<BriefCreativoGuardado, 'motivo'> | null | undefined): boolean => b?.motivo === MOTIVO_MEJOR_VERSION_DEL_BRIEF
+/** los bloqueos que dejó escritos la devolución de una versión (una línea «- …» por bloqueo) */
+export const bloqueosGuardados = (b: Pick<BriefCreativoGuardado, 'devolucion_texto'>): string[] =>
+  (b.devolucion_texto ?? '').split('\n').map((l) => l.replace(/^\s*-\s*/, '').trim()).filter(Boolean)
+/**
+ * puro · de las versiones DEVUELTAS con texto leído, la de MENOS bloqueos; empate → la más nueva; ninguna → null. Solo las devueltas: una `validada`
+ * anterior ya quedó reemplazada (la dirección devolvió la de después, o era un retoque que se deshizo) y no guarda bloqueos, así que ganaría con cero sin serlo.
+ * Tampoco la que Emilio mandó a cambiar («Pedir cambios»): la rechazó él, nunca vuelve sola
+ */
+export function mejorBriefConTexto<B extends Pick<BriefCreativoGuardado, 'version' | 'estado' | 'texto_md' | 'leido' | 'devolucion_texto' | 'motivo'>>(briefs: readonly B[]): B | null {
+  const con = briefs.filter((b) => !!b.texto_md && !!b.leido && b.estado === 'devuelta' && b.motivo !== MOTIVO_CAMBIOS_DE_EMILIO)
+  if (!con.length) return null
+  return [...con].sort((a, b) => bloqueosGuardados(a).length - bloqueosGuardados(b).length || b.version - a.version)[0]
+}
+/**
+ * la marca de la mesa que espera la vuelta siguiente: vive en el motivo de la campaña (como los reintentos del grupo A) y lleva el tramo de medio día
+ * en que se abrió (o se esperó) por última vez. Así la mesa se abre a lo más UNA vez por tramo, y nunca en el mismo tramo en que llegó al tope.
+ */
+export const marcaDeMesaEnReintento = (mesa: 'brief' | 'concepto', tramo: string): string => `${PREFIJO_DE_REINTENTO} · ${mesa} · mesa al tope · tramo ${tramo}`
+export const tramoDeLaMarca = (motivo: string | null | undefined, mesa: 'brief' | 'concepto'): string | null => {
+  const pref = `${PREFIJO_DE_REINTENTO} · ${mesa} · mesa al tope · tramo `
+  return motivo && motivo.startsWith(pref) ? motivo.slice(pref.length).split(' ')[0] || null : null
+}
+/**
+ * ¿la mesa al tope espera la vuelta siguiente? · la primera vez escribe la marca con este tramo y avisa UNA vez en #alertas (la clave lleva la versión
+ * del tope) → espera · en el mismo tramo → espera · en un tramo posterior → mueve la marca a este tramo y deja abrir (la mesa nueva queda en este tramo)
+ */
+async function esperaLaVueltaSiguiente(al: Almacen, campana: Campana, mesa: 'brief' | 'concepto', version: number, que: string, ahora: string): Promise<boolean> {
+  const ahoraTramo = tramoDeReintento(ahora)
+  const previo = tramoDeLaMarca(campana.estado_motivo, mesa)
+  if (previo === ahoraTramo) return true
+  await al.actualizarCampana(campana.id, { estado_motivo: marcaDeMesaEnReintento(mesa, ahoraTramo) })
+  if (previo !== null) return false
+  await al.avisarAlBuzon({
+    clave: `cadena:mesa-en-reintento:${mesa}:${campana.id}:v${version}`, tipo: 'alarma', client_id: campana.client_id, origen: 'cadena/mesas · grupo D', workflow_id: null, workflow_execution_id: null,
+    titulo: `La campaña ${campana.id} sigue sola: la mesa de ${mesa} se reabre en la vuelta siguiente`,
+    detalle: `${que}. No hay una versión con texto que dejar vigente, así que la mesa se vuelve a abrir en la vuelta siguiente del vigía (a lo más una vez por medio día). La campaña no se detiene; no hace falta nadie.`,
+  })
+  return true
+}
+/**
+ * 🟡 1 de CC7 (19-nov 09:00Z) · la marca es de UN incidente: cuando la mesa entrega (brief con texto · gran idea `lista`), se borra. Sin esto, una marca vieja de otro
+ * episodio hacía que el tope siguiente abriera en el mismo tramo y sin alarma. Solo borra la marca de ESA mesa (la del grupo A u otra mesa no se tocan)
+ */
+async function borrarMarcaDeMesa(al: Almacen, campana: Campana, mesa: 'brief' | 'concepto'): Promise<void> {
+  if (tramoDeLaMarca(campana.estado_motivo, mesa) !== null) await al.actualizarCampana(campana.id, { estado_motivo: null })
+}
+/** la respuesta de la mesa que espera: 200 «ya_hecha» para el flujo de la puerta (no hay nada que llevar a la oficina en esta vuelta), con el porqué */
+const respuestaEnReintento = (mesa: 'brief' | 'concepto', version: number, que: string): Respuesta =>
+  ({ status: 200, cuerpo: { ya_hecha: true, en_reintento: true, mesa, version, nota: `${que}; se reabre en la vuelta siguiente` } })
+
+/** deja vigente la mejor versión del brief (sin `necesita_humano`) y avisa UNA vez en #alertas · null si no hay versión con texto */
+async function quedaLaMejorVersionDelBrief(al: Almacen, campana: Campana, briefs: BriefCreativoGuardado[], que: string): Promise<{ version: number; de: number; bloqueos: string[] } | null> {
+  const mejor = mejorBriefConTexto(briefs)
+  if (!mejor) return null
+  const bloqueos = bloqueosGuardados(mejor)
+  const leidoBase = mejor.leido as unknown as BriefCreativoLeido
+  const leido = { ...leidoBase, avisos: [...(leidoBase.avisos ?? []), ...bloqueos.map((b) => `${PREFIJO_AVISO_DE_LA_MEJOR_VERSION}${b}`)] }
+  const ultima = briefs.reduce((m, b) => Math.max(m, b.version), 0)
+  const patch = { estado: 'validada' as const, leido: leido as unknown as Record<string, unknown>, motivo: MOTIVO_MEJOR_VERSION_DEL_BRIEF }
+  let version = mejor.version
+  // la mejor es la última: se valida ahí mismo; si es una anterior, se copia como versión nueva (la última manda en toda la cadena: «el brief vigente» es el último)
+  if (mejor.version === ultima) await al.actualizarBriefCreativo(campana.id, mejor.version, patch)
+  else {
+    version = ultima + 1
+    await al.insertarBriefCreativo({ campana_id: campana.id, version, texto_md: mejor.texto_md, devolucion_texto: mejor.devolucion_texto, costo_usd: null, encargo_id: null, plazo_en: null, seco: campana.seco, ...patch })
+  }
+  await al.avisarAlBuzon({
+    clave: `cadena:mejor-version:brief:${campana.id}`, tipo: 'alarma', client_id: campana.client_id, origen: 'cadena/mesas · grupo D', workflow_id: null, workflow_execution_id: null,
+    titulo: `La campaña ${campana.id} sigue con la mejor versión de su brief (la ${mejor.version})`,
+    detalle: `${que}. Quedó vigente la versión con menos bloqueos (${bloqueos.length}); cada pieza los lleva escritos y la jefatura los revisa. No hace falta nadie.`,
+  })
+  return { version, de: mejor.version, bloqueos }
+}
 export const PLAZO_DE_MESA_MIN = { brief: 30, concepto: 90 } as const
 export const HOLGURA_DE_MESA_MIN = 30
 export const TIPO_DE_ESPERA_DE_CONCEPTO = 'aprobacion_concepto'
 export const objetoDeEsperaDeConcepto = (version: number): string => `concepto:v${version}`
 
-export interface SobreParaLaOficina { tipo_de_mesa: 'brief' | 'concepto'; client_id: string; campana_id: string; version: number; dry_run: boolean; marco_texto: string; condiciones: string[] }
+export interface SobreParaLaOficina { tipo_de_mesa: 'brief' | 'concepto'; client_id: string; campana_id: string; version: number; dry_run: boolean; marco_texto: string; condiciones: string[]; /** 19-nov · G4 (CC5 · Lenovo 01:00Z): solo en la mesa del brief, el plan ENTERO en su campo propio; el marco ya no lo repite (antes iba al final del marco y el corte de 40 000 se lo comía) */ plan_texto?: string; /** 18-nov · relleno del banco: solo en la mesa de concepto; la oficina cuenta el banco con esto antes de entregar */ insumos_del_banco?: InsumosDelBanco }
 /**
  * El SOBRE con el que la puerta vuelve a entrar (31-oct · respuesta a CC2 «quién vuelve a entrar»): quien SABE del evento lo arma aquí y el flujo que ya corre lo lleva a la sala;
  * el vigía reemite el MISMO sobre de respaldo. La clave lleva la ETAPA (`campana:tanda-N:<etapa>`) para que la sala no lo trague como repetido cuando la pieza que faltaba ya está.
@@ -146,6 +230,9 @@ const reglaDeLengua = (ctx: ContextoDelCliente): string => [reglaDeRegistro(ctx.
  * El bloque `# FICHAS DE LAS OFERTAS` sale de `fichasEnTexto` de CC3, tal cual; sin fichas, el mismo bloque lo DICE (nunca falta en silencio).
  * Quién trae las fichas aquí lo cablea la entrega 2 de A (el lector y su tabla); hasta entonces los llamadores no las pasan y el bloque declara que no hay.
  */
+/** lo que el marco del brief dice donde antes iba el plan · el plan viaja en `sobre.plan_texto` y la oficina lo pone en «## 3 · El plan de trabajo» */
+export const PLAN_EN_SU_LUGAR = '(el plan de la campaña va ENTERO más abajo, en «## 3 · El plan de trabajo»: léelo ahí; no se repite en este marco)'
+
 export function marcoDelBrief(a: { ctx: ContextoDelCliente; estrategia: Estrategia; version: number; devolucion: string | null; nota: string | null; informeDeMercado?: string | null; metodo?: string | null; anterior?: string | null; perfil?: PerfilParaLectores | null; fichas?: ReadonlyArray<FichaDeOferta> | null; hoy?: string | null }): string {
   const perfil = a.perfil ? bloqueDelPerfil(a.perfil) : ''
   return [
@@ -178,7 +265,8 @@ export function marcoDelBrief(a: { ctx: ContextoDelCliente; estrategia: Estrateg
     ...(a.ctx.eslogan ? [`# UNA FRASE QUE EL CLIENTE USA (contexto)\n«${a.ctx.eslogan.texto}»: ${a.ctx.eslogan.regla}`] : []),
     `# PALABRAS QUE LA MARCA EVITA (contexto, no prohibición: razona la intención; un claim propio sin prueba no va, una reseña citada y atribuida sí)\n${a.ctx.forbiddenWords.length ? a.ctx.forbiddenWords.map((w) => `- ${w}`).join('\n') : '(ninguna)'}${a.ctx.palabrasDuras?.length ? `\n\n# PROHIBIDAS DE VERDAD (una norma o una orden declarada, con su cita): estas no se usan\n${a.ctx.palabrasDuras.map((w) => `- ${w}`).join('\n')}` : ''}`,
     '',
-    `# PLAN\n${a.ctx.planTexto}`,
+    // 19-nov · G4 (CC5): el plan va ENTERO en su lugar propio del pedido («## 3 · El plan de trabajo»), no aquí: así entra una sola vez y no lo corta el tope del marco
+    `# PLAN\n${PLAN_EN_SU_LUGAR}`,
   ].join('\n')
 }
 
@@ -292,6 +380,7 @@ export async function briefAbrir(al: Almacen, cuerpo: Record<string, unknown>, a
         metodo: await metodoDe(al, 'brief'),
       }),
       condiciones: condicionesDe(estrategia, await al.formatos()),
+      plan_texto: ctx.planTexto,
     }
     return { status: 200, cuerpo: { ya_abierta: true, version: ultimo.version, brief_id: idDeBrief(campana.id, ultimo.version), plazo_mesa_min: PLAZO_DE_MESA_MIN.brief, sobre } }
   }
@@ -301,9 +390,12 @@ export async function briefAbrir(al: Almacen, cuerpo: Record<string, unknown>, a
   const nota = pedido.nota
   if (ultimo?.estado === 'validada' && !nota) return { status: 200, cuerpo: { ya_hecha: true, version: ultimo.version, brief_id: idDeBrief(campana.id, ultimo.version) } }
   // reapertura por devolución o fallo: UNA vez; con nota de Emilio (cambios) no cuenta como reapertura
+  // 19-nov · grupo D: al tope ya no se para · queda la mejor versión con texto; sin texto que elegir, se reabre en la vuelta siguiente (nunca dos veces en el mismo tramo)
   if (ultimo && (ultimo.estado === 'devuelta' || ultimo.estado === 'descartada') && !nota && versionesDeMesaHasta(briefs, ultimo.version) >= MAX_VERSIONES_POR_REAPERTURA) {
-    const r = await ponerNecesitaHumano(al, campana, `el brief creativo ya se ${ultimo.estado === 'devuelta' ? 'devolvió' : 'descartó'} ${ultimo.version} veces`, ahora)
-    return { status: 409, cuerpo: { error: 'brief_agotado', necesita_humano: true, alerta: r.alerta } }
+    const que = `el brief creativo ya se ${ultimo.estado === 'devuelta' ? 'devolvió' : 'descartó'} ${ultimo.version} veces`
+    const mejor = await quedaLaMejorVersionDelBrief(al, campana, briefs, que)
+    if (mejor) return { status: 200, cuerpo: { ya_hecha: true, version: mejor.version, brief_id: idDeBrief(campana.id, mejor.version), mejor_version: { de: mejor.de, bloqueos: mejor.bloqueos.length } } }
+    if (await esperaLaVueltaSiguiente(al, campana, 'brief', ultimo.version, `${que} y ninguna versión trae texto`, ahora)) return respuestaEnReintento('brief', ultimo.version, `${que} y ninguna versión trae texto`)
   }
   const plazoMin = typeof cuerpo.plazo_mesa_min === 'number' && cuerpo.plazo_mesa_min > 0 ? cuerpo.plazo_mesa_min : PLAZO_DE_MESA_MIN.brief
   const fila: BriefCreativoGuardado = { campana_id: campana.id, version, estado: 'borrador', texto_md: null, leido: null, devolucion_texto: null, motivo: null, costo_usd: null, encargo_id: null, seco: campana.seco, plazo_en: masMinutos(ahora, plazoMin + HOLGURA_DE_MESA_MIN) }
@@ -312,6 +404,7 @@ export async function briefAbrir(al: Almacen, cuerpo: Record<string, unknown>, a
     tipo_de_mesa: 'brief', client_id: campana.client_id, campana_id: campana.id, version, dry_run: campana.seco,
     marco_texto: marcoDelBrief({ fichas: await fichasDeLaCampana(al, campana.id), ctx, estrategia, version, hoy: ahora.slice(0, 10), devolucion: ultimo?.estado === 'devuelta' && ultimo.motivo !== MOTIVO_CAMBIOS_DE_EMILIO ? ultimo.devolucion_texto : null, nota, informeDeMercado: texto(cuerpo.informe_de_mercado), metodo: await metodoDe(al, 'brief'), anterior: pedido.base ? briefAnteriorParaElMarco(pedido.base) : null, perfil: await perfilParaLaMesa(al, campana.client_id, 'brief') }),
     condiciones: condicionesDe(estrategia, await al.formatos()),
+    plan_texto: ctx.planTexto,
   }
   return { status: 200, cuerpo: { version, brief_id: idDeBrief(campana.id, version), plazo_mesa_min: plazoMin, sobre } }
 }
@@ -329,7 +422,7 @@ export async function recibirBrief(al: Almacen, p: EntregaDeBrief, ahora: string
   const base = { costo_usd: p.costo_usd, encargo_id: p.encargo_id, motivo }
   if (!texto(p.texto)) {
     await al.actualizarBriefCreativo(campana.id, p.version, { ...base, estado: 'descartada', motivo: motivo ?? 'la mesa no entregó texto' })
-    if (await agotoLaReapertura(al, campana.id, p.version)) await ponerNecesitaHumano(al, campana, `la mesa del brief no entregó dos veces (${motivo ?? 'sin motivo'})`, ahora)
+    // 19-nov · grupo D: a la segunda ya no se para: la próxima apertura deja la mejor versión con texto, o reabre en la vuelta siguiente
     return { ok: true, estado: 'descartada', ...(await siguienteDespuesDe(al, campana.id)) }
   }
   const estr = await al.ultimaEstrategia(campana.id)
@@ -357,7 +450,8 @@ export async function recibirBrief(al: Almacen, p: EntregaDeBrief, ahora: string
   const bloquea = bloqueosDelBrief(leido)
   const estado = bloquea.length ? 'devuelta' : 'validada'
   await al.actualizarBriefCreativo(campana.id, p.version, { ...base, estado, texto_md: textoDelBrief, leido: leido as unknown as Record<string, unknown>, devolucion_texto: bloquea.length ? bloquea.map((b) => `- ${b}`).join('\n') : null })
-  if (estado === 'devuelta' && (await agotoLaReapertura(al, campana.id, p.version))) await ponerNecesitaHumano(al, campana, `el brief creativo se devolvió por código dos veces: ${bloquea.slice(0, 3).join(' · ')}`, ahora)
+  // 19-nov · grupo D: devuelto por código a la segunda ya no para: la próxima apertura deja vigente la mejor versión, con sus bloqueos como avisos
+  await borrarMarcaDeMesa(al, campana, 'brief')
   return { ok: true, estado, ...(await siguienteDespuesDe(al, campana.id)) }
 }
 
@@ -391,7 +485,9 @@ export async function conceptoAbrir(al: Almacen, cuerpo: Record<string, unknown>
     // hueco 1 de CC3: el mismo sobre otra vez (la oficina es idempotente); el marco se rearma con la nota persistida en la fila
     const sobre: SobreParaLaOficina = {
       tipo_de_mesa: 'concepto', client_id: campana.client_id, campana_id: campana.id, version: ultimo.version, dry_run: campana.seco,
-      marco_texto: marcoDelConcepto({ fichas: await fichasDeLaCampana(al, campana.id), ctx, estrategia, briefTexto: brief.texto_md ?? '', version: ultimo.version, nota: texto(ultimo.nota_de_emilio), inicio: campana.fecha_inicio, hoy: ahora.slice(0, 10), anterior: anteriorConCambios(todos, ultimo.version), perfil: await perfilParaLaMesa(al, campana.client_id, 'gran_idea') }), condiciones: condicionesDe(estrategia, await al.formatos()),
+      // 19-nov · ADENDA 1 · P2 (CC5): la gran idea también recibe el plan ENTERO (antes no: «el brief ya es su lectura», y así la hipótesis B se acortó en el reel auditado)
+      plan_texto: ctx.planTexto,
+      marco_texto: marcoDelConcepto({ fichas: await fichasDeLaCampana(al, campana.id), ctx, estrategia, briefTexto: brief.texto_md ?? '', version: ultimo.version, nota: texto(ultimo.nota_de_emilio), inicio: campana.fecha_inicio, hoy: ahora.slice(0, 10), anterior: anteriorConCambios(todos, ultimo.version), perfil: await perfilParaLaMesa(al, campana.client_id, 'gran_idea') }), condiciones: condicionesDe(estrategia, await al.formatos()), insumos_del_banco: insumosDelBanco(estrategia),
     }
     return { status: 200, cuerpo: { ya_abierta: true, version: ultimo.version, concepto_id: idDeConcepto(campana.id, ultimo.version), brief_version: brief.version, sobre } }
   }
@@ -399,9 +495,11 @@ export async function conceptoAbrir(al: Almacen, cuerpo: Record<string, unknown>
   // 09-nov (revalidar la gran idea): una versión anterior revalidada que espera a Emilio manda sobre las `sin_mesa` posteriores · no se abre otra mesa
   const vigente = conceptoVigente(todos)
   if (!nota && vigente && vigente !== ultimo && vigente.estado === 'lista') return { status: 200, cuerpo: { ya_hecha: true, version: vigente.version, aprobacion: vigente.aprobacion, concepto_id: idDeConcepto(campana.id, vigente.version) } }
-  if (!nota && cuentaDe(todos, (x) => x.estado === 'sin_mesa') >= MAX_VERSIONES_POR_REAPERTURA) {
-    const r = await ponerNecesitaHumano(al, campana, 'la mesa de concepto no entregó concepto dos veces', ahora)
-    return { status: 409, cuerpo: { error: 'concepto_agotado', necesita_humano: true, alerta: r.alerta } }
+  // 19-nov · grupo D: la mesa de concepto que no entregó dos veces (o que devolvió otra vez un brief que ya es la mejor versión) se reabre en la vuelta siguiente, sin parar la campaña
+  const devolvioLaMejor = ultimo?.estado === 'brief_devuelto' && esMejorVersionDelBrief(brief)
+  if (!nota && (cuentaDe(todos, (x) => x.estado === 'sin_mesa') >= MAX_VERSIONES_POR_REAPERTURA || devolvioLaMejor)) {
+    const que = devolvioLaMejor ? 'la dirección devolvió el brief que ya es la mejor versión' : 'la mesa de concepto no entregó concepto dos veces'
+    if (await esperaLaVueltaSiguiente(al, campana, 'concepto', ultimo?.version ?? 0, que, ahora)) return respuestaEnReintento('concepto', ultimo?.version ?? 0, que)
   }
   const version = (ultimo?.version ?? 0) + 1
   const plazoMin = typeof cuerpo.plazo_mesa_min === 'number' && cuerpo.plazo_mesa_min > 0 ? cuerpo.plazo_mesa_min : PLAZO_DE_MESA_MIN.concepto
@@ -412,7 +510,9 @@ export async function conceptoAbrir(al: Almacen, cuerpo: Record<string, unknown>
   await al.insertarConcepto(fila)
   const sobre: SobreParaLaOficina = {
     tipo_de_mesa: 'concepto', client_id: campana.client_id, campana_id: campana.id, version, dry_run: campana.seco,
-    marco_texto: marcoDelConcepto({ fichas: await fichasDeLaCampana(al, campana.id), ctx, estrategia, briefTexto: brief.texto_md ?? '', version, nota, inicio: campana.fecha_inicio, hoy: ahora.slice(0, 10), anterior: anteriorConCambios([...todos, fila], version), perfil: await perfilParaLaMesa(al, campana.client_id, 'gran_idea') }), condiciones: condicionesDe(estrategia, await al.formatos()),
+      // 19-nov · ADENDA 1 · P2 (CC5): la gran idea también recibe el plan ENTERO (antes no: «el brief ya es su lectura», y así la hipótesis B se acortó en el reel auditado)
+      plan_texto: ctx.planTexto,
+    marco_texto: marcoDelConcepto({ fichas: await fichasDeLaCampana(al, campana.id), ctx, estrategia, briefTexto: brief.texto_md ?? '', version, nota, inicio: campana.fecha_inicio, hoy: ahora.slice(0, 10), anterior: anteriorConCambios([...todos, fila], version), perfil: await perfilParaLaMesa(al, campana.client_id, 'gran_idea') }), condiciones: condicionesDe(estrategia, await al.formatos()), insumos_del_banco: insumosDelBanco(estrategia),
   }
   return { status: 200, cuerpo: { version, concepto_id: idDeConcepto(campana.id, version), brief_version: brief.version, plazo_mesa_min: plazoMin, sobre } }
 }
@@ -447,10 +547,14 @@ export async function recibirConcepto(al: Almacen, p: EntregaDeConcepto, ahora: 
   if (devolucion) {
     await al.actualizarConcepto(campana.id, p.version, { ...base, estado: 'brief_devuelto', brief_devuelto: devolucion, texto_md: p.texto })
     const brief = await al.ultimoBriefCreativo(campana.id)
-    if (brief) {
-      await al.actualizarBriefCreativo(campana.id, brief.version, { estado: 'devuelta', devolucion_texto: devolucion })
-      if (await agotoLaReapertura(al, campana.id, brief.version)) await ponerNecesitaHumano(al, campana, 'la dirección devolvió el brief y ya era la segunda versión', ahora)
-    }
+    // 19-nov · grupo D: si el brief YA es la mejor versión al tope, no se devuelve (sería otra vuelta sin fin): sigue validado y los puntos de la dirección
+    //   se suman a sus avisos (llegan a cada pieza y a la jefatura); la gran idea se pide otra vez en la vuelta siguiente. Si no, se devuelve como siempre y,
+    //   a la segunda, la próxima apertura deja la mejor versión
+    if (brief && esMejorVersionDelBrief(brief)) {
+      const l = (brief.leido ?? {}) as unknown as BriefCreativoLeido
+      const nuevos = bloqueosGuardados({ devolucion_texto: devolucion }).map((b) => `${PREFIJO_AVISO_DE_LA_MEJOR_VERSION}${b}`).filter((a) => !(l.avisos ?? []).includes(a))
+      if (nuevos.length) await al.actualizarBriefCreativo(campana.id, brief.version, { leido: { ...l, avisos: [...(l.avisos ?? []), ...nuevos] } as unknown as Record<string, unknown> })
+    } else if (brief) await al.actualizarBriefCreativo(campana.id, brief.version, { estado: 'devuelta', devolucion_texto: devolucion })
     return { ok: true, estado: 'brief_devuelto', ...(await siguienteDespuesDe(al, campana.id)) }
   }
   const sinMesa = (motivo: string): Promise<EntregaALaCadena> => conceptoSinMesa(al, campana, p.version, todos, { ...base, motivo, texto_md: p.texto }, ahora)
@@ -475,6 +579,7 @@ export async function recibirConcepto(al: Almacen, p: EntregaDeConcepto, ahora: 
   const leido = leerConcepto(p.texto as string, await insumosDelConcepto(al, campana))
   if (leido.estado === 'sin_concepto') return sinMesa(`sin_concepto: ${leido.bloqueos.join(' · ')}`)
   await al.actualizarConcepto(campana.id, p.version, { ...base, estado: 'lista', aprobacion: 'pendiente', texto_md: p.texto, leido: leido as unknown as Record<string, unknown> })
+  await borrarMarcaDeMesa(al, campana, 'concepto')
   await abrirAprobacionDelConcepto(al, campana, p.version, leido, p.costo_usd, todos, ahora, ctx?.nombreDelNegocio ?? null)
   return { ok: true, estado: 'lista' }
 }
@@ -482,7 +587,7 @@ export async function recibirConcepto(al: Almacen, p: EntregaDeConcepto, ahora: 
 /** la gran idea que no trae concepto: `sin_mesa` (y, a la segunda, `necesita_humano`) · la usan la entrega y el cierre de la revisión de registro */
 async function conceptoSinMesa(al: Almacen, campana: Campana, version: number, todos: ConceptoGuardado[], patch: Partial<ConceptoGuardado> & { motivo: string }, ahora: string): Promise<EntregaALaCadena> {
   await al.actualizarConcepto(campana.id, version, { ...patch, estado: 'sin_mesa' })
-  if (cuentaDe(todos, (x) => x.estado === 'sin_mesa') + 1 >= MAX_VERSIONES_POR_REAPERTURA) await ponerNecesitaHumano(al, campana, `la mesa de concepto no entregó concepto dos veces (${patch.motivo.slice(0, 160)})`, ahora)
+  // 19-nov · grupo D: a la segunda ya no para: la apertura siguiente reabre en la vuelta siguiente del vigía
   return { ok: true, estado: 'sin_mesa', ...(await siguienteDespuesDe(al, campana.id)) }
 }
 
@@ -499,7 +604,8 @@ async function cerrarBriefDeRegistro(al: Almacen, campana: Campana, version: num
   const estado = bloquea.length ? 'devuelta' : 'validada'
   await resolverEsperas(al, campana.id, TIPO_DE_ESPERA_DE_JEFATURA, objetoDeRegistro('brief', version))
   await al.actualizarBriefCreativo(campana.id, version, { estado, texto_md: textoFinal, leido: l as unknown as Record<string, unknown>, devolucion_texto: bloquea.length ? bloquea.map((b) => `- ${b}`).join('\n') : null })
-  if (estado === 'devuelta' && (await agotoLaReapertura(al, campana.id, version))) await ponerNecesitaHumano(al, campana, `el brief creativo se devolvió por código dos veces: ${bloquea.slice(0, 3).join(' · ')}`, ahora)
+  // 19-nov · grupo D: devuelto por código a la segunda ya no para (la próxima apertura deja vigente la mejor versión)
+  await borrarMarcaDeMesa(al, campana, 'brief')
   return { ok: true, estado, ...(await siguienteDespuesDe(al, campana.id)) }
 }
 
@@ -509,6 +615,7 @@ async function cerrarConceptoDeRegistro(al: Almacen, campana: Campana, version: 
   if (leido.estado === 'sin_concepto') return conceptoSinMesa(al, campana, version, todos, { motivo: `sin_concepto: ${leido.bloqueos.join(' · ')}`, texto_md: textoFinal }, ahora)
   const l = conAvisos(leido, avisos)
   await al.actualizarConcepto(campana.id, version, { estado: 'lista', aprobacion: 'pendiente', texto_md: textoFinal, leido: l as unknown as Record<string, unknown> })
+  await borrarMarcaDeMesa(al, campana, 'concepto')
   const ctx = await al.cargarContexto(campana.client_id, campana.plan_id)
   await abrirAprobacionDelConcepto(al, campana, version, l, todos.find((x) => x.version === version)?.costo_usd ?? null, todos, ahora, ctx?.nombreDelNegocio ?? null)
   return { ok: true, estado: 'lista' }
@@ -659,9 +766,16 @@ export async function conceptoDecidir(al: Almacen, cuerpo: Record<string, unknow
   if (!apuntaA) return err(400, 'E-APUNTA-A', 'cambios necesita apunta_a: «concepto» (otra ronda de la mesa) o «brief» (brief nuevo y concepto sobre él)')
   if (!nota) return err(400, 'E-NOTA', 'cambios necesita una nota: qué cambiar (va al marco de la mesa)')
   const vueltas = cuentaDe(todos, (x) => x.aprobacion === 'cambios')
+  // 19-nov · grupo D · D2 (c) de Lenovo 08:00Z (el 3 lo firmó Emilio): pasado el tope, el pedido NO se aplica y se le PREGUNTA en el buzón; la campaña no se detiene
+  // (sigue esperando su aprobación: puede aprobar cualquier versión desde el tablero). Una pregunta por campaña y por pedido (la clave lleva la versión).
   if (vueltas >= CAP_DE_VUELTAS_DE_CAMBIOS) {
-    const r = await ponerNecesitaHumano(al, campana, `Emilio pidió cambios por tercera vez sobre la gran idea (cap ${CAP_DE_VUELTAS_DE_CAMBIOS}); se decide a mano`, ahora)
-    return { status: 409, cuerpo: { error: 'vueltas_agotadas', necesita_humano: true, alerta: r.alerta } }
+    const r = await al.avisarAlBuzon({
+      clave: `cadena:vueltas-de-cambios:${campana.id}:v${version}`, tipo: 'pregunta', client_id: campana.client_id, origen: 'cadena/mesas · grupo D', workflow_id: cadena(cuerpo.workflow_id) ?? null, workflow_execution_id: cadena(cuerpo.workflow_execution_id) ?? null,
+      titulo: `La gran idea de la campaña ${campana.id}: ya pediste cambios ${vueltas} veces`,
+      detalle: `Es tu pedido número ${vueltas + 1} sobre la gran idea (el tope firmado es ${CAP_DE_VUELTAS_DE_CAMBIOS}), y no lo apliqué. ¿Abro otra ronda con tu nota, o apruebas una de las versiones desde el tablero? Tu nota: «${nota}». La campaña sigue esperando tu aprobación; no se detiene.`,
+    })
+    return { status: 409, cuerpo: { error: 'vueltas_agotadas', necesita_humano: false, pregunta: r.ok ? 'enviada' : 'no_salio', vueltas, tope: CAP_DE_VUELTAS_DE_CAMBIOS,
+      detalle: `Ya pediste cambios ${vueltas} veces, que es el tope. Este pedido no lo apliqué: ${r.ok ? 'te dejé la pregunta en el buzón' : 'la pregunta al buzón no salió'}. Puedes aprobar una de las versiones; la campaña no se detiene.` } }
   }
   // cambios sobre un concepto YA aprobado también valen (cambio de rumbo a mitad de campaña · nota 3 de CC3): las filas ya ordenadas conservan su idea_ref
   await al.actualizarConcepto(campana.id, version, { aprobacion: 'cambios', apunta_a: apuntaA, nota_de_emilio: nota, decidido_en: ahora })
@@ -769,18 +883,16 @@ export async function cerrarMesasVencidas(al: Almacen, ahora: string): Promise<A
   for (const b of await al.briefsVencidos(ahora)) {
     const motivo = `la mesa del brief (versión ${b.version}) no entregó antes de su plazo más la holgura (${b.plazo_en})`
     await al.actualizarBriefCreativo(b.campana_id, b.version, { estado: 'descartada', motivo })
-    const campana = await al.campana(b.campana_id)
     const agotado = await agotoLaReapertura(al, b.campana_id, b.version)
-    if (campana && agotado) await ponerNecesitaHumano(al, campana, `la mesa del brief no entregó dos veces (la última venció: ${b.plazo_en})`, ahora)
-    out.push({ campana_id: b.campana_id, texto: `${motivo}: queda descartada${agotado ? ' · ya son dos: necesita_humano' : ' · se reabre una vez'}` })
+    // 19-nov · grupo D: a la segunda ya no para: sigue sola (la mejor versión con texto, o la mesa se reabre en la vuelta siguiente)
+    out.push({ campana_id: b.campana_id, texto: `${motivo}: queda descartada${agotado ? ' · ya son dos: sigue sola con la mejor versión o se reabre en la vuelta siguiente' : ' · se reabre una vez'}` })
   }
   for (const c of await al.conceptosVencidos(ahora)) {
     const motivo = `la mesa de concepto (versión ${c.version}) no entregó antes de su plazo más la holgura (${c.plazo_en})`
     await al.actualizarConcepto(c.campana_id, c.version, { estado: 'sin_mesa', motivo })
-    const campana = await al.campana(c.campana_id)
     const sinMesa = (await al.conceptosDe(c.campana_id)).filter((x) => x.estado === 'sin_mesa').length
-    if (campana && sinMesa >= MAX_VERSIONES_POR_REAPERTURA) await ponerNecesitaHumano(al, campana, `la mesa de concepto no entregó dos veces (la última venció: ${c.plazo_en})`, ahora)
-    out.push({ campana_id: c.campana_id, texto: `${motivo}: queda sin_mesa${sinMesa >= MAX_VERSIONES_POR_REAPERTURA ? ' · ya son dos: necesita_humano' : ' · se reabre una vez'}` })
+    // 19-nov · grupo D: a la segunda ya no para: la mesa se reabre en la vuelta siguiente
+    out.push({ campana_id: c.campana_id, texto: `${motivo}: queda sin_mesa${sinMesa >= MAX_VERSIONES_POR_REAPERTURA ? ' · ya son dos: se reabre en la vuelta siguiente' : ' · se reabre una vez'}` })
   }
   return out
 }
@@ -804,7 +916,7 @@ export async function avisoDePrimeraSemana(al: Almacen, campana: Pick<Campana, '
 }
 
 // ───────────────────────────────────────────────────────── LA HOJA DE PRODUCCIÓN por código (hoja.v1) · `POST /api/cadena/hojas {accion: 'escribir'}`
-const ESTADOS_QUE_NO_VAN_A_LA_HOJA = new Set(['esquema', 'cancelada', 'espera_video', 'vencida_sin_brazo', 'perdio_su_fecha', 'descartada_sin_fuente'])
+const ESTADOS_QUE_NO_VAN_A_LA_HOJA = new Set(['esquema', 'cancelada', 'espera_video', 'vencida_sin_brazo', 'perdio_su_fecha', 'descartada_sin_fuente', 'descartada_por_bloqueo'])
 /** la hoja de un lote de filas (por `fila_ids` o por `semana`): brief creativo validado + gran idea aprobada + filas con su `idea_ref` → el texto que la oficina ya lee (`parsearBrief`). No llama a nadie ni gasta. */
 /** 17-nov · Sprint 4 · A entrega 2: las fichas que escribió el lector de ESTA campaña (brief, gran idea y hoja leen las mismas) · sin ellas, cada bloque lo DICE */
 async function fichasDeLaCampana(al: Almacen, campanaId: string): Promise<FichaDeOferta[] | null> {
@@ -833,7 +945,8 @@ export async function hojaEscribir(al: Almacen, cuerpo: Record<string, unknown>,
   if (!filas.length) return err(409, 'E-SIN-FAMILIA', `ninguna fila del lote tiene un formato con familia: ${excluidas.map((x) => x.fila_id).join(', ')} · no se escribe la hoja ni se gasta`)
   const manual = ctx.referencias.find((r) => r.origen === 'manual')
   // 17-nov · Sprint 4 · A entrega 2: las fichas que escribió el lector de ESTA campaña; sin ellas (o sin almacén que las guarde) la hoja lo declara
-  const fichas = await fichasDeLaCampana(al, campana.id)
+  const guardadas = await al.ultimasFichas?.(campana.id)
+  const fichas = guardadas?.contenido ?? null
   // 18-nov · Lenovo (#1147): el estado de la oferta se lee EN VIVO del cerebro (consulta de «Hechos del negocio»); un fallo = null (vale la ficha y se avisa) · nunca frena
   const hechos = al.hechosDelNegocio ? await al.hechosDelNegocio(campana.client_id).catch(() => null) : undefined
   const hoja = escribirHoja({
@@ -841,7 +954,7 @@ export async function hojaEscribir(al: Almacen, cuerpo: Record<string, unknown>,
     hoy: ahora.slice(0, 10), lote_key: cadena(cuerpo.lote_key) ?? (ids ? `${campana.id.slice(0, 8)}:v${version}:ids` : `${campana.id.slice(0, 8)}:v${version}:s${semana}`),
     brief: brief.leido as unknown as BriefCreativoLeido, brief_id: idDeBrief(campana.id, brief.version), concepto: mesa.concepto, concepto_id: idDeConcepto(campana.id, mesa.version ?? 1),
     filas: filas.map((f) => ({ id: f.id, fecha: f.fecha, hora: f.hora, red: f.red, formato: f.formato, pilar: f.pilar, tema: f.tema, datos: f.datos, fase: f.fase ?? null, idea_ref: f.idea_ref ?? null, concepto: f.concepto ?? null, oferta: f.sede ?? null })),
-    formatos, seco: campana.seco, fichas, hechos,
+    formatos, seco: campana.seco, fichas, hechos, pendientes_de_las_fichas: guardadas?.pendientes ?? null,
   })
   return { status: 200, cuerpo: { hoja: hoja.texto_md, briefs: hoja.briefs, provenance: hoja.provenance, avisos: hoja.avisos, filas: filas.map((f) => f.id), ...(excluidas.length ? { excluidas } : {}), brief_version: brief.version, concepto_version: mesa.version } }
 }

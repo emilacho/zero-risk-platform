@@ -22,6 +22,7 @@ const h = vi.hoisted(() => ({
   redactor: [] as string[],
   estado: 200,
   pagina: 300,
+  noJunta: [] as string[],
 }))
 vi.mock('@/lib/supabase', () => {
   const DATOS: Record<string, unknown[]> = {
@@ -32,7 +33,7 @@ vi.mock('@/lib/supabase', () => {
   const consulta = (t: string) => {
     h.tablas.push(t)
     const o: Record<string, unknown> = {}
-    for (const m of ['select', 'eq', 'order', 'limit', 'in', 'contains']) o[m] = () => o
+    for (const m of ['select', 'eq', 'is', 'order', 'limit', 'in', 'contains']) o[m] = () => o
     for (const m of ['insert', 'upsert', 'update', 'delete']) o[m] = () => { h.escrituras.push(`${m}:${t}`); return o }
     o.then = (ok: (x: unknown) => unknown) => ok({ data: DATOS[t] ?? [], error: null })
     return o
@@ -53,7 +54,9 @@ vi.mock('@/lib/portero-alimenta/consultar', () => ({
       return pedido.contenido_completo === true || t.length <= 700 ? f : { ...f, contenido: `${t.slice(0, 700)}…` }
     })
     const hay = pedido.todo === true && desde + tam < h.resultados.length
-    return { status: 200, body: { resultados: trozo, siguiente_desde: hay ? desde + tam : null } }
+    // 18-nov · con `publico` (#1167) se porta como el cerebro: declara las clases del tipo y lo que no junta
+    const voz = pedido.publico === 'consumo' ? { voz_del_publico: { publico: 'consumo', clases_del_publico: ['resenas', 'comentarios', 'mencion', 'competidor_comentarios'], fuentes_que_el_cerebro_no_junta: h.noJunta } } : {}
+    return { status: 200, body: { resultados: trozo, siguiente_desde: hay ? desde + tam : null, ...voz } }
   },
 }))
 vi.mock('@/lib/ingress-filter', () => ({ DEFAULT_ROUTE_POLICY: {}, runIngressFilter: async () => ({ allow: true }) }))
@@ -72,7 +75,7 @@ const urls = () => red.mock.calls.map((c) => String(c[0]))
 
 describe('el perfil del público NO raspa: lee la voz del público solo del cerebro', () => {
   beforeEach(() => {
-    h.tablas.length = 0; h.escrituras.length = 0; h.consultas.length = 0; h.redactor.length = 0; h.estado = 200; h.pagina = 300
+    h.tablas.length = 0; h.escrituras.length = 0; h.consultas.length = 0; h.redactor.length = 0; h.estado = 200; h.pagina = 300; h.noJunta = []
     red.mockClear()
     vi.stubGlobal('fetch', red)
     vi.stubEnv('APIFY_SERVICE_WEBHOOK_URL', PUERTA_DE_APIFY)
@@ -90,10 +93,18 @@ describe('el perfil del público NO raspa: lee la voz del público solo del cere
     // la base: nada de lo crudo de Apify ni de una tabla de voces propia; y ninguna escritura
     expect(h.tablas.filter((t) => /apify|perfil_publico_voces/.test(t))).toEqual([])
     expect(h.escrituras).toEqual([])
-    // la voz llegó por la consulta del cerebro, con las clases de habla
+    // la voz llegó por la consulta del cerebro, pedida por TIPO de público (#1167): el cerebro elige las clases; sin `que` ni `clase`
     expect(h.consultas).toHaveLength(1)
-    expect(String(h.consultas[0].clase).split(',')).toEqual(expect.arrayContaining(['comentarios', 'resenas', 'mencion']))
+    expect(h.consultas[0]).toMatchObject({ publico: 'consumo', agente: 'feedback-synthesizer' })
+    expect(h.consultas[0]).not.toHaveProperty('clase')
+    expect(h.consultas[0]).not.toHaveProperty('que')
     expect(h.redactor[0]).toContain(`[voz:${uuid(2)}]`)
+  })
+  it('🔴 lo que el cerebro declara que NO junta llega a la fuente faltante (por el camino real de la consulta)', async () => {
+    h.resultados = fichas('resenas', 20, 1)
+    h.noJunta = ['directorios']
+    const r = await correr()
+    expect(r.publicos[0].fuentes_faltantes).toEqual(['cerebro:comentarios', 'cerebro:mencion', 'cerebro:competidor_comentarios', 'directorios'])
   })
   it('🔴 sin muestra en el cerebro: NO sale a buscarla · declara la fuente faltante, no redacta y no llama a nadie', async () => {
     h.resultados = fichas('resenas', 20, 1)
@@ -125,6 +136,14 @@ describe('el perfil del público NO raspa: lee la voz del público solo del cere
     expect(h.consultas).toHaveLength(20)
     expect(r.voces_del_cerebro).toBe(60)
     expect(r.cortes).toContain('se leyeron 60 voces en 20 páginas y el cerebro tiene más: el perfil usa solo esas')
+  })
+  it('🔴 CC7 g3 · con el tope de páginas agotado, lo que el cerebro declara que no junta igual llega a la fuente faltante', async () => {
+    h.pagina = 3
+    h.resultados = fichas('resenas', 70, 1)
+    h.noJunta = ['directorios']
+    const r = await correr()
+    expect(h.consultas).toHaveLength(20)
+    expect(r.publicos[0].fuentes_faltantes).toContain('directorios')
   })
   it('🔴 la consulta al cerebro CAÍDA no se lee como «cerebro vacío»: la corrida falla diciendo por qué, sin redactar ni declarar fuentes faltantes falsas', async () => {
     h.estado = 503

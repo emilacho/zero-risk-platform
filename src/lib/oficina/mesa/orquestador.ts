@@ -9,19 +9,20 @@ import { avanzar, cerrarPorTope, fallar, plantillaDe, type Respuesta, type Resul
 import { baseDeLaminas } from '../orquestador-laminas'
 import { fotosDeReferencia } from '../foto-de-referencia'
 import { seccionDeCambiosDelDueno } from '../cambios-del-dueno'
-import { devolucionDelBrief, entregarALaCadena, marcoDe, textoDeLaMesaParaLaCadena } from './de-la-cadena'
+import { conCabeceraDelRelleno, devolucionDelBrief, entregarALaCadena, marcoDe, rellenoPendiente, textoDeLaMesaParaLaCadena } from './de-la-cadena'
 import { conMarcaDeLaCritica } from './critica'
 import { abrirMaterialDeLaMesa, materialDe } from '../material-orquestador'
 import { registrarPaso } from '../motor'
 import { cotaDeLaMesa, loQueSigueDeLaMesa, pasadasDeLaMesa } from '../topes-por-duracion'
 import type { Cambios, Encargo, Puertos } from '../puertos'
 import type { Estado, Plantilla } from '../tipos'
-import { armarTarea, ASIENTOS_CON_METODO, pedidoDeAgente, seccionDeMetodo, type ContextoDeTurno, type TipoDeTurno } from './pedidos'
+import { armarTarea, ASIENTOS_CON_METODO, cierreConElObjetivo, pedidoDeAgente, seccionDeMetodo, type ContextoDeTurno, type TipoDeTurno } from './pedidos'
+import { imagenesDelTurno } from './fotos-a-la-vista'
 import { condicionesDeLaPieza, direccionDe, especialistasPertinentes, ingenieroDePrompts, porteroDe } from './directorio'
 import { condicionesDelVideo } from './condiciones-de-video'
 import { FORMATO_DE_PIEZA, destinatarioDe, leerRespuestaSobreNotas, quitarLineasDeNotas, rastroDeLasNotas, seccionDeNotasDelDueno, tareaParaConsultar } from './aprendizaje'
 import { separarRespuestas } from '../sentido-contra-la-ficha'
-import { tableroParaLaJefatura } from './libro'
+import { integracionDevuelta, pegarCitas, tableroParaLaJefatura, textoDeLoQueFalta } from './libro'
 import { siguienteDeLaMesa, techoDe, type ContextoDeLaMesa } from './planificador'
 import { traducirPieza, hayImagenesAGenerar, pedidoDeImagen, type ConceptoDeImagen, type OpcionesDeTraduccion, type Traduccion } from './traductor'
 import { traducirGuion, type TraduccionDeGuion } from '../video/guion'
@@ -32,6 +33,11 @@ import { avisosDeRitmo, bibliotecaDelCliente, seccionDeLaBiblioteca, type RitmoD
 import { desarmarReferencias, seccionDeReferencias } from '../video/referencias'
 import { aporteDePrompts, promptsParaElBrazo, type ConceptoDeLaImagen, type ImagenARedactar } from './prompts'
 import { COTAS, FAMILIAS_MESA, esDeLaCadena, type Aporte, type EstadoMesa, type LecturaDeNotas, type Tarjeta, type TipoDeAporte } from './tipos'
+import { bloqueDelPerfil } from '../../perfil-del-publico/lectores'
+import type { FuentesCompletas } from '../puertos'
+
+/** 19-nov · ADENDA 1 · P2b: el perfil del público de la mesa de piezas: el mismo bloque que leen la jefatura y los pedidos de la oficina (vigente, sin leer o ninguno, DICHO) */
+const perfilDeLaMesa = (F: Pick<FuentesCompletas, 'perfil_del_publico'>): { perfil_texto?: string } => { const b = F.perfil_del_publico ? bloqueDelPerfil(F.perfil_del_publico) : ''; return b ? { perfil_texto: b } : {} }
 
 const r = (status: number, cuerpo: Record<string, unknown>): Respuesta => ({ status, cuerpo })
 const sha = (x: unknown) => crypto.createHash('sha256').update(JSON.stringify(x)).digest('hex')
@@ -84,14 +90,15 @@ function estadoInicialDeLaMesa(tipo: EstadoMesa['tipo'], directorio: Tarjeta[]):
   return { tipo, directorio_congelado: directorio.filter((t) => t.activo), direccion: direccionDe(directorio, tipo)?.agente ?? '', turnos: 0, integraciones: 0, devoluciones_por_citas: 0, libro_visto: 0, preguntas_del_traductor: 0, marcas: {}, fase: 'trabajando', cierre_forzado: null, pieza_texto: null, turno_abierto: null }
 }
 
-function contextoDe(enc: Encargo, est: EstadoMesa): ContextoDeTurno {
+// 19-nov · G5b · 🔴 de CC7: `tope` = el de ESTA pieza (`plantillaDe`: min(su duración, el encargo)); sin él, el del encargo (como antes)
+function contextoDe(enc: Encargo, est: EstadoMesa, tope: number = enc.tope_usd): ContextoDeTurno {
   // 31-oct · mesas de la cadena (brief y concepto): no hay brief de la sala ni láminas; el contexto es el marco que la cadena guardó al abrir
   if (esDeLaCadena(est.tipo)) {
     const m = marcoDe(enc.estado_del_motor)
-    return { cliente_nombre: m?.cliente_nombre ?? '', tipo: est.tipo, brief_id: enc.brief_id, brief_texto: m?.marco_texto ?? '(sin marco)', manual_texto: m?.manual_texto ?? '', plan_texto: m?.plan_texto ?? null, fotos: m?.fotos ?? [], tope_usd: enc.tope_usd, gasto_usd: enc.estado_del_motor.gasto_usd }
+    return { cliente_nombre: m?.cliente_nombre ?? '', tipo: est.tipo, brief_id: enc.brief_id, brief_texto: m?.marco_texto ?? '(sin marco)', manual_texto: m?.manual_texto ?? '', plan_texto: m?.plan_texto ?? null, fotos: m?.fotos ?? [], tope_usd: tope, gasto_usd: enc.estado_del_motor.gasto_usd }
   }
   const b = baseDeLaminas(enc.estado_del_motor)
-  return { cliente_nombre: b.F.cliente_nombre, tipo: est.tipo, brief_id: enc.brief_id, brief_texto: b.brief.texto, manual_texto: b.F.manual_texto, plan_texto: b.F.plan_texto, fotos: b.F.fotos, tope_usd: enc.tope_usd, gasto_usd: enc.estado_del_motor.gasto_usd, ...(est.video ? { video: est.video } : {}) }
+  return { cliente_nombre: b.F.cliente_nombre, tipo: est.tipo, brief_id: enc.brief_id, brief_texto: b.brief.texto, manual_texto: b.F.manual_texto, plan_texto: b.F.plan_texto, fotos: b.F.fotos, tope_usd: tope, gasto_usd: enc.estado_del_motor.gasto_usd, ...(est.video ? { video: est.video } : {}), ...perfilDeLaMesa(b.F) }
 }
 
 /** lo que pide ESTA pieza según su brief (puro): fotos propias etiquetadas, hechos del cliente, lo más gustado; el portero decide qué hay */
@@ -171,22 +178,23 @@ export async function referenciasDelTurno(P: Puertos, enc: Encargo, est: EstadoM
 }
 
 /** el pedido del turno de un agente (puro respecto del libro: sirve igual para la primera entrega y para la reentrega) */
-export async function pedidoDelTurno(P: Puertos, enc: Encargo, est: EstadoMesa, t: NonNullable<EstadoMesa['turno_abierto']>): Promise<{ agente: string; pedido: Record<string, unknown>; paso: string }> {
+export async function pedidoDelTurno(P: Puertos, enc: Encargo, est: EstadoMesa, t: NonNullable<EstadoMesa['turno_abierto']>, tope: number = enc.tope_usd): Promise<{ agente: string; pedido: Record<string, unknown>; paso: string }> {
   const libro = await P.mesa!.libro(enc.id)
   const tarjeta = est.directorio_congelado.find((x) => x.agente === t.agente)
   const pedidoAporte = t.responde_a ? libro.find((a) => a.id === t.responde_a) : undefined
-  const c = contextoDe(enc, est)
+  const c = contextoDe(enc, est, tope)
   const tipo = t.tipo as TipoDeTurno
   let faltanCitas: string | undefined
-  if (tipo === 'devolver_citas') faltanCitas = 'algunas especialidades del equipo (revisa cada aporte del tablero)'
+  if (tipo === 'devolver_citas') faltanCitas = t.faltan_citas ? textoDeLoQueFalta(t.faltan_citas) : '- algunas especialidades del equipo no están citadas (revisa cada aporte del tablero)'
   const biblioteca = await bibliotecaDelTurno(P, enc, est)
   const referencias = await referenciasDelTurno(P, enc, est)
   const metodo = [await metodoDelAsiento(P, t.agente), biblioteca, referencias].filter(Boolean).join('\n\n') || undefined
   const imagenesARedactar = tipo === 'redactar_prompts' ? imagenesAGenerarDe(enc, est) : undefined
-  const task = armarTarea({ tipo, agente: t.agente, tarjeta, est, libro, c, pedido: pedidoAporte, faltanCitas, metodo, ...(imagenesARedactar ? { imagenesARedactar } : {}) }) + seccionDeCambiosDelDueno(enc.sala_ref) + seccionDeNotasDelDueno(t.notas_del_dueno, t.tipo)
+  const relleno = tipo === 'rellenar_banco' ? rellenoPendiente(marcoDe(enc.estado_del_motor), libro) ?? undefined : undefined
+  const task = armarTarea({ tipo, agente: t.agente, tarjeta, est, libro, c, pedido: pedidoAporte, faltanCitas, metodo, ...(imagenesARedactar ? { imagenesARedactar } : {}), ...(relleno ? { relleno } : {}) }) + seccionDeCambiosDelDueno(enc.sala_ref) + seccionDeNotasDelDueno(t.notas_del_dueno, t.tipo) + cierreConElObjetivo(c, tipo)
   const paso = `${PREFIJO}${t.tipo}:${t.agente}`
-  const reserva = Math.max(0.1, Math.min(COTAS.RESERVA_POR_TURNO_USD, techoDe(enc.tope_usd) - enc.estado_del_motor.gasto_usd))
-  return { agente: t.agente, paso, pedido: pedidoDeAgente({ agente: t.agente, task, encargo_id: enc.id, client_id: enc.client_id, dry_run: enc.dry_run, paso, reserva_usd: +reserva.toFixed(4), es_pieza: !esDeLaCadena(est.tipo) }) }
+  const reserva = Math.max(0.1, Math.min(COTAS.RESERVA_POR_TURNO_USD, techoDe(tope) - enc.estado_del_motor.gasto_usd))
+  return { agente: t.agente, paso, pedido: pedidoDeAgente({ agente: t.agente, task, encargo_id: enc.id, client_id: enc.client_id, dry_run: enc.dry_run, paso, reserva_usd: +reserva.toFixed(4), es_pieza: !esDeLaCadena(est.tipo), images: imagenesDelTurno(tipo, c.fotos) }) }
 }
 
 /** Sprint 1 · mejora 4 · las imágenes que la pieza integrada pide generar (ref + lo que pidió la dirección), leídas con el mismo traductor que usa el cierre · puro respecto del estado */
@@ -235,10 +243,10 @@ async function leerNotasDelTurno(P: Puertos, enc: Encargo, est: EstadoMesa, agen
 }
 
 /** reentrega del turno abierto (un «siguiente» repetido no abre otro turno) */
-export async function reentregaDelTurno(P: Puertos, enc: Encargo, abierto: { n: number; dispatch_key: string | null }): Promise<Respuesta> {
+export async function reentregaDelTurno(P: Puertos, enc: Encargo, abierto: { n: number; dispatch_key: string | null }, tope: number = enc.tope_usd): Promise<Respuesta> {
   const est = estadoDeLaMesa(enc.estado_del_motor)
   if (!est?.turno_abierto || !P.mesa) return r(200, { accion: 'esperar', turno: { n: abierto.n, dispatch_key: abierto.dispatch_key }, nota: 'ya hay un turno de la mesa esperando respuesta' })
-  const p = await pedidoDelTurno(P, enc, est, est.turno_abierto)
+  const p = await pedidoDelTurno(P, enc, est, est.turno_abierto, tope)
   return r(200, { accion: 'esperar', reentrega: true, turno: { n: abierto.n, paso: p.paso, tipo: 'agente', agente: p.agente, dispatch_key: abierto.dispatch_key, pedido: p.pedido } })
 }
 
@@ -249,6 +257,8 @@ const aporteNuevo = (enc: Encargo, de: string, para: string | null, tipo: TipoDe
 export async function avanzarMesa(P: Puertos, enc0: Encargo, pl: Plantilla, indice: number, vueltaDe?: string): Promise<Respuesta> {
   if (!P.mesa) return fallar(P, enc0, 'la mesa no tiene su puerto (libro y directorio) configurado')
   let enc = enc0
+  // 19-nov · G5b · 🔴 de CC7: la mesa frena contra el tope de ESTA pieza (`plantillaDe`: min(su duración, el encargo)); el del encargo es el de la campaña y deja crecer el guion
+  const tope = Math.min(enc0.tope_usd, pl.limites.tope_encargo_usd)
   for (let vuelta = 0; vuelta < 60; vuelta++) {
     let est = estadoDeLaMesa(enc.estado_del_motor)
     if (!est) {
@@ -343,12 +353,12 @@ export async function avanzarMesa(P: Puertos, enc0: Encargo, pl: Plantilla, indi
       // 17-nov · con propuestas en imagen: hay imágenes a generar si ALGUNA propuesta las pide (la lista del ingeniero, la misma que recibe)
       : esDeImagen(est.tipo) && (est.imagen?.propuestas ?? 1) > 1 ? imagenesAGenerarDe(enc, est).length > 0
       : hayImagenesAGenerar(est.pieza_texto, est.tipo, (b!.elementos ?? []).map((x) => x.ref))
-    const acc = siguienteDeLaMesa(est, libro, { gasto_usd: enc.estado_del_motor.gasto_usd, tope_usd: enc.tope_usd, hayImagenGenerada, tipo: est.tipo, ...reservaDeLaMesa(pl, est.tipo, enc.estado_del_motor), ...(typeof pl.limites.rondas_minimas === 'number' ? { rondas_minimas: pl.limites.rondas_minimas } : {}), ...(typeof pl.limites.rondas_de_la_mesa === 'number' ? { rondas_max: pl.limites.rondas_de_la_mesa } : {}), ...cotaDeLaMesaEnCurso(pl, est, enc.estado_del_motor) })
+    const acc = siguienteDeLaMesa(est, libro, { gasto_usd: enc.estado_del_motor.gasto_usd, tope_usd: tope, hayImagenGenerada, tipo: est.tipo, ...reservaDeLaMesa(pl, est.tipo, enc.estado_del_motor), ...(typeof pl.limites.rondas_minimas === 'number' ? { rondas_minimas: pl.limites.rondas_minimas } : {}), ...(typeof pl.limites.rondas_de_la_mesa === 'number' ? { rondas_max: pl.limites.rondas_de_la_mesa } : {}), ...cotaDeLaMesaEnCurso(pl, est, enc.estado_del_motor), relleno_del_banco: rellenoPendiente(marcoDe(enc.estado_del_motor), libro) })
 
     if (acc.accion === 'cierre_por_tope') {
       await guardarMesa(P, enc, { ...est, fase: 'cerrada' })
-      if (deCalendario) return entregarALaCadena(P, enc, { texto: textoDeLaMesaParaLaCadena(enc, libro, est.pieza_texto) || null, motivo: `la mesa llegó al techo absoluto (${techoDe(enc.tope_usd)}) con ${enc.estado_del_motor.gasto_usd.toFixed(3)} gastados`, estado: 'cerrado_por_tope' })
-      return cerrarPorTope(P, enc, pl, 'techo_de_gasto', `la mesa llegó al techo absoluto (${techoDe(enc.tope_usd)}) con ${enc.estado_del_motor.gasto_usd.toFixed(3)} gastados`)
+      if (deCalendario) return entregarALaCadena(P, enc, { texto: textoDeLaMesaParaLaCadena(enc, libro, est.pieza_texto) || null, motivo: `la mesa llegó al techo absoluto (${techoDe(tope)}) con ${enc.estado_del_motor.gasto_usd.toFixed(3)} gastados`, estado: 'cerrado_por_tope' })
+      return cerrarPorTope(P, enc, pl, 'techo_de_gasto', `la mesa llegó al techo absoluto (${techoDe(tope)}) con ${enc.estado_del_motor.gasto_usd.toFixed(3)} gastados`)
     }
 
     if (acc.accion === 'material') {
@@ -365,10 +375,10 @@ export async function avanzarMesa(P: Puertos, enc0: Encargo, pl: Plantilla, indi
 
     if (acc.accion === 'turno') {
       const lectura = await leerNotasDelTurno(P, enc, est, acc.agente)
-      const t = { n: turnoDe(enc.estado_del_motor), agente: acc.agente, tipo: acc.tipo, responde_a: acc.responde_a, ...(lectura ? { notas_del_dueno: lectura } : {}) }
+      const t = { n: turnoDe(enc.estado_del_motor), agente: acc.agente, tipo: acc.tipo, responde_a: acc.responde_a, ...(lectura ? { notas_del_dueno: lectura } : {}), ...(acc.faltan_citas ? { faltan_citas: acc.faltan_citas } : {}) }
       const est2: EstadoMesa = { ...est, turno_abierto: t, cierre_forzado: acc.tipo === 'integrar' && acc.motivo.startsWith('cierra con lo que hay') ? acc.motivo : est.cierre_forzado }
       enc = await guardarMesa(P, enc, est2)
-      const p = await pedidoDelTurno(P, enc, est2, t)
+      const p = await pedidoDelTurno(P, enc, est2, t, tope)
       const dispatch_key = `${enc.id}:${t.n}`
       await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: enc.estado_del_motor, gasto_usd: enc.estado_del_motor.gasto_usd, estado: 'en_paso', turno: { n: t.n, paso: p.paso, tipo: 'agente', agente: acc.agente, estado: 'corriendo', dispatch_key, cost_usd: 0 } })
       return r(200, { accion: 'esperar', turno: { n: t.n, paso: p.paso, tipo: 'agente', agente: acc.agente, dispatch_key, pedido: p.pedido }, mesa: { motivo: acc.motivo } })
@@ -637,7 +647,16 @@ export async function recibirResultadoMesa(P: Puertos, encargoId: string, n: num
   if (sinLineas.trim()) textoFinal = sinLineas
   // Sprint 4 · E · la crítica se rotula en el tablero: todos (y la jefatura) saben que es la crítica, y sus citas de ideas no se leen como ideas del banco
   if (t.tipo === 'criticar') textoFinal = conMarcaDeLaCritica(textoFinal)
-  const tipoAporte: Record<string, TipoDeAporte> = { dirigir: 'dirige', aportar: 'aporta', responder: 'responde', integrar: 'integra', devolver_citas: 'integra', redactar_prompts: 'aporta', criticar: 'aporta' }
+  // 18-nov · la devolución por citas NO reescribe la pieza: el director escribió solo las líneas de cita que faltaban y el código las pega dentro de «## Citas»
+  // de la integración devuelta. Se anota como un `integra` NUEVO con el texto COMPLETO (la cadena y la jefatura toman el último `integra` como la pieza); el viejo queda como registro.
+  if (t.tipo === 'devolver_citas') {
+    const libroAntes = await P.mesa.libro(enc.id)
+    const base = integracionDevuelta(libroAntes)
+    if (base) textoFinal = pegarCitas(base.texto, textoFinal, t.faltan_citas?.inexistentes ?? [])
+  }
+  // 18-nov · relleno del banco: se anota con la cabecera canónica de SU capítulo (el mismo cálculo que abrió el turno: el libro no cambió), así no se pide dos veces
+  if (t.tipo === 'rellenar_banco') { const rp = rellenoPendiente(marcoDe(e), await P.mesa.libro(enc.id)); textoFinal = conCabeceraDelRelleno(textoFinal, rp?.capitulo ?? 'sin_capitulo') }
+  const tipoAporte: Record<string, TipoDeAporte> = { dirigir: 'dirige', aportar: 'aporta', responder: 'responde', integrar: 'integra', devolver_citas: 'integra', rellenar_banco: 'aporta', redactar_prompts: 'aporta', criticar: 'aporta' }
   const pedido = t.responde_a ? (await P.mesa.libro(enc.id)).find((a) => a.id === t.responde_a) : undefined
   await P.mesa.aportar(aporteNuevo(enc, t.agente, t.tipo === 'responder' ? pedido?.de ?? null : null, tipoAporte[t.tipo] ?? 'aporta', textoFinal, { responde_a: t.tipo === 'responder' || t.tipo === 'devolver_citas' ? t.responde_a : null, profundidad: pedido ? pedido.profundidad : 0, costo_usd: costo, workflow_execution_id: res.workflow_execution_id ?? null }))
   const integra = t.tipo === 'integrar' || t.tipo === 'devolver_citas'

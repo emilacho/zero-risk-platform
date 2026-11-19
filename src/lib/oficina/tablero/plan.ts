@@ -166,9 +166,9 @@ async function reintentarSegundaMitad(db: Db, planId: string, comentario: string
 
 export const planAprobar: Manejador = async ({ db, ahora }, { cuerpo, reviewer }) => {
   if (typeof cuerpo.plan_id !== 'string' || !UUID.test(cuerpo.plan_id)) return rechazo(400, 'entrada_invalida', '`plan_id` debe ser un uuid')
-  const comentario = cuerpo.comentario === undefined || cuerpo.comentario === null || cuerpo.comentario === '' ? null : textoEntre(cuerpo.comentario, 1, 1000)
+  const comentario = cuerpo.comentario === undefined || cuerpo.comentario === null || cuerpo.comentario === '' ? null : textoEntre(cuerpo.comentario, 1, TOPE_DEL_TEXTO_DEL_DUENO) // 18-nov · G2b «nada se recorta» (CC5): lo que escribe Emilio desde el tablero llega entero, hasta el tope único del texto del dueño (antes 1000)
   const toca = { output_id: cuerpo.plan_id, comentario }
-  if (cuerpo.comentario && !comentario) return rechazo(400, 'entrada_invalida', '`comentario` debe tener hasta 1000 caracteres', toca)
+  if (cuerpo.comentario && !comentario) return rechazo(400, 'entrada_invalida', `\`comentario\` debe tener hasta ${TOPE_DEL_TEXTO_DEL_DUENO} caracteres`, toca)
   const hora = ahora().toISOString()
   const d = await planDecidible(db, cuerpo.plan_id, toca)
   if (!d.ok) return d.salida.cuerpo.error === 'plan_ya_aprobado' ? reintentarSegundaMitad(db, cuerpo.plan_id, comentario, reviewer, hora, d.salida) : d.salida

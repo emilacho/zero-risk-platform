@@ -126,8 +126,9 @@ describe('la matriz completa, por la ruta real y con agentes simulados (US$ 0)',
     const c = celdas({ caso: 'tope' })[0]
     const r = await correrCelda(llamar, c)
     expect(r.obs.estado).toBe('cierre_por_tope')
-    expect(r.obs.gasto_usd).toBeGreaterThanOrEqual(1.5)
-    expect(r.obs.gasto_usd).toBeLessThanOrEqual(1.5 + 0.6 + 1e-9)
+    // 18-nov · la base es 11,10 y la celda cuesta 2,50 por llamada
+    expect(r.obs.gasto_usd).toBeGreaterThanOrEqual(11.1)
+    expect(r.obs.gasto_usd).toBeLessThanOrEqual(11.1 + 2.5 + 1e-9)
   })
 
   it('la ronda 2 es UNA sola vuelta y solo habla el aludido', async () => {
@@ -202,7 +203,7 @@ describe('la puerta de la simulación', () => {
     expect((await llamar({ accion: 'abrir', client_id: IDS[0], dry_run: 'true', semilla: SEM })).status).toBe(400)
     expect((await llamar({ accion: 'abrir', client_id: 'cliente-que-no-es-de-practica', dry_run: true, semilla: SEM })).status).toBe(409)
     expect((await llamar({ accion: 'abrir', client_id: IDS[0], dry_run: true })).status).toBe(400)
-    expect((await llamar({ accion: 'abrir', client_id: IDS[0], dry_run: true, semilla: { ficha_resumen: 'x'.repeat(700_000) } })).status).toBe(413)
+    expect((await llamar({ accion: 'abrir', client_id: IDS[0], dry_run: true, semilla: { ficha_resumen: 'x'.repeat(1_600_000) } })).status).toBe(413)
     expect((await llamar({ accion: 'avanzar', encargo_id: 'no-existe' })).status).toBe(404)
     expect((await llamar({ accion: 'otra' })).status).toBe(400)
     expect(fake.t.finanzas_encargos).toHaveLength(0)

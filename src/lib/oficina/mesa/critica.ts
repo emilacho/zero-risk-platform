@@ -12,6 +12,7 @@
  */
 import { criticoDe, direccionDe } from './directorio'
 import { COTAS, type Aporte, type EstadoMesa } from './tipos'
+import { LA_CRITICA_MIRA_LAS_FOTOS } from './fotos-a-la-vista'
 
 /**
  * cómo empieza la línea que la dirección escribe DENTRO de «## Citas» al integrar. Va en las citas a propósito: todas las convenciones (láminas, kit, foto, guion,
@@ -65,9 +66,7 @@ export function estadoDeLaCritica(est: EstadoMesa, libro: Aporte[]): { critico: 
   return { critico, motivo: 'no hubo una ronda de aportes nuevos que criticar' }
 }
 
-/** cuánto de la crítica ve la dirección en su tarea (completa hasta aquí; nunca se corta callado) */
-export const LARGO_DE_LA_CRITICA_PARA_LA_DIRECCION = 8000
-const recortaCritica = (t: string): string => (t.length <= LARGO_DE_LA_CRITICA_PARA_LA_DIRECCION ? t : `${t.slice(0, LARGO_DE_LA_CRITICA_PARA_LA_DIRECCION)}\n[… recortado: ${LARGO_DE_LA_CRITICA_PARA_LA_DIRECCION} de ${t.length} caracteres de la crítica]`)
+/** 19-nov · ADENDA 1 · P2 (CC5 · «nada se recorta»): la dirección lee la crítica ENTERA (antes hasta 8000, con aviso) */
 
 /** la sección que se agrega a la tarea de la dirección cuando integra (null = no hay crítico: la tarea es la de siempre) */
 export function seccionDeLaCriticaParaLaDireccion(est: EstadoMesa, libro: Aporte[]): string | null {
@@ -75,9 +74,9 @@ export function seccionDeLaCriticaParaLaDireccion(est: EstadoMesa, libro: Aporte
   if (!e) return null
   if ('aporte' in e) return [
     `## La crítica de esta ronda (A${e.aporte.n} · ${e.critico})`,
-    `${e.critico} confrontó lo que propuso el equipo con los hechos y el plan. Léela antes de integrar (aquí va completa; en el tablero puede verse recortada). Tú decides: la crítica asesora, no aprueba ni rechaza.`,
+    `${e.critico} confrontó lo que propuso el equipo con los hechos y el plan. Léela antes de integrar (aquí va completa, igual que en el tablero). Tú decides: la crítica asesora, no aprueba ni rechaza.`,
     '',
-    recortaCritica(e.aporte.texto),
+    e.aporte.texto,
     '',
     `Dentro de \`## Citas\`, además de la cita de A${e.aporte.n}, escribe líneas que empiecen por «${PREFIJO_DE_LA_CRITICA}»: qué tomaste de la crítica, qué cambiaste por ella y por qué; y qué no tomaste y por qué. Nombra lo que cambió por su id (A<n>, o el id de la idea); no copies ahí líneas del banco ni de la pieza.`,
   ].join('\n')
@@ -93,6 +92,7 @@ export function tareaDeLaCritica(agente: string): string {
     '- **Qué choca con un hecho**: algo que la oferta no es, no tiene, no ofrece, no está disponible donde o cuando se dice, o no se puede afirmar según el manual, el brief, el plan o el material del portero. Di cuál es el hecho y dónde está.',
     '- **Qué choca con el plan**: objetivo, público, fase, ruta o mensaje que el plan no sostiene.',
     '- **Qué falta probar**: lo que la propuesta da por hecho y nadie mostró con una fuente.',
+    LA_CRITICA_MIRA_LAS_FOTOS,
     '- **Qué está bien sostenido**: dilo en una línea, para que la dirección sepa qué no tocar.',
     'Lo que no es un hecho o no está en el plan es opinión: si la das, dila como tal y en una línea. No reescribas la pieza, no propongas ideas nuevas, no votes, no apruebes ni rechaces: la dirección decide.',
     'No copies líneas del banco ni de la pieza: cita su id. Si te falta un hecho para confrontar algo, dilo (o pídelo con `pedir_material`); no lo supongas.',

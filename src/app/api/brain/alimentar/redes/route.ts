@@ -62,7 +62,7 @@ export async function POST(request: Request) {
   let b: Record<string, unknown>
   try { b = (await request.json()) as Record<string, unknown> } catch { return NextResponse.json({ error: 'invalid_json' }, { status: 400 }) }
   if (typeof b.dry_run !== 'boolean') return NextResponse.json({ error: 'entrada_invalida', detalle: '`dry_run` es obligatorio (true o false)' }, { status: 400 })
-  if (typeof b.client_id !== 'string' || !b.client_id || !esPaso(b.paso)) return NextResponse.json({ error: 'entrada_invalida', detalle: '`client_id` y `paso` (cuentas_y_comentarios, tendencias, bodega, transcripcion, anuncios_google, busquedas_google, horas_de_mas_gente, eventos_locales, comentarios_ig_fb o foros) son obligatorios' }, { status: 400 })
+  if (typeof b.client_id !== 'string' || !b.client_id || !esPaso(b.paso)) return NextResponse.json({ error: 'entrada_invalida', detalle: '`client_id` y `paso` (cuentas_y_comentarios, tendencias, bodega, transcripcion, anuncios_google, busquedas_google, horas_de_mas_gente, eventos_locales, comentarios_ig_fb, foros o comentarios_industria) son obligatorios' }, { status: 400 })
   if (!b.dry_run && (typeof b.workflow_id !== 'string' || typeof b.workflow_execution_id !== 'string')) return NextResponse.json({ error: 'workflow_id_required', code: 'E-WF-ID-REQUIRED', detalle: 'sin dry_run exige workflow_id y workflow_execution_id' }, { status: 403 })
   try {
     const r = await correrUnPaso(dependencias(request), { clientId: b.client_id, paso: b.paso, workflowId: String(b.workflow_id ?? ''), ejecucionId: String(b.workflow_execution_id ?? ''), dry_run: b.dry_run, reintentar: b.reintentar === true })

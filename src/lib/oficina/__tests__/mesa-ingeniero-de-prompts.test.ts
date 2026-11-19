@@ -211,7 +211,11 @@ describe('LA MESA · punta a punta con el ingeniero en el directorio (ensayo, en
     })
     const ing = turnos.find((t) => t.tipo === 'redactar_prompts')!
     expect(ing.task).toMatch(/Se EDITA SOBRE UNA FOTO REAL del cliente \(aptas: foto:780fc5e1/)
-    expect(ing.task).not.toMatch(/foto:6d85f0a0/)
+    // 18-nov (CC2, #1176): la lista de fotos de la mesa nombra ahora CADA foto con su rótulo `foto:<id>` (el mismo de su imagen), así que
+    // lo que no debe traer 6d85f0a0 es la línea de las fotos APTAS PARA EDITAR, que es lo que esta prueba cuida
+    const aptas = /\(aptas: ([^;]*);/.exec(ing.task)?.[1] ?? ''
+    expect(aptas).toMatch(/foto:780fc5e1/)
+    expect(aptas).not.toMatch(/6d85f0a0/)
   })
 
   it('si el ingeniero no deja nada legible, la imagen sale con la descripción de la dirección y la pieza no se frena', async () => {

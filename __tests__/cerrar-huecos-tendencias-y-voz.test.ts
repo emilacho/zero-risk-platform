@@ -648,10 +648,10 @@ describe('4 · descubrir y dejar las cuentas en la ficha', () => {
 
 // ───────────────────────────────────────── 3b · leer los comentarios de la competencia
 describe('3b · lectura de los comentarios de la competencia', () => {
-  const k = (id: string, o: Fila = {}): Fila => ({ id, client_id: CID, red: 'tiktok', cuenta: 'rival', texto: `comentario ${id}`, me_gusta: 1, fecha_comentario: '2026-10-10T10:00:00Z', post_url: 'https://t/1', observado_en: '2026-11-01T10:00:00Z', ...o })
+  const k = (id: string, o: Fila = {}): Fila => ({ id, client_id: CID, red: 'tiktok', cuenta: 'rival', texto: `comentario ${id}`, me_gusta: 1, fecha_comentario: '2026-10-10T10:00:00Z', post_url: 'https://t/1', observado_en: '2026-11-01T10:00:00Z', nivel: 'competencia', ...o })
   const consulta = (filas: Fila[], error: string | null = null): Consulta => async (p) => (error ? { filas: [], error } : { filas: filas.filter((x) => Object.entries(p.donde).every(([c, v]) => x[c] === v)), error: null })
   it('lo más nuevo primero con su fecha real; sin fecha va al final; cuenta por red y por cuenta; filtra por red y por cuenta (con o sin @)', async () => {
-    const filas = [k('a', { fecha_comentario: '2026-09-01T00:00:00Z' }), k('b', { fecha_comentario: '2026-10-30T00:00:00Z', red: 'x', cuenta: 'Rival_X' }), k('c', { fecha_comentario: null }), k('d', { fecha_comentario: '2026-10-20T00:00:00Z' }), k('z', { client_id: 'otro' })]
+    const filas = [k('a', { fecha_comentario: '2026-09-01T00:00:00Z' }), k('b', { fecha_comentario: '2026-10-30T00:00:00Z', red: 'x', cuenta: 'Rival_X' }), k('c', { fecha_comentario: null }), k('d', { fecha_comentario: '2026-10-20T00:00:00Z' }), k('z', { client_id: 'otro' }), k('i', { nivel: 'industria', fecha_comentario: '2026-11-15T00:00:00Z' })] // encargo 6: lo de la industria vive en la misma tabla y no es de la competencia
     const r = await listarComentariosDeLaCompetencia(consulta(filas), { cliente: CID })
     if (!r.ok) throw new Error('debía leer')
     expect(r.comentarios.map((x) => x.comentario_id)).toEqual(['b', 'd', 'a', 'c'])

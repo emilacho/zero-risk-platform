@@ -11,7 +11,8 @@ import { sumarDias } from '../fechas'
 import { fueraDePlazoDeProduccion, leadDeFormato, PREFIJO_FUERA_DE_PLAZO } from '../lotes'
 import type { Fila } from '../tipos'
 
-const ABRE = '2026-10-09T12:00:00Z'
+// 18-nov (día 1 = apertura): se abre el lunes 12-oct, el día 1 que antes ponía la regla, para que estas pruebas (que no son del día 1) midan lo mismo
+const ABRE = '2026-10-12T12:00:00Z'
 const wf = (extra: Record<string, unknown> = {}) => ({ workflow_id: 'wf-cadena', workflow_execution_id: 'ex-1', ...extra })
 const ok = (o: unknown) => ({ success: true, structured_output: o, cost_usd: 0.3 })
 
@@ -23,7 +24,7 @@ function almacen(c: ClienteFixture, zona = 'UTC') {
     journeys: [{ journeyId: 'journey-1', clientId: c.clientId }],
   })
 }
-/** abre la campaña el 09-oct y guarda la tanda 1 con el reloj en `ahora` */
+/** abre la campaña el 12-oct y guarda la tanda 1 con el reloj en `ahora` */
 async function tandaUno(c: ClienteFixture, ahora: string, zona = 'UTC') {
   const al = almacen(c, zona)
   const ab = await abrirCampana(al, { ...wf(), client_id: c.clientId, seco: true }, ABRE)

@@ -5,6 +5,7 @@
 import { BRIEF_GUIA_NO_REGLA, type ElementoDelKit } from './brief'
 import { AVISO_DEL_CEREBRO, describirReglas, FUNCION_DEL_BRIEF, FUNCION_DEL_MANUAL, FUNCION_DEL_PLAN, FUNCION_DEL_PORTERO, resumenDelEncargo, seccionDelPerfil, type ContextoDePedido } from './pedidos'
 import type { ContextoDelRevisor, ResumenDelEncargo } from './ciego'
+import { TOPE_REAL_DEL_PEDIDO } from '../limites-de-tamano'
 import { rolesSinImagen } from './marcas-de-origen'
 import { LIMITES_DE_LAMINA, LIMITES_DE_ESTRUCTURA } from './salida'
 import { seccionDeImagenSinFoto } from './prompts-sin-invencion'
@@ -43,7 +44,8 @@ const roles = (lim: Record<string, unknown>): string => {
   const sin = rolesSinImagen(lim)
   return sin.length ? `${lista} Una lámina que va SIN imagen (tipográfica, de marca) lleva el rol ${sin.map((x) => `«${x}»`).join(' o ')}; cualquier otro rol lleva imagen.` : lista
 }
-const recorta = (t: string, n: number) => (t.length > n ? `${t.slice(0, n)}\n[… recortado: ${t.length - n} caracteres más en el manual]` : t)
+// 19-nov · ADENDA 1 · P2b: el aviso dice de QUÉ documento es lo que falta
+const recorta = (t: string, n: number, de = 'el manual') => (t.length > n ? `${t.slice(0, n)}\n[… recortado: ${t.length - n} caracteres más en ${de}]` : t)
 const lista = (xs: string[]) => (xs.length ? xs.map((x) => `- ${x}`).join('\n') : '- (ninguno)')
 const arr = (a: unknown): unknown[] => (Array.isArray(a) ? a : [])
 const s = (v: unknown): string => (typeof v === 'string' ? v : v == null ? '' : String(v))
@@ -98,7 +100,7 @@ const describirElementos = (els: ElementoDelKit[]) => els.map((e) => `- ${e.ref}
 export function construirTareaLaminas(clave: string, c: ContextoLaminas, extra?: { fichas?: Ficha[]; errorDeFormato?: string }): { task: string; images: string[]; esquema: string } {
   const F = c.fuentes
   const kit = c.familia === 'kit'
-  const base = `${AVISO_DEL_CEREBRO}\n\n## Manual de marca del cliente\n${recorta(F.manual_texto, 12000)}\n\n## El brief de este entregable (${BRIEF_GUIA_NO_REGLA})\n${c.brief.texto}\n${c.fuentes.plan_texto ? `\n## Plan de trabajo del cliente (contexto)\n${recorta(c.fuentes.plan_texto, 8000)}\n` : ''}${seccionDelPerfil(F)}`
+  const base = `${AVISO_DEL_CEREBRO}\n\n## Manual de marca del cliente\n${recorta(F.manual_texto, TOPE_REAL_DEL_PEDIDO)}\n\n## El brief de este entregable (${BRIEF_GUIA_NO_REGLA})\n${c.brief.texto}\n${c.fuentes.plan_texto ? `\n## Plan de trabajo del cliente (contexto)\n${recorta(c.fuentes.plan_texto, TOPE_REAL_DEL_PEDIDO, 'el plan')}\n` : ''}${seccionDelPerfil(F)}`
   const datosVerificados = `## Datos verificados del cliente (solo estos; no inventes otros)\nTeléfonos: ${F.propios.telefonos.join(', ') || '(no se pudieron leer)'}\nUsuarios: ${F.propios.handles.join(', ') || '(no se pudieron leer)'}\nPrecios de la carta: ${F.fuentes.precios.join(', ') || '(no hay carta guardada)'}`
   const refs = kit ? `Elementos del kit (cada uno es una lámina fija 9:16):\n${describirElementos(c.elementos)}` : roles(c.limites)
   const pieza = describirPieza(c)
@@ -194,8 +196,8 @@ export function contextoDelRevisorLaminas(c: ContextoLaminas): { pieza: string; 
     imagenes: muestra,
     encargo: resumenDelEncargo(c.brief),
     contexto: [
-      { titulo: 'Manual de marca del cliente', funcion: FUNCION_DEL_MANUAL, texto: recorta(c.fuentes.manual_texto, 12000) },
-      { titulo: 'Plan de trabajo del cliente', funcion: FUNCION_DEL_PLAN, texto: c.fuentes.plan_texto ? recorta(c.fuentes.plan_texto, 12000) : '' },
+      { titulo: 'Manual de marca del cliente', funcion: FUNCION_DEL_MANUAL, texto: recorta(c.fuentes.manual_texto, TOPE_REAL_DEL_PEDIDO) },
+      { titulo: 'Plan de trabajo del cliente', funcion: FUNCION_DEL_PLAN, texto: c.fuentes.plan_texto ? recorta(c.fuentes.plan_texto, TOPE_REAL_DEL_PEDIDO, 'el plan') : '' },
       { titulo: 'El brief de este entregable', funcion: FUNCION_DEL_BRIEF, texto: c.brief.texto },
       { titulo: 'Lo que reunió el portero', funcion: FUNCION_DEL_PORTERO, texto: s(c.art('material_portero')?.texto) },
       ...(tablero ? [{ titulo: 'El tablero del equipo que hizo la pieza', funcion: FUNCION_DEL_TABLERO, texto: tablero }] : []),

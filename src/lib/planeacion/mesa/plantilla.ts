@@ -12,7 +12,8 @@
 import type { Paso, Plantilla } from '../../oficina/tipos'
 
 export const TOPE_DE_LA_MESA_USD = 4
-export const TOPE_DEL_PLAN_COMPLETO_USD = 15
+// 18-nov · Emilio: topes = 3 × lo medido (GO Lenovo 16:17Z): el plan completo más caro gastó 7,29 → 21,86
+export const TOPE_DEL_PLAN_COMPLETO_USD = 21.86
 export const PASO_CONSOLIDA = 'mesa-estrategia-consolida'
 export const MAX_DEVOLUCIONES = 1
 

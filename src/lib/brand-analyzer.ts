@@ -14,6 +14,8 @@
 import { SupabaseClient } from '@supabase/supabase-js'
 import { DiscoveryResult, CompetitorScrapeResult } from './web-discovery'
 import { resolveModel } from './models'
+import { pedirMensajePorFlujo } from './anthropic-por-flujo'
+import { guardarPublico, type Db as DbDePublicos } from './discovery-output/guardar-publico'
 
 // ============================================================
 // Types
@@ -351,32 +353,9 @@ Genera JSON:
     systemPrompt: string,
     userMessage: string
   ): Promise<{ text: string; inputTokens: number; outputTokens: number }> {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': this.claudeApiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: this.model,
-        max_tokens: 20000,
-        system: systemPrompt,
-        messages: [{ role: 'user', content: userMessage }],
-      }),
-    })
-
-    if (!response.ok) {
-      const errText = await response.text()
-      throw new Error(`Claude API error ${response.status}: ${errText.substring(0, 500)}`)
-    }
-
-    const data = await response.json()
-    return {
-      text: data.content?.[0]?.text || '{}',
-      inputTokens: data.usage?.input_tokens || 0,
-      outputTokens: data.usage?.output_tokens || 0,
-    }
+    // 18-nov · G1 «nada se recorta» (CC5): al techo del modelo (128.000, antes 20.000) y por flujo continuo · `src/lib/anthropic-por-flujo.ts`
+    const r = await pedirMensajePorFlujo({ apiKey: this.claudeApiKey, model: this.model, system: systemPrompt, userMessage })
+    return { text: r.text, inputTokens: r.inputTokens, outputTokens: r.outputTokens }
   }
 
   // ----------------------------------------------------------
@@ -478,10 +457,11 @@ Genera JSON:
         `Channels: ${segment.preferred_channels.join(', ')}`,
       ].join('\n')
 
-      const { error } = await this.supabase
-        .from('client_icp_documents')
-        .insert({
-          client_id: clientId,
+      // 19-nov · juntar públicos: el segundo camino de entrada usa la MISMA función que el descubrimiento (insert, sin decisión = nuevo, como antes)
+      const r = await guardarPublico(this.supabase as unknown as DbDePublicos, {
+        client_id: clientId,
+        modo: 'insert',
+        fila: {
           audience_segment: segment.audience_segment,
           segment_priority: segment.segment_priority,
           job_titles: segment.job_titles,
@@ -497,9 +477,10 @@ Genera JSON:
           recommended_tone: segment.recommended_tone,
           messaging_angle: segment.messaging_angle,
           content_text: contentText,
-        })
+        },
+      })
 
-      if (!error) count++
+      if (r.ok) count++
     }
     return count
   }

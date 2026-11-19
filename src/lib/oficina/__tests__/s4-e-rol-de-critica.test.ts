@@ -131,12 +131,13 @@ describe('E · lo que lee la crítica y lo que sabe la dirección', () => {
     }
     expect(tareaDeLaCritica(CRITICO)).toMatch(/«sin dato» y no lo supongas/)
   })
-  it('una crítica de más de 8000 caracteres se recorta DECLARADO, con los dos números (CC7 · m12)', () => {
+  it('19-nov · ADENDA 1 · P2: una crítica de más de 8000 caracteres llega ENTERA a la dirección (antes se recortaba a 8000 con aviso · CC7 · m12)', () => {
     const texto = `A2 choca con un hecho. ${'x'.repeat(9000)}COLA-QUE-NO-LLEGA`
     const largo = conMarcaDeLaCritica(texto).length
     const t = armarTarea({ tipo: 'integrar', agente: DIRECCION, tarjeta: DIR[0], est: est(), libro: [...ronda1(), critica(texto)], c: C('carrusel') })
-    expect(t).toContain(`[… recortado: 8000 de ${largo} caracteres de la crítica]`)
-    expect(t).not.toContain('COLA-QUE-NO-LLEGA')
+    expect(largo).toBeGreaterThan(9000)
+    expect(t).not.toContain('de la crítica]')
+    expect(t.slice(t.indexOf('## La crítica de esta ronda'))).toContain('COLA-QUE-NO-LLEGA')
     // control: la que cabe no lleva aviso
     expect(armarTarea({ tipo: 'integrar', agente: DIRECCION, tarjeta: DIR[0], est: est(), libro: [...ronda1(), critica('corta')], c: C('carrusel') })).not.toContain('recortado:')
   })
@@ -149,7 +150,8 @@ describe('E · lo que lee la crítica y lo que sabe la dirección', () => {
     expect(t).toContain(`«${PREFIJO_DE_LA_CRITICA}»`)
     expect(t).toMatch(/asesora, no aprueba ni rechaza/)
     const dev = armarTarea({ tipo: 'devolver_citas', agente: DIRECCION, tarjeta: DIR[0], est: est(), libro: l, c: C('carrusel'), faltanCitas: 'x' })
-    expect(dev).toContain('## La crítica de esta ronda')
+    // 18-nov · la devolución por citas no reescribe la pieza: la crítica ya quedó atendida en la integración y no se vuelve a pedir (ni dice «no llegó» en falso)
+    expect(dev).not.toContain('## La crítica de esta ronda')
   })
   it('si la crítica no llegó, la dirección lo sabe y lo declara', () => {
     const l = [...ronda1(), ...[1, 2, 3].map(() => A({ de: CRITICO, tipo: 'nota', texto: 'turno_fallido: x' }))]

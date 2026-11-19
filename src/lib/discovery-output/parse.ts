@@ -327,5 +327,7 @@ function validateIcpSegment(
       if (arr.length > 0) out[f] = arr
     }
   }
+  // 19-nov · juntar públicos: la decisión viaja tal cual; la verifica `guardarPublico` (lo exacto) al escribir
+  if (raw.fusion !== undefined && raw.fusion !== null) out.fusion = raw.fusion
   return out
 }

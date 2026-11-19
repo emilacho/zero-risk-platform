@@ -14,6 +14,8 @@ import { clienteA, contextoDe, piezaBuena, tandaBuena } from '../__fixtures__/cl
 
 const A = clienteA()
 const AHORA = '2026-10-09T12:00:00Z'
+// 18-nov (día 1 = apertura): estas pruebas no son del día 1; la campaña se abre el lunes que antes ponía la regla, para que sus fechas sigan siendo las mismas
+const ABRE = '2026-10-12T12:00:00Z'
 const wf = (extra: Record<string, unknown> = {}) => ({ workflow_id: 'wf-cadena', workflow_execution_id: 'ex-1', ...extra })
 const ok = (o: unknown) => ({ success: true, structured_output: o, cost_usd: 0.3 })
 
@@ -26,7 +28,7 @@ function almacen() {
   })
 }
 async function conEstrategia(al: AlmacenMemoria, e: Estrategia = A.estrategia) {
-  const c = await abrirCampana(al, { ...wf(), client_id: A.clientId, seco: true }, AHORA)
+  const c = await abrirCampana(al, { ...wf(), client_id: A.clientId, seco: true }, ABRE)
   const id = (c.cuerpo.campana as { id: string }).id
   const p = await estrategiaPreparar(al, { ...wf(), campana_id: id }, AHORA)
   const g = await estrategiaGuardar(al, { ...wf(), campana_id: id, corrida_id: p.cuerpo.corrida_id, resultado: ok(e) }, AHORA)
@@ -139,14 +141,17 @@ describe('cantidad por semana: el faltante no detiene; el exceso y lo demás sí
     expect(al.campanas.find((c) => c.id === id)!.estado).toBe('activa')
     expect(JSON.stringify(al.validaciones.filter((v) => v.objeto === 'calendario'))).toContain('por confirmar')
   })
-  it('🔴 faltante + un bloqueo que no es de cantidad: sigue yendo a necesita_humano', async () => {
+  it('🔴 faltante + un bloqueo que no es de cantidad: el bloqueo sigue volviendo al creador (19-nov · grupo C: otra ronda, no necesita_humano); el faltante no', async () => {
     const al = almacen()
     const { id } = await conEstrategia(al, conFrecuencia('facebook', 2))
     const t = tandaBuena(A)
     const mala = { ...t, piezas: t.piezas.map((p) => (p.semana === 4 && p.slot === 'b' ? { ...p, formato: 'formato-inexistente' } : p)) }
     const { g } = await primera(al, id, mala)
     const g2 = await corregir(al, id, g, mala, 'tanda')
-    expect(g2.cuerpo.necesita_humano).toBe(true)
+    expect(g2.cuerpo.necesita_humano).toBeUndefined()
+    expect(g2.cuerpo.correccion).toBe(true)
+    expect(g2.cuerpo.ronda).toBe(2)
+    expect(JSON.stringify(g2.cuerpo.fichas)).toContain('formato-inexistente')
   })
 })
 

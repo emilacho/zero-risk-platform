@@ -12,6 +12,7 @@ import { crearMesaEnMemoria } from './mesa-memoria'
 import { registrarHerramienta } from '../mesa/herramienta'
 import { observacionDeLaMesa } from '../mesa/evidencia'
 import { tableroParaLaJefatura } from '../mesa/libro'
+import { TOPE_REAL_DEL_PEDIDO } from '../../limites-de-tamano'
 import { cotaAgotada, reservaDeLoQueSigue, siguienteDeLaMesa, techoDe } from '../mesa/planificador'
 import { COTAS, type Aporte, type EstadoMesa, type Tarjeta } from '../mesa/tipos'
 import { revisarPasosMuertos } from '../vigia'
@@ -127,6 +128,52 @@ describe('BLOQUEANTE 1 · el tablero y las citas llegan a la jefatura', () => {
     expect(t).toMatch(/A9 \(NO EXISTE en el tablero\)/)
     expect(t).toMatch(/citas a aportes que no existen: A9/)
   })
+  // 19-nov · el t6 de CC7 en #1223: sacar un tipo del filtro sobrevivía. Cada tipo que la jefatura debe ver sale en el tablero; los pedidos y las notas, no
+  it('el tablero muestra los cinco tipos que cuentan (dirige, aporta, responde, material, integra) y deja fuera pedidos y notas', () => {
+    contador = 0
+    const l = [
+      A({ de: DIRECCION, tipo: 'dirige', texto: 'Idea rectora: el plato del día' }),
+      A({ de: 'content-creator', tipo: 'pide', para: 'portero', texto: 'el precio vigente del plato' }),
+      A({ de: 'portero', tipo: 'material', para: 'content-creator', texto: 'Precio vigente del plato del día: 8,50 USD (ficha del cerebro)' }),
+      A({ de: 'content-creator', tipo: 'aporta', texto: 'Tres titulares con el precio' }),
+      A({ de: 'carousel-designer', tipo: 'responde', para: 'content-creator', texto: 'El ritmo de cinco láminas' }),
+      A({ de: 'content-creator', tipo: 'nota', texto: 'turno_fallido: respuesta vacía' }),
+      A({ de: DIRECCION, tipo: 'integra', texto: '## Citas\nA3 usé: el precio del cerebro\nA4 usé: el titular' }),
+    ]
+    const t = tablero(l)
+    expect(t).toContain('A1 · ' + DIRECCION + ' · dirige: Idea rectora: el plato del día')
+    expect(t).toContain('A3 · portero · material: Precio vigente del plato del día: 8,50 USD (ficha del cerebro)')
+    expect(t).toContain('A4 · content-creator · aporta: Tres titulares con el precio')
+    expect(t).toContain('A5 · carousel-designer · responde: El ritmo de cinco láminas')
+    expect(t).toMatch(/A7 · [^\n]* · integra: ## Citas/)
+    expect(t).not.toMatch(/A2 · content-creator · pide/)
+    expect(t).not.toMatch(/turno_fallido/)
+  })
+  // 19-nov · G8 (3) · GO Lenovo 10:36 · «nada se recorta»: antes cada aporte llegaba a 600 y el tablero entero a 7000
+  it('cada aporte llega ENTERO a la jefatura, y un tablero de más de 7000 también (sin aviso de recorte)', () => {
+    contador = 0
+    const largo = `${'El titular nombra el plato del día y la sede, con la voz del manual y sin promesas que el cliente no hace. '.repeat(10)}FIN-DEL-APORTE`
+    expect(largo.length).toBeGreaterThan(600)
+    const l = [A({ de: DIRECCION, tipo: 'dirige' }), A({ de: 'content-creator', tipo: 'aporta', texto: largo }), ...Array.from({ length: 20 }, () => A({ de: 'carousel-designer', tipo: 'aporta', texto: 'y'.repeat(590) })), A({ de: DIRECCION, tipo: 'integra', texto: '## Citas\nA2 usé: el titular del gancho' })]
+    const t = tablero(l)
+    expect(t.length).toBeGreaterThan(7000)
+    expect(t).toContain(`A2 · content-creator · aporta: ${largo}`)
+    expect(t).not.toMatch(/recortado/)
+    expect(t).toMatch(/citas sin motivo suficiente/)
+  })
+  it('por omisión el techo es el real del pedido; encima de él se avisa cuánto quedó fuera', () => {
+    contador = 0
+    // justo debajo del techo real entra entero (un techo menor lo cortaría)
+    const casi = `${'w'.repeat(TOPE_REAL_DEL_PEDIDO - 2000)}FIN-CASI-EN-EL-TECHO`
+    const t0 = tablero([A({ de: DIRECCION, tipo: 'dirige' }), A({ de: 'content-creator', tipo: 'aporta', texto: casi }), A({ de: DIRECCION, tipo: 'integra', texto: '## Citas\nA2 usé: algo bien concreto' })])
+    expect(t0).toContain('FIN-CASI-EN-EL-TECHO')
+    expect(t0).not.toMatch(/recortado/)
+    contador = 0
+    const l = [A({ de: DIRECCION, tipo: 'dirige' }), A({ de: 'content-creator', tipo: 'aporta', texto: 'z'.repeat(TOPE_REAL_DEL_PEDIDO) }), A({ de: DIRECCION, tipo: 'integra', texto: '## Citas\nA2 usé: algo bien concreto' })]
+    const t = tablero(l)
+    expect(t.length).toBeLessThan(TOPE_REAL_DEL_PEDIDO + 200)
+    expect(t).toMatch(/\[… recortado: \d+ caracteres más del tablero\]$/)
+  })
   it('el tablero tiene tope de tamaño (el contexto de una revisión no es ilimitado)', () => {
     contador = 0
     const l = [A({ de: DIRECCION, tipo: 'dirige' }), ...Array.from({ length: 60 }, () => A({ de: 'content-creator', tipo: 'aporta', texto: 'x'.repeat(590) })), A({ de: DIRECCION, tipo: 'integra', texto: '## Citas\nA2 usé: algo bien concreto' })]
@@ -149,6 +196,26 @@ describe('BLOQUEANTE 1 · el tablero y las citas llegan a la jefatura', () => {
     expect(doc!.texto).toMatch(/Aportes que la dirección dice que USÓ/)
     // los documentos de siempre siguen ahí
     expect(sobres[0].payload.contexto.map((c) => c.titulo)).toEqual(expect.arrayContaining(['Manual de marca del cliente', 'El brief de este entregable']))
+  })
+  // 19-nov · el t3 (y el t7) de CC7 en #1223: por el camino REAL de la mesa, no la función pura. Si el llamador volviera a pasar 7000 (o cortara el aporte), esto lo ve
+  it('punta a punta: un aporte de más de 7000 caracteres y varias líneas llega ENTERO, en una línea y sin «recortado», al tablero guardado y a la revisión', async () => {
+    const { M, MS, a, id } = await montar()
+    const sobres: Array<{ payload: { contexto: Array<{ titulo: string; texto: string }> } }> = []
+    M.P.jefatura = (async (sobre: never) => { sobres.push(sobre); return { estado: 'esperando', revision_id: 'rev-1' } }) as never
+    const parrafo = (i: number) => `Párrafo ${i}: el titular nombra el plato del día y la sede, con la voz del manual, sin promesas que el cliente no hace.`
+    const largo = `${Array.from({ length: 70 }, (_, i) => parrafo(i + 1)).join('\n\n')}\nFIN-DEL-APORTE-LARGO`
+    expect(largo.length).toBeGreaterThan(7000)
+    const { ultima } = await jugar(M, id, a, (t) => (t.agente === 'content-creator' && t.tipo !== 'dirigir' && t.tipo !== 'integrar' && t.tipo !== 'devolver_citas' ? { texto: largo } : undefined))
+    expect(ultima.cuerpo.accion).toBe('esperar_jefatura')
+    const fila = MS.filas.find((f) => f.de === 'content-creator' && f.tipo === 'aporta')!
+    const enUnaLinea = largo.replace(/\s+/g, ' ').trim()
+    const guardado = (M.encargos.get(id)!.estado_del_motor.artefactos.mesa.datos as { tablero_para_la_jefatura: string }).tablero_para_la_jefatura
+    for (const t of [guardado, sobres[0].payload.contexto.find((c) => /tablero del equipo/.test(c.titulo))!.texto]) {
+      expect(t).toContain(`A${fila.n} · content-creator · aporta: ${enUnaLinea}`)
+      expect(t).toContain('FIN-DEL-APORTE-LARGO')
+      expect(t).not.toMatch(/recortado/)
+      expect(t).not.toMatch(/Párrafo 1: [^\n]*\n\nPárrafo 2/)
+    }
   })
 })
 

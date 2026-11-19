@@ -4,6 +4,7 @@
  */
 import { TIPOS_DE_CONDICION, TIPOS_DE_PASO, type Condicion, type Plantilla } from './tipos'
 import { erroresDeLosTopesPorDuracion } from './topes-por-duracion'
+import { TECHO_DE_LA_PIEZA_S } from './video/techo-de-la-pieza'
 
 /** funciones de código registradas (lista CERRADA; se amplía con cada sala, por PR) */
 export const FUNCIONES_REGISTRADAS = [
@@ -78,6 +79,14 @@ export function validarPlantilla(p: Plantilla): string[] {
   if (!lim || !(lim.tope_encargo_usd > 0)) e.push('`limites.tope_encargo_usd` debe ser mayor que 0')
   // 17-nov · T7a · el dato por segundo/plano (topes que crecen con la pieza)
   e.push(...erroresDeLosTopesPorDuracion(p))
+  // 19-nov · G5 · la pieza de video más larga no pasa de lo que aguanta la cadena (`video/techo-de-la-pieza.ts`)
+  const segMax = (lim?.video as Record<string, unknown> | undefined)?.segundos_max
+  if (typeof segMax === 'number' && segMax > TECHO_DE_LA_PIEZA_S) e.push(`\`limites.video.segundos_max\` (${segMax}) pasa del techo de la pieza de video (${TECHO_DE_LA_PIEZA_S} s: lo que aguanta el render de la composición)`)
+  // 19-nov · G5b · 🟡 de CC6 (#1201): un mínimo sobre el techo dejaba el máximo de la mesa por debajo del mínimo; y la de por omisión tiene que caber en el rango
+  const vid = (lim?.video ?? {}) as Record<string, unknown>
+  if (typeof vid.segundos_min === 'number' && vid.segundos_min > TECHO_DE_LA_PIEZA_S) e.push(`\`limites.video.segundos_min\` (${vid.segundos_min}) pasa del techo de la pieza de video (${TECHO_DE_LA_PIEZA_S} s)`)
+  if (typeof vid.segundos_min === 'number' && typeof segMax === 'number' && vid.segundos_min > segMax) e.push(`\`limites.video.segundos_min\` (${vid.segundos_min}) es mayor que \`segundos_max\` (${segMax})`)
+  if (vid.duracion_por_omision_s !== undefined && (typeof vid.duracion_por_omision_s !== 'number' || !Number.isFinite(vid.duracion_por_omision_s) || vid.duracion_por_omision_s <= 0 || (typeof segMax === 'number' && vid.duracion_por_omision_s > segMax) || (typeof vid.segundos_min === 'number' && vid.duracion_por_omision_s < vid.segundos_min))) e.push(`\`limites.video.duracion_por_omision_s\` (${String(vid.duracion_por_omision_s)}) tiene que ser un número dentro de \`segundos_min\`..\`segundos_max\``)
   if (!lim || ![1, 2].includes(lim.max_rondas)) e.push('`limites.max_rondas` debe ser 1 o 2')
 
   let sumaVueltas = 0

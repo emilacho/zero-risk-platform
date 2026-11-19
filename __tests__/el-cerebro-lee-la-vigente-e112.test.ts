@@ -10,19 +10,20 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-type Llamada = { table: string; select: string; eq: [string, string] | null; order: [string, { ascending: boolean }] | null; limit: number | null }
+type Llamada = { table: string; select: string; eq: [string, string] | null; order: [string, { ascending: boolean }] | null; limit: number | null; is: [string, unknown] | null }
 const llamadas: Llamada[] = []
 const respuestas: Record<string, unknown[]> = {}
 
 vi.mock('@/lib/supabase', () => ({
   getSupabaseAdmin: () => ({
     from: (table: string) => {
-      const l: Llamada = { table, select: '', eq: null, order: null, limit: null }
+      const l: Llamada = { table, select: '', eq: null, order: null, limit: null, is: null }
       llamadas.push(l)
       const fin = () => Promise.resolve({ data: respuestas[table] ?? [], error: null })
       const cadena: Record<string, unknown> = {}
       cadena.select = (s: string) => { l.select = s; return cadena }
       cadena.eq = (k: string, v: string) => { l.eq = [k, v]; return cadena }
+      cadena.is = (k: string, v: unknown) => { l.is = [k, v]; return cadena }
       cadena.order = (k: string, o: { ascending: boolean }) => { l.order = [k, o]; return cadena }
       cadena.limit = (n: number) => { l.limit = n; return fin() }
       return cadena
@@ -67,6 +68,8 @@ describe('E112 · nada más cambió', () => {
     const otras = llamadas.filter((x) => x.table !== 'client_brand_books')
     expect(otras.map((x) => x.table).sort()).toEqual(['client_competitive_landscape', 'client_historical_outputs', 'client_icp_documents', 'client_service_capabilities', 'client_voc_library'])
     for (const l of otras) { expect(l.limit).toBe(20); expect(l.order).toBeNull(); expect(l.eq).toEqual(['client_id', CID]) }
+    // 19-nov · juntar públicos: SOLO los públicos filtran a los vigentes; las demás secciones no llevan filtro
+    for (const l of otras) expect(l.is).toEqual(l.table === 'client_icp_documents' ? ['fusionado_en', null] : null)
   })
   it('sin secciones pide todas (brand books con la vigente · el resto como antes) · sección desconocida se declara', async () => {
     await GET(req(''), ctx)

@@ -165,11 +165,11 @@ describe('④ un fallo del redactor (p. ej. el corte por tope) es un parte INVÁ
 describe('⑤ `razonamiento` del sobre llega al corredor como `thinking_mode` · opt-in puro', () => {
   const cuerpo = async (prev: Record<string, unknown>) => (await correrNodo('n3-armar-cuerpo.js', { input: [{ name: 'Náufrago' }], refs: { '② ¿Ya hay parte de este plan? · guarda': { client_id: CID, dry_run: false, manual_texto: 'm', plan_id: 'p', plan_texto: 'x', manual_version: 1, manual_id: 'm', ...prev } } }))[0].json.cuerpo
   it('el sobre: ausente ⇒ disabled · completo ⇒ null · válido ⇒ el valor', async () => {
-    expect((await sobre({}))[0].json.razonamiento).toBe('disabled') // POR DEFECTO apagado (GO de Emilio 2026-10-01)
+    expect((await sobre({}))[0].json.razonamiento).toBe('maximo') // 18-nov · G1: POR DEFECTO al máximo (antes apagado por el GO del 01-oct)
     expect((await sobre({ razonamiento: 'completo' }))[0].json.razonamiento).toBeNull() // el razonamiento completo hay que pedirlo
-    for (const v of ['disabled', 'low', 'medium']) expect((await sobre({ razonamiento: v }))[0].json.razonamiento).toBe(v)
+    for (const v of ['disabled', 'low', 'medium', 'high', 'xhigh', 'max', 'maximo']) expect((await sobre({ razonamiento: v }))[0].json.razonamiento).toBe(v)
   })
-  it.each([['high'], [''], [null], [true], [0], ['DISABLED']])('🔴 razonamiento mal escrito (%j) ⇒ BRIEF_RAZONAMIENTO_INVALIDO · se DETIENE antes de gastar', async (v) => {
+  it.each([['alto'], ['MAX'], [''], [null], [true], [0], ['DISABLED']])('🔴 razonamiento mal escrito (%j) ⇒ BRIEF_RAZONAMIENTO_INVALIDO · se DETIENE antes de gastar', async (v) => {
     await expect(sobre({ razonamiento: v })).rejects.toThrow(/BRIEF_RAZONAMIENTO_INVALIDO/)
   })
   it('el nodo que paga: con razonamiento ⇒ thinking_mode en el cuerpo · sin él ⇒ ni la clave', async () => {
@@ -202,7 +202,16 @@ describe('⑥ Vercel valida y reenvía `thinking_mode`', () => {
     await POST(req(pedido()))
     expect(Object.prototype.hasOwnProperty.call(alCorredor[2], 'thinking_mode')).toBe(false)
   })
-  it.each([['high'], [''], [null], [1], ['Disabled']])('🔴 thinking_mode mal escrito (%j) ⇒ 400 thinking_mode_invalid y el corredor NO se llama', async (v) => {
+  it.each([['high'], ['xhigh'], ['max'], ['maximo']])('🟢 18-nov G1 · thinking_mode %j (nivel alto) ⇒ pasa y el corredor lo recibe tal cual', async (v) => {
+    await POST(req(pedido({ thinking_mode: v })))
+    expect(alCorredor[0]).toMatchObject({ thinking_mode: v })
+  })
+  it('🟢 18-nov G1 · la lista de la ruta es la MISMA que valida el corredor (si se separan, uno rechaza lo que el otro acepta)', async () => {
+    const { MODOS_DE_RAZONAMIENTO_DEL_PEDIDO } = await import('@/lib/razonamiento')
+    const { MODOS_DE_RAZONAMIENTO } = await import('../services/agent-runner/src/lib/tope-por-corrida')
+    expect([...MODOS_DE_RAZONAMIENTO_DEL_PEDIDO]).toEqual([...MODOS_DE_RAZONAMIENTO])
+  })
+  it.each([['alto'], ['MAX'], [''], [null], [1], ['Disabled']])('🔴 thinking_mode mal escrito (%j) ⇒ 400 thinking_mode_invalid y el corredor NO se llama', async (v) => {
     const r = await POST(req(pedido({ thinking_mode: v })))
     expect(r.status).toBe(400)
     expect(await r.json()).toMatchObject({ error: 'thinking_mode_invalid', code: 'E-THINKING-INVALID' })

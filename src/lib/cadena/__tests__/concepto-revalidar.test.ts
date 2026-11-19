@@ -14,6 +14,7 @@ import type { Campana, EstrategiaGuardada } from '../almacen'
 import { briefAbrir, conceptoAbrir, conceptoDecidir, conceptoParaElCalendario, conceptoVigente, etapaDeReentrada, recibirBrief, recibirConcepto, TIPO_DE_ESPERA_DE_CONCEPTO } from '../mesas'
 import { insumosDesdeEstrategia, leerConcepto } from '../conceptos'
 import { conceptoRevalidar } from '../revalidar'
+import { ponerNecesitaHumano } from '../nucleo'
 import { ACCIONES } from '../acciones'
 import { ideasDeLosAportes, lineaDeIdeaLimpia, textoDeLaMesaParaLaCadena, textoParaLaCadena, TITULO_IDEAS_DE_LOS_APORTES } from '../../oficina/mesa/de-la-cadena'
 
@@ -93,6 +94,10 @@ async function comoNaufrago(o: { libro?: Linea[]; v2?: boolean } = {}) {
   if (o.v2 !== false) {
     expect((await conceptoAbrir(al, wf(), AHORA)).cuerpo.version).toBe(2)
     expect(await recibirConcepto(al, entrega(2, null, { motivo: 'la mesa llegó al techo absoluto' }), AHORA)).toMatchObject({ ok: true, estado: 'sin_mesa' })
+    // 19-nov · grupo D: la cadena ya no detiene aquí (la mesa se reabre en la vuelta siguiente). Las campañas que la regla de antes SÍ detuvo siguen en la base
+    // (revalidar existe para sacarlas), así que el estado de entonces se arma a mano, con el mismo motivo que escribía la cadena
+    expect(al.campanas[0].estado).toBe('calendario')
+    await ponerNecesitaHumano(al, al.campanas[0], 'la mesa de concepto no entregó concepto dos veces', AHORA)
     expect(al.campanas[0].estado).toBe('necesita_humano')
     expect(al.campanas[0].estado_motivo).toMatch(/^la mesa de concepto no entregó concepto dos veces/)
   }
@@ -138,7 +143,8 @@ describe('la entrega de la mesa de concepto lleva las ideas de los aportes', () 
     const ideas = ideasDeLosAportes(LIBRO, INTEGRACION)
     expect(ideas[0]).toBe('- C1-I01 · instagram · carrusel · la primera silla · mensaje: aquí siempre hay una silla para ti · gancho: ¿quién se sentaba aquí? · protagonista: la silla · serie: ninguna · foto:ninguna')
     expect(ideas[2]).toMatch(/^- C1-I03 · facebook/)
-    expect(ideas[3]).toMatch(/^- C1-I01 · instagram · reel · otra cosa/)
+    // 18-nov · ids únicos: la del aporte no citado choca con la C1-I01 del citado → se renumera (la citada conserva el id)
+    expect(ideas[3]).toMatch(/^- C1-I04 · instagram · reel · otra cosa/)
     expect(ideas).toHaveLength(4)
     const sinCita = ideasDeLosAportes(LIBRO, INTEGRACION.replace('A5', 'nadie'))
     expect(sinCita[0]).toMatch(/otra cosa/) // sin cita: el más nuevo primero
@@ -160,7 +166,8 @@ describe('concepto/revalidar · la gran idea ya pagada se relee desde el libro d
     const al = await comoNaufrago()
     const r = await conceptoRevalidar(al, wf({ version: 1 }), AHORA)
     expect(r.status, JSON.stringify(r.cuerpo)).toBe(200)
-    expect(r.cuerpo).toMatchObject({ pasa: true, version: 1, ideas_en_el_banco: 3, bloqueos: [], campana: { estado: 'calendario' } })
+    // 18-nov · ids únicos: la «otra cosa» de A7 (mismo id C1-I01 que la de A5) ya no se pierde: entra renumerada → 4
+    expect(r.cuerpo).toMatchObject({ pasa: true, version: 1, ideas_en_el_banco: 4, bloqueos: [], campana: { estado: 'calendario' } })
     expect(al.conceptos.map((k) => [k.version, k.estado, k.aprobacion])).toEqual([[1, 'lista', 'pendiente'], [2, 'sin_mesa', null]])
     expect(al.conceptos[0].texto_md).toContain(TITULO_IDEAS_DE_LOS_APORTES)
     expect(al.conceptos[0].motivo).toMatch(/^revalidado por wf-cadena · ejecución ex-1 · .* · antes: sin_concepto/)
@@ -360,7 +367,7 @@ describe('el voseo en «Tono» y «Cómo suena» bloquea, con el tope de vueltas
   const VOSEA = (t: string) => t.replace('## Cómo suena  Voz cercana, frases cortas.', '## Cómo suena  Voz cercana: entrá y pedí.')
   const libroQueVosea = LIBRO.map((x) => (x.tipo === 'integra' ? { ...x, texto: VOSEA(x.texto) } : x))
 
-  it('🔴 gran idea: la primera queda sin_mesa por «Cómo suena»; la segunda igual → necesita_humano y no se abre una tercera mesa', async () => {
+  it('🔴 gran idea: la primera queda sin_mesa por «Cómo suena»; la segunda igual → (grupo D, 19-nov) la campaña sigue y no se abre una tercera mesa en el mismo tramo', async () => {
     expect(VOSEA(INTEGRACION)).toContain('entrá y pedí')
     const al = almacen()
     await briefAbrir(al, wf(), AHORA)
@@ -371,12 +378,12 @@ describe('el voseo en «Tono» y «Cómo suena» bloquea, con el tope de vueltas
     expect(al.campanas[0].estado).not.toBe('necesita_humano')
     expect((await conceptoAbrir(al, wf(), AHORA)).cuerpo.version).toBe(2)
     expect(await recibirConcepto(al, entrega(2, textoParaLaCadena(libroQueVosea, null, true)), AHORA)).toMatchObject({ ok: true, estado: 'sin_mesa' })
-    expect(al.campanas[0].estado).toBe('necesita_humano')
+    expect(al.campanas[0].estado).toBe('calendario')
     const r = await conceptoAbrir(al, wf(), AHORA)
-    expect(r.status).toBe(409)
+    expect(r).toMatchObject({ status: 200, cuerpo: { ya_hecha: true, en_reintento: true, mesa: 'concepto' } })
     expect(al.conceptos).toHaveLength(2)
   })
-  it('🔴 brief: «Tono» con voseo se devuelve; la segunda versión igual → necesita_humano', async () => {
+  it('🔴 brief: «Tono» con voseo se devuelve; la segunda versión igual → (grupo D, 19-nov) queda vigente con el voseo escrito como aviso', async () => {
     const BRIEF_VOSEA = BRIEF_BUENO.replace('Cercano y directo, sin exclamaciones.', 'Cercano y directo: entrá y pedí.')
     expect(BRIEF_VOSEA).toContain('entrá y pedí')
     const al = almacen()
@@ -386,6 +393,9 @@ describe('el voseo en «Tono» y «Cómo suena» bloquea, con el tope de vueltas
     expect(al.briefsCreativos[0].devolucion_texto).toMatch(/«Tono» usa formas que no son/)
     await briefAbrir(al, wf(), AHORA)
     expect(await recibirBrief(al, entrega(2, BRIEF_VOSEA, { costo_usd: 0.1 }), AHORA)).toMatchObject({ estado: 'devuelta' })
-    expect(al.campanas[0].estado).toBe('necesita_humano')
+    expect(al.campanas[0].estado).toBe('calendario')
+    expect((await briefAbrir(al, wf(), AHORA)).cuerpo).toMatchObject({ ya_hecha: true, version: 2, mejor_version: { de: 2 } })
+    expect(al.briefsCreativos[1].estado).toBe('validada')
+    expect((al.briefsCreativos[1].leido as { avisos: string[] }).avisos.some((a) => /^el brief quedó vigente con lo que la mesa no pudo arreglar: «Tono» usa formas que no son/.test(a))).toBe(true)
   })
 })
