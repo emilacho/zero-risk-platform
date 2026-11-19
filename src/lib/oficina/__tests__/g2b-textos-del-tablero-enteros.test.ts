@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest'
 import { ACCIONES } from '../tablero/acciones'
 import { validarSobre } from '../sobre'
 import { OBSERVACIONES_MAX } from '../video/aprobacion'
-import { MAX_MOTIVO } from '../../dueno-preguntas/preguntas'
+import { MAX_MOTIVO, TABLA, descartar } from '../../dueno-preguntas/preguntas'
 import { LARGO_MAXIMO_DE_CAMPO } from '../../cadena/banco-de-ideas'
 import { TOPE_DEL_TEXTO_DEL_DUENO } from '../../limites-de-tamano'
 import { DbFalsa } from './dbfalsa'
@@ -59,6 +59,26 @@ describe('G2b-plataforma · la baja del cliente y rehacer la pieza', () => {
     expect(s.cuerpo.error).not.toBe('entrada_invalida')
     expect((s as { toca?: { comentario?: unknown } }).toca?.comentario).toBe(largo)
     expect((await llamar('rehacer-pieza', new DbFalsa(), { encargo_id: H, comentario: demas })).cuerpo.error).toBe('entrada_invalida')
+  })
+})
+
+describe('G2b-plataforma · el motivo al descartar una pregunta del dueño (pedido de CC7 00:14Z, h1)', () => {
+  const C = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', Q = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'
+  const base = () => new DbFalsa().semilla(TABLA, [{ id: Q, client_id: C, estado: 'pendiente', pregunta: '¿?' }])
+  const cerebro = { guardar: async () => { throw new Error('descartar no debe tocar el cerebro') } } as never
+  const pide = (db: DbFalsa, motivo: string) => descartar({ db, cerebro, ahora: AHORA }, { client_id: C, workflow_id: 'wf', workflow_execution_id: 'x1', pregunta_id: Q, motivo, decidido_por: 'emilio' })
+  it('🔴 un motivo de 5000 queda entero en la fila', async () => {
+    const db = base()
+    expect((await pide(db, largo)).status).toBe(200)
+    expect(db.tablas[TABLA][0]).toMatchObject({ estado: 'descartada', motivo: largo })
+  })
+  it('🔴 uno de 100 001 es 400 en el código (no un error crudo de la base) y la fila sigue pendiente, sin motivo', async () => {
+    const db = base()
+    const s = await pide(db, demas)
+    expect(s.status).toBe(400)
+    expect(s.body.error).toBe('entrada_invalida')
+    expect(db.tablas[TABLA][0].estado).toBe('pendiente')
+    expect(db.tablas[TABLA][0].motivo).toBeUndefined()
   })
 })
 
