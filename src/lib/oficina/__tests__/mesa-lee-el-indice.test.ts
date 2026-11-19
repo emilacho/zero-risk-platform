@@ -161,6 +161,12 @@ describe('al abrir una mesa de pieza: UNA lectura del índice y sin el pedido me
     expect(mezclados).toHaveLength(1)
     expect(a.status).toBeLessThan(500)
   })
+  it('el error del índice se guarda entero, sin cortar (Lenovo 19-nov 08:30Z)', async () => {
+    const largo = 'HTTP 502 · ' + 'detalle de la red '.repeat(40) + '· fin del error'
+    expect(largo.length).toBeGreaterThan(300)
+    const { est } = await abrir({ indice: () => ({ ok: false, error: largo }), conCerebro: true, dry: false })
+    expect(est().marcas.indice_sin_respuesta).toBe(largo)
+  })
   it('índice sin huella = como si fallara (motivo visible) y la mesa sigue', async () => {
     const { est } = await abrir({ indice: () => ({ ok: true, body: { lista_texto: LISTA } }) })
     expect(est().indice).toBeUndefined()

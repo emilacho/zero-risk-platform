@@ -299,7 +299,7 @@ export async function avanzarMesa(P: Puertos, enc0: Encargo, pl: Plantilla, indi
         const r = await P.indice.indice(ped)
         const ix = r.ok ? leerIndice(r.body) : null
         if (ix) est = { ...est, indice: ix }
-        else est = { ...est, marcas: { ...est.marcas, indice_sin_respuesta: r.ok ? 'el índice no trajo huella ni lista' : String(r.error).slice(0, 300) } }
+        else est = { ...est, marcas: { ...est.marcas, indice_sin_respuesta: r.ok ? 'el índice no trajo huella ni lista' : String(r.error) } }
       }
       // 10-nov · la mesa de reubicación decide fechas con lo que la cadena le pasa: NO abre con el cerebro (no se toca el cerebro)
       if (!est.indice && P.cerebro && portero && est.tipo !== 'reubicacion' && est.tipo !== 'fallidos' && est.tipo !== 'banco') {
