@@ -179,7 +179,9 @@ export function idasYVueltas(libro: Aporte[], x: string, y: string): number {
   return libro.filter((a) => ['pide', 'devuelve', 'responde'].includes(a.tipo) && a.para && ((a.de === x && a.para === y) || (a.de === y && a.para === x))).length
 }
 
-/** huella de un pedido (de, para, texto normalizado): un pedido idéntico de la misma pareja no se anota dos veces */
+/** huella de un pedido (de, para, texto normalizado ENTERO): un pedido idéntico de la misma pareja no se anota dos veces.
+ *  G8 · 19-nov: comparaba solo los primeros 200 caracteres; con los textos enteros (#1222), dos pedidos distintos con el mismo comienzo
+ *  se tomaban por uno y el segundo no se anotaba (lo vio CC6). Ahora solo cuenta como repetido el pedido idéntico. */
 export function huellaDePedido(de: string, para: string, texto: string): string {
-  return `${de}>${para}:${texto.toLowerCase().replace(/\s+/g, ' ').trim().slice(0, 200)}`
+  return `${de}>${para}:${texto.toLowerCase().replace(/\s+/g, ' ').trim()}`
 }

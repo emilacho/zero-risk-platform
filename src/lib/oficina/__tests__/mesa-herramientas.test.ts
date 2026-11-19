@@ -35,6 +35,19 @@ describe('LA MESA · herramientas del tablero', () => {
     expect(MS.filas.filter((f) => f.tipo === 'pide')).toHaveLength(1)
   })
 
+  // 19-nov · G8 (4b), lo vio CC6 en #1222: la huella comparaba solo 200 caracteres y un segundo pedido distinto se daba por «ya anotado»
+  it('dos pedidos al mismo compañero con el mismo comienzo largo y final distinto se anotan los dos; el idéntico, una vez', async () => {
+    const { M, MS, id, turno } = await preparado()
+    const comienzo = 'Necesito el titular del hook con el plato del día, la sede del centro y el horario de la tarde, '.repeat(3)
+    const r1 = await llamar(M, { herramienta: 'mesa_pedir', encargo_id: id, de: turno.agente, a: 'content-creator', que: `${comienzo}para la lámina 1` })
+    const r2 = await llamar(M, { herramienta: 'mesa_pedir', encargo_id: id, de: turno.agente, a: 'content-creator', que: `${comienzo}para la lámina 7` })
+    expect(r1.cuerpo).toMatchObject({ ok: true })
+    expect(r2.cuerpo).toMatchObject({ ok: true })
+    expect(r2.cuerpo.duplicado).toBeUndefined()
+    expect((await llamar(M, { herramienta: 'mesa_pedir', encargo_id: id, de: turno.agente, a: 'content-creator', que: `${comienzo}para la lámina 7` })).cuerpo).toMatchObject({ ok: true, duplicado: true })
+    expect(MS.filas.filter((f) => f.tipo === 'pide').map((f) => f.texto.slice(-7))).toEqual(['lámina 1', 'lámina 7'].map((x) => x.slice(-7)))
+  })
+
   it('pedir_material le escribe al portero; sin portero en el directorio responde ok:false (nunca éxito falso)', async () => {
     const { M, MS, id, turno } = await preparado()
     const r = await llamar(M, { herramienta: 'pedir_material', encargo_id: id, de: turno.agente, que: 'el precio vigente del plato' })
