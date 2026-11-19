@@ -8,7 +8,8 @@
  *   · `posible_duplicado_de: <id>`  → en duda: los dos vigentes, marcado (`posible_duplicado_de`).
  * El JUICIO es del agente; este código solo verifica lo EXACTO: que el id exista, sea del mismo cliente y esté vigente. Si la decisión falta,
  * no se lee o no cuadra, entra como `nuevo` y queda el aviso. Nada se frena ni va a una persona.
- * Solo INSERT o el upsert de siempre: nunca un UPDATE de fusión sobre otra fila (el AFTER UPDATE `icp_documents_brain_reembed` re-embebería).
+ * Solo INSERT o el upsert de siempre: nunca un UPDATE de fusión sobre otra fila (el AFTER UPDATE `icp_documents_brain_reembed` re-embebería). Por eso, si el
+ * upsert caería sobre un nombre que ya existe, «mismo_que» baja a «posible_duplicado_de» (entrega 2).
  * Agnóstico: ningún dato de un cliente.
  */
 
@@ -79,11 +80,21 @@ export async function guardarPublico(
       if (motivo === null) d = { tipo: 'nuevo', porque: d.porque }
       else if (motivo !== undefined) { aviso = `${motivo}; entró como nuevo (decía ${d.tipo})`; d = { tipo: 'nuevo', porque: d.porque } }
     }
-    const marcas: Record<string, unknown> =
-      d.tipo === 'mismo_que' ? { fusionado_en: d.id, fusion_porque: d.porque }
-      : d.tipo === 'dentro_de' ? { segmento_de: d.id, fusion_porque: d.porque }
-      : d.tipo === 'posible_duplicado_de' ? { posible_duplicado_de: d.id, fusion_porque: d.porque }
-      : {}
+    // 19-nov · entrega 2 (condición 2 de CC6): por el upsert, «mismo_que» sobre un nombre que YA existe (otra fila, vigente e indexada) sería un UPDATE de fusión
+    // que deja sus trozos viejos en el cerebro y dispara el re-embebido. No se absorbe: queda en duda (los dos vigentes) y se dice.
+    if (d.tipo === 'mismo_que' && p.modo === 'upsert') {
+      const r = await db.from(TABLA).select('id').eq('client_id', p.client_id).eq('audience_segment', nombre).maybeSingle()
+      if (r.error) { aviso = `no se pudo ver si el público «${nombre}» ya existe: ${r.error.message}; entró como nuevo (decía mismo_que)`; d = { tipo: 'nuevo', porque: d.porque } }
+      else if (r.data) { aviso = `el público «${nombre}» ya existe; no se absorbe al actualizarlo: queda como posible duplicado de ${d.id}`; d = { tipo: 'posible_duplicado_de', id: d.id, porque: d.porque } }
+    }
+    // 19-nov · entrega 2 (condición 3 de CC6): las 3 marcas y el porqué van SIEMPRE (null cuando no aplican): un público que vuelve a entrar no hereda marcas viejas.
+    // Requiere la migración 202611190700 aplicada (CC7, 19-nov 06:53Z).
+    const marcas: Record<string, unknown> = {
+      fusionado_en: d.tipo === 'mismo_que' ? d.id : null,
+      segmento_de: d.tipo === 'dentro_de' ? d.id : null,
+      posible_duplicado_de: d.tipo === 'posible_duplicado_de' ? d.id : null,
+      fusion_porque: d.tipo === 'nuevo' ? null : d.porque,
+    }
     const fila = { ...p.fila, client_id: p.client_id, ...marcas }
     const w = p.modo === 'upsert'
       ? await db.from(TABLA).upsert(fila, { onConflict: 'client_id,audience_segment' }).select('id').maybeSingle()

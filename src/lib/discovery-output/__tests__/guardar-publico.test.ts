@@ -60,6 +60,8 @@ function base(o: { filas?: Fila[]; fallaLeer?: string; fallaEscribir?: string; l
 const vigente = (id: string, nombre: string, client_id = CLIENTE): Fila => ({ id, client_id, audience_segment: nombre, fusionado_en: null })
 const publico = (nombre: string) => ({ audience_segment: nombre, segment_priority: 1, geography: 'Olón' })
 const MARCAS = ['fusionado_en', 'segmento_de', 'posible_duplicado_de', 'fusion_porque']
+// entrega 2 · las marcas viajan SIEMPRE (null cuando no aplican): un público que vuelve no hereda una marca vieja
+const SIN_MARCAS = { fusionado_en: null, segmento_de: null, posible_duplicado_de: null, fusion_porque: null }
 
 describe('leerDecision · solo lo exacto, nada se adivina', () => {
   it('lee las 4 formas', () => {
@@ -80,8 +82,8 @@ describe('guardarPublico · los dos caminos, sin decisión = como hoy', () => {
     const { db, escrituras } = base()
     const r = await guardarPublico(db, { client_id: CLIENTE, fila: publico('Turista playero en Olón'), modo: 'upsert' })
     expect(r).toEqual({ ok: true, id: 'nuevo-1', vigente: true, aplicada: { tipo: 'nuevo', porque: null }, aviso: null })
-    expect(escrituras).toEqual([{ modo: 'upsert', onConflict: 'client_id,audience_segment', fila: { ...publico('Turista playero en Olón'), client_id: CLIENTE } }])
-    for (const m of MARCAS) expect(escrituras[0].fila).not.toHaveProperty(m)
+    expect(escrituras).toEqual([{ modo: 'upsert', onConflict: 'client_id,audience_segment', fila: { ...publico('Turista playero en Olón'), client_id: CLIENTE, ...SIN_MARCAS } }])
+    expect(escrituras[0].fila).toMatchObject(SIN_MARCAS)
   })
   it('🟢 analizador de marca (insert) sin decisión: el mismo resultado por el otro camino', async () => {
     const { db, escrituras } = base()
@@ -102,14 +104,14 @@ describe('guardarPublico · la decisión del agente, verificada', () => {
     const r = await guardarPublico(db, { client_id: CLIENTE, fila: publico('Turista playero en Olón'), decision: { mismo_que: P1, porque: 'mismo público con otro nombre' }, modo: 'upsert' })
     expect(r).toMatchObject({ ok: true, vigente: false, aplicada: { tipo: 'mismo_que', id: P1 }, aviso: null })
     expect(escrituras[0].fila).toMatchObject({ fusionado_en: P1, fusion_porque: 'mismo público con otro nombre' })
-    expect(escrituras[0].fila).not.toHaveProperty('segmento_de')
+    expect(escrituras[0].fila).toMatchObject({ segmento_de: null, posible_duplicado_de: null })
   })
   it('🔴 dentro_de: segmento del general, sigue vigente', async () => {
     const { db, escrituras } = base({ filas: [vigente(P1, 'Residentes urbanos de Guayaquil')] })
     const r = await guardarPublico(db, { client_id: CLIENTE, fila: publico('Residente zona norte Guayaquil'), decision: { dentro_de: P1, porque: 'zona norte está dentro de Guayaquil' }, modo: 'insert' })
     expect(r).toMatchObject({ ok: true, vigente: true, aplicada: { tipo: 'dentro_de', id: P1 } })
     expect(escrituras[0].fila).toMatchObject({ segmento_de: P1, fusion_porque: 'zona norte está dentro de Guayaquil' })
-    expect(escrituras[0].fila).not.toHaveProperty('fusionado_en')
+    expect(escrituras[0].fila).toMatchObject({ fusionado_en: null, posible_duplicado_de: null })
   })
   it('🔴 posible_duplicado_de: los dos vigentes, marcado', async () => {
     const { db, escrituras } = base({ filas: [vigente(P1, 'A')] })
@@ -126,26 +128,26 @@ describe('guardarPublico · la decisión del agente, verificada', () => {
       const { db, escrituras } = base({ filas: [...filas] })
       const r = await guardarPublico(db, { client_id: CLIENTE, fila: publico('B'), decision: { mismo_que: P1, porque: 'p' }, modo: 'upsert' })
       expect(r).toMatchObject({ ok: true, vigente: true, aplicada: { tipo: 'nuevo', porque: 'p' }, aviso: `${esperado}; entró como nuevo (decía mismo_que)` })
-      for (const m of MARCAS) expect(escrituras[0].fila).not.toHaveProperty(m)
+      expect(escrituras[0].fila).toMatchObject(SIN_MARCAS)
     })
   }
   it('🔴 si no se puede leer el destino: entra como nuevo y se dice (no se marca a ciegas)', async () => {
     const { db, escrituras } = base({ fallaLeer: 'tabla caída' })
     const r = await guardarPublico(db, { client_id: CLIENTE, fila: publico('B'), decision: { dentro_de: P1, porque: 'p' }, modo: 'insert' })
     expect(r).toMatchObject({ ok: true, vigente: true, aplicada: { tipo: 'nuevo' }, aviso: `no se pudo leer el público ${P1}: tabla caída; entró como nuevo (decía dentro_de)` })
-    for (const m of MARCAS) expect(escrituras[0].fila).not.toHaveProperty(m)
+    expect(escrituras[0].fila).toMatchObject(SIN_MARCAS)
   })
   it('🟢 la decisión ilegible no frena: entra como nuevo y se dice', async () => {
     const { db, escrituras } = base()
     const r = await guardarPublico(db, { client_id: CLIENTE, fila: publico('B'), decision: { mismo_que: 'no-es-un-id', porque: 'p' }, modo: 'upsert' })
     expect(r).toMatchObject({ ok: true, vigente: true, aplicada: { tipo: 'nuevo' }, aviso: 'la decisión de fusión no se pudo leer; entró como nuevo' })
-    for (const m of MARCAS) expect(escrituras[0].fila).not.toHaveProperty(m)
+    expect(escrituras[0].fila).toMatchObject(SIN_MARCAS)
   })
   it('🟢 por el upsert, «mismo_que» la fila del MISMO nombre = la misma fila: se refresca sin marcarse contra sí misma', async () => {
     const { db, escrituras, filas } = base({ filas: [vigente(P1, 'Turista playero en Olón')] })
     const r = await guardarPublico(db, { client_id: CLIENTE, fila: publico('Turista playero en Olón'), decision: { mismo_que: P1, porque: 'es el mismo' }, modo: 'upsert' })
     expect(r).toEqual({ ok: true, id: P1, vigente: true, aplicada: { tipo: 'nuevo', porque: 'es el mismo' }, aviso: null })
-    expect(escrituras[0].fila).not.toHaveProperty('fusionado_en')
+    expect(escrituras[0].fila).toMatchObject(SIN_MARCAS)
     expect(filas).toHaveLength(1)
   })
   it('🟢 la decisión explícita «nuevo» no lee nada y entra vigente', async () => {
@@ -238,4 +240,51 @@ describe('🟡 CC6 · los 4 caminos sin prueba', () => {
       }
     })
   }
+})
+
+// 19-nov · entrega 2 · condiciones 2 y 3 de CC6 (#1208, 06:15Z)
+describe('entrega 2 · un público que vuelve no hereda marcas; «mismo_que» nunca absorbe por UPDATE', () => {
+  it('🔴 c3 · un absorbido que vuelve a entrar como nuevo por el upsert queda vigente DE VERDAD (las marcas viejas se borran)', async () => {
+    const { db, filas, escrituras } = base({ filas: [{ ...vigente(P2, 'Turista playero'), fusionado_en: P1, fusion_porque: 'viejo' }, vigente(P1, 'Turistas')] })
+    const r = await guardarPublico(db, { client_id: CLIENTE, fila: publico('Turista playero'), modo: 'upsert' })
+    expect(r).toMatchObject({ ok: true, id: P2, vigente: true })
+    expect(escrituras[0].fila).toMatchObject(SIN_MARCAS)
+    expect(filas.find((f) => f.id === P2)).toMatchObject(SIN_MARCAS)
+  })
+  it('🔴 c3 · un segmento viejo que ahora es «posible_duplicado_de» pierde el segmento_de (no choca con la regla de la base)', async () => {
+    const { db, filas } = base({ filas: [{ ...vigente(P2, 'Zona norte'), segmento_de: P3 }, vigente(P1, 'Guayaquil'), vigente(P3, 'Costa')] })
+    await guardarPublico(db, { client_id: CLIENTE, fila: publico('Zona norte'), decision: { posible_duplicado_de: P1, porque: 'en duda' }, modo: 'upsert' })
+    expect(filas.find((f) => f.id === P2)).toMatchObject({ segmento_de: null, posible_duplicado_de: P1, fusionado_en: null, fusion_porque: 'en duda' })
+  })
+  it('🔴 c2 · «mismo_que» por el upsert sobre un nombre que YA existe (otra fila): no se absorbe, queda en duda y se dice', async () => {
+    const { db, filas, escrituras } = base({ filas: [vigente(P1, 'Turistas de playa'), vigente(P2, 'Turista playero')] })
+    const r = await guardarPublico(db, { client_id: CLIENTE, fila: publico('Turista playero'), decision: { mismo_que: P1, porque: 'mismo público' }, modo: 'upsert' })
+    expect(r).toEqual({ ok: true, id: P2, vigente: true, aplicada: { tipo: 'posible_duplicado_de', id: P1, porque: 'mismo público' },
+      aviso: `el público «Turista playero» ya existe; no se absorbe al actualizarlo: queda como posible duplicado de ${P1}` })
+    expect(escrituras[0].fila).toMatchObject({ fusionado_en: null, posible_duplicado_de: P1, segmento_de: null })
+    expect(filas.find((f) => f.id === P2)?.fusionado_en).toBeNull()
+  })
+  it('🔴 c2 · si no se puede ver si el nombre ya existe: no se absorbe a ciegas (entra como nuevo y se dice)', async () => {
+    let n = 0
+    const { db: real } = base({ filas: [vigente(P1, 'Turistas de playa')] })
+    const db: Db = { from: (t: string) => {
+      const q = real.from(t) as unknown as Record<string, unknown>
+      if (++n !== 2) return q as never
+      const falla = { select: () => falla, eq: () => falla, maybeSingle: async () => ({ data: null, error: { message: 'caída' } }) }
+      return falla as never
+    } }
+    const r = await guardarPublico(db, { client_id: CLIENTE, fila: publico('Turista playero'), decision: { mismo_que: P1, porque: 'p' }, modo: 'upsert' })
+    expect(r).toMatchObject({ ok: true, vigente: true, aplicada: { tipo: 'nuevo' }, aviso: 'no se pudo ver si el público «Turista playero» ya existe: caída; entró como nuevo (decía mismo_que)' })
+  })
+  it('🟢 c2 · el nombre nuevo (no existe): «mismo_que» sí entra absorbido, por insert del upsert', async () => {
+    const { db, filas } = base({ filas: [vigente(P1, 'Turistas de playa')] })
+    const r = await guardarPublico(db, { client_id: CLIENTE, fila: publico('Turista playero'), decision: { mismo_que: P1, porque: 'p' }, modo: 'upsert' })
+    expect(r).toMatchObject({ ok: true, vigente: false, aplicada: { tipo: 'mismo_que', id: P1 }, aviso: null })
+    expect(filas).toHaveLength(2)
+  })
+  it('🟢 c2 · el analizador (insert) no busca el nombre: siempre es fila nueva', async () => {
+    const { db } = base({ filas: [vigente(P1, 'Turistas de playa'), vigente(P2, 'Turista playero')] })
+    const r = await guardarPublico(db, { client_id: CLIENTE, fila: publico('Turista playero'), decision: { mismo_que: P1, porque: 'p' }, modo: 'insert' })
+    expect(r).toMatchObject({ ok: true, vigente: false, aplicada: { tipo: 'mismo_que' } })
+  })
 })
