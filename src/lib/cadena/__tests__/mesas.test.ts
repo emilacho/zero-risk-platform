@@ -309,13 +309,13 @@ describe('la decisión de Emilio sobre la gran idea', () => {
     await conConceptoListo(al, 4)
     expect(al.avisosAlBuzon).toHaveLength(0)
     const r4 = await conceptoDecidir(al, wf({ decision: 'cambios', apunta_a: 'concepto', nota: 'la cuarta' }), AHORA)
-    expect(r4).toMatchObject({ status: 409, cuerpo: { error: 'vueltas_agotadas', necesita_humano: false, pregunta: 'enviada', vueltas: 3, tope: 3 } })
+    expect(r4).toMatchObject({ status: 409, cuerpo: { error: 'vueltas_agotadas', necesita_humano: false, vueltas: 3, tope: 3 } })
+    expect(r4.cuerpo).not.toHaveProperty('pregunta')
     expect(al.campanas[0].estado).toBe('calendario')
     expect(al.conceptos).toHaveLength(4)
     expect(al.conceptos[3].aprobacion).toBe('pendiente')
-    expect(al.avisosAlBuzon).toHaveLength(1)
-    expect(al.avisosAlBuzon[0]).toMatchObject({ tipo: 'pregunta', clave: `cadena:vueltas-de-cambios:${CAMP}:v4`, client_id: A.clientId, workflow_id: 'wf-cadena', workflow_execution_id: 'ex-1' })
-    expect(al.avisosAlBuzon[0].detalle).toContain('«la cuarta»')
+    // Emilio 16:19 Zúrich: sin mensaje ni alerta en el buzón
+    expect(al.avisosAlBuzon).toHaveLength(0)
     // la aprobación a mano sigue valiendo
     expect((await conceptoDecidir(al, wf({ decision: 'aprobar' }), AHORA)).status).toBe(200)
   })
