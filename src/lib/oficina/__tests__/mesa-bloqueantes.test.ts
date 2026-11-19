@@ -12,6 +12,7 @@ import { crearMesaEnMemoria } from './mesa-memoria'
 import { registrarHerramienta } from '../mesa/herramienta'
 import { observacionDeLaMesa } from '../mesa/evidencia'
 import { tableroParaLaJefatura } from '../mesa/libro'
+import { TOPE_REAL_DEL_PEDIDO } from '../../limites-de-tamano'
 import { cotaAgotada, reservaDeLoQueSigue, siguienteDeLaMesa, techoDe } from '../mesa/planificador'
 import { COTAS, type Aporte, type EstadoMesa, type Tarjeta } from '../mesa/tipos'
 import { revisarPasosMuertos } from '../vigia'
@@ -126,6 +127,31 @@ describe('BLOQUEANTE 1 · el tablero y las citas llegan a la jefatura', () => {
     expect(t).toMatch(/## Aportes que la dirección dice que DESCARTÓ\n- A4 \(marketing_instagram_curator\): la foto propia 3 choca/)
     expect(t).toMatch(/A9 \(NO EXISTE en el tablero\)/)
     expect(t).toMatch(/citas a aportes que no existen: A9/)
+  })
+  // 19-nov · G8 (3) · GO Lenovo 10:36 · «nada se recorta»: antes cada aporte llegaba a 600 y el tablero entero a 7000
+  it('cada aporte llega ENTERO a la jefatura, y un tablero de más de 7000 también (sin aviso de recorte)', () => {
+    contador = 0
+    const largo = `${'El titular nombra el plato del día y la sede, con la voz del manual y sin promesas que el cliente no hace. '.repeat(10)}FIN-DEL-APORTE`
+    expect(largo.length).toBeGreaterThan(600)
+    const l = [A({ de: DIRECCION, tipo: 'dirige' }), A({ de: 'content-creator', tipo: 'aporta', texto: largo }), ...Array.from({ length: 20 }, () => A({ de: 'carousel-designer', tipo: 'aporta', texto: 'y'.repeat(590) })), A({ de: DIRECCION, tipo: 'integra', texto: '## Citas\nA2 usé: el titular del gancho' })]
+    const t = tablero(l)
+    expect(t.length).toBeGreaterThan(7000)
+    expect(t).toContain(`A2 · content-creator · aporta: ${largo}`)
+    expect(t).not.toMatch(/recortado/)
+    expect(t).toMatch(/citas sin motivo suficiente/)
+  })
+  it('por omisión el techo es el real del pedido; encima de él se avisa cuánto quedó fuera', () => {
+    contador = 0
+    // justo debajo del techo real entra entero (un techo menor lo cortaría)
+    const casi = `${'w'.repeat(TOPE_REAL_DEL_PEDIDO - 2000)}FIN-CASI-EN-EL-TECHO`
+    const t0 = tablero([A({ de: DIRECCION, tipo: 'dirige' }), A({ de: 'content-creator', tipo: 'aporta', texto: casi }), A({ de: DIRECCION, tipo: 'integra', texto: '## Citas\nA2 usé: algo bien concreto' })])
+    expect(t0).toContain('FIN-CASI-EN-EL-TECHO')
+    expect(t0).not.toMatch(/recortado/)
+    contador = 0
+    const l = [A({ de: DIRECCION, tipo: 'dirige' }), A({ de: 'content-creator', tipo: 'aporta', texto: 'z'.repeat(TOPE_REAL_DEL_PEDIDO) }), A({ de: DIRECCION, tipo: 'integra', texto: '## Citas\nA2 usé: algo bien concreto' })]
+    const t = tablero(l)
+    expect(t.length).toBeLessThan(TOPE_REAL_DEL_PEDIDO + 200)
+    expect(t).toMatch(/\[… recortado: \d+ caracteres más del tablero\]$/)
   })
   it('el tablero tiene tope de tamaño (el contexto de una revisión no es ilimitado)', () => {
     contador = 0
