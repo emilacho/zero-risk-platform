@@ -2,7 +2,7 @@
  * 19-nov · VARIAS CAMPAÑAS POR CLIENTE · entrega 2 · la PUERTA (`pBAp5Cx7R39U585i`) le pasa a la apertura qué campaña (`campana_id`) o la llave de la nueva · CC1 · US$ 0, sin red.
  * El respaldo ANTES es la puerta viva tal cual (19-nov, 48 nodos). Se ejecuta el código REAL de `⓪ Llave y origen` y la expresión REAL del cuerpo de `1 · Abrir campaña`.
  * Lo que fija: DESPUES = construir(ANTES) y solo cambian esos dos nodos; la llave pasa `llave_de_campana` (texto o null); el cuerpo de abrir lleva `campana_id` y `llave_de_campana`;
- * el sobre del reintento llega a la apertura con SU `campana_id`; sin esos campos, el cuerpo es el de siempre más dos null.
+ * el sobre del reintento llega a la apertura con SU `campana_id`; sin esos campos, el cuerpo es el de siempre más tres null (campaña, llave y nombre).
  */
 import fs from 'node:fs'
 import path from 'node:path'
@@ -58,18 +58,22 @@ describe('puerta · varias campañas · el cambio', () => {
 })
 
 describe('puerta · varias campañas · lo que llega a la apertura', () => {
-  it('🔴 con llave: la llave la pasa y el cuerpo de abrir la lleva', () => {
-    const s = llave(DESPUES, sobre({ llave_de_campana: 'prueba-conjunta-2026-11-19' }))
+  it('🔴 con llave y nombre: la llave los pasa y el cuerpo de abrir los lleva', () => {
+    const s = llave(DESPUES, sobre({ llave_de_campana: 'prueba-conjunta-2026-11-19', nombre_de_campana: 'Prueba conjunta' }))
     expect(s.llave_de_campana).toBe('prueba-conjunta-2026-11-19')
-    expect(cuerpoDeAbrir(DESPUES, s)).toMatchObject({ accion: 'abrir', client_id: CLIENTE, plan_id: 'plan-1', llave_de_campana: 'prueba-conjunta-2026-11-19', campana_id: null, seco: true })
+    expect(s.nombre_de_campana).toBe('Prueba conjunta')
+    expect(cuerpoDeAbrir(DESPUES, s)).toMatchObject({ accion: 'abrir', client_id: CLIENTE, plan_id: 'plan-1', llave_de_campana: 'prueba-conjunta-2026-11-19', nombre_de_campana: 'Prueba conjunta', campana_id: null, seco: true })
   })
-  it('🔴 una llave que no es texto llega como null (la apertura nunca recibe un número u objeto)', () => {
-    for (const v of [7, { a: 1 }, ['k'], true]) expect(llave(DESPUES, sobre({ llave_de_campana: v })).llave_de_campana, JSON.stringify(v)).toBeNull()
+  it('🔴 una llave o un nombre que no es texto llega como null (la apertura nunca recibe un número u objeto)', () => {
+    for (const v of [7, { a: 1 }, ['k'], true]) {
+      expect(llave(DESPUES, sobre({ llave_de_campana: v })).llave_de_campana, JSON.stringify(v)).toBeNull()
+      expect(llave(DESPUES, sobre({ nombre_de_campana: v })).nombre_de_campana, JSON.stringify(v)).toBeNull()
+    }
   })
-  it('🔴 sin campos nuevos: el cuerpo es el de antes más dos null', () => {
+  it('🔴 sin campos nuevos: el cuerpo es el de antes más tres null', () => {
     const antes = cuerpoDeAbrir(ANTES, llave(ANTES, sobre()))
     const despues = cuerpoDeAbrir(DESPUES, llave(DESPUES, sobre()))
-    expect(despues).toEqual({ ...antes, campana_id: null, llave_de_campana: null })
+    expect(despues).toEqual({ ...antes, campana_id: null, llave_de_campana: null, nombre_de_campana: null })
     expect(antes).not.toHaveProperty('campana_id') // hoy la puerta lo perdía
   })
   it('🔴 el sobre del REINTENTO llega a la apertura con su campana_id, y la apertura retoma ESA campaña', async () => {

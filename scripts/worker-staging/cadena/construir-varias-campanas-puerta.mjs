@@ -5,8 +5,8 @@
  *   node scripts/worker-staging/cadena/construir-varias-campanas-puerta.mjs   → escribe puerta-varias-campanas-DESPUES.json desde el respaldo ANTES
  *
  * Qué cambia (y SOLO esto, dos nodos):
- *   · `⓪ Llave y origen`: además de `campana_id` (que ya leía), lee `llave_de_campana` del sobre (texto o null);
- *   · `1 · Abrir campaña`: el cuerpo a `/api/cadena/campanas` (acción `abrir`) lleva `campana_id` y `llave_de_campana`.
+ *   · `⓪ Llave y origen`: además de `campana_id` (que ya leía), lee `llave_de_campana` y `nombre_de_campana` del sobre (texto o null);
+ *   · `1 · Abrir campaña`: el cuerpo a `/api/cadena/campanas` (acción `abrir`) lleva `campana_id`, `llave_de_campana` y `nombre_de_campana`.
  * Por qué: el reintento y la reapertura ya mandan `payload.campana_id` (`campanas.ts`, `sobreDeReintento` / `reabrirCampana`), pero la puerta lo perdía y la
  * apertura buscaba por (cliente, plan): con dos campañas en el mismo plan retomaba la que no era. La campaña nueva de la prueba nace con su llave.
  * Con el código de antes de #1243 los dos campos se ignoran: la puerta se comporta igual que hoy.
@@ -23,9 +23,9 @@ export const ANTES = path.join(AQUI, 'puerta-varias-campanas-ANTES.json')
 export const DESPUES = path.join(AQUI, 'puerta-varias-campanas-DESPUES.json')
 
 export const LLAVE_VIEJA = "    campana_id: typeof body.campana_id === 'string' ? body.campana_id : null,\n"
-export const LLAVE_NUEVA = LLAVE_VIEJA + "    // 19-nov · varias campañas: la campaña NUEVA nace con su llave (la apertura la valida); sin llave, nace del plan como siempre\n    llave_de_campana: typeof body.llave_de_campana === 'string' ? body.llave_de_campana : null,\n"
+export const LLAVE_NUEVA = LLAVE_VIEJA + "    // 19-nov · varias campañas: la campaña NUEVA nace con su llave y su nombre (la apertura los valida); sin llave, nace del plan como siempre\n    llave_de_campana: typeof body.llave_de_campana === 'string' ? body.llave_de_campana : null,\n    nombre_de_campana: typeof body.nombre_de_campana === 'string' ? body.nombre_de_campana : null,\n"
 export const ABRIR_VIEJO = 'plan_id: $json.plan_id, seco: $json.dry_run,'
-export const ABRIR_NUEVO = 'plan_id: $json.plan_id, campana_id: $json.campana_id, llave_de_campana: $json.llave_de_campana, seco: $json.dry_run,'
+export const ABRIR_NUEVO = 'plan_id: $json.plan_id, campana_id: $json.campana_id, llave_de_campana: $json.llave_de_campana, nombre_de_campana: $json.nombre_de_campana, seco: $json.dry_run,'
 
 /** cambia `viejo` por `nuevo` en el texto; tiene que estar UNA sola vez (si no, el respaldo no es el que se espera y no se sigue) */
 function unaVez(texto, viejo, nuevo, donde) {
