@@ -11,6 +11,8 @@ import {
 import { AlmacenMemoria } from '../__fixtures__/almacen-memoria'
 import { siguienteDespuesDe } from '../mesas'
 import { bolsaDePlanificacion, medidaDeCampana } from '../constantes'
+import { MOTIVO_DE_SALIDA, resolverTrasLaUltimaRonda } from '../ciclo'
+import type { Hallazgo } from '../tipos'
 import { clienteA, clienteB, contextoDe, piezaBuena, tandaBuena } from '../__fixtures__/clientes'
 
 const A = clienteA()
@@ -727,6 +729,35 @@ describe('afinando lo que las mutaciones dejaron vivo (manejadores)', () => {
     expect(hueco!.ficha.que).toContain('quedó anotado tras la última ronda de corrección')
     expect(ultima.hallazgos.some((h) => h.severidad === 'bloquea')).toBe(false)
     expect(await al.hallazgosQueBloquean(id, 1)).toEqual([])
+  })
+  it('🔴 19-nov · C1 · m3 de CC6 · tras la última ronda, en filas distintas, un dato SIN FUENTE y otro bloqueo: cada fila sale con SU estado y SU motivo', async () => {
+    const al = almacen()
+    const { id } = await conEstrategia(al)
+    const t = tandaBuena(A)
+    const sinFuente = { dato: 'peso del pan', valor: '45 g', clase: 'alto' as const, ref: 'no-existe', nivel: 'F1' as const, opcional: false }
+    const malas = (p: (typeof t.piezas)[number]) => (p.semana === 1 && p.slot === 'a' ? { ...p, datos: [sinFuente] } : p.semana === 4 && p.slot === 'b' ? { ...p, formato: 'formato-inexistente' } : p)
+    const mala = { ...t, piezas: t.piezas.map(malas) }
+    let { g } = await tandaDe(al, id, 1, mala)
+    for (let ronda = 1; ronda <= 3; ronda++) {
+      expect(g!.cuerpo.correccion).toBe(true)
+      const p = await calendarioPreparar(al, { ...wf(), campana_id: id, tanda: 1, correccion: { fichas: g!.cuerpo.fichas, fila_ids: g!.cuerpo.fila_ids, modo: 'filas' } }, AHORA)
+      g = await calendarioGuardar(al, { ...wf(), campana_id: id, tanda: 1, corrida_id: p.cuerpo.corrida_id, correccion: true, modo: 'filas', resultado: ok({ piezas: t.piezas.filter((x) => (x.semana === 1 && x.slot === 'a') || (x.semana === 4 && x.slot === 'b')).map(malas), ajustes_al_patron: [] }) }, AHORA)
+    }
+    expect(g!.cuerpo.ok).toBe(true)
+    const fila = (semana: number, slot: string) => al.filasGuardadas.find((f) => f.tanda === 1 && f.semana === semana && f.id.endsWith(`-${slot}`))!
+    expect(fila(1, 'a').estado).toBe('descartada_sin_fuente')
+    expect(fila(4, 'b').estado).toBe('descartada_por_bloqueo')
+    expect(g!.cuerpo.salieron_sin_fuente).toEqual([fila(1, 'a').id])
+    expect(g!.cuerpo.salieron_por_bloqueo).toEqual([fila(4, 'b').id])
+    expect(fila(1, 'a').avisos.some((a) => a.includes('siguió bloqueada'))).toBe(false)
+    expect(fila(4, 'b').avisos.some((a) => a.startsWith('la fila salió: siguió bloqueada tras la última ronda de corrección'))).toBe(true)
+  })
+  it('19-nov · C1 · m3 · `resolverTrasLaUltimaRonda` (pura): el dato faltante sale sin fuente y el otro bloqueo por bloqueo, cada uno con su motivo en el ajuste', () => {
+    const h = (chequeo: string, fila_id: string): Hallazgo => ({ chequeo, severidad: 'bloquea', fila_id, alcance: 'fila', ficha: { que: chequeo, donde: fila_id, contra_que: 'x', gravedad: 'bloquea', propuesta: 'x' } })
+    const r = resolverTrasLaUltimaRonda([h('V06', 's1-d1-a'), h('V02', 's4-d4-b')], () => 1)
+    expect(r.porBloqueo).toEqual(['s4-d4-b'])
+    expect(r.filasQueSalen.sort()).toEqual(['s1-d1-a', 's4-d4-b'])
+    expect(Object.fromEntries(r.ajustes.map((a) => [a.slot, a.motivo]))).toEqual({ a: MOTIVO_DE_SALIDA.descartada_sin_fuente, b: MOTIVO_DE_SALIDA.descartada_por_bloqueo })
   })
   it('19-nov · grupo C · la fila que sale por bloqueo deja dicho POR QUÉ (el motivo y lo que la bloqueaba), y lo viejo no queda como bloqueo abierto', async () => {
     const al = almacen()
