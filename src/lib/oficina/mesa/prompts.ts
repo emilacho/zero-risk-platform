@@ -32,7 +32,8 @@ export function conceptoEnTexto(c: unknown): string {
   const o = c as Record<string, unknown>
   return ROTULOS_DEL_CONCEPTO.map(([k, r]) => (typeof o[k] === 'string' && (o[k] as string).trim() ? `${r}: ${(o[k] as string).trim()}` : '')).filter(Boolean).join(' · ')
 }
-export interface PromptLeido { prompt: string; foto_de_referencia?: string }
+/** 19-nov · «lo real es el set» · `otras_fotos_de_referencia`: las demás fotos que nombró en la misma línea, en su orden (la primera sigue siendo la base) */
+export interface PromptLeido { prompt: string; foto_de_referencia?: string; otras_fotos_de_referencia?: string[] }
 export interface PromptsDeLaPieza { por_ref: Record<string, PromptLeido>; avisos: string[] }
 
 /** el aporte del ingeniero que vale: el último suyo (tipo `aporta`) escrito DESPUÉS de la última integración; lo anterior a esa integración ya no describe la pieza */
@@ -54,6 +55,7 @@ export const CONVENCION_DE_PROMPTS = [
   '## <ref de la imagen>',
   'Prompt: <la instrucción completa para el modelo de imagen, en inglés>',
   'Referencia: foto:<id de una foto propia que muestre el producto o el lugar> | ninguna',
+  '(Puedes nombrar varias en la misma línea, separadas por coma: `foto:<id>, foto:<id>`. La primera es la base que se edita; las demás viajan con ella como referencia: el lugar, el producto, el personaje. Las que elijas valen para toda la pieza: una imagen sin referencia lleva las que nombraste en las otras. Si el cliente no tiene foto de algo, escribe `ninguna`: se genera igual con el estilo del manual.)',
   '```',
 ].join('\n')
 
@@ -88,7 +90,7 @@ export function tareaDelIngeniero(imagenes: ImagenARedactar[]): string {
 const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[*_`#]/g, '').replace(/\s+/g, ' ').trim()
 const LINEA_PROMPT = /^\s*[-*]?\s*(?:\*\*)?\s*(?:prompt|instrucci[oó]n|instruction)\s*(?:\*\*)?\s*[:：]\s*(?:\*\*)?\s*/i
 const LINEA_REFERENCIA = /^\s*[-*]?\s*(?:\*\*)?\s*(?:referencia|reference|foto de referencia)\s*(?:\*\*)?\s*[:：]\s*(?:\*\*)?\s*(.*)$/i
-const ID_DE_FOTO = /foto\s*:\s*([A-Za-z0-9][\w-]*)/i
+const ID_DE_FOTO = /foto\s*:\s*([A-Za-z0-9][\w-]*)/gi
 
 /** una sección del ingeniero → su prompt (todo lo que va después de «Prompt:», aunque siga en varias líneas, hasta «Referencia:») y su foto de referencia */
 function leerSeccion(cuerpo: string): PromptLeido | null {
@@ -102,8 +104,10 @@ function leerSeccion(cuerpo: string): PromptLeido | null {
   } else partes = lineas.filter((_, k) => k !== iR)
   const prompt = partes.map((l) => l.replace(/\*\*/g, '').trim()).filter(Boolean).join(' ').replace(/^["“]|["”]$/g, '').trim()
   if (!prompt) return null
-  const ref = iR >= 0 ? ID_DE_FOTO.exec(LINEA_REFERENCIA.exec(lineas[iR])?.[1] ?? '')?.[1] : undefined
-  return { prompt, ...(ref ? { foto_de_referencia: ref } : {}) }
+  // 19-nov · «lo real es el set» · todas las fotos de la línea, en su orden y sin repetir: la primera es la base, las demás viajan con ella
+  const ids = iR >= 0 ? [...new Set([...(LINEA_REFERENCIA.exec(lineas[iR])?.[1] ?? '').matchAll(ID_DE_FOTO)].map((m) => m[1]))] : []
+  const [ref, ...otras] = ids
+  return { prompt, ...(ref ? { foto_de_referencia: ref } : {}), ...(otras.length ? { otras_fotos_de_referencia: otras } : {}) }
 }
 
 /**

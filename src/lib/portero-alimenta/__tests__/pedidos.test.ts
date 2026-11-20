@@ -174,6 +174,17 @@ describe('pedido · la web (fuera del catálogo)', () => {
   const T = (cuerpo: string) => ({ 'https://eventos.example/feria': `${cuerpo} Texto adicional de la página para que tenga largo suficiente y se pueda leer completa sin problemas.` })
   const decide = [{ decision: 'web', consultas: ['feria del encebollado Olón noviembre 2026'], razon: 'no está en el catálogo' }]
 
+  it('🔴 ADENDA 1 · la ficha archivada lleva el `para` ENTERO (antes la ficha se cortaba a 1500)', async () => {
+    const t = tablas()
+    const w = web(T(PAGINA))
+    const m = modelo([...decide, { hallazgos: [{ url: 'https://eventos.example/feria', cita: 'del 14 al 16 de noviembre se realizará la Feria del Encebollado en Olón', resumen: 'Feria del Encebollado en Olón del 14 al 16 de noviembre' }], nada: false }])
+    const para = 'planear la campaña de noviembre con todo el detalle de la oficina: ' + 'públicos, presupuestos y fechas de cada pieza; '.repeat(60) + 'FIN DEL PARA'
+    expect(para.length).toBeGreaterThan(2500)
+    const r = await rutaPedido(deps(t, { razonar: m.razonar, buscar: w.buscar, leerPagina: w.leerPagina }), pedido({ para, huecos: [{ objetivo: 'eventos locales de noviembre en Olón' }] }))
+    expect(r.status).toBe(200)
+    const f = t.cerebro_fichas.find((x) => x.clase === 'dato_de_pedido')!
+    expect(String(f.contenido).endsWith(`para: ${para}`)).toBe(true)
+  })
   it('lo encuentra: lo entrega con su cita y lo ARCHIVA en el cerebro con fuente, fecha y quién lo pidió; el puente lo lleva al índice', async () => {
     const t = tablas()
     const w = web(T(PAGINA))
@@ -192,6 +203,7 @@ describe('pedido · la web (fuera del catálogo)', () => {
     expect(f).toMatchObject({ fuente_url: 'https://eventos.example/feria', origen: 'tercero', propiedad: 'ajena', alcance: 'mercado' })
     expect(String(f.contenido)).toMatch(/Cita de la página: «del 14 al 16 de noviembre se realizará la Feria del Encebollado en Olón»/)
     expect(String(f.contenido)).toMatch(/a pedido de oficina-financiera \(chief-financial-officer\) para: planear la campaña de noviembre/)
+    expect(String(f.contenido)).toContain('Traído el 2026-10-16 a pedido de')
     expect(f.vigente_hasta).toBe(iso(new Date(AHORA.getTime() + 30 * 86_400_000)))
     expect(enviados).toHaveLength(1)
     // el gasto es del portero: la búsqueda deja su fila cruda con origen portero_pedido (cuenta en el tope diario)

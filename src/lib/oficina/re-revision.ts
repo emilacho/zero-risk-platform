@@ -76,7 +76,7 @@ export async function reRevisar(db: Db, P: Puertos, p: { hitl_id: string; review
   const cal = esObjeto(sala.fila) ? { fila: sala.fila } : {}
   const re: ReRevision = { desde_encargo: String(enc.id), desde_hitl: p.hitl_id, pedido_por: p.reviewer }
   const c = await P.almacen.crearEncargo({
-    client_id: String(enc.client_id), parte_id: String(enc.parte_id), brief_id: String(enc.brief_id), tipo_de_grupo: String(enc.tipo_de_grupo), familia: String(enc.familia), tope_usd: tope, dry_run: false, prueba: false,
+    client_id: String(enc.client_id), campana_id: typeof enc.campana_id === 'string' ? enc.campana_id : null, parte_id: String(enc.parte_id), brief_id: String(enc.brief_id), tipo_de_grupo: String(enc.tipo_de_grupo), familia: String(enc.familia), tope_usd: tope, dry_run: false, prueba: false,
     sala_ref: { _journey_id: sala._journey_id ?? null, _sala_correlation_id: sala._sala_correlation_id ?? null, ...cal }, estado_del_motor: sem.estado, re_revision: re,
   })
   if (!c.ok) return { status: 409, cuerpo: { error: 'no_se_pudo_abrir_la_re_revision', detalle: c.error } }
