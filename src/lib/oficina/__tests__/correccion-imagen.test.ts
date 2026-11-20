@@ -287,7 +287,20 @@ describe('3 · la mirada de otro proveedor decide', () => {
   it('el salto está cableado en el orquestador (antes de armar el pedido del agente)', async () => {
     const fs = await import('node:fs')
     const fuente = fs.readFileSync(new URL('../orquestador.ts', import.meta.url), 'utf8')
-    expect(fuente).toMatch(/paso\.clave === PASO_CORREGIR_IMAGEN \? saltoDeLaCorreccion\(e\)/)
+    expect(fuente).toMatch(/paso\.clave === PASO_CORREGIR_IMAGEN \? saltoDeLaCorreccion\(e, enc\.dry_run\)/)
+  })
+  it('🔴 en ensayo la corrección se salta sin llamar al creativo (imágenes simuladas, como la revisión de las imágenes clave del video)', async () => {
+    expect(saltoDeLaCorreccion(estado(), true)).toMatchObject({ costo_usd: 0, artefacto: { por_ref: {}, en_ensayo: true } })
+    expect(saltoDeLaCorreccion(estado(), false)).toBeNull()
+    const { P, llamadas } = puertos()
+    const e = conArt(estado(), ARTEFACTO_PEDIDO_DE_CORRECCION, saltoDeLaCorreccion(estado(), true)!.artefacto)
+    await editarImagenes(P, enc(e, true))
+    expect(llamadas.imagen).toHaveLength(0)
+    const r = await mirarCorreccion(P, enc(e, true), plConCorreccion())
+    expect(llamadas.revisor).toHaveLength(0)
+    expect(r.res).toMatchObject({ costo_usd: 0, artefacto: { sigue: false, en_ensayo: true } })
+    expect(r.res.otros_artefactos).toBeUndefined()
+    expect(r.res.fichas).toBeUndefined()
   })
   it('la edición falló → sale la mejor con su aviso; la mirada ilegible → sale la elegida, sin confirmar', async () => {
     const { P } = puertos({ mirada: () => 'no sé' })

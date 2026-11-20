@@ -123,7 +123,8 @@ describe('② Armar el pedido · moldes del modelo simulado', () => {
   // 11-nov · la mirada del video (mirada_video.v1) es SOLO de la oficina y NUNCA corre en ensayo (sin video real no hay cuadros: `mirar-el-video.test.ts`); la jefatura no la recibe
   // `fichas_con_cifras.v1` (11-nov · ficha de hechos 1b): como el registro, su molde lo entrega SIEMPRE la ruta (`moldeDelPaso` con las cifras listadas)
   // 16-nov · S2-3 · la revisión de las imágenes clave (revision_imagenes_clave.v1) es como la mirada: SOLO de la oficina y NUNCA corre en ensayo (imágenes simuladas ⇒ `hay_imagenes: false`: `video-imagen-clave.test.ts`)
-  const SIN_MOLDE_EN_LA_JEFATURA = ['opinion_libre.v1', 'autorevision.v1', 'reemplazos.v1', 'fichas_de_registro.v1', 'veredictos_colateral.v1', 'mirada_video.v1', 'fichas_con_cifras.v1', 'revision_imagenes_clave.v1']
+  // 20-nov · punto 3 · la mirada del creativo sobre la imagen final (correccion_imagen.v1) tampoco: SOLO de la oficina y NUNCA corre en ensayo (`saltoDeLaCorreccion` con dry_run)
+  const SIN_MOLDE_EN_LA_JEFATURA = ['opinion_libre.v1', 'autorevision.v1', 'reemplazos.v1', 'fichas_de_registro.v1', 'veredictos_colateral.v1', 'mirada_video.v1', 'fichas_con_cifras.v1', 'revision_imagenes_clave.v1', 'correccion_imagen.v1']
   const codigoArmar = fs.readFileSync(path.join(DIR, 'turno-n1-armar.js'), 'utf8')
 
   it('todo esquema de la oficina (menos la opinión libre de GPT, que va dentro de la ruta) tiene molde válido contra SU contrato de formato', () => {

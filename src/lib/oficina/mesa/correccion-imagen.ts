@@ -172,8 +172,10 @@ export function pedidoDeLaCorreccion(e: Estado, valor: Record<string, unknown>):
 
 /** ¿hay que llamar al creativo? Si no queda ninguna imagen pendiente en la tanda vigente (todas cerradas, o la regeneración no rehizo ninguna), el paso se salta sin llamar a nadie
  *  y deja un pedido vacío: la edición no edita nada y la mirada no mira nada · pura */
-export function saltoDeLaCorreccion(e: Estado): ResultadoDePaso | null {
+export function saltoDeLaCorreccion(e: Estado, dry_run = false): ResultadoDePaso | null {
   const c = correccionesVigentes(e)
+  // en ensayo las imágenes son simuladas: no hay nada que mirar ni que corregir (como la revisión de las imágenes clave del video); la cola sigue con las generadas
+  if (dry_run) return { costo_usd: 0, artefacto: { vuelta: vueltaEnCurso(c), por_ref: {}, en_ensayo: true } }
   if (pendientesDe(c).length) return null
   return { costo_usd: 0, artefacto: { vuelta: vueltaEnCurso(c), por_ref: {}, sin_pendientes: true } }
 }
@@ -316,6 +318,8 @@ export async function mirarCorreccion(P: Puertos, enc: Encargo, pl: Plantilla): 
   const c0 = correccionesVigentes(e)
   const c: Correcciones = structuredClone(c0)
   const vuelta = vueltaEnCurso(c0)
+  // en ensayo (el creativo se saltó: imágenes simuladas) no se mira nada ni se reescribe `imagenes`: la cola sigue con las generadas, sin otra vuelta
+  if (enc.dry_run && datos(e, ARTEFACTO_PEDIDO_DE_CORRECCION)?.en_ensayo === true) return { res: { costo_usd: 0, artefacto: { ...c, sigue: false, en_ensayo: true } as unknown as Record<string, unknown> }, gastos: [] }
   const pedido = (datos(e, ARTEFACTO_PEDIDO_DE_CORRECCION)?.por_ref ?? {}) as Record<string, { base: number; cambios: string; vistas?: number[] }>
   const ediciones = (datos(e, ARTEFACTO_EDICIONES_DE_IMAGEN)?.por_ref ?? {}) as Record<string, { version?: VersionDeImagen; costo_usd: number; llave: string; error?: string }>
   const gastos: NonNullable<Cambios['gastos']> = []

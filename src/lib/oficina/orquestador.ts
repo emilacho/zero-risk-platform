@@ -287,7 +287,7 @@ export async function avanzar(P: Puertos, encargoId: string): Promise<Respuesta>
       }
       // portero y agente: salto sin llamar a nadie si no hay nada que hacer
       // 20-nov · punto 3 · sin imágenes pendientes de corrección (p. ej. la jefatura devolvió la pieza y no se rehizo ninguna), el creativo no se llama: US$ 0
-      const salto = paso.clave === PASO_CORREGIR_IMAGEN ? saltoDeLaCorreccion(e) : familiaDeLaminas(pl) ? saltoL(paso, e) : saltoPorFalta(paso, e)
+      const salto = paso.clave === PASO_CORREGIR_IMAGEN ? saltoDeLaCorreccion(e, enc.dry_run) : familiaDeLaminas(pl) ? saltoL(paso, e) : saltoPorFalta(paso, e)
       if (salto) { enc = await aplicar(P, enc, pl, sig.indice, salto, { vuelta: sig.vuelta, turno: { paso: paso.clave, tipo: paso.tipo, agente: null, dispatch_key: null, cost_usd: 0 } }); continue }
       const { agente, pedido } = armarPedido(enc, pl, paso, e)
       const n = turnoDe(e)
