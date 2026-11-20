@@ -53,3 +53,23 @@ describe('campaña detenida', () => {
     expect(db.tablas['plan_cambios'] ?? []).toHaveLength(0)
   })
 })
+
+// 20-nov · entrega 4-B (D2) · con varias campañas del mismo plan, la compuerta mira solo la sin llave
+describe('campaña detenida con varias campañas del mismo plan', () => {
+  const conLlave = (extra: Record<string, unknown>) => campana({ id: 'k-llave', llave_de_campana: 'tablero-aaaaaaaa-1', ...extra })
+  it.each(PUERTAS.flatMap(([a, c]) => CAMPANA_DETENIDA.map((e) => [a, c, e] as const)))('%s: una con llave «%s» no frena; la sin llave está armando', async (accion, cuerpo, estado) => {
+    const db = new DbFalsa().semilla('client_historical_outputs', [plan()]).semilla('cadena_campanas', [conLlave({ estado }), campana({ estado: 'calendario', llave_de_campana: null })])
+    expect((await llamar(accion, db, cuerpo)).status).toBe(200)
+  })
+  it.each(PUERTAS)('%s: la sin llave detenida frena aunque la con llave venga primero y esté armando', async (accion, cuerpo) => {
+    const db = new DbFalsa().semilla('client_historical_outputs', [plan()]).semilla('cadena_campanas', [conLlave({ estado: 'calendario' }), campana({ estado: 'necesita_humano', llave_de_campana: null })])
+    const s = await llamar(accion, db, cuerpo)
+    expect(s.status).toBe(409)
+    expect(s.cuerpo.error).toBe('campana_detenida')
+    expect(String(s.cuerpo.detalle)).toContain('necesita_humano')
+  })
+  it.each(PUERTAS)('%s: solo hay una con llave (detenida) y ninguna sin llave: sigue', async (accion, cuerpo) => {
+    const db = new DbFalsa().semilla('client_historical_outputs', [plan()]).semilla('cadena_campanas', [conLlave({ estado: 'pausada' })])
+    expect((await llamar(accion, db, cuerpo)).status).toBe(200)
+  })
+})
