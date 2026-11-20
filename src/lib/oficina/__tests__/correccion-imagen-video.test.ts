@@ -3,12 +3,14 @@
  * entre `imagenes_clave_final` y `revisar_imagenes_clave`. Diseño v3 de CC5 (a): «el mismo par de pasos entre la imagen clave de cada plano y el clip». En seco, sin red, US$ 0.
  */
 import { describe, expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import {
   AGENTE_QUE_CORRIGE_LA_IMAGEN, AGENTE_QUE_CORRIGE_LA_IMAGEN_CLAVE, ARTEFACTO_CORRECCIONES_DE_IMAGEN, ARTEFACTO_EDICIONES_DE_IMAGEN, ARTEFACTO_PEDIDO_DE_CORRECCION,
   INDICACION_DE_LA_CORRECCION_DEL_VIDEO, PASO_CORREGIR_IMAGEN, PASO_EDITAR_IMAGEN, PASO_MIRAR_CORRECCION, TOPE_DE_LA_CORRECCION_DEL_VIDEO_POR_SEGUNDO_USD, RESERVA_POR_VIDEO_DE_LA_CORRECCION_USD,
   TOPE_DE_LA_EDICION_DE_IMAGEN_CLAVE_POR_SEGUNDO_USD, TOPE_DE_LA_MIRADA_DE_IMAGEN_CLAVE_POR_SEGUNDO_USD, TOPE_FIJO_DE_LA_CORRECCION_DEL_VIDEO_USD, VUELTAS_DE_CORRECCION_IMAGEN,
   conCorreccionDeImagen, conCorreccionDeImagenClave, correccionesVigentes, dondeDe, editarImagenes, imagenesClaveConLaMejor, llaveDeLaEdicion, margenDeLaCorreccion, mirarCorreccion,
-  loteDe, pedidoDeLaCorreccion, refDelPlano, saltoDeLaCorreccion, tareaDeLaCorreccion, turnosDeLaVueltaDelVideo, vistasDe, type Correcciones,
+  loteDe, pasosDeLaCorreccionDelVideo, pedidoDeLaCorreccion, refDelPlano, saltoDeLaCorreccion, tareaDeLaCorreccion, turnosDeLaVueltaDelVideo, vistasDe, type Correcciones,
 } from '../mesa/correccion-imagen'
 import { PASO_IMAGENES_CLAVE_FINAL, PASO_REVISAR_IMAGENES_CLAVE, imagenesClaveVigentes } from '../video/imagen-clave'
 import { VIDEO_MESA_POR_SEGUNDO as VIDEO_MESA_POR_SEGUNDO_CODIGO } from '../plantillas/video-mesa'
@@ -243,6 +245,17 @@ describe('tanda 2 · la vuelta se parte en turnos si no cabe en un pedido (Lenov
     expect(c.imagenes['plano-1'].motivo_de_cierre).toBe('tope_de_vueltas')
     expect(c.imagenes['plano-11'].cerrada).toBe(false)
   })
+  it('🔴 a mitad de la vuelta 3, si el próximo turno no cabe en el tope: las que hicieron su 3.ª vuelta cierran por «tope_de_vueltas»; las que no, por «no_cupo»', async () => {
+    const e0 = est(12, undefined, CARGADA.limites.tope_encargo_usd - 1)
+    const e = conArt(e0, ARTEFACTO_CORRECCIONES_DE_IMAGEN, { ...correccionesVigentes(e0), vuelta: 2 })
+    const { P } = puertos({ mirada: () => '{"queda_bien":false,"lectura":"falta"}' })
+    const m = await mirarCorreccion(P, enc(conArt(e, ARTEFACTO_PEDIDO_DE_CORRECCION, pedidoDeLaCorreccion(e, { imagenes: [] }).artefacto)), CARGADA)
+    const c = m.res.artefacto as unknown as Correcciones
+    expect(c.sigue).toBe(false)
+    expect(c.imagenes['plano-1'].motivo_de_cierre).toBe('tope_de_vueltas')
+    expect(c.imagenes['plano-11'].motivo_de_cierre).toBe('no_cupo')
+    expect(c.imagenes['plano-12'].motivo_de_cierre).toBe('no_cupo')
+  })
   it('la mesa de imagen no se parte si cabe (como en la tanda 1): un turno con todas', () => {
     const e = { artefactos: { encargo: art({ F: { fotos: FOTOS } }), imagenes: art({ ultimo_intento: 1, items: [1, 2, 3].map((k) => ({ ref: `r${k}`, intento: 1, url: `https://img.test/${k}.png`, generation_id: `g${k}`, prompt: 'p' })) }) }, fichas: [], vueltas: {}, pasos_ejecutados: 1, gasto_usd: 0 } as unknown as Estado
     expect(loteDe(correccionesVigentes(e))).toHaveLength(3)
@@ -354,5 +367,35 @@ describe('tanda 2 · la plantilla del video', () => {
   it('🔴 la plantilla del video con la corrección no trae errores NUEVOS del validador', () => {
     const base = new Set(validarPlantilla(VIDEO_MESA_POR_SEGUNDO))
     expect(validarPlantilla(PL).filter((x) => !base.has(x))).toEqual([])
+  })
+})
+
+describe('tanda 2 · la migración 202611201600 y su reversa dicen lo mismo que el código', () => {
+  const MIG = readFileSync(join(process.cwd(), 'supabase/migrations/202611201600_oficina_correccion_de_la_imagen_clave_del_video.sql'), 'utf8')
+  const REV = readFileSync(join(process.cwd(), 'supabase/reversas/202611201600_oficina_correccion_de_la_imagen_clave_del_video_REVERSA.sql'), 'utf8')
+  const canon = (x: unknown): unknown => (Array.isArray(x) ? x.map(canon) : x && typeof x === 'object' ? Object.fromEntries(Object.keys(x).sort().map((k) => [k, canon((x as Record<string, unknown>)[k])])) : x)
+  it('🔴 los 3 pasos del SQL son los del código (condición de la revisión, techo 350)', () => {
+    const pasos = [...MIG.matchAll(/\$([cem])\$(\{.*?\})\$\1\$/g)].map((m) => JSON.parse(m[2]))
+    const cond = { tipo: 'si_artefacto', campo: 'hay_imagenes', igual: true, artefacto: PASO_IMAGENES_CLAVE_FINAL }
+    expect(canon(pasos)).toEqual(canon(pasosDeLaCorreccionDelVideo(cond as Plantilla['pasos'][number]['condicion'], 350)))
+  })
+  it('🔴 las cifras del SQL salen de las constantes: margen, reserva, tope fijo, por segundo, columna y la indicación', () => {
+    expect(MIG).toContain(`'margen', ${50 + margenDeLaCorreccion(350)}, 'reserva_por_pieza_usd', ${+(30 + RESERVA_POR_VIDEO_DE_LA_CORRECCION_USD).toFixed(4)}, 'tope_encargo_usd', ${45 + TOPE_FIJO_DE_LA_CORRECCION_DEL_VIDEO_USD}`)
+    const ps = { '720p': +(4.86 + TOPE_DE_LA_CORRECCION_DEL_VIDEO_POR_SEGUNDO_USD).toFixed(4), '1080p': +(4.9 + TOPE_DE_LA_CORRECCION_DEL_VIDEO_POR_SEGUNDO_USD).toFixed(4) }
+    expect(MIG).toContain(`'tope_encargo_usd_por_segundo', '${JSON.stringify(ps)}'::jsonb`)
+    const columna = +(45 + TOPE_FIJO_DE_LA_CORRECCION_DEL_VIDEO_USD + ps['720p'] * 120).toFixed(4)
+    expect(MIG).toContain(`tope_encargo_usd = ${columna},`)
+    expect(MIG).toContain(`'turnos_de_correccion_imagen', ${turnosDeLaVueltaDelVideo(120)})`)
+    expect(MIG).toContain(JSON.stringify([INDICACION_DE_LA_CORRECCION_DEL_VIDEO]))
+    expect(REV).toContain(JSON.stringify([INDICACION_DE_LA_CORRECCION_DEL_VIDEO]))
+    expect(REV).toContain(`g.tope_encargo_usd IS DISTINCT FROM ${columna}::numeric`)
+  })
+  it('🔴 el techo de la base sube a 1000 en las dos reglas y la reversa lo baja a 650, frenando si hay filas por encima de 650', () => {
+    expect(MIG).toContain('CHECK (tope_usd > 0 AND tope_usd <= 1000)')
+    expect(MIG).toContain('CHECK (tope_encargo_usd > 0 AND tope_encargo_usd <= 1000)')
+    expect(REV).toContain('CHECK (tope_usd > 0 AND tope_usd <= 650)')
+    expect(REV).toContain('CHECK (tope_encargo_usd > 0 AND tope_encargo_usd <= 650)')
+    expect(REV).toContain('IF EXISTS (SELECT 1 FROM public.oficina_encargos WHERE tope_usd > 650) THEN')
+    expect(REV).toContain("IF EXISTS (SELECT 1 FROM public.oficina_tipos_de_grupo WHERE tipo <> 'video_mesa' AND tope_encargo_usd > 650) THEN")
   })
 })
