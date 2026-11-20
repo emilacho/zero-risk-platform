@@ -76,8 +76,9 @@ describe('IGUALDAD CON LA OFICINA · una pieza con las mismas entradas simuladas
     const delJefe = (fs: Json[]) => fs.filter((f) => f.origen === 'jefe').map((f) => `${f.donde}:${f.estado}`).sort()
     expect(delJefe(j.fichas)).toEqual(delJefe(o.fichas))
     expect(delJefe(j.fichas), 'la igualdad no puede ser vacía cuando hay ficha').toHaveLength(c.fichas === 'ninguna' ? 0 : 1)
-    // si GPT dejó texto, en las dos corre la decisión del autor; si no, ninguna
-    expect(j.hubo_decision, `oficina ${o.pasos.join(',')} · jefatura ${j.pasos.join(',')}`).toBe(o.hubo_decision)
+    // 20-nov · PLAN v4 (choque 3 aceptado por LENOVO 11:27Z) · la ÚNICA diferencia buscada: en la jefatura GPT va primero y su informe solo se guarda,
+    //   así que nunca hay decisión del autor sobre su opinión (en la plantilla de julio sí, si GPT dejó texto). La marca y las fichas del jefe siguen iguales
+    expect(j.hubo_decision, `oficina ${o.pasos.join(',')} · jefatura ${j.pasos.join(',')}`).toBe(false)
   })
 })
 

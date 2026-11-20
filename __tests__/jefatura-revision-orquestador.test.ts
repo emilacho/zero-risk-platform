@@ -90,11 +90,13 @@ describe('la puerta: interruptores, dry_run y guardas', () => {
   })
 })
 
-describe('pieza · el orden firmado: jefe → corrige el dueño → GPT ciego → decide el dueño → cierre', () => {
-  it('sin fichas, GPT con opinión y los dueños la toman: recorre fondo → segunda mirada → decisiones y cierra LIMPIA (el desacuerdo solo viene de lo de fondo)', async () => {
+// 20-nov · PLAN v4 (CC4 · 🟢 CC7/CC6 · LENOVO 11:27Z): en la pieza GPT va PRIMERO y ciego, lee la versión A y opina sobre lo creativo; su informe SOLO se guarda
+//   (sin fichas, sin decisión del dueño). En las mesas ya opinó en la propuesta (`segunda_mirada_ya_dada`) y aquí no vuelve a correr.
+describe('pieza · el orden del PLAN v4: GPT primero y ciego (solo se guarda) → jefe → corrige el dueño → cierre', () => {
+  it('sin fichas: GPT opina (en seco, simulado) y luego el jefe; cierra LIMPIA sin decisiones (el desacuerdo solo viene de lo de fondo)', async () => {
     const { P, rastro } = puertosDePrueba()
     const c = await correr(P, sobre('pieza'))
-    expect(pasosDe(c)).toEqual(['revision_fondo', 'decision:content-creator', 'decision:marketing_instagram_curator'])
+    expect(pasosDe(c)).toEqual(['revision_fondo'])
     expect(c.final.cuerpo.resultado).toBe('limpia')
     expect(rastro.avisos).toHaveLength(0)
     expect(sal(c).simulado).toBe(true)
@@ -105,25 +107,29 @@ describe('pieza · el orden firmado: jefe → corrige el dueño → GPT ciego �
     const c = await correr(P, sobre('pieza', { simulacion: { fichas: 'sugerencia' } }))
     expect(pasosDe(c).some((p) => p.startsWith('correccion:'))).toBe(false)
   })
-  it('con ficha que bloquea en «texto»: corrige SOLO el dueño del texto y GPT ve la pieza CORREGIDA', async () => {
+  it('con ficha que bloquea en «texto»: corrige SOLO el dueño del texto; GPT lee la versión A y el jefe y el corrector no ven nada de GPT (CC7 · ceguera)', async () => {
     const { P, rastro } = puertosDePrueba()
+    const pedidos: string[] = []
     // modo real (no seco) para que GPT llame al puerto y quede su pedido
     const c = await correr(P, sobre('pieza', { dry_run: false }), (t) => {
+      pedidos.push(String(t.pedido.task))
       if (t.paso === 'revision_fondo') return { texto: JSON.stringify({ fichas: [{ que: 'el pie promete un descuento que no existe', donde: 'texto', contra_que: 'el brief', gravedad: 'bloquea', propuesta: 'quitar el descuento' }] }) }
       if (t.paso === 'correccion:content-creator') {
         const id = /^- \[([^\]\n]+)\]/m.exec(String(t.pedido.task))![1]
         return { texto: JSON.stringify({ respuestas: [{ id, estado: 'tomada', razon: 'ok' }], pieza: { pie_de_foto: 'PIE CORREGIDO SIN DESCUENTO', hashtags: ['#a'] } }), costo_usd: 0.07 }
       }
-      return { texto: JSON.stringify({ respuestas: [...String(t.pedido.task).matchAll(/^- \[([^\]\n]+)\]/gm)].map((m) => ({ id: m[1], estado: 'no_tomada', razon: 'no aplica' })) }), costo_usd: 0.07 }
+      return { texto: JSON.stringify({ respuestas: [] }), costo_usd: 0.07 }
     })
-    expect(pasosDe(c)).toEqual(['revision_fondo', 'correccion:content-creator', 'decision:content-creator', 'decision:marketing_instagram_curator'])
+    expect(pasosDe(c)).toEqual(['revision_fondo', 'correccion:content-creator'])
     expect(rastro.llamadasAlRevisor).toHaveLength(1)
     const ciego = rastro.llamadasAlRevisor[0].texto
-    expect(ciego).toContain('PIE CORREGIDO SIN DESCUENTO')
-    expect(ciego).not.toContain('Pie de foto original')
+    expect(ciego).toContain('Pie de foto original')
+    expect(ciego).not.toContain('PIE CORREGIDO SIN DESCUENTO')
     // CIEGO: nada del hilo ni de las fichas del jefe
     for (const prohibido of ['el pie promete un descuento que no existe', 'quitar el descuento', 'jefe-marketing', 'bloquea', 'fichas']) expect(ciego).not.toContain(prohibido)
     expect(ciego).toContain('Tono cercano. Tuteo.')
+    // y al revés: ni el jefe ni el corrector reciben la opinión de GPT
+    for (const t of pedidos) expect(t).not.toContain('opinión real simulada')
     expect(c.final.cuerpo.resultado).toBe('limpia')
   })
   it('el jefe recibe los documentos «contra qué» (el manual) del contexto y la línea de contexto de su tipo', async () => {
@@ -139,7 +145,8 @@ describe('pieza · el orden firmado: jefe → corrige el dueño → GPT ciego �
     const c = await correr(P, sobre('pieza', { dry_run: false }), (t) => (t.paso === 'revision_fondo' ? { texto: '{"fichas":[]}' } : { texto: '{"respuestas":[]}' }))
     expect(rastro.llamadasAlRevisor).toHaveLength(1)
     const id = String(c.aperturas[0].cuerpo.revision_id)
-    expect(rastro.llamadasAlRevisor[0].contexto).toEqual({ revision_id: id, n: 2, client_id: 'cliente-prueba' })
+    // GPT es el primer paso de la pieza
+    expect(rastro.llamadasAlRevisor[0].contexto).toEqual({ revision_id: id, n: 1, client_id: 'cliente-prueba' })
   })
   it('regla 2 (revisión 2 = A): la corrección de criterio NO tomada = observación declarada; sin otra vuelta, sin «con desacuerdo» y SIN aviso', async () => {
     const { P, rastro } = puertosDePrueba()
@@ -150,25 +157,38 @@ describe('pieza · el orden firmado: jefe → corrige el dueño → GPT ciego �
     expect(sal(c).observaciones.length).toBe(1)
     expect(rastro.avisos).toHaveLength(0)
   })
-  it('regla 3: un hallazgo de GPT NO tomado lleva su razón y NO es desacuerdo', async () => {
+  it('la opinión de GPT NO es ficha ni respuesta ni desacuerdo: se guarda como informe (con su resumen para medir)', async () => {
     const { P } = puertosDePrueba()
     const c = await correr(P, sobre('pieza', { simulacion: { fichas: 'ninguna', toma: 'nada' } }))
     expect(c.final.cuerpo.resultado).toBe('limpia')
-    const noTomadas = sal(c).respuestas.filter((x: any) => x.origen === 'externa' && x.estado === 'no_tomada')
-    expect(noTomadas.length).toBeGreaterThan(0)
-    expect(noTomadas.every((x: any) => x.razon)).toBe(true)
+    expect((sal(c).respuestas ?? []).filter((x: any) => x.origen === 'externa')).toEqual([])
+    expect(sal(c).segunda_mirada.informe.observaciones.length).toBeGreaterThan(0)
+    expect(sal(c).segunda_mirada.resumen).toEqual(expect.objectContaining({ observaciones: expect.any(Number), datos: expect.any(Number) }))
   })
-  it('la opinión de GPT llega a TODOS los que hicieron algo (una ficha por parte) y se guarda como OPINIÓN', async () => {
-    const { P } = puertosDePrueba()
-    const c = await correr(P, sobre('pieza'))
-    const ext = sal(c).respuestas.filter((x: any) => x.origen === 'externa')
-    expect(ext.map((x: any) => x.donde).sort()).toEqual(['imagen', 'texto'])
-    expect(sal(c).opinion_externa.texto).toMatch(/simulado/)
-  })
-  it('quien dirige la imagen toma la opinión: la jefatura devuelve «imagen por rehacer» como dato (la oficina hace la única re-imagen)', async () => {
+  it('la opinión de GPT ya no pide re-imagen: aunque el dueño «tome todo», no hay `imagen_por_rehacer` por GPT', async () => {
     const { P } = puertosDePrueba()
     const c = await correr(P, sobre('pieza', { simulacion: { toma: 'todo' } }))
-    expect(sal(c).imagen_por_rehacer).toBe(true)
+    expect(sal(c).imagen_por_rehacer ?? false).toBe(false)
+  })
+  it('en una mesa, GPT ya opinó en la propuesta (`segunda_mirada_ya_dada`): aquí no se le llama (CC7 · ya_opino)', async () => {
+    const { P, rastro } = puertosDePrueba()
+    const c = await correr(P, sobre('pieza', { dry_run: false, payload: { segunda_mirada_ya_dada: true } }), (t) => (t.paso === 'revision_fondo' ? { texto: '{"fichas":[]}' } : { texto: '{"respuestas":[]}' }))
+    expect(rastro.llamadasAlRevisor).toHaveLength(0)
+    expect(c.final.cuerpo.resultado).toBe('limpia')
+    expect(sal(c).segunda_mirada).toBeUndefined()
+  })
+  it('GPT no se come el presupuesto del jefe: si su tope + el del fondo + el de lengua no caben, se salta y el jefe corre igual (CC6 1)', async () => {
+    const { P, rastro } = puertosDePrueba()
+    // 0,6 de tope: 0,5 (GPT) + 0,2 (fondo) no caben juntos; el fondo solo sí
+    const c = await correr(P, sobre('pieza', { dry_run: false, payload: { tope_restante_usd: 0.6 } }), (t) => (t.paso === 'revision_fondo' ? { texto: '{"fichas":[]}' } : { texto: '{"respuestas":[]}' }))
+    expect(rastro.llamadasAlRevisor).toHaveLength(0)
+    expect(pasosDe(c)).toEqual(['revision_fondo'])
+    expect(c.final.cuerpo.resultado).toBe('sin_segunda_mirada')
+  })
+  it('guarda el modelo que de verdad contestó (CC6 3)', async () => {
+    const { P } = puertosDePrueba({ revisor: () => ({ ok: true, texto: 'el color está liviano', costo_usd: 0.01, modelo: 'gpt-pedido', modelo_efectivo: 'gpt-pedido-2026-11-01', intentos: [] }) })
+    const c = await correr(P, sobre('pieza', { dry_run: false }), (t) => (t.paso === 'revision_fondo' ? { texto: '{"fichas":[]}' } : { texto: '{"respuestas":[]}' }))
+    expect(sal(c).segunda_mirada.resumen).toEqual(expect.objectContaining({ modelo_efectivo: 'gpt-pedido-2026-11-01', otro_proveedor: true }))
   })
   it('regla 4: GPT sin respuesta tras los reintentos ⇒ sin_segunda_mirada + UN aviso; no frena y no hay decisión', async () => {
     const { P, rastro } = puertosDePrueba()
@@ -422,7 +442,8 @@ describe('un siguiente repetido, respuestas repetidas y el vigía', () => {
     const b = await avanzar(P, String(a.cuerpo.revision_id))
     expect(b.cuerpo.reentrega).toBe(true)
     expect((b.cuerpo.turno as { n: number; dispatch_key: string }).dispatch_key).toBe(t1.dispatch_key)
-    expect([...mem.pasos.values()][0]).toHaveLength(1)
+    // 20-nov · PLAN v4 · en la pieza GPT va primero (ese paso también queda guardado): lo que cuenta es que no se abrió otro turno del jefe
+    expect([...mem.pasos.values()][0].filter((x: { paso: string }) => x.paso === 'revision_fondo')).toHaveLength(1)
   })
   it('una respuesta repetida (ya registrada) no se cuenta dos veces', async () => {
     const { P, mem } = puertosDePrueba()

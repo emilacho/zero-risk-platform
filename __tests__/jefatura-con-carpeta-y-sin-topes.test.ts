@@ -138,7 +138,10 @@ describe('la jefatura de las piezas lleva la carpeta', () => {
     const o = readFileSync(join(RAIZ, 'src/lib/oficina/orquestador.ts'), 'utf8')
     // 17-nov · después de la carpeta puede ir el documento de hechos del negocio (coherencia con los hechos)
     // 19-nov · ADENDA 1 · P2b: antes de todo va el resumen del encargo (para qué red, formato y objetivo es la pieza)
-    expect(o).toMatch(/contexto: \[\.\.\.resumen, \.\.\.material\.contexto, \.\.\.carpeta[,\]]/)
+    // 20-nov · PLAN v4 · el contexto del revisor sale de UNA función (`contextoDelRevisorDeLaPieza`), la misma para la jefatura del render y para la segunda mirada de la propuesta
+    expect(o).toMatch(/return \[\.\.\.resumen, \.\.\.material\.contexto, \.\.\.carpeta[,\]]/)
+    expect(o).toMatch(/sobreDeLaRevision\(enc, pl, e, \{[^\n]*contexto: await contextoDelRevisorDeLaPieza\(P, enc, pl, e\)/)
+    expect(o).toMatch(/correrSegundaMirada\(P, enc, pl, paso, await contextoDelRevisorDeLaPieza\(P, enc, pl, e\)\)/)
     expect(o).toMatch(/P\.carpetaParaRevisar\(String\(enc\.client_id\)\)\.catch\([^\n]*no se pudo leer[^\n]*No lo tomes como que no existe/)
     expect(readFileSync(join(RAIZ, 'src/lib/oficina/adaptadores.ts'), 'utf8')).toMatch(/carpetaParaRevisar: \(clientId\) => carpetaParaRevisar\(db, clientId\)/)
   })

@@ -23,11 +23,14 @@ export const FUNCIONES_REGISTRADAS = [
   'borrador_video',
   // 17-nov · propuestas en imagen · tramo 2b · el borrador de cada propuesta de imagen (imagen en baja + láminas dibujadas, antes de la parada del dueño)
   'borrador_imagen',
+  // 20-nov · PLAN v4 (CC4) · el segundo doctor creativo (GPT) opina sobre las propuestas antes de que el dueño apruebe
+  'segunda_mirada',
   // 20-nov · punto 3 · la corrección de la imagen final: editar sobre la elegida y la mirada de otro proveedor que decide (`mesa/correccion-imagen.ts`)
   'editar_imagen', 'mirar_correccion',
 ] as const
 /** funciones de código que SÍ gastan (un proveedor de imágenes o de video, no un modelo de texto): su tope puede ser mayor que 0 */
-export const FUNCIONES_CON_GASTO = ['imagen', 'imagen_ref', 'video', 'imagenes_clave', 'borrador_video', 'borrador_imagen', 'editar_imagen', 'mirar_correccion'] as const
+/** 20-nov · `segunda_mirada` gasta en OTRO proveedor (GPT), no en un modelo de texto de la sala: su tope también es mayor que 0 */
+export const FUNCIONES_CON_GASTO = ['imagen', 'imagen_ref', 'video', 'imagenes_clave', 'borrador_video', 'borrador_imagen', 'segunda_mirada', 'editar_imagen', 'mirar_correccion'] as const
 /** validadores de código sobre la salida de un agente */
 export const VALIDADORES_REGISTRADOS = ['citas_existen', 'chequear_prompts', 'decide_imagen', 'texto_laminas_en_copy', 'contrato_de_lamina', 'sin_texto_en_estructura', 'refs_validos'] as const
 /** esquemas de salida registrados (ver salida.ts) */

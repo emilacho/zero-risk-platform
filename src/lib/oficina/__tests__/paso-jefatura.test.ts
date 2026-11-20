@@ -280,26 +280,33 @@ describe('IGUALDAD: lo que queda en la bandeja es lo mismo con la plantilla de j
           conLaJefatura(n.M, { responder: responderJefatura(f, s), opinion: s.opinion, sinSegunda: s.sinSegunda })
           const r = await correr(n.M, n.id, f.guionBase)
           expect(r.ultima.cuerpo.accion).toBe('cerrado')
-          expect(observable(n.M, n.id)).toEqual(observable(v.M, v.id))
+          // 20-nov · PLAN v4 (choque 3 aceptado por LENOVO 11:27Z) · la ÚNICA diferencia buscada: en la jefatura GPT va primero y su informe solo se guarda,
+          //   así que no deja fichas «externas» ni decisión sobre su opinión. Todo lo demás de la bandeja sigue IGUAL a la plantilla de julio
+          const sinOpinion = (o: ReturnType<typeof observable>) => ({ ...o, opinion: undefined, marca: { ...o.marca, opinion: undefined } })
+          expect(sinOpinion(observable(n.M, n.id))).toEqual(sinOpinion(observable(v.M, v.id)))
+          expect(observable(n.M, n.id).opinion).toEqual([])
+          expect(Object.values((observable(n.M, n.id).marca as { opinion?: Record<string, unknown> }).opinion ?? {}).every((x) => x === null)).toBe(true)
           expect(observable(n.M, n.id).hayBandeja).toBe(true)
         })
       }
     })
   }
 
-  it('la re-imagen de la opinión es la MISMA: si quien dirige la imagen toma la opinión, la oficina rehace la imagen una sola vez (post con imagen generada)', async () => {
+  // 20-nov · PLAN v4 · antes, si quien dirige la imagen tomaba la opinión de GPT, la oficina rehacía la imagen una vez. Ahora la opinión ya no es ficha ni
+  //   decisión (solo se guarda): con el paso `jefatura` NO hay re-imagen por GPT, aunque la plantilla de julio sí la haga
+  it('la opinión de GPT ya NO rehace la imagen: con el paso `jefatura` la imagen se genera una sola tanda (la plantilla de julio hacía la re-imagen)', async () => {
     const f = FAMILIAS[0]
     const respuestaImagen = (t: string, tomar: boolean) => j({ respuestas: respuestasDe(idsDe(t, 'ext'), tomar ? 'tomada' : 'no_tomada') })
     const v = await abrir(f, f.vieja)
     v.M.revisorTexto = () => ({ ok: true, texto: 'La imagen podría ser más cálida.', costo_usd: 0.1, modelo: 'revisor-simulado' })
     await correr(v.M, v.id, { ...guionViejo(f, ESCENARIOS[0]), decide: (_n, t) => ({ texto: respuestaImagen(t, false) }), decide_imagen: (_n, t) => ({ texto: respuestaImagen(t, true) }) })
     const n = await abrir(f, f.nueva)
-    conLaJefatura(n.M, { opinion: 'La imagen podría ser más cálida.', responder: (t) => (t.paso === 'revision_fondo' ? { texto: FICHAS_VACIAS } : t.paso.startsWith('decision:') ? { texto: respuestaImagen(String(t.pedido.task), t.paso.endsWith('marketing_instagram_curator')) } : undefined) })
+    conLaJefatura(n.M, { opinion: 'La imagen podría ser más cálida.', responder: (t) => (t.paso === 'revision_fondo' ? { texto: FICHAS_VACIAS } : undefined) as never })
     await correr(n.M, n.id, f.guionBase)
-    expect(v.M.llamadas.imagen).toBe(4) // 2 de la primera tanda + 2 de la re-imagen
-    expect(n.M.llamadas.imagen).toBe(v.M.llamadas.imagen)
-    expect(observable(n.M, n.id)).toEqual(observable(v.M, v.id))
-    expect(n.M.encargos.get(n.id)!.estado_del_motor.vueltas['reimagen_imagen'] ?? 0).toBe(v.M.encargos.get(v.id)!.estado_del_motor.vueltas['reimagen_imagen'] ?? 0)
+    expect(v.M.llamadas.imagen).toBe(4) // julio: 2 de la primera tanda + 2 de la re-imagen
+    expect(n.M.llamadas.imagen).toBe(2) // PLAN v4: solo la primera tanda
+    expect(n.M.encargos.get(n.id)!.estado_del_motor.vueltas['reimagen_imagen'] ?? 0).toBe(0)
+    expect(observable(n.M, n.id).marca.imagen_por_rehacer).toBe(false)
   })
 })
 

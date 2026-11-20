@@ -176,7 +176,12 @@ export function plantillaDePolitica(p: PoliticaDeRevision, productores: Producto
     ]
     return { tipo: p.artifact_type, familia: p.artifact_type, pasos: pasosC, indicaciones: {}, limites: { margen: 6, tope_encargo_usd: Math.min(tope_usd, p.tope_revision_usd, TOPE_MAXIMO_DE_REVISION_USD), max_rondas: 1 } }
   }
+  // 20-nov · PLAN v3 (CC4 · aclaración de Emilio, LENOVO 11:00Z) · en la PIEZA, GPT es el segundo doctor CREATIVO: corre PRIMERO y a ciegas (lee la versión A, antes de fondo y lengua)
+  //   y su opinión va al creativo de la mesa (la oficina), no a un paso de decisión aquí. En las demás revisiones, todo como antes
+  const doctorCreativo = p.artifact_type === 'pieza'
+  const segunda: Paso = { clave: 'segunda_mirada', tipo: 'externo', quien: 'GPT', condicion: { tipo: 'siempre' }, ronda: doctorCreativo ? 1 : 2, entrada: ['revision'], salida_artefacto: 'fichas_externas', tope_usd: topeDelPaso(p, 'segunda_mirada') }
   const pasos: Paso[] = [
+    ...(doctorCreativo ? [segunda] : []),
     {
       clave: 'revision_fondo', tipo: 'agente', quien: p.revisor_fondo ?? 'jefe-marketing', condicion: { tipo: 'siempre' }, ronda: 1, entrada: ['revision'], salida_artefacto: 'fichas_jefe',
       tope_usd: topeDelPaso(p, 'revision_fondo'), salida: { esquema: o.ficha_de_hechos ? 'fichas_con_cifras.v1' : 'fichas.v1', reintento_formato: 1 },
@@ -192,8 +197,8 @@ export function plantillaDePolitica(p: PoliticaDeRevision, productores: Producto
       pasos.push({ clave: CLAVE_DE_CORRECCION(d.agente), tipo: 'agente', quien: d.agente, condicion: c, ronda: 1, entrada: ['fichas_jefe', 'revision'], salida_artefacto: 'revision', tope_usd: topeDelPaso(p, 'correccion'), salida: { esquema: esquemaDelDueno(p, d), reintento_formato: 1 } })
     }
   }
-  pasos.push({ clave: 'segunda_mirada', tipo: 'externo', quien: 'GPT', condicion: { tipo: 'siempre' }, ronda: 2, entrada: ['revision'], salida_artefacto: 'fichas_externas', tope_usd: topeDelPaso(p, 'segunda_mirada') })
-  if (conRe) {
+  if (!doctorCreativo) pasos.push(segunda)
+  if (conRe && !doctorCreativo) {
     for (const d of duenos) {
       const c: Condicion = { tipo: 'si_fichas_abiertas', origen: 'externa', ...sinWildcard(d) }
       pasos.push({ clave: CLAVE_DE_DECISION(d.agente), tipo: 'agente', quien: d.agente, condicion: c, ronda: 2, entrada: ['fichas_externas', 'revision'], salida_artefacto: 'revision', tope_usd: topeDelPaso(p, 'decision'), salida: { esquema: esquemaDelDueno(p, d), reintento_formato: 1 } })

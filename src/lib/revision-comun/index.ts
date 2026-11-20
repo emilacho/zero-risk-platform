@@ -18,3 +18,6 @@ export type { ContextoDelRevisor, HuecosDeLaPregunta, IntentoDelRevisor, PedidoA
 /** la llamada a GPT que además anota su costo en el libro central de invocaciones (condición 5 de CC#3) */
 export { llamarRevisorGptConLibro } from '../revisor-gpt-libro'
 export type { ContextoDelLibro, OrigenDelRevisor } from '../revisor-gpt-libro'
+/** 20-nov · PLAN v4 · el segundo doctor CREATIVO: la regla de la cita y de la parte, la lectura del informe y lo que llega al creativo (puro; lo usan la jefatura y la oficina) */
+export { bloqueParaElCreativo, huella, leerInformeCreativo, PEDIDO_CREATIVO, resumenDelDoctor } from '../segundo-doctor'
+export type { InformeCreativo, ResumenDelDoctor } from '../segundo-doctor'
