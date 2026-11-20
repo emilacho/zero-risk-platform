@@ -563,7 +563,7 @@ describe('por el camino REAL del orquestador (CC7 m20 · #1250)', () => {
     await recibirResultado(M.P, id, n2, { texto: 'sigue sin ser JSON', costo_usd: 0.01 })
     const enc = M.encargos.get(id)!
     expect(enc.estado).not.toBe('fallido')
-    const pedido = (enc.estado_del_motor.artefactos as Record<string, { datos: { sin_lectura?: boolean; por_ref: Record<string, { cambios: string }> } }>)[ARTEFACTO_PEDIDO_DE_CORRECCION].datos
+    const pedido = (enc.estado_del_motor.artefactos as unknown as Record<string, { datos: { sin_lectura?: boolean; por_ref: Record<string, { cambios: string }> } }>)[ARTEFACTO_PEDIDO_DE_CORRECCION].datos
     expect(pedido.sin_lectura).toBe(true)
     expect(Object.values(pedido.por_ref).every((x) => x.cambios === '')).toBe(true)
     expect(M.llamadas.imagen).toBe(0)
