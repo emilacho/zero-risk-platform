@@ -3,6 +3,7 @@
  * `preparar` arma el cuerpo COMPLETO del `run-sdk` (tarea, esquema, tope, razonamiento, modelo, cabecera): el flujo n8n no duplica nada.
  * `guardar` valida con el código, hace UNA corrección si hace falta, y deja todo escrito con su reloj.
  */
+import { briefPedidoDeLaCampana } from './brief-de-la-campana'
 import type { Almacen, Campana, ContextoDelCliente, Corrida, EsperaFila, RondaDeEstrategia } from './almacen'
 import { activarYArrancar, type ResultadoDelArranque } from './arranque'
 import { autorizarLlamada, cadena, compuerta, err, type Respuesta } from './autorizar'
@@ -152,7 +153,8 @@ export async function estrategiaPreparar(al: Almacen, cuerpo: Record<string, unk
   }
   if (campana.estado === 'abierta') await al.actualizarCampana(campana.id, { estado: 'estrategia' })
   const llavesDeFechas = ctx.pais ? await al.llavesDeFechas(ctx.pais, campana.client_id) : []
-  const tarea = tareaDeEstrategia({ ctx, formatosPermitidos: formatosPermitidos(formatos), version, diasDeCampana: medidaDeCampana(campana).dias, fechaInicio: campana.fecha_inicio, fechaFin: campana.fecha_fin, diaUnoDelPlan: diaUnoDelPlan(ctx.planTexto), correccion: fichas ?? undefined, llavesDeFechas })
+  const briefDeLaCampana = await briefPedidoDeLaCampana(al, campana.id)
+  const tarea = tareaDeEstrategia({ briefDeLaCampana, ctx, formatosPermitidos: formatosPermitidos(formatos), version, diasDeCampana: medidaDeCampana(campana).dias, fechaInicio: campana.fecha_inicio, fechaFin: campana.fecha_fin, diaUnoDelPlan: diaUnoDelPlan(ctx.planTexto), correccion: fichas ?? undefined, llavesDeFechas })
   return {
     status: 200,
     cuerpo: {

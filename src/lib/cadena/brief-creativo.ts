@@ -59,6 +59,8 @@ export interface InsumosDelBrief {
   planTexto: string
   /** 10-nov (GO de Lenovo · todas las citas): el manual vigente · una cita atribuida al manual se comprueba contra él (sin manual, no se comprueba) */
   manualTexto?: string
+  /** 20-nov · «Crear Campaña» (GO Lenovo · entrega 3): el brief de ESTA campaña (el que se escribió al pedirla), entero · tercera fuente citable · ausente = solo plan y manual, como siempre */
+  campanaTexto?: string
   /** palabras prohibidas del manual */
   prohibidas: string[]
   /** las declaradas, con su cita: 02-nov, firma de Emilio: tampoco bloquean, se avisan con su propio texto */
@@ -127,8 +129,8 @@ export const frasesDe = (s: string): number => s.split(/[.!?¡¿]+/).map((x) => 
  * Los insumos del verificador del brief, armados UNA sola vez para todos los que lo leen (la mesa al recibirlo, la revalidación y los colaterales):
  * el plan y el manual vigentes, las prohibidas y duras del manual, las redes que la estrategia usa y el registro del cliente. Sin contexto, no se compara nada.
  */
-export function insumosDelBrief(ctx: Pick<ContextoDelCliente, 'planTexto' | 'manualTexto' | 'forbiddenWords' | 'palabrasDuras' | 'registro'> | null | undefined, canales: Pick<Canal, 'red' | 'rol'>[] | null | undefined): InsumosDelBrief {
-  return { planTexto: ctx?.planTexto ?? '', manualTexto: ctx?.manualTexto, prohibidas: ctx?.forbiddenWords ?? [], duras: ctx?.palabrasDuras, redes: (canales ?? []).filter((x) => x.rol !== 'no').map((x) => x.red), registro: ctx?.registro }
+export function insumosDelBrief(ctx: Pick<ContextoDelCliente, 'planTexto' | 'manualTexto' | 'forbiddenWords' | 'palabrasDuras' | 'registro'> | null | undefined, canales: Pick<Canal, 'red' | 'rol'>[] | null | undefined, campana?: string | null): InsumosDelBrief {
+  return { planTexto: ctx?.planTexto ?? '', manualTexto: ctx?.manualTexto, prohibidas: ctx?.forbiddenWords ?? [], duras: ctx?.palabrasDuras, redes: (canales ?? []).filter((x) => x.rol !== 'no').map((x) => x.red), registro: ctx?.registro, ...(campana && campana.trim() ? { campanaTexto: campana } : {}) }
 }
 
 export function publicoEsTodos(publico: string): boolean {
@@ -208,7 +210,18 @@ export function citasEntreComillas(cita: string): string[] {
   return out.length ? out : [...cita.matchAll(/[«"“]([^»"”]{4,})[»"”]/g)].map((m) => m[1])
 }
 
-export interface CitaQueNoAparece { cita: string; seccion: string; fuente: 'plan' | 'manual' }
+export interface CitaQueNoAparece { cita: string; seccion: string; fuente: FuenteDeCita }
+/** 20-nov · las fuentes que una cita puede nombrar: el plan, el manual y (en una campaña pedida desde el tablero) su brief */
+export type FuenteDeCita = 'plan' | 'manual' | 'campana'
+export interface FuentesDeCita { plan: string; manual?: string; campana?: string }
+/** el nombre con que la devolución nombra cada fuente */
+export const NOMBRE_DE_LA_FUENTE: Record<FuenteDeCita, string> = { plan: 'plan', manual: 'manual', campana: 'brief de la campaña' }
+/** quién dice una cita atribuida en la línea («el plan dice: «…»», «el brief de la campaña dice «…»») */
+const FUENTE_ATRIBUIDA = /\b(plan|manual|brief\s+de\s+la\s+campa(?:ñ|n)a)(\s+(?:dice|declara|indica|señala|afirma|pide|establece)(?:\s+que)?\s*:?\s*)«([^»]+)»/giu
+const fuenteAtribuida = (quien: string): FuenteDeCita => (/campa(?:ñ|n)a$/i.test(quien) ? 'campana' : quien.toLowerCase() === 'manual' ? 'manual' : 'plan')
+const textoDeLaFuente = (f: FuentesDeCita, de: FuenteDeCita): string | undefined => (de === 'plan' ? f.plan : de === 'manual' ? f.manual : f.campana)
+/** las fuentes leídas UNA vez con el lector común (el brief de la campaña, solo si trae texto) */
+const leerFuentes = (f: FuentesDeCita): FuentesDeCita => ({ plan: textoDelDocumento(f.plan), manual: f.manual == null ? undefined : textoDelDocumento(f.manual), campana: f.campana && f.campana.trim() ? textoDelDocumento(f.campana) : undefined })
 
 /** las citas de un bloque `>` (líneas seguidas ya unidas), como las lee el chequeo */
 function partesDelBloque(b: string): string[] {
@@ -226,10 +239,10 @@ function partesDelBloque(b: string): string[] {
  * · una cita atribuida en la línea («el plan dice: «…»», «manual dice «…»»…): tiene que estar en ESE documento (la del manual, solo si hay manual).
  * Lo entre «» sin atribución (palabras, llamados) no es una cita a un documento y no se comprueba. Las citas cortas (< 12 caracteres) tampoco.
  */
-export function citasQueNoAparecen(md: string, fuentes: { plan: string; manual?: string }): CitaQueNoAparece[] {
+export function citasQueNoAparecen(md: string, fuentes: FuentesDeCita): CitaQueNoAparece[] {
   const out: CitaQueNoAparece[] = []
-  fuentes = { plan: textoDelDocumento(fuentes.plan), manual: fuentes.manual == null ? undefined : textoDelDocumento(fuentes.manual) }
-  const enAlguno = (c: string) => citaLiteralEn(fuentes.plan, c) || (!!fuentes.manual && citaLiteralEn(fuentes.manual, c))
+  fuentes = leerFuentes(fuentes)
+  const enAlguno = (c: string) => citaLiteralEn(fuentes.plan, c) || (!!fuentes.manual && citaLiteralEn(fuentes.manual, c)) || (!!fuentes.campana && citaLiteralEn(fuentes.campana, c))
   for (const s of seccionesDe(md)) {
     const k = tituloConocido(s)
     if (k === 'De qué parte del plan sale') continue
@@ -250,12 +263,13 @@ export function citasQueNoAparecen(md: string, fuentes: { plan: string; manual?:
       }
     }
     // citas atribuidas en la línea
-    for (const m of `${s.titulo}\n${s.cuerpo}`.matchAll(/\b(plan|manual)\s+(?:dice|declara|indica|señala|afirma|pide|establece)(?:\s+que)?\s*:?\s*«([^»]+)»/giu)) {
-      const fuente = m[1].toLowerCase() === 'manual' ? 'manual' : 'plan'
-      const c = m[2]
+    for (const m of `${s.titulo}\n${s.cuerpo}`.matchAll(FUENTE_ATRIBUIDA)) {
+      const fuente = fuenteAtribuida(m[1])
+      const c = m[3]
       if (normalizar(c).length < MIN_CARACTERES_DE_CITA) continue
-      if (fuente === 'manual' && !fuentes.manual) continue
-      if (!citaLiteralEn(fuente === 'manual' ? fuentes.manual! : fuentes.plan, c)) out.push({ cita: c, seccion, fuente })
+      const doc = textoDeLaFuente(fuentes, fuente)
+      if (fuente !== 'plan' && !doc) continue
+      if (!citaLiteralEn(doc ?? '', c)) out.push({ cita: c, seccion, fuente })
     }
   }
   return sinRepetidas(out)
@@ -273,14 +287,14 @@ function sinRepetidas(xs: CitaQueNoAparece[]): CitaQueNoAparece[] {
  * Detecta con LA MISMA lectura que `citasQueNoAparecen` (bloques `>` y citas atribuidas; no «De qué parte del plan sale», que tiene su propio chequeo).
  */
 export const TOPE_DE_CITAS_A_RESUMEN = 3
-const marcaDeResumen = (de: 'plan' | 'manual' | 'bloque'): string =>
-  `*(resumen, no cita literal ${de === 'bloque' ? 'del plan ni del manual' : `del ${de}`})*`
+const marcaDeResumen = (de: FuenteDeCita | 'bloque', conBriefDeLaCampana = false): string =>
+  `*(resumen, no cita literal ${de === 'bloque' ? (conBriefDeLaCampana ? 'del plan, del manual ni del brief de la campaña' : 'del plan ni del manual') : `del ${NOMBRE_DE_LA_FUENTE[de]}`})*`
 export interface CitasBajadas { texto: string; bajadas: CitaQueNoAparece[] }
-export function bajarCitasNoLiterales(md: string, fuentes: { plan: string; manual?: string }): CitasBajadas {
+export function bajarCitasNoLiterales(md: string, fuentes: FuentesDeCita): CitasBajadas {
   const fallan = citasQueNoAparecen(md, fuentes)
   if (!fallan.length || fallan.length > TOPE_DE_CITAS_A_RESUMEN) return { texto: md, bajadas: [] }
-  const doc = { plan: textoDelDocumento(fuentes.plan), manual: fuentes.manual == null ? undefined : textoDelDocumento(fuentes.manual) }
-  const enAlguno = (c: string) => citaLiteralEn(doc.plan, c) || (!!doc.manual && citaLiteralEn(doc.manual, c))
+  const doc = leerFuentes(fuentes)
+  const enAlguno = (c: string) => citaLiteralEn(doc.plan, c) || (!!doc.manual && citaLiteralEn(doc.manual, c)) || (!!doc.campana && citaLiteralEn(doc.campana, c))
   const bajadas: CitaQueNoAparece[] = []
   const trozos: Array<{ cabeza: string | null; k: Seccion | null; titulo: string; cuerpo: string[] }> = [{ cabeza: null, k: null, titulo: '', cuerpo: [] }]
   for (const l of md.replace(/\r/g, '').split('\n')) {
@@ -302,15 +316,16 @@ export function bajarCitasNoLiterales(md: string, fuentes: { plan: string; manua
       const malas = partesDelBloque(b).filter((c) => normalizar(c).length >= MIN_CARACTERES_DE_CITA && !enAlguno(c))
       if (!malas.length) { out.push(...lineas); continue }
       let prosa = b
-      for (const c of malas) prosa = prosa.includes(`«${c}»`) ? prosa.replace(`«${c}»`, `${c} ${marcaDeResumen('bloque')}`) : `${prosa} ${marcaDeResumen('bloque')}`
+      for (const c of malas) prosa = prosa.includes(`«${c}»`) ? prosa.replace(`«${c}»`, `${c} ${marcaDeResumen('bloque', !!doc.campana)}`) : `${prosa} ${marcaDeResumen('bloque', !!doc.campana)}`
       out.push(prosa)
       bajadas.push(...malas.map((c) => ({ cita: c, seccion, fuente: 'plan' as const })))
     }
     // citas atribuidas en la línea («el plan dice: «…»»): la que no es literal pierde sus «» (y así deja de leerse como cita)
-    tz.cuerpo = out.join('\n').replace(/\b(plan|manual)(\s+(?:dice|declara|indica|señala|afirma|pide|establece)(?:\s+que)?\s*:?\s*)«([^»]+)»/giu, (todo, quien: string, medio: string, c: string) => {
-      const fuente = quien.toLowerCase() === 'manual' ? 'manual' : 'plan'
-      if (normalizar(c).length < MIN_CARACTERES_DE_CITA || (fuente === 'manual' && !doc.manual)) return todo
-      if (citaLiteralEn(fuente === 'manual' ? doc.manual! : doc.plan, c)) return todo
+    tz.cuerpo = out.join('\n').replace(FUENTE_ATRIBUIDA, (todo, quien: string, medio: string, c: string) => {
+      const fuente = fuenteAtribuida(quien)
+      const texto = textoDeLaFuente(doc, fuente)
+      if (normalizar(c).length < MIN_CARACTERES_DE_CITA || (fuente !== 'plan' && !texto)) return todo
+      if (citaLiteralEn(texto ?? '', c)) return todo
       bajadas.push({ cita: c, seccion, fuente })
       return `${quien}${medio}${c} ${marcaDeResumen(fuente)}`
     }).split('\n')
@@ -328,8 +343,12 @@ export function bajarCitasNoLiterales(md: string, fuentes: { plan: string; manua
   return { texto, bajadas: lista }
 }
 /** el aviso de cada cita que se bajó a resumen (el brief sigue; la gran idea lo ve) */
-export const avisosDeCitasBajadas = (bajadas: CitaQueNoAparece[]): string[] =>
+/** el aviso de una cita del plan o del manual que se bajó a resumen */
+const avisosDePlanYManual = (bajadas: CitaQueNoAparece[]): string[] =>
   bajadas.map((x) => `la cita «${x.cita.slice(0, 80)}» (en «## ${x.seccion}») no estaba literal en el ${x.fuente === 'manual' ? 'manual' : 'plan'} · se dejó como resumen, sin comillas, y se anotó en «Faltantes»`)
+/** 20-nov · entrega 3: el de una cita atribuida al brief de la campaña dice ESA fuente (el mismo aviso, con su nombre) */
+export const avisosDeCitasBajadas = (bajadas: CitaQueNoAparece[]): string[] =>
+  bajadas.flatMap((x) => (x.fuente === 'campana' ? avisosDePlanYManual([{ ...x, fuente: 'plan' }]).map((a) => a.replace(') no estaba literal en el plan ·', ') no estaba literal en el brief de la campaña ·')) : avisosDePlanYManual([x])))
 
 export function leerBriefCreativo(md: string, ins: InsumosDelBrief): BriefCreativoLeido {
   const secciones = seccionesDe(md)
@@ -355,14 +374,17 @@ export function leerBriefCreativo(md: string, ins: InsumosDelBrief): BriefCreati
   if (cita) {
     const entreComillas = citasEntreComillas(cita)
     const candidatas = entreComillas.length ? entreComillas : [cita]
-    const literal = candidatas.some((c) => normalizar(c).length >= MIN_CARACTERES_DE_CITA && citaAparece(textoDelDocumento(ins.planTexto), c))
+    // 20-nov · «Crear Campaña»: en una campaña pedida desde el tablero, la cita puede salir de SU brief (la campaña nace de ahí); sin brief de la campaña, solo el plan, como siempre
+    const campanaLeida = ins.campanaTexto && ins.campanaTexto.trim() ? textoDelDocumento(ins.campanaTexto) : null
+    const literal = candidatas.some((c) => normalizar(c).length >= MIN_CARACTERES_DE_CITA && (citaAparece(textoDelDocumento(ins.planTexto), c) || (!!campanaLeida && citaAparece(campanaLeida, c))))
     if (normalizar(cita).length < MIN_CARACTERES_DE_CITA) bloqueos.push(`la cita al plan es demasiado corta para verificarse: «${cita.slice(0, 60)}»`)
+    else if (!literal && campanaLeida) bloqueos.push(`la cita «${cita}» no se encuentra literal en el plan ni en el brief de la campaña · no se puede verificar de qué parte sale`)
     else if (!literal) bloqueos.push(`la cita «${cita.slice(0, 80)}» no se encuentra literal en el plan · no se puede verificar de qué parte sale`)
   }
   // 10-nov (GO de Lenovo): TODAS las citas son literales · una cita nunca se corrige
-  for (const x of citasQueNoAparecen(md, { plan: ins.planTexto, manual: ins.manualTexto })) {
-    const nombre = x.fuente === 'manual' ? 'manual' : 'plan'
-    const pista = pistaDeLaCita(x.fuente === 'manual' ? ins.manualTexto ?? '' : ins.planTexto, x.cita, nombre)
+  for (const x of citasQueNoAparecen(md, { plan: ins.planTexto, manual: ins.manualTexto, campana: ins.campanaTexto })) {
+    const nombre = NOMBRE_DE_LA_FUENTE[x.fuente]
+    const pista = pistaDeLaCita(textoDeLaFuente({ plan: ins.planTexto, manual: ins.manualTexto, campana: ins.campanaTexto }, x.fuente) ?? '', x.cita, nombre)
     bloqueos.push(`la cita «${x.cita.slice(0, 80)}» (en «## ${x.seccion}») no está literal en el ${nombre}${pista} · una cita nunca se corrige: cópiala tal cual y, si el cambio pedido la contradice, explícalo fuera de la cita`)
   }
 

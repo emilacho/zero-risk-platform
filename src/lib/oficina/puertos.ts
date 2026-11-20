@@ -232,6 +232,8 @@ export interface Puertos {
   componerVideo?: PuertoDeComposicionDeVideo
   /** (01-nov) lo que el revisor de la jefatura debe tener además del manual y el brief: resumen vivo, informes, lo que dijo el dueño y las páginas del sitio */
   carpetaParaRevisar?(clientId: string): Promise<Array<{ titulo: string; funcion?: string; texto: string }>>
+  /** 20-nov · «Crear Campaña» (entrega 3): el brief del dueño de la campaña de la pieza, para el revisor · null sin brief del dueño · nunca lanza */
+  briefDeLaCampanaParaRevisar?(campanaId: string): Promise<{ titulo: string; funcion?: string; texto: string } | null>
   /** (17-nov · coherencia con los hechos) el bloque de hechos del negocio que define Cerebro. Opcional: sin él (o si falla) la revisión recibe el aviso «no hay bloque» y compara contra el manual y el plan */
   hechosDelNegocio?(clientId: string): Promise<LecturaDeHechos>
   /** (17-nov · cambio 4 · D1) los hechos del cerebro POR OFERTA con su `tipo` (la misma lectura de la cadena · solo lectura). Sin él (o si falla), D1 usa solo el cierre que trae la hoja y lo declara */

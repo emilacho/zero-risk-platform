@@ -12,6 +12,7 @@ import { contextoDeEstado } from '../sedes/por-abrir'
 import { TOPE_REAL_DEL_PEDIDO } from '../limites-de-tamano'
 import { diaSemanaIso, esFechaIso, fechaDeFila } from './fechas'
 import { ideasQueVolvieronAlBanco } from './reubicacion'
+import { bloqueDelBriefDeLaCampana } from './brief-de-la-campana'
 
 const REGLAS_BASE = [
   'Respondes SOLO con el objeto que pide el formato de salida. No escribas nada fuera de él.',
@@ -53,7 +54,9 @@ export interface PedidoDeEstrategia { ctx: ContextoDelCliente; formatosPermitido
   /** 09-nov · F: el día 1 DEL PLAN (su ventana). Si difiere del de la campaña, las fechas del plan se cuentan desde él y se corren en bloque */
   diaUnoDelPlan?: string | null
   /** 10-nov (fechas sin fuente · D): las llaves de fechas que YA existen para el país del cliente (y sus temporadas). El agente reusa la misma si es la misma fecha */
-  llavesDeFechas?: LlaveDeFecha[] }
+  llavesDeFechas?: LlaveDeFecha[]
+  /** 20-nov · «Crear Campaña» (entrega 3): el brief de la campaña de ESTA campaña, entero (`brief-de-la-campana.ts`) · sin él, la tarea queda idéntica */
+  briefDeLaCampana?: string | null }
 
 /** una llave de fecha ya guardada: la llave estable, su ámbito y, si se sabe, su clase */
 export interface LlaveDeFecha { llave: string; ambito: string; clase?: ClaseDeFecha | null }
@@ -145,6 +148,7 @@ export function tareaDeEstrategia(p: PedidoDeEstrategia): string {
     `# PLAN\n${documentoDeLaCadena('el plan', p.ctx.planTexto)}`,
     '',
     `# MANUAL DE MARCA\n${documentoDeLaCadena('el manual de marca', p.ctx.manualTexto)}`,
+    ...bloqueDelBriefDeLaCampana(p.briefDeLaCampana),
     '',
     '# Qué te pido',
     'Lee el PLAN de marketing y el MANUAL de marca de este negocio y devuelve su ESTRATEGIA de redes como un objeto estructurado (canales, excluidos, pilares, fases, hitos, dependencias, fechas que importan, patrón semanal, piezas fijas, pendientes, alertas).',

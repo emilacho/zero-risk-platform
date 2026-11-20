@@ -30,7 +30,7 @@ import { resolverCierre } from '../jefatura/revision/cierre'
 import { N8N_POR_OMISION, VERCEL_DE_LA_PLATAFORMA, type SalidaDeRevision } from '../jefatura/revision/contrato'
 import { ESTADOS_TERMINALES } from '../jefatura/revision/puertos'
 import { enviarPiezaASlack, leerNotasParaElProductor, piezaParaSlackDeLaBandeja, registrarAutorevision } from '../notas-del-dueno/adaptadores'
-import { carpetaParaRevisar } from '../jefatura/revision/carpeta-para-revisar'
+import { briefDeLaCampanaParaRevisar, carpetaParaRevisar } from '../jefatura/revision/carpeta-para-revisar'
 import { adjuntoDelCliente } from '../portero-alimenta/contexto-del-cliente'
 import { sacarCuadros } from './video/cuadros'
 import { pedirPng, type ServicioDeRender } from '../render-html/cliente'
@@ -183,6 +183,7 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
   const almacen = almacenDeSupabase(db)
   return {
     carpetaParaRevisar: (clientId) => carpetaParaRevisar(db, clientId),
+    briefDeLaCampanaParaRevisar: (campanaId) => briefDeLaCampanaParaRevisar((id) => almacenDeLaCadena().pedidoDeLaCampana!(id), campanaId),
     almacen,
     // 18-nov · T5 tramo 3 · el video compuesto: solo con el servicio de render configurado (sin él, el video unido sale como hoy)
     ...(env.renderHtml ? { componerVideo: puertoDeComposicionDeVideo(env.renderHtml, f) } : {}),
