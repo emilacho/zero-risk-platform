@@ -1,7 +1,8 @@
 /**
- * 17-nov · «creativos en cada paso» (GO Lenovo · firma de Emilio 07:18 · punto 1) · la mesa CORTA de las historias y la palanca por cliente.
- *  · la palanca apagada (ausente, vacía, ilegible, otro cliente) deja la ruta EXACTA de siempre; encendida y con la mesa activa, la pieza nueva abre `kit_mesa`;
- *  · una reapertura o una devolución del dueño sigue en la línea en que nació; con la mesa apagada, la palanca no deja la pieza sin producir;
+ * 17-nov · «creativos en cada paso» (GO Lenovo · firma de Emilio 07:18 · punto 1) · la mesa CORTA de las historias y la ruta a la mesa.
+ *  · 20-nov · «la mesa para todos los clientes» (firma de Emilio 12:37 Zúrich): sin lista de clientes. Toda pieza NUEVA de una familia con versión con mesa, de CUALQUIER cliente,
+ *    abre su mesa si está activa; con la mesa apagada (o sin la mesa conectada, o si la plantilla no se puede leer) sigue la ruta EXACTA de siempre;
+ *  · una reapertura o una devolución del dueño sigue en la línea en que nació;
  *  · el freno de la campaña reserva lo de la familia que de verdad corre;
  *  · en la mesa se sientan SOLO los 3 asientos (más quien dirige y el portero) y hay UNA ronda de aportes.
  */
@@ -9,7 +10,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { abrirEncargo, recibirResultado } from '../orquestador'
-import { CLAVE_DE_LA_PALANCA, FAMILIA_CON_MESA, familiaConMesa, gruposHermanos, palancaEncendida, topesConMesa } from '../mesa/con-mesa'
+import { FAMILIA_CON_MESA, familiaConMesa, gruposHermanos, topesConMesa } from '../mesa/con-mesa'
 import { directorioConAsientos } from '../mesa/orquestador'
 import { siguienteDeLaMesa } from '../mesa/planificador'
 import { ASIENTOS_DE_LA_MESA_CORTA, DIFERENCIAS_CON_LAS_HISTORIAS, KIT_MESA, RONDAS_DE_LA_MESA_CORTA } from '../plantillas/mesa'
@@ -20,59 +21,63 @@ import type { Aporte, EstadoMesa, Tarjeta } from '../mesa/tipos'
 import { CLIENTE, PARTE, crearMemoria } from './memoria'
 import { crearMesaEnMemoria } from './mesa-memoria'
 
+/** un cliente que NO estaba en la vieja lista de la palanca (solo estaba Náufrago) */
 const OTRO = '00000000-0000-4000-8000-000000000099'
-const ON = { clientes: [CLIENTE] }
 
-describe('la palanca por cliente (puro)', () => {
-  it('apagada por defecto: ausente, vacía, mal formada u otro cliente', () => {
-    for (const v of [undefined, null, {}, { clientes: [] }, { clientes: OTRO }, [CLIENTE], 'si', { clientes: [OTRO] }]) expect(palancaEncendida(v, CLIENTE)).toBe(false)
-    expect(palancaEncendida(ON, CLIENTE)).toBe(true)
+describe('la ruta a la mesa (puro)', () => {
+  it('solo rutea una familia con versión con mesa y con la mesa activa', () => {
+    expect(familiaConMesa('kit_historias', () => true)).toBe('kit_mesa')
+    expect(familiaConMesa('kit_historias', () => false)).toBe('kit_historias')
+    expect(familiaConMesa('post_img', () => true)).toBe('post_mesa')
+    expect(familiaConMesa('carrusel_ig_v1', () => true)).toBe('carrusel_mesa')
+    expect(familiaConMesa('carrusel_ig_v1', () => false)).toBe('carrusel_ig_v1')
+    expect(familiaConMesa('video_mesa', () => true)).toBe('video_mesa')
+    expect(familiaConMesa(null, () => true)).toBeNull()
   })
-  it('solo rutea una familia con versión con mesa, con la palanca encendida y la mesa activa', () => {
-    expect(familiaConMesa('kit_historias', ON, CLIENTE, () => true)).toBe('kit_mesa')
-    expect(familiaConMesa('kit_historias', ON, CLIENTE, () => false)).toBe('kit_historias')
-    expect(familiaConMesa('kit_historias', { clientes: [] }, CLIENTE, () => true)).toBe('kit_historias')
-    expect(familiaConMesa('carrusel_ig_v1', ON, CLIENTE, () => true)).toBe('carrusel_ig_v1')
-    expect(familiaConMesa('video_mesa', ON, CLIENTE, () => true)).toBe('video_mesa')
-    expect(familiaConMesa(null, ON, CLIENTE, () => true)).toBeNull()
-  })
-  it('las historias y la foto tienen versión con mesa por palanca (tramo B: la foto); el carrusel no', () => {
-    expect(FAMILIA_CON_MESA).toEqual({ kit_historias: 'kit_mesa', post_img: 'post_mesa' })
+  it('las historias, la foto y el carrusel tienen versión con mesa (20-nov: el carrusel también)', () => {
+    expect(FAMILIA_CON_MESA).toEqual({ kit_historias: 'kit_mesa', post_img: 'post_mesa', carrusel_ig_v1: 'carrusel_mesa' })
   })
   it('la misma pieza por las dos líneas cuenta como una (versiones y reaperturas)', () => {
     expect(gruposHermanos('kit_mesa').sort()).toEqual(['kit_historias', 'kit_mesa'])
     expect(gruposHermanos('kit_historias').sort()).toEqual(['kit_historias', 'kit_mesa'])
-    expect(gruposHermanos('carrusel_ig_v1')).toEqual(['carrusel_ig_v1'])
+    expect(gruposHermanos('carrusel_ig_v1').sort()).toEqual(['carrusel_ig_v1', 'carrusel_mesa'])
+    expect(gruposHermanos('carrusel_mesa').sort()).toEqual(['carrusel_ig_v1', 'carrusel_mesa'])
+    expect(gruposHermanos('video_mesa')).toEqual(['video_mesa'])
+  })
+  it('ya no hay lista de clientes: el código no lee la vieja palanca `creativos_con_mesa`', () => {
+    const leer = (r: string) => readFileSync(join(process.cwd(), r), 'utf8')
+    for (const r of ['src/lib/oficina/mesa/con-mesa.ts', 'src/lib/oficina/orquestador.ts', 'src/lib/cadena/autoproducir.ts']) {
+      expect(leer(r)).not.toMatch(/CLAVE_DE_LA_PALANCA|palancaEncendida|'creativos_con_mesa'/)
+    }
   })
 })
 
 describe('el freno de la campaña reserva lo de la familia que corre', () => {
   const topes = { kit_historias: 2.5, post_img: 2.5, kit_mesa: 5 }
-  it('sin palanca: los mapas salen IGUALES (mismo objeto)', () => {
-    const r = { kit_historias: 1.2 }
-    const s = topesConMesa(topes, r, { clientes: [OTRO] }, CLIENTE)
-    expect(s.topes).toBe(topes)
-    expect(s.reservas).toBe(r)
-  })
-  it('con palanca: la historia reserva el tope de la mesa (sin historia de la mesa) y nunca baja', () => {
-    const s = topesConMesa(topes, { kit_historias: 1.2 }, ON, CLIENTE)
+  it('la historia reserva el tope de la mesa (sin historia de la mesa) y nunca baja; para cualquier cliente', () => {
+    const s = topesConMesa(topes, { kit_historias: 1.2 })
     expect(s.topes.kit_historias).toBe(5)
     expect(s.reservas?.kit_historias).toBe(5)
     expect(s.topes.post_img).toBe(2.5)
     // con lo esperado de la mesa medido, se usa ese
-    expect(topesConMesa(topes, { kit_historias: 1.2, kit_mesa: 3.1 }, ON, CLIENTE).reservas?.kit_historias).toBe(3.1)
+    expect(topesConMesa(topes, { kit_historias: 1.2, kit_mesa: 3.1 }).reservas?.kit_historias).toBe(3.1)
     // una reserva de siempre mayor se queda (del lado seguro)
-    expect(topesConMesa({ ...topes, kit_historias: 8 }, { kit_historias: 7, kit_mesa: 3.1 }, ON, CLIENTE).reservas?.kit_historias).toBe(7)
+    expect(topesConMesa({ ...topes, kit_historias: 8 }, { kit_historias: 7, kit_mesa: 3.1 }).reservas?.kit_historias).toBe(7)
+  })
+  it('el carrusel reserva el tope de su mesa', () => {
+    const s = topesConMesa({ carrusel_ig_v1: 2.5, carrusel_mesa: 6 }, { carrusel_ig_v1: 1 })
+    expect(s.topes.carrusel_ig_v1).toBe(6)
+    expect(s.reservas?.carrusel_ig_v1).toBe(6)
   })
   it('(m4 de CC7) nunca BAJA: si la línea de siempre tiene tope o reserva MAYOR que la mesa, se queda la mayor', () => {
-    const r = topesConMesa({ kit_historias: 7, kit_mesa: 5 }, { kit_historias: 6, kit_mesa: 4 }, ON, CLIENTE)
+    const r = topesConMesa({ kit_historias: 7, kit_mesa: 5 }, { kit_historias: 6, kit_mesa: 4 })
     expect(r.topes.kit_historias).toBe(7)
     expect(r.reservas!.kit_historias).toBe(6)
     // y con la mesa mayor, sube (control)
-    expect(topesConMesa({ kit_historias: 2.5, kit_mesa: 5 }, { kit_historias: 2.5 }, ON, CLIENTE).topes.kit_historias).toBe(5)
+    expect(topesConMesa({ kit_historias: 2.5, kit_mesa: 5 }, { kit_historias: 2.5 }).topes.kit_historias).toBe(5)
   })
-  it('con palanca pero la mesa apagada (sin tope de familia activa): nada cambia', () => {
-    const s = topesConMesa({ kit_historias: 2.5 }, { kit_historias: 1 }, ON, CLIENTE)
+  it('la mesa apagada (sin tope de familia activa): nada cambia', () => {
+    const s = topesConMesa({ kit_historias: 2.5 }, { kit_historias: 1 })
     expect(s.topes).toEqual({ kit_historias: 2.5 })
     expect(s.reservas).toEqual({ kit_historias: 1 })
   })
@@ -92,72 +97,70 @@ const BRIEF_KIT = `### BRF-0200 · Instagram · kit_historias
 const parteCon = (b: string) => `# PARTE DE TRABAJO\nPlan de origen: 29d6daeb-a95a-4328-9c10-cf3cddc236f7 · Manual: versión 1\n\n## Entregables\n\n${b}\n### BRF-9999 · Instagram · imagen\n- QUÉ ES: otro\n`
 
 const CAMBIOS = { ronda: 1, comentario: 'más luz en la segunda historia, por favor', laminas: [], desde_hitl: 'hitl-1', pedido_por: 'emilio' }
-function montarPuerta(o: { palanca?: unknown; mesaActiva?: boolean; leerFalla?: boolean; familias?: string[] } = {}) {
+function montarPuerta(o: { mesaActiva?: boolean; leerFalla?: boolean; familias?: string[]; sinMesa?: boolean; cliente?: string } = {}) {
   const M = crearMemoria({ parte: parteCon(BRIEF_KIT), plantilla: KIT_HISTORIAS_CON_JEFATURA, config: { familias_activas: o.familias ?? ['kit_historias'] } })
   const leidas: string[] = []
   const plantillas: Record<string, { plantilla: Plantilla; activo: boolean }> = {
     kit_historias: { plantilla: JSON.parse(JSON.stringify(KIT_HISTORIAS_CON_JEFATURA)), activo: true },
     kit_mesa: { plantilla: JSON.parse(JSON.stringify(KIT_MESA)), activo: o.mesaActiva ?? true },
   }
-  M.P.almacen.leerPlantilla = async (f) => { leidas.push(f); return plantillas[f] ?? null }
+  M.P.almacen.leerPlantilla = async (f) => { leidas.push(f); if (o.leerFalla && f === 'kit_mesa') throw new Error('base caída'); return plantillas[f] ?? null }
   const MS = crearMesaEnMemoria()
   const pedidas: string[] = []
-  M.P.mesa = { ...MS, configDeLaCadena: async (k: string) => { pedidas.push(k); if (o.leerFalla) throw new Error('base caída'); return k === CLAVE_DE_LA_PALANCA ? o.palanca : undefined } }
-  const abrir = (extra: Record<string, unknown> = {}) => abrirEncargo(M.P, { cuerpo: { parte_id: PARTE, brief_id: 'BRF-0200', dry_run: true, familia: 'kit_historias', ...extra }, client_id: CLIENTE, target_step_id: TARGET_STEP_PRODUCIR })
+  M.P.mesa = o.sinMesa ? undefined : { ...MS, configDeLaCadena: async (k: string) => { pedidas.push(k); return undefined } }
+  const abrir = (extra: Record<string, unknown> = {}) => abrirEncargo(M.P, { cuerpo: { parte_id: PARTE, brief_id: 'BRF-0200', dry_run: true, familia: 'kit_historias', ...extra }, client_id: o.cliente ?? CLIENTE, target_step_id: TARGET_STEP_PRODUCIR })
   const encargo = () => [...M.encargos.values()].at(-1)!
   return { M, abrir, encargo, leidas, pedidas }
 }
 
-describe('la puerta de la oficina con la palanca', () => {
-  it('APAGADA (ausente): la historia abre kit_historias, EXACTO como hoy, y no lee la plantilla con mesa', async () => {
-    const x = montarPuerta({ palanca: undefined })
+describe('la puerta de la oficina abre la mesa para cualquier cliente', () => {
+  it('con la mesa activa: la pieza nueva abre kit_mesa (tope de la mesa), deja dicho desde qué familia vino y no lee ninguna lista', async () => {
+    const x = montarPuerta()
     await x.abrir()
-    expect(x.encargo().familia).toBe('kit_historias')
-    expect(x.encargo().tipo_de_grupo).toBe('kit_historias')
-    expect(x.encargo().sala_ref?.con_mesa).toBeUndefined()
-    expect(x.leidas).not.toContain('kit_mesa')
-  })
-  it('apagada para OTRO cliente o vacía: la ruta de siempre', async () => {
-    for (const palanca of [{ clientes: [OTRO] }, { clientes: [] }]) {
-      const x = montarPuerta({ palanca })
-      await x.abrir()
-      expect(x.encargo().familia).toBe('kit_historias')
-    }
-  })
-  it('si la palanca no se puede leer: la ruta de siempre (nunca frena la pieza)', async () => {
-    const x = montarPuerta({ palanca: ON, leerFalla: true })
-    await x.abrir()
-    expect(x.encargo().familia).toBe('kit_historias')
-  })
-  it('ENCENDIDA y la mesa activa: la pieza nueva abre kit_mesa (tope de la mesa) y deja dicho desde qué familia vino', async () => {
-    const x = montarPuerta({ palanca: ON })
-    await x.abrir()
-    expect(x.pedidas).toContain(CLAVE_DE_LA_PALANCA)
     expect(x.encargo().familia).toBe('kit_mesa')
     expect(x.encargo().tipo_de_grupo).toBe('kit_mesa')
     expect(x.encargo().tope_usd).toBe(KIT_MESA.limites.tope_encargo_usd)
     expect(x.encargo().sala_ref?.con_mesa).toEqual({ de: 'kit_historias', a: 'kit_mesa' })
+    expect(x.pedidas).not.toContain('creativos_con_mesa')
   })
-  it('encendida pero la mesa APAGADA: la pieza sigue por la línea de siempre (no queda sin producir)', async () => {
-    const x = montarPuerta({ palanca: ON, mesaActiva: false })
+  it('un cliente que NO estaba en la vieja lista también abre la mesa', async () => {
+    const x = montarPuerta({ cliente: OTRO })
+    await x.abrir()
+    expect(x.encargo().client_id).toBe(OTRO)
+    expect(x.encargo().familia).toBe('kit_mesa')
+  })
+  it('la mesa APAGADA: la pieza sigue por la línea de siempre (no queda sin producir)', async () => {
+    const x = montarPuerta({ mesaActiva: false })
+    await x.abrir()
+    expect(x.encargo().familia).toBe('kit_historias')
+    expect(x.encargo().sala_ref?.con_mesa).toBeUndefined()
+  })
+  it('si la plantilla de la mesa no se puede leer: la ruta de siempre (nunca frena la pieza)', async () => {
+    const x = montarPuerta({ leerFalla: true })
     await x.abrir()
     expect(x.encargo().familia).toBe('kit_historias')
   })
-  it('una REAPERTURA de una pieza nacida SIN mesa sigue sin mesa aunque la palanca esté encendida', async () => {
-    const x = montarPuerta({ palanca: ON })
+  it('sin la mesa conectada a la oficina: la ruta de siempre, EXACTO como antes, y no lee la plantilla con mesa', async () => {
+    const x = montarPuerta({ sinMesa: true })
+    await x.abrir()
+    expect(x.encargo().familia).toBe('kit_historias')
+    expect(x.leidas).not.toContain('kit_mesa')
+  })
+  it('una REAPERTURA de una pieza nacida SIN mesa sigue sin mesa', async () => {
+    const x = montarPuerta()
     await x.abrir({ reabrir_causa_corregida: 'se corrigió el largo del sobre-título' })
     expect(x.encargo().familia).toBe('kit_historias')
   })
   it('(m12 de CC7) una DEVOLUCIÓN DEL DUEÑO de una pieza nacida sin mesa también sigue sin mesa', async () => {
-    const x = montarPuerta({ palanca: ON })
+    const x = montarPuerta()
     await x.abrir({ cambios_del_dueno: CAMBIOS })
     expect(x.encargo().familia).toBe('kit_historias')
     expect(x.encargo().sala_ref?.con_mesa).toBeUndefined()
   })
   it('(🟡 2 de CC7) una pieza NACIDA en la mesa vuelve a la mesa: los tres que reabren (rehacer del tablero, cambios del dueño, rehacer fallidos de la cadena) mandan la familia del encargo, `kit_mesa`', async () => {
     for (const extra of [{ reabrir_causa_corregida: 'se corrigió el sobre-título' }, { cambios_del_dueno: CAMBIOS }]) {
-      // aunque la palanca se haya apagado después: la pieza termina en la línea que la abrió (encender kit_mesa incluye sumarla a familias_activas)
-      const x = montarPuerta({ palanca: undefined, familias: ['kit_historias', 'kit_mesa'] })
+      // la pieza termina en la línea que la abrió (encender kit_mesa incluye sumarla a familias_activas)
+      const x = montarPuerta({ familias: ['kit_historias', 'kit_mesa'] })
       await x.abrir({ familia: 'kit_mesa', ...extra })
       expect(x.encargo().familia).toBe('kit_mesa')
     }
@@ -259,7 +262,7 @@ describe('la mesa corta de las historias: 3 asientos y 1 ronda', () => {
     const plantillas: Record<string, { plantilla: Plantilla; activo: boolean }> = { kit_historias: { plantilla: KIT_HISTORIAS_CON_JEFATURA, activo: true }, kit_mesa: { plantilla: mesaPl, activo: true } }
     M.P.almacen.leerPlantilla = async (f) => plantillas[f] ?? null
     const MS = crearMesaEnMemoria(DIRECTORIO_VIVO)
-    M.P.mesa = { ...MS, configDeLaCadena: async (k: string) => (k === CLAVE_DE_LA_PALANCA ? ON : undefined) }
+    M.P.mesa = { ...MS }
     let r = await abrirEncargo(M.P, { cuerpo: { parte_id: PARTE, brief_id: 'BRF-0200', dry_run: true, familia: 'kit_historias' }, client_id: CLIENTE, target_step_id: TARGET_STEP_PRODUCIR })
     const id = String(r.cuerpo.encargo_id)
     expect(M.encargos.get(id)!.familia).toBe('kit_mesa')

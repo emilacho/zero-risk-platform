@@ -7,7 +7,6 @@
  */
 import { describe, expect, it } from 'vitest'
 import { abrirEncargo, puedeVolverALaMesa, recibirResultado } from '../orquestador'
-import { CLAVE_DE_LA_PALANCA } from '../mesa/con-mesa'
 import { traducirPieza, gruposDelKit, separarTitulosPegados, textoAntesDelPrimerTitulo, traeCamposDeLaPieza } from '../mesa/traductor'
 import { CONVENCION_DE_LA_PIEZA } from '../mesa/pedidos'
 import { armarLaminasDeKit, refDeCuadro, refDelElemento } from '../laminas'
@@ -184,7 +183,7 @@ function montar(o: { plantilla?: Plantilla; desacuerdos: string[][] }) {
   const plantillas: Record<string, { plantilla: Plantilla; activo: boolean }> = { kit_historias: { plantilla: KIT_HISTORIAS_CON_JEFATURA, activo: true }, kit_mesa: { plantilla: pl, activo: true } }
   M.P.almacen.leerPlantilla = async (f) => plantillas[f] ?? null
   const MS = crearMesaEnMemoria(DIRECTORIO)
-  M.P.mesa = { ...MS, configDeLaCadena: async (k: string) => (k === CLAVE_DE_LA_PALANCA ? { clientes: [CLIENTE] } : undefined) }
+  M.P.mesa = { ...MS }
   const revisiones: string[] = []
   M.P.jefatura = async (sobre) => { revisiones.push(sobre.payload.texto); return { estado: 'cerrada', salida: salida(o.desacuerdos[Math.min(revisiones.length - 1, o.desacuerdos.length - 1)]) } }
   return { M, MS, revisiones }
