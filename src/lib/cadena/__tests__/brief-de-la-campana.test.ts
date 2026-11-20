@@ -9,13 +9,15 @@ import { describe, expect, it } from 'vitest'
 import { AlmacenMemoria } from '../__fixtures__/almacen-memoria'
 import { clienteA, contextoDe } from '../__fixtures__/clientes'
 import type { Campana, EstrategiaGuardada } from '../almacen'
-import { bajarCitasNoLiterales, citasQueNoAparecen, insumosDelBrief, leerBriefCreativo } from '../brief-creativo'
+import { avisosDeCitasBajadas, bajarCitasNoLiterales, citasQueNoAparecen, insumosDelBrief, leerBriefCreativo } from '../brief-creativo'
 import { briefPedidoDeLaCampana, briefDeLaCampanaEnTexto, bloqueDelBriefDeLaCampana, FUENTE_DEL_BRIEF_DE_LA_CAMPANA, REGLA_DEL_BRIEF_DE_LA_CAMPANA, TITULO_DEL_BRIEF_DE_LA_CAMPANA, type PedidoDeLaCampana } from '../brief-de-la-campana'
 import { tareaDeEstrategia } from '../indicaciones'
 import { abrirCampana, estrategiaGuardar, estrategiaPreparar } from '../index'
 import { ponerNecesitaHumano } from '../nucleo'
 import { briefRevalidar } from '../revalidar'
-import { briefAbrir, conceptoAbrir, marcoDelBrief, marcoDelConcepto, recibirBrief, recibirConcepto } from '../mesas'
+import { BriefConBloqueos, escritorDeBrief } from '../../colaterales/escritores'
+import { artifactIdDeRegistro } from '../registro-en-jefatura'
+import { briefAbrir, conceptoAbrir, EN_REVISION_DE_REGISTRO, marcoDelBrief, recibirVueltaDeRegistro, marcoDelConcepto, recibirBrief, recibirConcepto } from '../mesas'
 import { LA_GRAN_IDEA_SIN_PLAN } from '../../oficina/mesa/pedidos'
 import { briefDeLaCampanaParaRevisar, TITULO_DEL_BRIEF_DE_LA_CAMPANA_PARA_REVISAR } from '../../jefatura/revision/carpeta-para-revisar'
 
@@ -37,9 +39,9 @@ const PEDIDO_DOS = pedido(FRASE_DOS)
 
 const wf = (campana: string, extra: Record<string, unknown> = {}) => ({ workflow_id: 'wf-cadena', workflow_execution_id: 'ex-1', campana_id: campana, ...extra })
 
-function almacen(): AlmacenMemoria {
+function almacen(o: { registro?: 'tu' } = {}): AlmacenMemoria {
   const al = new AlmacenMemoria({
-    contextos: { [A.clientId]: contextoDe(A) },
+    contextos: { [A.clientId]: { ...contextoDe(A), ...(o.registro ? { registro: o.registro } : {}) } },
     planes: { [A.clientId]: [{ plan_id: 'plan-1', fecha: '2026-10-08' }] },
     config: { flujos: ['wf-cadena'], puerta_workflow_id: 'wf-puerta', estado_cadena: 'ensayo', clientes_ensayo: [A.clientId], nuevo_orden: { clientes: [A.clientId] } },
     journeys: [{ journeyId: 'journey-1', clientId: A.clientId }],
@@ -308,6 +310,52 @@ describe('por los pasos reales: la estrategia y la revalidación', () => {
       const r = await briefRevalidar(al, wf(id), AHORA)
       expect(r.status, JSON.stringify(r.cuerpo)).toBe(200)
       expect(r.cuerpo.pasa).toBe(conPedido)
+    }
+  })
+})
+
+describe('lo que los sabotajes encontraron sin prueba (s6, s8, s22, s26)', () => {
+  const plan = contextoDe(A).planTexto
+  const campana = briefDeLaCampanaEnTexto(PEDIDO_UNO)!
+  it('s6 · a resumen baja SOLO la cita que no está en ninguna fuente; la del brief de la campaña queda literal', () => {
+    const md = conBloque(FRASE_UNO).replace('## Insight\nLa gente', '## Insight\n> «esta frase no está en ninguna fuente conocida»\nLa gente')
+    const b = bajarCitasNoLiterales(md, { plan, campana })
+    expect(b.texto).toContain(`> «${FRASE_UNO}»`)
+    expect(b.texto.split('*(resumen').length - 1).toBe(1)
+    expect(b.bajadas.map((x) => x.cita)).toEqual(['esta frase no está en ninguna fuente conocida'])
+  })
+  it('s8 · el aviso de una cita del brief de la campaña bajada a resumen nombra ESA fuente; la del plan, al plan', () => {
+    const [deLaCampana, delPlan] = avisosDeCitasBajadas([{ cita: FRASE_UNO, seccion: 'Mensaje', fuente: 'campana' }, { cita: FRASE_UNO, seccion: 'Mensaje', fuente: 'plan' }])
+    expect(deLaCampana).toContain(') no estaba literal en el brief de la campaña ·')
+    expect(deLaCampana).not.toContain('literal en el plan')
+    expect(delPlan).toContain(') no estaba literal en el plan ·')
+  })
+  it('s26 · el retoque de colaterales relee con el brief de la campaña: su cita pasa; sin pedido, bloquea', async () => {
+    for (const [c, pasa] of [[UNO, true], [SIN, false]] as const) {
+      const al = almacen()
+      expect((await briefAbrir(al, wf(c), AHORA)).status).toBe(200)
+      expect(await recibirBrief(al, entrega(c, BRIEF_BUENO), AHORA)).toMatchObject({ ok: true, estado: 'validada' })
+      const escribir = escritorDeBrief(al).escribirSiSigue(c, '1', deQueParte(FRASE_UNO), 'retoque de prueba')
+      if (pasa) expect(await escribir).toBe('2')
+      else await expect(escribir).rejects.toBeInstanceOf(BriefConBloqueos)
+    }
+  })
+  it('s22 · la vuelta de la revisión de registro relee con el brief de la campaña: la versión corregida queda validada', async () => {
+    process.env.INTERNAL_API_KEY = 'k-interna'
+    for (const [c, validada] of [[UNO, true], [DOS, false]] as const) {
+      const al = almacen({ registro: 'tu' })
+      al.retencion = async (tipo) => ({ retener: tipo === 'registro', motivo: tipo === 'registro' ? 'jefatura_activa' : 'tipo_no_activo' })
+      al.registro = async () => ({ estado: 'esperando', revision_id: 'rev-1' })
+      expect((await briefAbrir(al, wf(c), AHORA)).status).toBe(200)
+      const original = deQueParte(FRASE_UNO)
+      const r0 = await recibirBrief(al, entrega(c, original), AHORA)
+      if (!validada) { expect(r0).toMatchObject({ ok: true, estado: 'devuelta' }); continue }
+      expect(r0).toMatchObject({ ok: true, estado: EN_REVISION_DE_REGISTRO })
+      const corregido = original.replace('Cercano y directo, sin exclamaciones.', 'Cercano y directo, en tuteo, sin exclamaciones.')
+      const salida = { revision_id: 'rev-1', artifact_type: 'registro', artifact_id: artifactIdDeRegistro('brief', c, 1), resultado: 'limpia', marcas: {}, artefacto_final: { texto: corregido }, versiones: [{ etiqueta: 'A', paso: 'correccion:documento', texto: corregido, largo: corregido.length }] }
+      const r = await recibirVueltaDeRegistro(al, { marcas: {}, salida }, AHORA)
+      expect(r.cuerpo, JSON.stringify(r.cuerpo)).toMatchObject({ ok: true, estado: 'validada' })
+      expect((await al.ultimoBriefCreativo(c))!.texto_md).toBe(corregido)
     }
   })
 })
