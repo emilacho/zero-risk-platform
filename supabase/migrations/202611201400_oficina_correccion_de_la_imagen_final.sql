@@ -1,4 +1,4 @@
--- 202611201300 · PUNTO 3 · tanda 1 · LA CORRECCIÓN DE LA IMAGEN FINAL · CC1 · 20-nov · US$ 0 (escribir una plantilla no gasta)
+-- 202611201400 · PUNTO 3 (va después de 202611201330, la reserva por pieza de CC2, que necesita aplicada) · tanda 1 · LA CORRECCIÓN DE LA IMAGEN FINAL · CC1 · 20-nov · US$ 0 (escribir una plantilla no gasta)
 -- GO Lenovo a CC1 12:18Z (2026-11-20-GO-LENOVO-a-CC1-punto-3-dos-versiones-y-rondas) · diseño v3 de CC5 con las 9 condiciones de CC6 y CC7 · opción (a) de Lenovo para las vueltas.
 -- En las 3 mesas de imagen final (post, carrusel, kit) mete 3 pasos JUSTO DESPUÉS de `imagen` (por clave): corregir_imagen · editar_imagen · mirar_correccion.
 --   · la condición de los 3 es la MISMA del paso `imagen` de cada fila (se copia de la fila, no se escribe aquí)
@@ -8,7 +8,7 @@
 --   · limites.margen + 44 (14 × 3 + 2) · limites.vueltas_de_correccion_imagen = 3 · la indicación del creativo (la agrega al final de la suya, si tuviera)
 -- Solo toca lo suyo: no cambia ningún paso existente, ni topes, ni cota. Se niega con encargos vivos de esas familias, si una fila no tiene `imagen` seguido de `observar`,
 -- si ya tiene la corrección, o si la vuelta que la envuelve no es la de la jefatura con máximo 6 (el 14 sale de ahí). Los pasos literales los fija una prueba contra el código.
--- Reversa: supabase/reversas/202611201300_oficina_correccion_de_la_imagen_final_REVERSA.sql
+-- Reversa: supabase/reversas/202611201400_oficina_correccion_de_la_imagen_final_REVERSA.sql
 BEGIN;
 
 SET LOCAL lock_timeout = '5s';
@@ -23,28 +23,28 @@ DECLARE
   otras int;
 BEGIN
   IF EXISTS (SELECT 1 FROM public.oficina_encargos e WHERE e.estado IN ('abierto', 'en_paso') AND e.familia IN ('post_mesa', 'carrusel_mesa', 'kit_mesa')) THEN
-    RAISE EXCEPTION '202611201300: hay un encargo vivo de una mesa de imagen; esperar a que cierre';
+    RAISE EXCEPTION '202611201400: hay un encargo vivo de una mesa de imagen; esperar a que cierre';
   END IF;
   IF (SELECT count(*) FROM public.oficina_tipos_de_grupo WHERE tipo IN ('post_mesa', 'carrusel_mesa', 'kit_mesa')) <> 3 THEN
-    RAISE EXCEPTION '202611201300: no están las 3 filas de las mesas de imagen';
+    RAISE EXCEPTION '202611201400: no están las 3 filas de las mesas de imagen';
   END IF;
   FOR f IN SELECT tipo, pasos, limites FROM public.oficina_tipos_de_grupo WHERE tipo IN ('post_mesa', 'carrusel_mesa', 'kit_mesa') LOOP
     IF EXISTS (SELECT 1 FROM jsonb_array_elements(f.pasos) p WHERE p->>'clave' IN ('corregir_imagen', 'editar_imagen', 'mirar_correccion')) THEN
-      RAISE EXCEPTION '202611201300: % ya tiene la corrección de la imagen; no se toca', f.tipo;
+      RAISE EXCEPTION '202611201400: % ya tiene la corrección de la imagen; no se toca', f.tipo;
     END IF;
     IF (SELECT count(*) FROM jsonb_array_elements(f.pasos) p WHERE p->>'clave' = 'imagen') <> 1 THEN
-      RAISE EXCEPTION '202611201300: % no tiene exactamente un paso «imagen»', f.tipo;
+      RAISE EXCEPTION '202611201400: % no tiene exactamente un paso «imagen»', f.tipo;
     END IF;
     SELECT (o - 1)::int INTO i_img FROM jsonb_array_elements(f.pasos) WITH ORDINALITY z(p, o) WHERE z.p->>'clave' = 'imagen';
     IF f.pasos->(i_img + 1)->>'clave' IS DISTINCT FROM 'observar' THEN
-      RAISE EXCEPTION '202611201300: en % el paso después de «imagen» no es «observar»', f.tipo;
+      RAISE EXCEPTION '202611201400: en % el paso después de «imagen» no es «observar»', f.tipo;
     END IF;
     IF jsonb_typeof(f.limites->'margen') IS DISTINCT FROM 'number' OR jsonb_typeof(f.limites->'imagenes_generadas_max') IS DISTINCT FROM 'number' THEN
-      RAISE EXCEPTION '202611201300: % no tiene margen o imagenes_generadas_max numéricos', f.tipo;
+      RAISE EXCEPTION '202611201400: % no tiene margen o imagenes_generadas_max numéricos', f.tipo;
     END IF;
     -- va DESPUÉS de la reserva por pieza de CC2 (la fila: #1249 → la reserva → #1248): sin su dato no hay piso que subir
     IF jsonb_typeof(f.limites->'reserva_por_pieza_usd') IS DISTINCT FROM 'number' THEN
-      RAISE EXCEPTION '202611201300: % no tiene limites.reserva_por_pieza_usd (va después de la migración de la reserva por pieza)', f.tipo;
+      RAISE EXCEPTION '202611201400: % no tiene limites.reserva_por_pieza_usd (va después de la migración de la reserva por pieza)', f.tipo;
     END IF;
     -- las vueltas que ENVUELVEN a la corrección: salen después de «imagen» y vuelven a un paso antes de él (en las filas leídas: solo la jefatura a la mesa, máximo 6)
     SELECT coalesce(sum((z.p->'vuelve_a'->>'max')::numeric), 0), count(*) INTO envuelve, otras
@@ -52,7 +52,7 @@ BEGIN
       WHERE z.p ? 'vuelve_a' AND (z.o - 1) > i_img
         AND (SELECT (y.o - 1) FROM jsonb_array_elements(f.pasos) WITH ORDINALITY y(p, o) WHERE y.p->>'clave' = z.p->'vuelve_a'->>'paso') < i_img;
     IF envuelve <> 6 OR otras <> 1 OR NOT EXISTS (SELECT 1 FROM jsonb_array_elements(f.pasos) p WHERE p->>'clave' = 'jefatura' AND p->'vuelve_a'->>'paso' = 'mesa' AND (p->'vuelve_a'->>'max')::int = 6) THEN
-      RAISE EXCEPTION '202611201300: en % la vuelta que envuelve a la corrección no es solo la de la jefatura con máximo 6 (el techo 14 sale de ahí); medir de nuevo', f.tipo;
+      RAISE EXCEPTION '202611201400: en % la vuelta que envuelve a la corrección no es solo la de la jefatura con máximo 6 (el techo 14 sale de ahí); medir de nuevo', f.tipo;
     END IF;
   END LOOP;
 END $$;
@@ -98,14 +98,14 @@ BEGIN
     SELECT (o - 1)::int INTO i_img FROM jsonb_array_elements(f.pasos) WITH ORDINALITY z(p, o) WHERE z.p->>'clave' = 'imagen';
     IF f.pasos->(i_img + 1)->>'clave' IS DISTINCT FROM 'corregir_imagen' OR f.pasos->(i_img + 2)->>'clave' IS DISTINCT FROM 'editar_imagen'
        OR f.pasos->(i_img + 3)->>'clave' IS DISTINCT FROM 'mirar_correccion' OR f.pasos->(i_img + 4)->>'clave' IS DISTINCT FROM 'observar' THEN
-      RAISE EXCEPTION '202611201300: en % los pasos no quedaron entre «imagen» y «observar»', f.tipo;
+      RAISE EXCEPTION '202611201400: en % los pasos no quedaron entre «imagen» y «observar»', f.tipo;
     END IF;
     IF f.pasos->(i_img + 1)->'condicion' IS DISTINCT FROM f.pasos->i_img->'condicion' OR f.pasos->(i_img + 3)->'condicion' IS DISTINCT FROM f.pasos->i_img->'condicion' THEN
-      RAISE EXCEPTION '202611201300: en % la condición no es la de «imagen»', f.tipo;
+      RAISE EXCEPTION '202611201400: en % la condición no es la de «imagen»', f.tipo;
     END IF;
     IF (f.pasos->(i_img + 2)->>'tope_usd')::numeric <> round((f.limites->>'imagenes_generadas_max')::numeric * 0.07, 4)
        OR (f.pasos->(i_img + 3)->>'tope_usd')::numeric <> round((f.limites->>'imagenes_generadas_max')::numeric * 0.26, 4) OR (f.limites->>'vueltas_de_correccion_imagen')::int <> 3 THEN
-      RAISE EXCEPTION '202611201300: en % el tope de la edición o las vueltas no quedaron', f.tipo;
+      RAISE EXCEPTION '202611201400: en % el tope de la edición o las vueltas no quedaron', f.tipo;
     END IF;
   END LOOP;
 END $$;
