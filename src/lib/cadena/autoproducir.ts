@@ -41,7 +41,7 @@ export interface ParteGuardada {
 export interface SobreDeProducir {
   source: typeof FUENTE_DEL_SOBRE
   intent: typeof INTENCION_DEL_SOBRE
-  payload: { parte_id: string; brief_id: string; dry_run: boolean; familia?: string; fila_id?: string; fecha?: string; hora?: string; desde_worker?: string }
+  payload: { parte_id: string; brief_id: string; dry_run: boolean; familia?: string; fila_id?: string; fecha?: string; hora?: string; desde_worker?: string; /** 19-nov · varias campañas: la campaña del parte (el encargo la guarda) */ campana_id?: string }
   idempotency_key: string
   logical_period: string
   tenant_id: string
@@ -59,7 +59,7 @@ export const llaveDeProducir = (parteId: string, briefId: string): string => `${
 export const llaveDeReintento = (parteId: string, briefId: string, n: number): string => `${llaveDeProducir(parteId, briefId)}:r${n}`
 
 /** un sobre por brief · sin `familia` si la fila no tiene sala o la familia viene mal escrita (nunca se inventa) · dedup por `brief_id` · puro */
-export function sobresDeProducir(parte: ParteGuardada, o: { dry_run: boolean; tenant_id?: string; correlation_id?: string | null; desde_worker?: string; /** r79 · D5 · fila_id → fecha y hora del calendario */ cuando?: ReadonlyMap<string, { fecha: string; hora: string | null }> }): { sobres: SobreDeProducir[]; omitidos: Omitido[] } {
+export function sobresDeProducir(parte: ParteGuardada, o: { dry_run: boolean; /** 19-nov · varias campañas: la campaña del parte (el encargo la guarda) */ campana_id?: string; tenant_id?: string; correlation_id?: string | null; desde_worker?: string; /** r79 · D5 · fila_id → fecha y hora del calendario */ cuando?: ReadonlyMap<string, { fecha: string; hora: string | null }> }): { sobres: SobreDeProducir[]; omitidos: Omitido[] } {
   const sobres: SobreDeProducir[] = [], omitidos: Omitido[] = [], vistos = new Set<string>()
   for (const b of parte.briefs) {
     const id = typeof b.brief_id === 'string' ? b.brief_id.trim() : ''
@@ -70,7 +70,7 @@ export function sobresDeProducir(parte: ParteGuardada, o: { dry_run: boolean; te
     const familia = typeof b.familia === 'string' && RE_FAMILIA.test(b.familia.trim()) ? b.familia.trim() : null
     sobres.push({
       source: FUENTE_DEL_SOBRE, intent: INTENCION_DEL_SOBRE,
-      payload: { parte_id: parte.id, brief_id: id, dry_run: o.dry_run, ...(familia ? { familia } : {}), ...(b.fila_id ? { fila_id: b.fila_id } : {}), ...(b.fila_id && o.cuando?.get(b.fila_id) ? { fecha: o.cuando.get(b.fila_id)!.fecha, ...(o.cuando.get(b.fila_id)!.hora ? { hora: o.cuando.get(b.fila_id)!.hora! } : {}) } : {}), ...(o.desde_worker ? { desde_worker: o.desde_worker } : {}) },
+      payload: { parte_id: parte.id, brief_id: id, dry_run: o.dry_run, ...(familia ? { familia } : {}), ...(b.fila_id ? { fila_id: b.fila_id } : {}), ...(b.fila_id && o.cuando?.get(b.fila_id) ? { fecha: o.cuando.get(b.fila_id)!.fecha, ...(o.cuando.get(b.fila_id)!.hora ? { hora: o.cuando.get(b.fila_id)!.hora! } : {}) } : {}), ...(o.desde_worker ? { desde_worker: o.desde_worker } : {}), ...(o.campana_id ? { campana_id: o.campana_id } : {}) },
       idempotency_key: llaveDeProducir(parte.id, id),
       logical_period: `parte:${parte.id}`,
       tenant_id: o.tenant_id ?? parte.client_id,
@@ -208,7 +208,7 @@ export async function filasAutoproducir(al: Almacen, cuerpo: Record<string, unkn
   const cuando = new Map<string, { fecha: string; hora: string | null }>()
   let filasDelCalendario: Awaited<ReturnType<Almacen['filas']>> | null = null
   try { filasDelCalendario = await al.filas(c.id, Math.max(1, await al.ultimaVersionDeCalendario(c.id))); for (const f of filasDelCalendario) if (f.fecha) cuando.set(f.id, { fecha: f.fecha, hora: f.hora ?? null }) } catch { /* sin filas legibles: los sobres salen sin fecha (y lo real no suelta nada: el tope necesita el calendario) */ }
-  const { sobres: todos, omitidos } = sobresDeProducir(parte, { dry_run: s.seco, correlation_id: corr, desde_worker: cadena(cuerpo.workflow_id) ?? undefined, cuando })
+  const { sobres: todos, omitidos } = sobresDeProducir(parte, { dry_run: s.seco, campana_id: campanaId, correlation_id: corr, desde_worker: cadena(cuerpo.workflow_id) ?? undefined, cuando })
   // 10-nov · TOPE POR CAMPAÑA · solo lo real gasta: el ensayo no lo consulta
   let sobres = todos
   let tope: { decision: DecisionDelTope['tipo'] | 'gasto_ilegible'; tope?: number; gastado?: number; comprometido?: number; estimado?: number; retenidas: string[]; aviso?: unknown } | null = null

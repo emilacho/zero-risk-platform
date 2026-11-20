@@ -15,13 +15,25 @@ import { estadoInicial, type Plantilla } from './tipos'
 export type Db = { from(tabla: string): any }
 type Fila = Record<string, unknown>
 const DUPLICADO = '23505'
+/** la campaña pedida no existe en cadena_campanas (violación de FK) */
+const SIN_CAMPANA = '23503'
 
 function ok<T>(r: { data: T; error: { message: string; code?: string } | null }, que: string): T {
   if (r.error) throw new Error(`${que}: ${r.error.message}`)
   return r.data
 }
+/** 19-nov · la campaña de la fila del calendario que originó la pieza (`sala_ref.fila.id`) · una lectura que falla o no encuentra = null: nunca frena el encargo */
+export async function campanaDeLaFila(db: { from: (t: string) => any }, salaRef: Record<string, unknown> | null | undefined): Promise<string | null> {
+  const fila = salaRef && typeof salaRef.fila === 'object' && salaRef.fila ? (salaRef.fila as Record<string, unknown>).id : null
+  if (typeof fila !== 'string' || !fila) return null
+  try {
+    const r = await db.from('cadena_calendario_filas').select('campana_id').eq('id', fila).maybeSingle()
+    return !r.error && typeof r.data?.campana_id === 'string' ? r.data.campana_id : null
+  } catch { return null }
+}
+
 const aEncargo = (f: Fila): Encargo => ({
-  id: String(f.id), client_id: String(f.client_id), parte_id: String(f.parte_id), brief_id: String(f.brief_id), tipo_de_grupo: String(f.tipo_de_grupo), familia: String(f.familia),
+  id: String(f.id), client_id: String(f.client_id), ...(typeof f.campana_id === 'string' ? { campana_id: f.campana_id } : {}), parte_id: String(f.parte_id), brief_id: String(f.brief_id), tipo_de_grupo: String(f.tipo_de_grupo), familia: String(f.familia),
   version_encargo: Number(f.version_encargo ?? 1), estado: f.estado as Encargo['estado'],
   estado_del_motor: (f.estado_del_motor && typeof f.estado_del_motor === 'object' && Object.keys(f.estado_del_motor as object).length ? f.estado_del_motor : estadoInicial()) as Encargo['estado_del_motor'],
   con_desacuerdo: f.con_desacuerdo === true, imagen_generada: f.imagen_generada === true, tope_usd: Number(f.tope_usd ?? 10), gasto_usd: Number(f.gasto_usd ?? 0),
@@ -83,8 +95,15 @@ export function almacenDeSupabase(db: Db): Almacen {
         version = n.dry_run ? d.version : Math.max(d.version, Number(mayor?.version_encargo ?? 1) + 1)
         if (d.por_causa) salaRef = { ...(n.sala_ref ?? {}), reapertura: { causa_corregida: d.por_causa, desde_version: Number(ultimo.version_encargo ?? 1), estado_anterior: String(ultimo.estado), gasto_anterior_usd: Number(ultimo.gasto_usd ?? 0) } }
       }
-      const fila = { client_id: n.client_id, parte_id: n.parte_id, brief_id: n.brief_id, tipo_de_grupo: n.tipo_de_grupo, familia: n.familia, version_encargo: version, estado: 'abierto', estado_del_motor: n.estado_del_motor, tope_usd: n.tope_usd, dry_run: n.dry_run, prueba: n.prueba, sala_ref: salaRef }
-      const r = await db.from('oficina_encargos').insert(fila).select('*').single()
+      // 19-nov · VARIAS CAMPAÑAS · de qué campaña es: la del sobre · si no viene, la de la versión anterior del mismo brief · si tampoco, la de su fila del calendario
+      const campana = n.campana_id ?? (typeof mayor?.campana_id === 'string' ? mayor.campana_id : null) ?? (await campanaDeLaFila(db, salaRef))
+      const fila = { client_id: n.client_id, ...(campana ? { campana_id: campana } : {}), parte_id: n.parte_id, brief_id: n.brief_id, tipo_de_grupo: n.tipo_de_grupo, familia: n.familia, version_encargo: version, estado: 'abierto', estado_del_motor: n.estado_del_motor, tope_usd: n.tope_usd, dry_run: n.dry_run, prueba: n.prueba, sala_ref: salaRef }
+      let r = await db.from('oficina_encargos').insert(fila).select('*').single()
+      // 19-nov · 🟡 de CC7 en #1245: la campaña es una ETIQUETA, nunca frena una pieza · si la campaña no existe (FK, 23503) el encargo nace igual, sin campaña
+      if (r.error?.code === SIN_CAMPANA && campana) {
+        const { campana_id: _sin, ...sinCampana } = fila as Record<string, unknown>
+        r = await db.from('oficina_encargos').insert(sinCampana).select('*').single()
+      }
       if (!r.error) return { ok: true as const, encargo: aEncargo(r.data as Fila), nuevo: true }
       if (r.error.code === DUPLICADO) {
         const e = await db.from('oficina_encargos').select('*').eq('parte_id', n.parte_id).eq('brief_id', n.brief_id).eq('tipo_de_grupo', n.tipo_de_grupo).eq('version_encargo', version).limit(1)

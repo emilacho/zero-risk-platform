@@ -159,7 +159,7 @@ export async function abrirEncargo(P: Puertos, entrada: { cuerpo: unknown; clien
   const s: Sobre = v.sobre
   const tope = topeDelEncargo
   const salaBase = ruta ? { ...(salaRefConFila(entrada.sala_ref, s) ?? {}), con_mesa: { de: dec.familia, a: ruta.familia } } : salaRefConFila(entrada.sala_ref, s)
-  const c = await P.almacen.crearEncargo({ client_id: entrada.client_id, parte_id: s.parte_id, brief_id: s.brief_id, tipo_de_grupo: pl.plantilla.tipo, familia: ruta ? ruta.familia : dec.familia, tope_usd: tope, dry_run: s.dry_run, prueba: !!entrada.prueba, sala_ref: duracion ? { ...(salaBase ?? {}), [CLAVE_DE_LA_DURACION]: duracion } : salaBase, estado_del_motor: estadoInicial(), ...(s.reabrir_causa_corregida ? { reabrir_causa: s.reabrir_causa_corregida } : {}), ...(s.cambios_del_dueno ? { cambios_del_dueno: s.cambios_del_dueno } : {}) })
+  const c = await P.almacen.crearEncargo({ client_id: entrada.client_id, campana_id: s.campana_id ?? null, parte_id: s.parte_id, brief_id: s.brief_id, tipo_de_grupo: pl.plantilla.tipo, familia: ruta ? ruta.familia : dec.familia, tope_usd: tope, dry_run: s.dry_run, prueba: !!entrada.prueba, sala_ref: duracion ? { ...(salaBase ?? {}), [CLAVE_DE_LA_DURACION]: duracion } : salaBase, estado_del_motor: estadoInicial(), ...(s.reabrir_causa_corregida ? { reabrir_causa: s.reabrir_causa_corregida } : {}), ...(s.cambios_del_dueno ? { cambios_del_dueno: s.cambios_del_dueno } : {}) })
   if (!c.ok) return r(500, { error: 'almacen_error', detalle: c.error })
   if (!c.nuevo) return r(200, { accion: 'ya_existia', encargo_id: c.encargo.id, estado: c.encargo.estado })
   const sal = await avanzar(P, c.encargo.id)

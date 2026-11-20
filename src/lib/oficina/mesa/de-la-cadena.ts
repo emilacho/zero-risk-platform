@@ -105,7 +105,7 @@ export async function abrirMesaDeLaCadena(P: Puertos, s: SobreDeLaCadena, avanza
   const topeDeLaPlantilla = pl.plantilla.limites.tope_encargo_usd ?? TOPE_POR_OMISION_USD[s.tipo_de_mesa]
   const tope = s.tope_usd !== undefined ? Math.min(topeDeLaPlantilla, s.tope_usd) : topeDeLaPlantilla
   const c = await P.almacen.crearEncargo({
-    client_id: s.client_id, parte_id: s.campana_id, brief_id: briefIdDeLaCadena(s.tipo_de_mesa, s.campana_id, s.version), tipo_de_grupo: pl.plantilla.tipo, familia,
+    client_id: s.client_id, campana_id: s.campana_id, parte_id: s.campana_id, brief_id: briefIdDeLaCadena(s.tipo_de_mesa, s.campana_id, s.version), tipo_de_grupo: pl.plantilla.tipo, familia,
     tope_usd: tope, dry_run: s.dry_run, prueba: false, sala_ref: { origen: 'cadena', tipo_de_mesa: s.tipo_de_mesa, campana_id: s.campana_id, version: s.version }, estado_del_motor: estado,
   })
   if (!c.ok) return r(500, { error: 'almacen_error', detalle: c.error })
