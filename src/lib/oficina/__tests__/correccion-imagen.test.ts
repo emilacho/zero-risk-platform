@@ -341,6 +341,16 @@ describe('3 · la mirada de otro proveedor decide', () => {
     expect(c.imagenes.hook.motivo_de_cierre).toBe('fallo_la_edicion')
     expect(c.imagenes.cierre.motivo_de_cierre).toBe('sin_lectura')
   })
+  it('🔴 sin lectura y CON edición nueva: sale la BASE (no se elige a ciegas la editada) y una persona mira (CC6 m13 · #1250)', async () => {
+    const { P } = puertos({ mirada: () => 'no sé' })
+    const r = await mirarCorreccion(P, enc(paraMirar({ hook: { base: 1, cambios: 'barro' } }, { hook: nueva('https://img.test/editada.png') })), plConCorreccion())
+    const h = corr(r).imagenes.hook
+    expect(h.motivo_de_cierre).toBe('sin_lectura')
+    expect(h.versiones.map((v) => v.url)).toContain('https://img.test/editada.png')
+    expect(h.mejor).toBe(1)
+    expect(h.versiones[h.mejor].url).not.toBe('https://img.test/editada.png')
+    expect(corr(r).filas.find((f) => f.ref === 'hook')).toMatchObject({ elegida: 1, version_nueva: 2, motivo_de_cierre: 'sin_lectura' })
+  })
   it('🔴 registro: una fila por (imagen, vuelta) con su motivo, su llave y «donde: final»', async () => {
     const { P } = puertos()
     const r = await mirarCorreccion(P, enc(paraMirar({ hook: { base: 1, cambios: 'barro' }, cierre: { base: 0, cambios: '' } }, { hook: nueva('n') })), plConCorreccion())
@@ -494,6 +504,46 @@ describe('la migración 202611201400 dice lo mismo que el código', () => {
       const sql = await leer(r)
       expect(sql).toMatch(/SET LOCAL lock_timeout = '5s';\nLOCK TABLE public\.oficina_encargos IN SHARE MODE;/)
       expect(sql).toMatch(/e\.estado IN \('abierto', 'en_paso'\) AND e\.familia IN \('post_mesa', 'carrusel_mesa', 'kit_mesa'\)/)
+      // la guarda de vivos FRENA (excepción), no solo avisa (CC6 m14 · m15)
+      expect(sql).toMatch(/e\.estado IN \('abierto', 'en_paso'\) AND e\.familia IN \('post_mesa', 'carrusel_mesa', 'kit_mesa'\)\) THEN\n\s*RAISE EXCEPTION '[^']*hay un encargo vivo/)
+      // y todo va en una transacción que se confirma al final (CC6 m20)
+      expect(sql).toMatch(/^BEGIN;$/m)
+      expect(sql.trimEnd().endsWith('COMMIT;')).toBe(true)
     }
+  })
+  it('🔴 la ida exige la reserva por pieza de CC2 y FRENA sin ella (CC6 m19)', async () => {
+    const sql = await leer('supabase/migrations/202611201400_oficina_correccion_de_la_imagen_final.sql')
+    expect(sql).toMatch(/IF jsonb_typeof\(f\.limites->'reserva_por_pieza_usd'\) IS DISTINCT FROM 'number' THEN\n\s*RAISE EXCEPTION '[^']*no tiene limites\.reserva_por_pieza_usd/)
+  })
+})
+
+describe('el adaptador real de la edición (CC6 m24 · m25 · #1250)', () => {
+  const ENV = { baseUrl: 'https://app.test', internalKey: 'k', openaiKey: 'sk', revisorModelo: 'm', revisorPrecioEntrada: 1, revisorPrecioSalida: 1, slackToken: 'x', bucket: 'b' }
+  it('🔴 `imagen` con llave manda `caller: llave` en el cuerpo (sin eso el reuso nunca encuentra nada y cada repetición vuelve a pagar); sin llave no manda caller', async () => {
+    const { crearPuertos } = await import('../adaptadores')
+    const { DbFalsa } = await import('./dbfalsa')
+    const cuerpos: Array<Record<string, unknown>> = []
+    const f = (async (_u: string | URL | Request, init?: RequestInit) => { cuerpos.push(JSON.parse(String(init?.body))); return new Response(JSON.stringify({ image_url: 'https://b.test/1.png', generation_id: 'g1', cost_usd: 0.01 }), { status: 200 }) }) as typeof fetch
+    const P = crearPuertos(new DbFalsa() as never, ENV as never, f)
+    const llave = llaveDeLaEdicion('enc', 1, 'hook', 1)
+    await P.imagen({ prompt: 'p', client_id: 'c', encargo_id: 'enc', dry_run: false, foto: { id: 'b', url: 'https://f.test/b.jpg' }, otras_fotos: [], llave } as never)
+    expect(cuerpos.at(-1)).toMatchObject({ caller: llave })
+    await P.imagen({ prompt: 'p', client_id: 'c', encargo_id: 'enc', dry_run: false, foto: null, otras_fotos: [] } as never)
+    expect(cuerpos.at(-1)).not.toHaveProperty('caller')
+  })
+  it('🔴 `imagenYaPedida` filtra por caller = llave, por cliente y por status completed', async () => {
+    const { crearPuertos } = await import('../adaptadores')
+    const { DbFalsa } = await import('./dbfalsa')
+    const llave = llaveDeLaEdicion('enc', 1, 'hook', 1)
+    const db = new DbFalsa().semilla('agent_image_generations', [
+      { id: 'otro-cliente', caller: llave, client_id: 'otro', status: 'completed', image_url: 'https://b.test/otro.png', cost_usd: 0.01, created_at: '2026-11-20T10:00:00Z' },
+      { id: 'pendiente', caller: llave, client_id: 'c', status: 'pending', image_url: 'https://b.test/pend.png', cost_usd: 0.01, created_at: '2026-11-20T10:01:00Z' },
+      { id: 'otra-llave', caller: 'ed:otra', client_id: 'c', status: 'completed', image_url: 'https://b.test/otra.png', cost_usd: 0.01, created_at: '2026-11-20T10:02:00Z' },
+      { id: 'la-buena', caller: llave, client_id: 'c', status: 'completed', image_url: 'https://b.test/buena.png', cost_usd: 0.012, created_at: '2026-11-20T10:03:00Z' },
+    ])
+    const P = crearPuertos(db as never, ENV as never, (async () => new Response('{}')) as typeof fetch)
+    expect(await P.imagenYaPedida!({ llave, client_id: 'c' })).toEqual({ url: 'https://b.test/buena.png', generation_id: 'la-buena', costo_usd: 0.012 })
+    expect(await P.imagenYaPedida!({ llave, client_id: 'nadie' })).toBeNull()
+    expect(await P.imagenYaPedida!({ llave: 'ed:no-existe', client_id: 'c' })).toBeNull()
   })
 })
