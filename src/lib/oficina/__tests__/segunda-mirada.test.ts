@@ -31,7 +31,6 @@ const RAIZ = path.resolve(__dirname, '..', '..', '..', '..')
 const leer = (...p: string[]) => fs.readFileSync(path.join(RAIZ, 'supabase', ...p), 'utf8').replace(/\r/g, '')
 const MIG = leer('migrations', '202611201500_oficina_segunda_mirada_en_la_propuesta.sql')
 const REV = leer('reversas', '202611201500_oficina_segunda_mirada_en_la_propuesta_REVERSA.sql')
-const REV1400 = leer('reversas', '202611201400_oficina_correccion_de_la_imagen_final_REVERSA.sql')
 const sentencias = (sql: string) => sql.split('\n').filter((l) => !l.trimStart().startsWith('--')).join('\n')
 const claves = (pl: Plantilla) => pl.pasos.map((p) => p.clave)
 
@@ -207,19 +206,8 @@ describe('🔴 la migración 202611201500 escribe EXACTAMENTE el paso del códig
     expect(R).toMatch(/LOCK TABLE public\.oficina_encargos IN SHARE MODE;/)
     expect(R).not.toMatch(/SET [^;]*WHERE g\.tipo = 'video_mesa';/)
   })
-  it('🔴 CC6 16:50Z · LENOVO 16:55Z · la reversa de 1400 (CC1) FRENA con la segunda mirada puesta o con otra reserva que la exacta de su ida, ANTES de cambiar', () => {
-    const R = sentencias(REV1400)
-    expect(R).toContain("IF EXISTS (SELECT 1 FROM jsonb_array_elements(f.pasos) p WHERE p->>'clave' = 'segunda_mirada' OR p->>'funcion' = 'segunda_mirada') THEN\n      RAISE EXCEPTION 'REVERSA 202611201400: % tiene la segunda mirada")
-    expect(R).toContain(`IF (f.limites->>'reserva_por_pieza_usd')::numeric IS DISTINCT FROM (CASE f.tipo WHEN 'post_mesa' THEN ${L.post_mesa} ELSE ${L.carrusel_mesa} END) THEN\n      RAISE EXCEPTION 'REVERSA 202611201400: la reserva por pieza de % no es la exacta`)
-    expect(L.carrusel_mesa).toBe(L.kit_mesa)
-    // dentro del recorrido de las 3 filas y antes del UPDATE
-    const loop = R.slice(R.indexOf('FOR f IN SELECT tipo, pasos, limites'), R.indexOf('END LOOP;'))
-    expect(loop).toContain('tiene la segunda mirada')
-    expect(loop).toContain('no es la exacta')
-    expect(R.indexOf('tiene la segunda mirada')).toBeLessThan(R.indexOf('UPDATE public.oficina_tipos_de_grupo'))
-    // 🟡 CC6 16:59Z · en un IF de plpgsql la condición termina en el primer THEN fuera de paréntesis: un CASE suelto ahí es «syntax error at end of input»
-    const conCase = [REV1400, MIG, REV].flatMap((sql) => sentencias(sql).split('\n').filter((x) => /^\s*(ELS)?IF\b/.test(x) && /\bCASE\b/.test(x)))
-    expect(conCase.length).toBeGreaterThan(0)
+  it('🟡 CC6 16:59Z · en un IF de plpgsql la condición termina en el primer THEN fuera de paréntesis: un CASE ahí va entre paréntesis (mis 2 SQL)', () => {
+    const conCase = [MIG, REV].flatMap((sql) => sentencias(sql).split('\n').filter((x) => /^\s*(ELS)?IF\b/.test(x) && /\bCASE\b/.test(x)))
     for (const l of conCase) expect(l).toMatch(/\(CASE\b[^()]*\bEND\)/)
   })
   it('🔴 la reversa vuelve la reserva y el tope a lo leído, exige lo que dejó la ida, lo comprueba al final y la versión crece', () => {

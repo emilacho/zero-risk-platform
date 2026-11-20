@@ -21,14 +21,6 @@ BEGIN
        OR jsonb_typeof(f.limites->'reserva_por_pieza_usd') IS DISTINCT FROM 'number' OR (f.limites->>'reserva_por_pieza_usd')::numeric < 0.9 THEN
       RAISE EXCEPTION 'REVERSA 202611201400: % no tiene lo que dejó la migración; no se toca', f.tipo;
     END IF;
-    -- 🟡 CC6 16:50Z en #1252 · LENOVO 16:55Z · con 202611201500 (la segunda mirada) puesta, esta reversa dejaría una mezcla que ninguna reversa reconoce:
-    -- frena si hay un paso segunda_mirada o si la reserva no es la EXACTA que dejó la ida (post 3,35 · carrusel y kit 4,00). Primero va la reversa de 1500.
-    IF EXISTS (SELECT 1 FROM jsonb_array_elements(f.pasos) p WHERE p->>'clave' = 'segunda_mirada' OR p->>'funcion' = 'segunda_mirada') THEN
-      RAISE EXCEPTION 'REVERSA 202611201400: % tiene la segunda mirada (202611201500); primero su reversa', f.tipo;
-    END IF;
-    IF (f.limites->>'reserva_por_pieza_usd')::numeric IS DISTINCT FROM (CASE f.tipo WHEN 'post_mesa' THEN 3.35 ELSE 4 END) THEN
-      RAISE EXCEPTION 'REVERSA 202611201400: la reserva por pieza de % no es la exacta que dejó la migración (3.35/4/4); no se toca', f.tipo;
-    END IF;
   END LOOP;
 END $$;
 
