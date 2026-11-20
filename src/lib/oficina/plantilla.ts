@@ -145,7 +145,8 @@ export function validarPlantilla(p: Plantilla): string[] {
       // 20-nov · punto 3 (LENOVO, opción (a)): una vuelta que el código salta si no cabe y que va ANIDADA en otras lleva un techo de seguridad: hasta 3 por cada pasada
       //   de las que la envuelven (1 + sus máximos). La cuenta que decide la lleva el código; las demás vueltas siguen limitadas a 1, 2 o 3
       const techoAnidado = t >= 0 && t <= i && (VUELTAS_QUE_SE_SALTAN_SI_NO_CABEN.claves as readonly string[]).includes(s.clave)
-        ? 3 * (1 + p.pasos.reduce((acc, x, k) => { const tx = x.vuelve_a ? p.pasos.findIndex((y) => y.clave === x.vuelve_a!.paso) : -1; return tx >= 0 && tx < t && k > i ? acc + Number(x.vuelve_a!.max) : acc }, 0))
+        // tanda 2 (video): una vuelta se puede partir en turnos (`limites.turnos_de_correccion_imagen`, dato; sin dato, 1): el techo es 3 por turno
+        ? 3 * Math.max(1, Math.floor(Number((lim as { turnos_de_correccion_imagen?: unknown } | undefined)?.turnos_de_correccion_imagen ?? 1)) || 1) * (1 + p.pasos.reduce((acc, x, k) => { const tx = x.vuelve_a ? p.pasos.findIndex((y) => y.clave === x.vuelve_a!.paso) : -1; return tx >= 0 && tx < t && k > i ? acc + Number(x.vuelve_a!.max) : acc }, 0))
         : 3
       if (!Number.isInteger(v.max) || v.max < 1 || v.max > techoAnidado) e.push(techoAnidado > 3 ? `${d}: vuelve_a.max debe estar entre 1 y ${techoAnidado} (3 por cada pasada de las vueltas que la envuelven)` : `${d}: vuelve_a.max debe ser 1, 2 o 3`)
       else sumaVueltas += v.max

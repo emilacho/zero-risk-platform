@@ -5,13 +5,13 @@
 import { describe, expect, it } from 'vitest'
 import {
   ARTEFACTO_CORRECCIONES_DE_IMAGEN, ARTEFACTO_EDICIONES_DE_IMAGEN, ARTEFACTO_PEDIDO_DE_CORRECCION, MARGEN_DE_LA_CORRECCION, PASO_CORREGIR_IMAGEN, PASO_EDITAR_IMAGEN, PASO_MIRAR_CORRECCION,
-  VUELTAS_DE_CORRECCION_IMAGEN, conCorreccionDeImagen, correccionesVigentes, editarImagenes, fotosDeLaEdicion, imagenesConLaMejor, leerLaMirada, llaveDeLaEdicion, mirarCorreccion,
+  VUELTAS_DE_CORRECCION_IMAGEN, cabeOtraVuelta, conCorreccionDeImagen, correccionesVigentes, editarImagenes, fotosDeLaEdicion, imagenesConLaMejor, leerLaMirada, llaveDeLaEdicion, mirarCorreccion,
   pedidoDeLaCorreccion, saltoDeLaCorreccion, sinLecturaDeLaCorreccion, tareaDeLaCorreccion, vistasDe, type Correcciones,
 } from '../mesa/correccion-imagen'
 import { validarPlantilla } from '../plantilla'
 import { procesarSalida } from '../salida'
 import { CONTRATOS_EN_TEXTO } from '../pedidos'
-import { VUELTAS_QUE_SE_SALTAN_SI_NO_CABEN } from '../topes-por-duracion'
+import { VUELTAS_QUE_SE_SALTAN_SI_NO_CABEN, costoDeVolver, loQueSigueDespuesDelPaso } from '../topes-por-duracion'
 import type { Estado, Plantilla } from '../tipos'
 
 const art = (datos: unknown) => ({ version: 1, version_consumida: 0, datos })
@@ -613,5 +613,24 @@ describe('el adaptador real de la edición (CC6 m24 · m25 · #1250)', () => {
     expect(await P.imagenYaPedida!({ llave, client_id: 'c' })).toEqual({ url: 'https://b.test/buena.png', generation_id: 'la-buena', costo_usd: 0.012 })
     expect(await P.imagenYaPedida!({ llave, client_id: 'nadie' })).toBeNull()
     expect(await P.imagenYaPedida!({ llave: 'ed:no-existe', client_id: 'c' })).toBeNull()
+  })
+})
+
+describe('tanda 1 · la corrección guarda lo que sigue (CC6, riesgo 5.5 de la corrida conjunta · LENOVO 18:45Z: imagen y video juntos)', () => {
+  it('🔴 en las 3 mesas: en la franja de antes (cabía la vuelta sola, no la vuelta más lo que sigue) ya NO vuelve; con lo justo, sí', async () => {
+    const { POST_MESA_CON_CORRECCION, CARRUSEL_MESA_CON_CORRECCION, KIT_MESA_CON_CORRECCION } = await import('../plantillas/imagen-correccion')
+    for (const pl of [POST_MESA_CON_CORRECCION, CARRUSEL_MESA_CON_CORRECCION, KIT_MESA_CON_CORRECCION]) {
+      const T = pl.limites.tope_encargo_usd
+      const mirar = pl.pasos.find((p) => p.clave === PASO_MIRAR_CORRECCION)!
+      const volver = costoDeVolver(pl, mirar)
+      const sigue = loQueSigueDespuesDelPaso(pl, PASO_MIRAR_CORRECCION, { vueltas: {} })
+      // lo que sigue lleva al menos la reserva de la jefatura (1,7)
+      expect(sigue, String(pl.familia)).toBeGreaterThanOrEqual(1.7)
+      const e = { artefactos: {}, fichas: [], vueltas: {}, pasos_ejecutados: 1, gasto_usd: 0 } as unknown as Estado
+      const enLaFranja = +(T - volver - sigue / 2).toFixed(4)
+      expect(enLaFranja + volver, String(pl.familia)).toBeLessThanOrEqual(T)
+      expect(cabeOtraVuelta(pl, e, enLaFranja), String(pl.familia)).toBe(false)
+      expect(cabeOtraVuelta(pl, e, +(T - volver - sigue - 0.01).toFixed(4)), String(pl.familia)).toBe(true)
+    }
   })
 })

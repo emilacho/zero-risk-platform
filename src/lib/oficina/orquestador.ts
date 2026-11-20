@@ -703,7 +703,7 @@ async function ejecutarCodigo(P: Puertos, enc: Encargo, pl: Plantilla, paso: Pas
     }
     // 20-nov · punto 3 · la corrección de la imagen final (`mesa/correccion-imagen.ts`): editar sobre la elegida y la mirada de otro proveedor que decide
     case 'editar_imagen': {
-      const s = await (await import('./mesa/correccion-imagen')).editarImagenes(P, enc)
+      const s = await (await import('./mesa/correccion-imagen')).editarImagenes(P, enc, pl)
       return { res: s.res, ...(s.gastos.length ? { gastos: s.gastos, imagen_generada: true } : {}) }
     }
     case 'mirar_correccion': {

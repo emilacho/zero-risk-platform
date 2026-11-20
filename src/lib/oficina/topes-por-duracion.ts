@@ -207,6 +207,23 @@ export function loQueSigueDeLaMesa(p: Plantilla, e: { vueltas?: Record<string, n
   return r4(pasada + vueltas)
 }
 
+/**
+ * 20-nov · CC6 🔴 #1254 · lo que sigue DESPUÉS de un paso, con la misma cuenta que `loQueSigueDeLaMesa`: cada paso a su tope (más la reserva de la jefatura) y las vueltas
+ * que no se saltan y aún quedan, a su `costoDeVolver`. Lo usa la corrección de la imagen antes de decidir otra vuelta o turno: si no guarda esto, en el video puede
+ * comerse lo del paso `video` y el motor corta la pieza a medias por `tope_de_gasto` (Emilio 17-nov 08:06: «nunca corta a medias»). Sin el paso, 0 · pura
+ */
+export function loQueSigueDespuesDelPaso(p: Plantilla, clave: string, e: { vueltas?: Record<string, number> } & Partial<Estado>): number {
+  const pasos = Array.isArray(p?.pasos) ? p.pasos : []
+  const i = pasos.findIndex((s) => s.clave === clave)
+  if (i < 0) return 0
+  const despues = pasos.slice(i + 1)
+  const pasada = despues.reduce((a, s) => a + Math.max(0, num(s.tope_usd) ?? 0) + (s.tipo === 'jefatura' ? COTAS.RESERVA_DE_LO_QUE_SIGUE_SIN_IMAGEN_USD : 0), 0)
+  const vueltas = despues
+    .filter((s) => (num(s.vuelve_a?.max) ?? 0) > 0 && !seSalta(s))
+    .reduce((a, s) => a + Math.max(0, (num(s.vuelve_a?.max) as number) - (e.vueltas?.[s.clave] ?? 0)) * costoDeVolver(p, s), 0)
+  return r4(pasada + vueltas)
+}
+
 /** el tope del encargo de una FILA de la base (`tope_encargo_usd`, `limites`, `pasos`) con la misma cuenta: para el freno de la campaña (condición 2) · puro.
  *  Sin partes por segundo, la columna (como siempre). Con dato inválido, `null` (quien lo lee se queda del lado seguro). */
 export function topeDelEncargoDeLaFila(f: { tope_encargo_usd: unknown; limites?: unknown; pasos?: unknown }): number | null {
