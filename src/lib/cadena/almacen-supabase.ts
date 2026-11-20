@@ -110,7 +110,8 @@ export function planParaLaCadena(planes: PlanDelCliente[], clientId: string): { 
 export const consultasDeDireccion = (db: { from(tabla: string): any }) => ({
   campanasDetenidas: (tope: number) => db.from('cadena_campanas').select('id, client_id, estado, estado_motivo, actualizada_en, seco').in('estado', ['pausada', 'necesita_humano']).limit(tope),
   estadoDeLaCadena: () => db.from('cadena_config').select('valor').eq('clave', 'estado_cadena').limit(1),
-  campanaDelPlan: (planId: string) => db.from('cadena_campanas').select('id, estado, estado_motivo').eq('plan_id', planId).eq('seco', false).limit(1),
+  // 20-nov · entrega 4-B (D2 · Lenovo 21:22Z) · solo la campaña SIN llave del plan: es la única a la que llega «plan listo», y una campaña con llave detenida no frena a las demás (firma de Emilio, 19-nov)
+  campanaDelPlan: (planId: string) => db.from('cadena_campanas').select('id, estado, estado_motivo').eq('plan_id', planId).eq('seco', false).is('llave_de_campana', null).limit(1),
   // 09-nov · C (GO Lenovo · CC#2) · Decisiones: las campañas reales que esperan a una persona y la espera que las sostiene
   campanasQueEsperanAUnaPersona: (tope: number) => db.from('cadena_campanas').select('id, client_id, estado, estado_motivo, actualizada_en').eq('estado', 'necesita_humano').eq('seco', false).is('archivada_en', null).limit(tope),
   esperasDeUnaPersona: (campanaIds: string[], tope: number) => db.from('cadena_esperas').select('campana_id, vence_en, accion_al_vencer, desde').in('campana_id', campanaIds).eq('objeto_tipo', 'necesita_humano').eq('estado', 'viva').eq('seco', false).limit(tope),
