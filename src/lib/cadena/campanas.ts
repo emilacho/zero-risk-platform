@@ -56,6 +56,13 @@ export async function abrirCampana(al: Almacen, cuerpo: Record<string, unknown>,
   // idempotencia: el mismo sobre dos veces no abre dos campañas
   //    · con `campana_id`: ESA campaña, que tiene que ser de este cliente, de este plan y del mismo seco (si no, no se escribe nada)
   //    · con llave: la campaña de esa llave · sin nada: la que nació de este plan (solo las sin llave)
+  // 20-nov · «Crear Campaña» (entrega 2): una campaña con llave puede venir de un PEDIDO del dueño (`cadena_pedidos_de_campana`, misma llave): trae sus fechas, su tope y su nombre
+  const pedido = llavePedida && al.pedidoPorLlave ? await al.pedidoPorLlave(clientId, llavePedida, s.seco) : null
+  const ligar = async (campanaId: string): Promise<string | null> => {
+    if (!pedido || pedido.campana_id === campanaId || !al.ligarPedidoDeCampana) return null
+    if (pedido.campana_id) return `el pedido ya está ligado a otra campaña (${pedido.campana_id})`
+    try { await al.ligarPedidoDeCampana(pedido.id, campanaId); return null } catch (e) { return `no se pudo ligar el pedido: ${String(e instanceof Error ? e.message : e).slice(0, 200)}` }
+  }
   let ya: Campana | null
   if (campanaPedida) {
     ya = await al.campana(campanaPedida)
@@ -64,6 +71,9 @@ export async function abrirCampana(al: Almacen, cuerpo: Record<string, unknown>,
   // 🔴 #464 C5a (CC#3): reenviar el sobre de un plan YA REEMPLAZADO no «tiene éxito»: lo dice, y no abre ni revive nada
   if (ya && ya.estado === 'reemplazada') return err(409, 'E-PLAN-REEMPLAZADO', 'este plan ya fue reemplazado por uno más nuevo: no se abre nada', { campana: ya })
   if (ya) {
+    // el pedido que no quedó ligado (la apertura anterior se cortó entre crear la campaña y ligarlo) se liga ahora, con la misma campaña
+    const sinLigar = await ligar(ya.id)
+    if (sinLigar) return { status: 200, cuerpo: { ya_abierta: true, campana: ya, aviso_pedido: sinLigar } }
     // 09-nov · E: una campaña que SIGUE ARMANDO y llega por un viaje NUEVO de la sala (la reapertura deja un sobre nuevo) contesta a ESE viaje: el cable de vuelta sale de `sala_ref`
     const nuevoRef = typeof cuerpo.sala_ref === 'object' && cuerpo.sala_ref ? (cuerpo.sala_ref as Record<string, unknown>) : null
     const armando = ya.estado === 'abierta' || ya.estado === 'estrategia' || ya.estado === 'calendario'
@@ -96,9 +106,14 @@ export async function abrirCampana(al: Almacen, cuerpo: Record<string, unknown>,
   // 18-nov · DECISIÓN DE EMILIO (13:56 Zúrich, regla de sistema): el día 1 de una campaña es el día en que SE ABRE, en la zona del cliente; nunca se hereda la fecha del plan
   //    (Náufrago perdió 2½ semanas con el día 1 heredado). Dura lo que dura el plan (su ventana), o la medida que se pida; las semanas se cuentan desde la semana de ese día 1.
   //    La cronología del plan se corre en bloque desde su propio día 1 (F · `lineaDelDiaUno`); las fechas especiales reales quedan en su fecha.
-  const ventana = ventanaDeLaCampana(ctx.planTexto, hoyEnZona(ahora, ctx.zonaHoraria), dias as number, cuerpo.dias_de_campana !== undefined)
+  // 20-nov · con pedido y fechas, las fechas son las del dueño (origen `emilio`); sin fechas en el pedido, la regla de siempre
+  const ventana: { fecha_inicio: string; fecha_fin: string; origen: Campana['fecha_inicio_origen'] } = pedido?.fecha_inicio && pedido.fecha_fin
+    ? { fecha_inicio: pedido.fecha_inicio, fecha_fin: pedido.fecha_fin, origen: 'emilio' }
+    : ventanaDeLaCampana(ctx.planTexto, hoyEnZona(ahora, ctx.zonaHoraria), dias as number, cuerpo.dias_de_campana !== undefined)
   // 10-nov · el tope de gasto nace del valor por omisión de la cadena; sin él, la campaña nace SIN tope y no produce piezas reales hasta que una persona lo decida
-  const topeInicial = topeDeLaCampana(await al.leerConfig('tope_gasto_campana_por_omision'))
+  // 20-nov · con pedido, el tope es el que puso el dueño (obligatorio y nunca debajo del mínimo al crear)
+  const topeInicial = pedido ? Number(pedido.tope_usd) : topeDeLaCampana(await al.leerConfig('tope_gasto_campana_por_omision'))
+  const nombreFinal = nombrePedido ?? (pedido ? pedido.nombre : null)
   let nueva: Campana
   try { nueva = await al.insertarCampana({
     client_id: clientId, plan_id: plan.plan_id, fecha_inicio: ventana.fecha_inicio, fecha_inicio_origen: ventana.origen, fecha_fin: ventana.fecha_fin, ...(semanasDeTanda === SEMANAS_DE_TANDA ? {} : { semanas_de_tanda: semanasDeTanda as number }),
@@ -108,19 +123,21 @@ export async function abrirCampana(al: Almacen, cuerpo: Record<string, unknown>,
     ...(topeInicial !== null ? { tope_gasto_usd: topeInicial } : {}),
     sala_ref: typeof cuerpo.sala_ref === 'object' && cuerpo.sala_ref ? (cuerpo.sala_ref as Record<string, unknown>) : {}, reemplaza_a: reemplaza, seco: s.seco,
     ...(llavePedida ? { llave_de_campana: llavePedida } : {}),
-    ...(nombrePedido ? { nombre_de_campana: nombrePedido } : {}),
+    ...(nombreFinal ? { nombre_de_campana: nombreFinal } : {}),
   }) } catch (e) {
     const duplicado = (e as { code?: string })?.code === '23505' || /23505|duplicate key|un_plan/i.test(String((e as Error)?.message ?? ''))
     const ganadora = duplicado ? (llavePedida ? await al.campanaPorLlave(clientId, llavePedida, s.seco) : await al.campanaPorPlan(clientId, plan.plan_id, s.seco)) : null
     // si OTRO sobre igual ganó la carrera, ÉL ya reemplazó a la anterior: no se la devuelve a la vida (habría dos vivas)
-    if (ganadora) return { status: 200, cuerpo: { ya_abierta: true, campana: ganadora } }
+    if (ganadora) { const sinLigar = await ligar(ganadora.id); return { status: 200, cuerpo: { ya_abierta: true, campana: ganadora, ...(sinLigar ? { aviso_pedido: sinLigar } : {}) } } }
     await devolverLaViva()
     throw e
   }
   // la campaña reemplazada ya no existe para el vigía: sus esperas (la fecha de inicio, la bandeja, lo que investigaba…) se cancelan TODAS
   if (viva) await cancelarEsperasDeCampana(al, viva.id)
+  // el pedido queda ligado a SU campaña (si no se pudo, la campaña igual existe: el próximo sobre con la misma llave lo liga y lo dice)
+  const sinLigar = await ligar(nueva.id)
   // 18-nov · sin «fecha propuesta»: el día 1 es hoy, no hay un día anterior en que tenga que quedar firme
-  return { status: 201, cuerpo: { campana: nueva, aviso_fecha_inicio: null, ventana_origen: ventana.origen, reemplaza_a: reemplaza } }
+  return { status: 201, cuerpo: { campana: nueva, aviso_fecha_inicio: null, ventana_origen: ventana.origen, reemplaza_a: reemplaza, ...(pedido ? { pedido_id: pedido.id } : {}), ...(sinLigar ? { aviso_pedido: sinLigar } : {}) } }
 }
 
 /** 19-nov · la llave de una campaña nueva: sin valor = null (la campaña nace del plan) · válida = el texto sin espacios a los lados · inválida = false */
@@ -161,7 +178,8 @@ export const ESTADOS_QUE_SE_REABREN: readonly EstadoCampana[] = ['necesita_human
 /** el sobre que deja la reapertura: el MISMO que deja planeación al terminar el plan (la sala lo despacha a la puerta en modo «abrir», que retoma la campaña que sigue armando) */
 export interface SobreDePlan {
   source: 'planeacion/plan-listo'; intent: 'briefear'
-  payload: { client_id: string; plan_id: string; dry_run: boolean; desde_worker: 'cadena/reabrir' | 'cadena/reintento'; campana_id: string }
+  // 20-nov · «Crear Campaña»: el pedido del dueño abre una campaña NUEVA con su llave y su nombre (la puerta se los pasa a la apertura); retomar lleva `campana_id`
+  payload: { client_id: string; plan_id: string; dry_run: boolean; desde_worker: 'cadena/reabrir' | 'cadena/reintento' | 'tablero/crear-campana'; campana_id?: string; llave_de_campana?: string; nombre_de_campana?: string }
   idempotency_key: string; logical_period: string; tenant_id: string; client_id: string
 }
 export const llaveDeReapertura = (campanaId: string, fechaInicio: string): string => `${campanaId}:reabrir:${fechaInicio}`

@@ -3,6 +3,7 @@
  * La migración NO está aplicada: hasta entonces nada llega aquí. `client_id` es TEXTO en todas las tablas de la cadena.
  */
 import type { PedidoDeLaCampana } from './brief-de-la-campana'
+import type { PedidoGuardado } from './crear-campana'
 import { planesVigentes, type PlanDelCliente } from '../direccion/decisiones-reemplazadas'
 import { palabrasDuras } from '../manual/palabras-con-intencion'
 import { getSupabaseAdmin } from '@/lib/supabase'
@@ -91,6 +92,16 @@ const COLUMNAS_DEL_BRIEF = 'campana_id, version, estado, texto_md, leido, devolu
 
 /** La sala del director (solo lectura): este archivo es el único que nombra las tablas de la cadena (guarda de generalidad). */
 /** sin plan indicado, la cadena toma el vigente del cliente: nunca uno rechazado ni uno ya reemplazado */
+/** 20-nov · una fila de `cadena_pedidos_de_campana` → el pedido (el tope numeric puede llegar como texto) · pura */
+export function pedidoDeFila(f: Record<string, unknown>): PedidoGuardado {
+  const t = (v: unknown): string | null => (typeof v === 'string' ? v : null)
+  return {
+    id: String(f.id), client_id: String(f.client_id), seco: f.seco === true, llave: String(f.llave), nombre: String(f.nombre), cambio: String(f.cambio),
+    fecha_inicio: t(f.fecha_inicio), fecha_fin: t(f.fecha_fin), fechas_clave: Array.isArray(f.fechas_clave) ? (f.fechas_clave as PedidoGuardado['fechas_clave']) : [],
+    tope_usd: Number(f.tope_usd), brief_libre: String(f.brief_libre), pedido_por: String(f.pedido_por), creado_en: String(f.creado_en ?? ''), campana_id: t(f.campana_id),
+  }
+}
+
 export function planParaLaCadena(planes: PlanDelCliente[], clientId: string): { plan_id: string; fecha: string } | null {
   const v = planesVigentes(planes).get(clientId)
   return v ? { plan_id: v.id, fecha: v.creado_en.slice(0, 10) } : null
@@ -402,6 +413,35 @@ export function almacenDeSupabase(): Almacen {
       const { data, error } = await db.from('cadena_pedidos_de_campana').select('nombre, cambio, fecha_inicio, fecha_fin, fechas_clave, brief_libre').eq('campana_id', campanaId).maybeSingle()
       if (error) { if (TABLA_AUSENTE.has(String((error as { code?: string }).code))) return null; fallo(error) }
       return (data as PedidoDeLaCampana | null) ?? null
+    },
+    // 20-nov · «Crear Campaña» (entrega 2) · el pedido por su llave, guardarlo y ligarlo (el candado de la base exige que la campaña sea la de ESE pedido)
+    async pedidoPorLlave(clientId, llave, seco) {
+      const d = await uno<Record<string, unknown>>(db.from('cadena_pedidos_de_campana').select('*').eq('client_id', clientId).eq('seco', seco).eq('llave', llave).maybeSingle())
+      return d ? pedidoDeFila(d) : null
+    },
+    async insertarPedidoDeCampana(p) {
+      const { data, error } = await db.from('cadena_pedidos_de_campana').insert(p).select().single()
+      if (error) { const x = new Error(`${(error as { code?: string }).code ?? ''} ${error.message ?? 'no se guardó el pedido'}`.trim()) as Error & { code?: string }; x.code = (error as { code?: string }).code; throw x }
+      return pedidoDeFila(data as Record<string, unknown>)
+    },
+    async ligarPedidoDeCampana(pedidoId, campanaId) {
+      const { data, error } = await db.from('cadena_pedidos_de_campana').update({ campana_id: campanaId }).eq('id', pedidoId).is('campana_id', null).select('id')
+      if (error) fallo(error)
+      if (!((data as unknown[] | null) ?? []).length) throw new Error('el pedido ya estaba ligado o no existe')
+    },
+    async planAprobado(planId) {
+      const f = await uno<{ status: string }>(db.from('client_historical_outputs').select('status').eq('id', planId).eq('output_type', 'campaign_plan_90d').maybeSingle())
+      return f?.status === 'approved'
+    },
+    async costosDelMinimo() {
+      const [topes, reservas, politica] = await Promise.all([
+        topesDeFamiliasActivas(db as unknown as DbDeGasto),
+        reservasDeFamiliasActivas(db as unknown as DbDeGasto),
+        // el tope de UNA revisión de registro lo lee la jefatura (solo ella nombra sus tablas)
+        almacenDeJefatura(db as never).leerPolitica('registro'),
+      ])
+      if (!politica.ok) throw new Error(`la política de registro no se pudo leer: ${politica.error}`)
+      return { topes, reservas, tope_registro_usd: politica.politica.tope_revision_usd }
     },
     async campanaViva(clientId, seco) { return (await lista<Campana>(db.from('cadena_campanas').select('*').eq('client_id', clientId).eq('seco', seco).is('llave_de_campana', null).not('estado', 'in', '(cerrada,reemplazada)').limit(1)))[0] ?? null },
     async insertarCampana(c) { const { data, error } = await db.from('cadena_campanas').insert(c).select().single(); if (error) fallo(error); return data as Campana },
