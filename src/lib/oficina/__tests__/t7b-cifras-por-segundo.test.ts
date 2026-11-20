@@ -111,7 +111,8 @@ describe('T7b · condición de CC6 · las rondas del dueño van DENTRO de lo req
   })
   it('🔴 las vueltas que se saltan si no caben son las de los guardas del código (no otras)', () => {
     // 18-nov · la vuelta de la jefatura también: `puedeVolverALaMesa` la mide entera antes de devolver (regla dura, hasta 6 vueltas · 202611181530)
-    expect(VUELTAS_QUE_SE_SALTAN_SI_NO_CABEN.claves).toEqual([PASO_REVISAR_IMAGENES_CLAVE, PASO_MIRAR_VIDEO, 'jefatura'])
+    // 20-nov · punto 3 · y la corrección de la imagen final: `cabeOtraVuelta` (mesa/correccion-imagen) la mide entera antes de volver
+    expect(VUELTAS_QUE_SE_SALTAN_SI_NO_CABEN.claves).toEqual([PASO_REVISAR_IMAGENES_CLAVE, PASO_MIRAR_VIDEO, 'jefatura', 'mirar_correccion'])
     expect(VUELTAS_QUE_SE_SALTAN_SI_NO_CABEN.funciones).toEqual(['pedido_de_video'])
     expect(VIDEO_MESA_ENCENDIDA.pasos.find((s) => s.funcion === 'pedido_de_video')?.vuelve_a).toBeTruthy()
   })
