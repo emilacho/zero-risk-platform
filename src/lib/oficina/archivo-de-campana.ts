@@ -9,7 +9,8 @@ import { tablasDelArchivo } from '../cadena/almacen-supabase'
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 export const MOTIVO_DE_ARCHIVO = 'archivada · campaña anterior'
 const ESTADOS_ARCHIVABLES = ['pausada', 'necesita_humano', 'cerrada', 'reemplazada']
-const VIVAS_AL_RESTAURAR = ['abierta', 'estrategia', 'calendario', 'activa', 'pausada', 'necesita_humano']
+// los estados que el índice de «una viva por cliente» deja fuera
+const FUERA_DEL_INDICE = ['cerrada', 'reemplazada']
 const TIPO_DE_PIEZA = 'content_piece_review'
 
 type Fila = Record<string, unknown>
@@ -43,6 +44,60 @@ async function leerCampana(db: Db, cuerpo: unknown): Promise<{ c: Fila; cuerpo: 
 }
 const esRespuesta = (x: unknown): x is Respuesta => esObjeto(x) && typeof x.status === 'number'
 
+export const RASTROS_DISTINTOS = 'rastros_distintos'
+export const OTRA_VIVA = 'otra_campana_viva'
+const SIN_DUENO = 'sin_dueno'
+const texto = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? v : null)
+const tiempo = (v: unknown): number => (typeof v === 'string' ? Date.parse(v) : NaN)
+
+/**
+ * De qué campaña es cada pieza (20-nov · entrega 4 · D3: con varias campañas vivas, las fechas mezclaban piezas).
+ * 1. Por su rastro: el `campana_id` del encargo y el `provenance_tag.campana_id` de su parte (el de la pieza o el del encargo). Si dicen dos campañas distintas, no es de ninguna: se declara.
+ * 2. Sin rastro (las piezas de antes de #1245): por la hora, solo si a esa hora la única campaña viva del cliente era esta. Si había otra, se declara.
+ * Una campaña sin llave vive hasta que se archiva o nace la siguiente sin llave (la base no deja dos vivas sin llave). Una con llave, hasta que se archiva: si no, se toma por viva.
+ */
+async function duenoDeLasPiezas(db: Db, c: Fila, piezas: Fila[]): Promise<Map<string, string> | Respuesta> {
+  const meta = (p: Fila): Fila => (esObjeto(p.metadata) ? p.metadata : {})
+  const idsEnc = [...new Set(piezas.map((p) => texto(meta(p).oficina_encargo_id)).filter((x): x is string => !!x))]
+  const enc = new Map<string, Fila>()
+  if (idsEnc.length) {
+    const r = await db.from('oficina_encargos').select('id, campana_id, parte_id').in('id', idsEnc)
+    if (r.error) return falla(r.error.message)
+    for (const f of filasDe(r)) enc.set(String(f.id), f)
+  }
+  const parteDe = (p: Fila): string[] => [texto(meta(p).parte_id), texto(enc.get(String(meta(p).oficina_encargo_id))?.parte_id)].filter((x): x is string => !!x)
+  const idsPartes = [...new Set(piezas.flatMap(parteDe))]
+  const campanaDelParte = new Map<string, string>()
+  if (idsPartes.length) {
+    const r = await db.from('client_historical_outputs').select('id, provenance_tag').in('id', idsPartes)
+    if (r.error) return falla(r.error.message)
+    for (const f of filasDe(r)) { const k = esObjeto(f.provenance_tag) ? texto(f.provenance_tag.campana_id) : null; if (k) campanaDelParte.set(String(f.id), k) }
+  }
+  const todas = await tablasDelArchivo(db).campanas().select('id, creada_en, archivada_en, llave_de_campana').eq('client_id', c.client_id).eq('seco', c.seco)
+  if (todas.error) return falla(todas.error.message)
+  const campanas = filasDe(todas)
+  if (!campanas.some((x) => x.id === c.id)) campanas.push(c)
+  const sinLlave = campanas.filter((x) => !texto(x.llave_de_campana)).map((x) => tiempo(x.creada_en)).sort((a, b) => a - b)
+  const fin = (x: Fila): number => {
+    if (texto(x.archivada_en)) return tiempo(x.archivada_en)
+    if (texto(x.llave_de_campana)) return Infinity
+    return sinLlave.find((t) => t > tiempo(x.creada_en)) ?? Infinity
+  }
+  const vivaA = (x: Fila, t: number): boolean => tiempo(x.creada_en) <= t && t < fin(x)
+  const r = new Map<string, string>()
+  for (const p of piezas) {
+    const m = meta(p)
+    const e = enc.get(String(m.oficina_encargo_id))
+    const rastro = new Set([texto(e?.campana_id), ...parteDe(p).map((k) => campanaDelParte.get(k) ?? null)].filter((x): x is string => !!x))
+    if (rastro.size > 1) { r.set(String(p.id), RASTROS_DISTINTOS); continue }
+    if (rastro.size === 1) { r.set(String(p.id), [...rastro][0]); continue }
+    const t = tiempo(p.created_at)
+    const vivas = campanas.filter((x) => vivaA(x, t))
+    r.set(String(p.id), vivas.length === 1 ? String(vivas[0].id) : vivas.some((x) => x.id === c.id) ? OTRA_VIVA : SIN_DUENO)
+  }
+  return r
+}
+
 /** POST /api/cadena/archivo/archivar: sin `dry_run:false` no escribe y solo dice qué haría. Repetirlo no cambia nada */
 export async function archivarCampana(db: Db, cuerpo: unknown, ahora: Date = new Date()): Promise<Respuesta> {
   const l = await leerCampana(db, cuerpo)
@@ -57,19 +112,18 @@ export async function archivarCampana(db: Db, cuerpo: unknown, ahora: Date = new
   if (filas.error) return falla(filas.error.message)
   const esperas = await tablasDelArchivo(db).esperas().select('id').eq('campana_id', campana_id).eq('estado', 'viva')
   if (esperas.error) return falla(esperas.error.message)
-  // las piezas se atan por fechas: desde que nació la campaña hasta que se archivó o nació la siguiente. Sin este límite, repetir arrastraría las piezas de la campaña nueva
-  const siguientes = await tablasDelArchivo(db).campanas().select('id, creada_en').eq('client_id', c.client_id).eq('seco', c.seco).neq('id', c.id).gt('creada_en', c.creada_en)
-  if (siguientes.error) return falla(siguientes.error.message)
-  const nacioOtra = filasDe(siguientes).map((x) => String(x.creada_en)).sort()[0]
-  const limite = typeof c.archivada_en === 'string' ? c.archivada_en : nacioOtra
-  const consultaDePiezas = db.from('hitl_queue').select('id, status, metadata').eq('client_id', c.client_id).eq('type', TIPO_DE_PIEZA).gte('created_at', c.creada_en).is('archivada_en', null)
-  const hq = await (limite ? consultaDePiezas.lt('created_at', limite) : consultaDePiezas)
+  // 20-nov · entrega 4 (D3) · con varias campañas vivas, las piezas se atan por su rastro y no por fechas
+  const hq = await db.from('hitl_queue').select('id, status, created_at, metadata').eq('client_id', c.client_id).eq('type', TIPO_DE_PIEZA).gte('created_at', c.creada_en).is('archivada_en', null)
   if (hq.error) return falla(hq.error.message)
-  const aprobadas = filasDe(hq).filter((p) => p.status === 'approved')
+  const dueno = await duenoDeLasPiezas(db, c, filasDe(hq))
+  if (esRespuesta(dueno)) return dueno
+  const deEsta = filasDe(hq).filter((p) => dueno.get(String(p.id)) === c.id)
+  const sin_campana_clara = filasDe(hq).filter((p) => { const x = dueno.get(String(p.id)); return x === RASTROS_DISTINTOS || x === OTRA_VIVA }).map((p) => ({ id: p.id, motivo: dueno.get(String(p.id)) }))
+  const aprobadas = deEsta.filter((p) => p.status === 'approved')
   // lo que Emilio sacó del archivo no vuelve a entrar si esto se repite
-  const piezas = filasDe(hq).filter((p) => p.status !== 'approved' && !(esObjeto(p.metadata) && p.metadata.recuperada_del_archivo))
+  const piezas = deEsta.filter((p) => p.status !== 'approved' && !(esObjeto(p.metadata) && p.metadata.recuperada_del_archivo))
   const encargos = [...new Set(piezas.map((p) => (esObjeto(p.metadata) ? p.metadata.oficina_encargo_id : null)).filter((x): x is string => typeof x === 'string'))]
-  const resumen = { filas: filasDe(filas).length, esperas: filasDe(esperas).length, piezas: piezas.length, encargos: encargos.length, aprobadas_sin_archivar: aprobadas.map((p) => p.id) }
+  const resumen = { filas: filasDe(filas).length, esperas: filasDe(esperas).length, piezas: piezas.length, encargos: encargos.length, aprobadas_sin_archivar: aprobadas.map((p) => p.id), sin_campana_clara }
   if (seco) return { status: 200, body: { ok: true, dry_run: true, estado_actual: c.estado, ...resumen } }
 
   // la campaña va primero: deja de contar como viva, y si algo falla después, repetir usa esta misma fecha, que es con la que se reabren las esperas
@@ -98,9 +152,13 @@ export async function desarchivarCampana(db: Db, cuerpo: unknown, ahora: Date = 
   if (esRespuesta(l)) return l
   const { c } = l
   if (!c.archivada_en) return mal(409, 'sin_archivar', 'esa campaña no está archivada')
-  const otras = await tablasDelArchivo(db).campanas().select('id, estado').eq('client_id', c.client_id).eq('seco', c.seco).neq('id', c.id).in('estado', VIVAS_AL_RESTAURAR)
-  if (otras.error) return falla(otras.error.message)
-  if (filasDe(otras).length) return mal(409, 'hay_otra_campana', 'el cliente ya tiene una campaña viva')
+  // 20-nov · entrega 4 (D4) · frena solo donde frenaría la base: el índice `cadena_campanas_una_viva_por_cliente` (202611192130) cuenta las campañas sin llave y no cerradas ni reemplazadas
+  const vuelveA = String(c.estado_antes_de_archivar ?? 'pausada')
+  if (!texto(c.llave_de_campana) && !FUERA_DEL_INDICE.includes(vuelveA)) {
+    const otras = await tablasDelArchivo(db).campanas().select('id, estado').eq('client_id', c.client_id).eq('seco', c.seco).neq('id', c.id).is('llave_de_campana', null)
+    if (otras.error) return falla(otras.error.message)
+    if (filasDe(otras).some((x) => !FUERA_DEL_INDICE.includes(String(x.estado)))) return mal(409, 'hay_otra_campana', 'el cliente ya tiene una campaña viva sin llave')
+  }
   const hora = ahora.toISOString()
   const limpio = { archivada_en: null, archivo_motivo: null }
   const uf = await tablasDelArchivo(db).filas().update(limpio).eq('campana_id', c.id)
