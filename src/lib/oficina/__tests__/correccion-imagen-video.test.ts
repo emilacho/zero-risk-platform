@@ -291,6 +291,16 @@ describe('tanda 2 · la vuelta se parte en turnos si no cabe en un pedido (Lenov
     expect(si.sigue).toBe(true)
     expect(si.hechas_en_la_vuelta).toHaveLength(10)
   })
+  it('🔴 LENOVO (a) · a 120 s, con las 2 rondas del dueño y todo lo de antes a su tope, la vuelta 1 cabe ENTERA (12 turnos) guardando lo que sigue', () => {
+    const C = CARGADA
+    const iC = C.pasos.findIndex((p) => p.clave === PASO_CORREGIR_IMAGEN)
+    const ronda = costoDeVolver(C, C.pasos.find((p) => p.clave === 'aprobar_propuestas')!)
+    const antes = C.pasos.slice(0, iC).reduce((s, p) => s + (Number(p.tope_usd) || 0), 0) + 2 * ronda
+    // lo que gasta un turno de 10 planos con su foto, a lo que reserva el código por plano: el director 0,75 + 10 × (0,2 + 0,26)
+    const porTurno = TOPE_FIJO_DE_LA_CORRECCION_DEL_VIDEO_USD + 10 * (TOPE_DE_LA_EDICION_DE_IMAGEN_CLAVE_POR_SEGUNDO_USD + TOPE_DE_LA_MIRADA_DE_IMAGEN_CLAVE_POR_SEGUNDO_USD)
+    const e0 = est(12)
+    for (let k = 1; k < turnosDeLaVueltaDelVideo(120); k++) expect(cabeOtraVuelta(C, e0, +(antes + k * porTurno).toFixed(4))).toBe(true)
+  })
   it('🔴 CC5 s22 · el mismo plano edita en la vuelta 1 y en la 2 con llaves DISTINTAS (la 2 no reusa la edición de la 1)', async () => {
     const e = est(1)
     const { P, llamadas } = puertos({ mirada: () => '{"queda_bien":false,"lectura":"falta"}' })
@@ -379,12 +389,15 @@ describe('tanda 2 · la plantilla del video', () => {
     expect(PL.indicaciones[AGENTE_QUE_CORRIGE_LA_IMAGEN_CLAVE]).toContainEqual(INDICACION_DE_LA_CORRECCION_DEL_VIDEO)
     expect(PL.indicaciones[AGENTE_QUE_CORRIGE_LA_IMAGEN] ?? []).toEqual([])
   })
-  it('🔴 la edición y la mirada crecen por segundo (0,2/s y 0,26/s), con tope fijo 0', () => {
-    expect(PL.pasos[i + 2]).toMatchObject({ tope_usd: 0, tope_usd_por_segundo: TOPE_DE_LA_EDICION_DE_IMAGEN_CLAVE_POR_SEGUNDO_USD })
-    expect(PL.pasos[i + 3]).toMatchObject({ tope_usd: 0, tope_usd_por_segundo: TOPE_DE_LA_MIRADA_DE_IMAGEN_CLAVE_POR_SEGUNDO_USD })
+  it('🔴 LENOVO (a) 18:30Z · la edición y la mirada topan POR TURNO (20 planos × 0,2 y × 0,26 = 4 y 5,2), sin parte por segundo', () => {
+    expect(PL.pasos[i + 2]).toMatchObject({ tope_usd: 4 })
+    expect(PL.pasos[i + 3]).toMatchObject({ tope_usd: 5.2 })
+    expect(PL.pasos[i + 2].tope_usd_por_segundo).toBeUndefined()
+    expect(PL.pasos[i + 3].tope_usd_por_segundo).toBeUndefined()
+    expect([TOPE_DE_LA_EDICION_DE_IMAGEN_CLAVE_POR_SEGUNDO_USD, TOPE_DE_LA_MIRADA_DE_IMAGEN_CLAVE_POR_SEGUNDO_USD]).toEqual([0.2, 0.26])
     const at15 = CARGADA.pasos.filter((p) => [PASO_EDITAR_IMAGEN, PASO_MIRAR_CORRECCION].includes(p.clave)).map((p) => p.tope_usd)
-    // a 120 s (la fila viva): 0,2 × 120 y 0,26 × 120
-    expect(at15).toEqual([24, 31.2])
+    // a 120 s (la fila viva) siguen en 4 y 5,2: no crecen con el largo (lo que crece es el tope del encargo)
+    expect(at15).toEqual([4, 5.2])
   })
   it('🔴 las vueltas que la envuelven (revisión 1, pedido 1, mirada del video 1, jefatura 6) y los turnos de la vuelta (12 a 120 s) dan techo (3 × 12 − 1) × (1 + 9) = 350 y margen +1052', () => {
     const vueltas = VIDEO_MESA_POR_SEGUNDO.pasos.filter((p) => p.vuelve_a?.paso === 'mesa').map((p) => [p.clave, p.vuelve_a!.max])

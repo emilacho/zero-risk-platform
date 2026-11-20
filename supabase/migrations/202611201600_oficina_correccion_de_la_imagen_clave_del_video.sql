@@ -1,7 +1,8 @@
 -- 202611201600 · PUNTO 3 TANDA 2 · LA CORRECCIÓN DE LAS IMÁGENES CLAVE DEL VIDEO (video_mesa) · CC1 · decisiones de LENOVO 16:55Z (GO 2026-11-20 punto 3) · US$ 0
 -- Va DESPUÉS de 202611201500 (el segundo doctor de CC4): exige su paso `segunda_mirada` y la fila que dejó.
 --   · 3 pasos nuevos entre `imagenes_clave_final` y `revisar_imagenes_clave`, con la misma condición de la revisión (se saltan en un ensayo):
---     corregir_imagen (creative-director-mesa, 0,75) · editar_imagen (0,2/s) · mirar_correccion (0,26/s, vuelve a corregir_imagen hasta 350 veces)
+--     corregir_imagen (creative-director-mesa, 0,75) · editar_imagen (4,0 por turno) · mirar_correccion (5,2 por turno, vuelve a corregir_imagen hasta 350 veces)
+--     (LENOVO 18:30Z, opción (a): los topes de paso van por TURNO, 20 planos × 0,2 y × 0,26; el del encargo sigue por segundo)
 --   · el techo 350 = (3 vueltas × 12 turnos − 1) × (1 + 9): las vueltas que envuelven el bloque en la fila leída suman 9 (revisión 1 · pedido 1 · mirada del video 1 ·
 --     jefatura 6); 12 turnos = un plano por segundo a 120 s, 20 imágenes por pedido (la elegida y su foto real por plano). La cuenta que decide la lleva el código.
 --   · margen 50 → 1102 (+ 350 × 3 + 2) · vueltas_de_correccion_imagen 3 · turnos_de_correccion_imagen 12
@@ -80,8 +81,8 @@ SET pasos = (
         UNION ALL
         SELECT n.q, n.j FROM (VALUES
           ($c${"clave":"corregir_imagen","tipo":"agente","quien":"creative-director-mesa","condicion":{"tipo":"si_artefacto","campo":"hay_imagenes","igual":true,"artefacto":"imagenes_clave_final"},"entrada":["imagenes_clave_final"],"salida_artefacto":"pedido_de_correccion","tope_usd":0.75,"salida":{"esquema":"correccion_imagen.v1","reintento_formato":1}}$c$::jsonb, 1),
-          ($e${"clave":"editar_imagen","tipo":"codigo","quien":"sala","funcion":"editar_imagen","condicion":{"tipo":"si_artefacto","campo":"hay_imagenes","igual":true,"artefacto":"imagenes_clave_final"},"entrada":["pedido_de_correccion"],"salida_artefacto":"ediciones_de_imagen","tope_usd":0,"tope_usd_por_segundo":0.2}$e$::jsonb, 2),
-          ($m${"clave":"mirar_correccion","tipo":"codigo","quien":"sala","funcion":"mirar_correccion","condicion":{"tipo":"si_artefacto","campo":"hay_imagenes","igual":true,"artefacto":"imagenes_clave_final"},"entrada":["ediciones_de_imagen"],"salida_artefacto":"correcciones_de_imagen","tope_usd":0,"vuelve_a":{"paso":"corregir_imagen","max":350,"si":{"tipo":"si_artefacto","artefacto":"correcciones_de_imagen","campo":"sigue","igual":true}},"tope_usd_por_segundo":0.26}$m$::jsonb, 3)
+          ($e${"clave":"editar_imagen","tipo":"codigo","quien":"sala","funcion":"editar_imagen","condicion":{"tipo":"si_artefacto","campo":"hay_imagenes","igual":true,"artefacto":"imagenes_clave_final"},"entrada":["pedido_de_correccion"],"salida_artefacto":"ediciones_de_imagen","tope_usd":4}$e$::jsonb, 2),
+          ($m${"clave":"mirar_correccion","tipo":"codigo","quien":"sala","funcion":"mirar_correccion","condicion":{"tipo":"si_artefacto","campo":"hay_imagenes","igual":true,"artefacto":"imagenes_clave_final"},"entrada":["ediciones_de_imagen"],"salida_artefacto":"correcciones_de_imagen","tope_usd":5.2,"vuelve_a":{"paso":"corregir_imagen","max":350,"si":{"tipo":"si_artefacto","artefacto":"correcciones_de_imagen","campo":"sigue","igual":true}}}$m$::jsonb, 3)
         ) AS n(q, j)
         WHERE p->>'clave' = 'imagenes_clave_final'
       ) y

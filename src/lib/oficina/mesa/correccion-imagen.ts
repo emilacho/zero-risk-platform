@@ -520,6 +520,14 @@ export const TOPE_FIJO_DE_LA_CORRECCION_DEL_VIDEO_USD = TOPE_DE_LA_MIRADA_DEL_CR
 /** tanda 2 · la vuelta 1 se parte en turnos (un turno del director por cada `MAX_IMAGENES` imágenes): el director de los turnos que siguen al primero, por segundo
  *  (0,75 × 2 imágenes por plano ÷ 20 por pedido = 0,075). Así una pasada cubre el turno fijo más uno por cada 10 s */
 export const TOPE_DEL_DIRECTOR_POR_SEGUNDO_USD = +((TOPE_DE_LA_MIRADA_DEL_CREATIVO_USD * 2) / MAX_IMAGENES).toFixed(4)
+/**
+ * 20-nov · LENOVO 18:30Z, opción (a) (tras el 🔴 de CC6): la edición y la mirada de UN turno topan por TURNO, no por segundo. Un turno lleva como mucho `MAX_IMAGENES` planos
+ * (sin foto real, una imagen por plano), así que 20 × 0,2 = 4,0 y 20 × 0,26 = 5,2. Con los topes por segundo (24 y 31,2 a 120 s) cada turno reservaba la pieza entera y,
+ * con lo que sigue guardado, la vuelta 1 no llegaba a todos los planos en el peor caso. El tope del ENCARGO sigue por segundo (cubre todos los turnos de una pasada)
+ */
+export const PLANOS_MAX_POR_TURNO = MAX_IMAGENES
+export const TOPE_DE_LA_EDICION_DE_IMAGEN_CLAVE_POR_TURNO_USD = +(PLANOS_MAX_POR_TURNO * TOPE_DE_LA_EDICION_DE_IMAGEN_CLAVE_POR_SEGUNDO_USD).toFixed(4)
+export const TOPE_DE_LA_MIRADA_DE_IMAGEN_CLAVE_POR_TURNO_USD = +(PLANOS_MAX_POR_TURNO * TOPE_DE_LA_MIRADA_DE_IMAGEN_CLAVE_POR_SEGUNDO_USD).toFixed(4)
 export const TOPE_DE_LA_CORRECCION_DEL_VIDEO_POR_SEGUNDO_USD = +(TOPE_DE_LA_EDICION_DE_IMAGEN_CLAVE_POR_SEGUNDO_USD + TOPE_DE_LA_MIRADA_DE_IMAGEN_CLAVE_POR_SEGUNDO_USD + TOPE_DEL_DIRECTOR_POR_SEGUNDO_USD).toFixed(4)
 /**
  * lo ESPERADO de la corrección en un video (sube `reserva_por_pieza_usd` de video_mesa, punto 1 de CC6; no es el peor caso): la cuenta de la tanda 1 con 15 planos
@@ -531,13 +539,13 @@ export const RESERVA_POR_VIDEO_DE_LA_CORRECCION_USD = 1.6
 /** la indicación del director cuando mira las imágenes clave que pidió: pide cambios, no califica (lo decide otro proveedor) */
 export const INDICACION_DE_LA_CORRECCION_DEL_VIDEO = { regla: 'Cuando miras las imágenes clave que pediste en la hoja de planos, NO las calificas: eliges la versión sobre la que se edita y dices qué cambiar, en lenguaje llano y concreto, para que cada una cumpla su plano y se parezca a la foto real. Si no hay nada que cambiar, no inventes cambios.', aplica: 'guia' } as const
 
-/** los tres pasos del video: los de la mesa, con quien corrige, la fuente y los topes por segundo del video · puro */
+/** los tres pasos del video: los de la mesa, con quien corrige, la fuente y los topes POR TURNO (opción (a) de Lenovo 18:30Z) · puro */
 export function pasosDeLaCorreccionDelVideo(condicion: Paso['condicion'], techo: number): Paso[] {
   const [corr, ed, mir] = pasosDeLaCorreccion(condicion, { limites: { imagenes_generadas_max: 0 } } as never, techo)
   return [
     { ...corr, quien: AGENTE_QUE_CORRIGE_LA_IMAGEN_CLAVE, entrada: [PASO_IMAGENES_CLAVE_FINAL] },
-    { ...ed, tope_usd: 0, tope_usd_por_segundo: TOPE_DE_LA_EDICION_DE_IMAGEN_CLAVE_POR_SEGUNDO_USD },
-    { ...mir, tope_usd: 0, tope_usd_por_segundo: TOPE_DE_LA_MIRADA_DE_IMAGEN_CLAVE_POR_SEGUNDO_USD },
+    { ...ed, tope_usd: TOPE_DE_LA_EDICION_DE_IMAGEN_CLAVE_POR_TURNO_USD },
+    { ...mir, tope_usd: TOPE_DE_LA_MIRADA_DE_IMAGEN_CLAVE_POR_TURNO_USD },
   ]
 }
 
