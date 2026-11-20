@@ -546,6 +546,12 @@ function artefactosDeImagen(tr: Traduccion, tipo: string, ingeniero: string | nu
     const pb = promptsParaElBrazo(generadas.map((g) => ({ ref: refIng(g.ref), descripcion: pedidoDeImagen(g.descripcion, g.concepto) })), textoDelIngeniero)
     avisosDePrompts.push(...pb.avisos)
     otros.prompts_validos = { por_ref: Object.fromEntries(generadas.map((g) => { const p = pb.por_ref[refIng(g.ref)]; return [g.ref, { indices: [0], prompts: [{ prompt: p.prompt, idea_en_una_linea: g.descripcion.slice(0, 120), ...conConcepto(g), ...(p.foto_de_referencia ? { foto_de_referencia: p.foto_de_referencia } : {}) }], origen: pb.del_ingeniero.includes(refIng(g.ref)) ? 'ingeniero_de_prompts' : 'direccion' }] })), ninguno: false, ...(delIngeniero ? { ingeniero: { agente: ingeniero, aporte: delIngeniero.id } } : {}) }
+    // 19-nov · «lo real es el set» · las otras fotos que nombró el ingeniero viajan con su prompt (en línea aparte: la de arriba lleva un corte viejo registrado)
+    const porRefValidos = (otros.prompts_validos as { por_ref: Record<string, { prompts: Array<Record<string, unknown>> }> }).por_ref
+    for (const g of generadas) {
+      const otras = pb.por_ref[refIng(g.ref)]?.otras_fotos_de_referencia
+      if (otras?.length && porRefValidos[g.ref]?.prompts[0]) porRefValidos[g.ref].prompts[0].otras_fotos_de_referencia = otras
+    }
     if (tipo === 'carrusel') { otros.copy_carrusel = tr.copy_carrusel as unknown as Record<string, unknown>; otros.laminas = { laminas: tr.laminas } }
     else if (tipo === 'post') Object.assign(otros, artefactosDeLaFoto(tr, otros))
     else { otros.copy_kit = { elementos: tr.copy_kit }; otros.estructura = { elementos: tr.estructura } }

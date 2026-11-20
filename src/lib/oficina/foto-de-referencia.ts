@@ -5,6 +5,8 @@
  * Primero la que eligió el director visual, si es apta; si no, las candidatas en su orden, rotando para que dos imágenes del mismo
  * encargo no salgan de la misma foto. Sin candidata apta → null y la imagen se genera como siempre. Pura.
  */
+import { MAX_FOTOS_POR_IMAGEN } from '../imagen-sobre-foto'
+
 export interface FotoDeReferencia { id: string; url: string }
 
 interface FotoConUrl { id: string; url?: string | null }
@@ -21,6 +23,39 @@ export function fotosDeReferencia(fotos: FotoConUrl[], candidatas: CandidataMin[
   const k = o.preferida ? aptas.findIndex((x) => x.id === o.preferida) : -1
   if (k > 0) aptas.unshift(...aptas.splice(k, 1))
   return aptas
+}
+
+/**
+ * 19-nov · «lo real es el set» (precisión de Emilio 16:34) · sin foto real la imagen se genera igual con el estilo del manual, y la pieza lo dice: nunca frena.
+ * `nombradas`: las fotos reales que el agente nombró y existen, pero ninguna sirve de base (🟡 CC6 23:11Z: el aviso no dice «no tiene foto» si sí las tiene).
+ */
+export const avisoDeImagenGenerada = (cual: string, nombradas: string[] = []): string =>
+  nombradas.length
+    ? `${cual} salió generada con el estilo del manual: se nombraron fotos reales (${nombradas.map((id) => `foto:${id}`).join(', ')}), pero ninguna sirve de base (no muestran al protagonista)`
+    : `${cual} salió generada con el estilo del manual: el cliente no tiene una foto real de esto`
+
+/** 19-nov · «lo real es el set» · cuántas fotos viajan con la base en un pedido: las que admite la edición menos la base (16 − 1 = 15) */
+export const MAX_OTRAS_FOTOS = MAX_FOTOS_POR_IMAGEN - 1
+
+/**
+ * 19-nov · «lo real es el set» (GO Lenovo + ADENDA 1: nadie arma un juego aparte) · las OTRAS fotos que viajan con la base de UNA imagen. Pura.
+ * Las elige el agente que crea: las que nombró para esta imagen; si para esta no nombró ninguna, hereda las que nombró en las demás imágenes de la pieza
+ * (bases y otras, en su orden). Sirve cualquier foto propia con dirección (el lugar, el personaje, el producto), no solo las candidatas del protagonista.
+ * Nunca repite la base ni una foto ya puesta; tope `MAX_OTRAS_FOTOS`. `no_aptas`: las que nombró para ESTA imagen y no se pueden usar (sin dirección o no existen).
+ * Sin fotos nombradas en toda la pieza → [] (cero fotos: se genera igual, sin frenar).
+ */
+export function otrasFotosDeLaImagen(propias: FotoConUrl[], base: FotoDeReferencia | null, deEstaImagen: Array<string | null | undefined>, deLaPieza: Array<string | null | undefined>): { otras: FotoDeReferencia[]; no_aptas: string[] } {
+  const propiasDeEsta = deEstaImagen.filter((x): x is string => typeof x === 'string' && !!x.trim())
+  const lista = propiasDeEsta.length ? propiasDeEsta : deLaPieza.filter((x): x is string => typeof x === 'string' && !!x.trim())
+  const otras: FotoDeReferencia[] = []
+  const no_aptas: string[] = []
+  for (const id of lista) {
+    if (id === base?.id || otras.some((o) => o.id === id)) continue
+    const url = propias.find((f) => f.id === id)?.url
+    if (typeof url !== 'string' || !url.trim()) { if (propiasDeEsta.length && !no_aptas.includes(id)) no_aptas.push(id); continue }
+    if (otras.length < MAX_OTRAS_FOTOS) otras.push({ id, url })
+  }
+  return { otras, no_aptas }
 }
 
 /** la n-ésima foto de referencia (rota sobre las aptas) */
