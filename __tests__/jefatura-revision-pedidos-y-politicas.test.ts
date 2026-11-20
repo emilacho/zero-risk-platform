@@ -210,12 +210,14 @@ describe('la tabla por tipo, hecha política y plantilla', () => {
     const p = politica('pieza', { tope_paso_usd: {} })
     expect([topeDelPaso(p, 'revision_fondo'), topeDelPaso(p, 'correccion'), topeDelPaso(p, 'segunda_mirada'), topeDelPaso(p, 'decision')]).toEqual([0.2, 0.2, 0.5, 0.2])
   })
-  it('plantilla de la pieza: jefe → una corrección POR dueño → GPT → una decisión POR dueño → cierre', () => {
+  // 20-nov · PLAN v4 · GPT va PRIMERO y ciego (lee la versión A), su informe solo se guarda: ya no hay decisión del dueño sobre su opinión
+  it('plantilla de la pieza: GPT primero → jefe → una corrección POR dueño → cierre (sin decisiones)', () => {
     const pol = politica('pieza')
     const pl = plantillaDePolitica(pol, pol.productores, 1.5)
-    expect(pl.pasos.map((x) => x.clave)).toEqual(['revision_fondo', CLAVE_DE_CORRECCION('content-creator'), CLAVE_DE_CORRECCION('marketing_instagram_curator'), 'segunda_mirada', CLAVE_DE_DECISION('content-creator'), CLAVE_DE_DECISION('marketing_instagram_curator'), 'cierre'])
-    expect(pl.pasos.find((x) => x.clave === 'segunda_mirada')).toMatchObject({ tipo: 'externo', quien: 'GPT', ronda: 2 })
+    expect(pl.pasos.map((x) => x.clave)).toEqual(['segunda_mirada', 'revision_fondo', CLAVE_DE_CORRECCION('content-creator'), CLAVE_DE_CORRECCION('marketing_instagram_curator'), 'cierre'])
+    expect(pl.pasos.find((x) => x.clave === 'segunda_mirada')).toMatchObject({ tipo: 'externo', quien: 'GPT', ronda: 1 })
     expect(pl.pasos.find((x) => x.clave === 'revision_fondo')).toMatchObject({ quien: 'jefe-marketing', ronda: 1, salida: { esquema: 'fichas.v1' } })
+    expect(pl.pasos.some((x) => x.clave.startsWith(CLAVE_DE_DECISION('')))).toBe(false)
     // sin ciclos: ningún paso vuelve atrás
     expect(pl.pasos.some((x) => x.vuelve_a)).toBe(false)
   })

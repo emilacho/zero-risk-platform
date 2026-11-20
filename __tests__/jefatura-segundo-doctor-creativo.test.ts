@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest'
 import {
   bloqueParaElCreativo, CARACTERES_MINIMOS_DE_UNA_CITA, estadoDeLaCita, huella, LA_OPINION_SOLA_HACE_VOLVER, leerInformeCreativo, MARCA_DE_FIN_DEL_INFORME, MARCA_DE_INICIO_DEL_INFORME,
   normalizarParaCitar, PALABRAS_MINIMAS_DE_UNA_CITA, parteQueToca, resumenDelDoctor, TEXTO_HONESTO_AL_CREATIVO, verificarCita, type MaterialDelDoctor,
-} from '../src/lib/jefatura/revision/segundo-doctor'
+} from '../src/lib/segundo-doctor'
 
 const relleno = Array.from({ length: 400 }, (_, i) => `Párrafo ${i} del manual con indicaciones generales de la marca.`).join('\n')
 const MANUAL = `${relleno}\nAl final: la luz de la tarde debe sentirse cálida y dorada, nunca fría ni azulada en las fotos.`

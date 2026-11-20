@@ -18,7 +18,7 @@ import { ARTEFACTO_SEGUNDA_MIRADA, cabeLaVueltaDeLaSegundaMirada, conSegundaMira
 import { leerRespuestas } from '../sentido-contra-la-ficha'
 import { sobreDeLaRevision } from '../paso-jefatura'
 import type { Estado, Plantilla } from '../tipos'
-import { MARCA_DE_FIN_DEL_INFORME, MARCA_DE_INICIO_DEL_INFORME, TEXTO_HONESTO_AL_CREATIVO } from '../../jefatura/revision/segundo-doctor'
+import { MARCA_DE_FIN_DEL_INFORME, MARCA_DE_INICIO_DEL_INFORME, TEXTO_HONESTO_AL_CREATIVO } from '../../segundo-doctor'
 
 const RAIZ = path.resolve(__dirname, '..', '..', '..', '..')
 const leer = (...p: string[]) => fs.readFileSync(path.join(RAIZ, 'supabase', ...p), 'utf8').replace(/\r/g, '')

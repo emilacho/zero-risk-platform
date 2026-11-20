@@ -18,7 +18,7 @@ import { validarEntrada, type EntradaDeRevision, type Marcas, type PayloadDeRevi
 import { procesarSalidaDeRevision } from './formatos'
 import { armarPedidoCiego, armarPedidoDeAgente, auditarPedidoDeAgente, tareaDeCorreccion, tareaDeDecision, tareaDeRevisionDeFondo, tareaDeRevisionDeLengua, type FichaParaElDueno } from './pedidos'
 import { elegirVersion as elegirVersionPura, esProductoDeUnaRevision, etiquetaDeVersion, MAXIMO_DE_VERSIONES, planDeGuardado, resultadoTrasElegir, type EvaluacionDeVersion, type Etiqueta, type FilaExistente } from './plan'
-import { huella, leerInformeCreativo, PEDIDO_CREATIVO, resumenDelDoctor, type InformeCreativo, type ResumenDelDoctor } from './segundo-doctor'
+import { huella, leerInformeCreativo, PEDIDO_CREATIVO, resumenDelDoctor, type InformeCreativo, type ResumenDelDoctor } from '../../revision-comun'
 import { atiende, casarId, CLAVE_DE_CORRECCION, CLAVE_DE_DECISION, dondeDeLaOpinion, duenosDe, normalizarDonde, plantillaDePolitica, topeDelPaso, type Dueno } from './politicas'
 import { lecturasDeVida, vidaDelPaso, type LectorDeVida } from '../../plazo-de-vida'
 import { ESTADOS_TERMINALES, type CambiosDeRevision, type PasoRegistrado, type Puertos, type Revision } from './puertos'

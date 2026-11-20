@@ -8,7 +8,7 @@
  * Lo que es dato equivocado (`datos`) nunca llega al creativo: es diagnóstico para la corrida (CC7).
  */
 import { armarPedidoAlRevisor, PREGUNTA_AL_REVISOR, type ContextoDelRevisor } from '../revision-comun'
-import { bloqueParaElCreativo, huella, leerInformeCreativo, PEDIDO_CREATIVO, resumenDelDoctor, type InformeCreativo } from '../jefatura/revision/segundo-doctor'
+import { bloqueParaElCreativo, huella, leerInformeCreativo, PEDIDO_CREATIVO, resumenDelDoctor, type InformeCreativo } from '../segundo-doctor'
 import { datos } from './ayudas'
 import { ARTEFACTO_BORRADOR_IMAGEN, FUNCION_BORRADOR_IMAGEN, type BorradoresDeImagen } from './mesa/borrador-imagen'
 import { ARTEFACTO_PROPUESTAS_IMAGEN, type PropuestasDeImagen } from './mesa/propuestas-imagen'

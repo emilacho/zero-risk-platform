@@ -7,7 +7,7 @@
  * Puro: sin red ni base.
  */
 import { createHash } from 'node:crypto'
-import type { ContextoDelRevisor } from '../../revision-comun'
+import type { ContextoDelRevisor } from './revisor-gpt'
 
 /** el bloque del informe, entre marcas (como el bloque de resolución del plan) */
 export const MARCA_DE_INICIO_DEL_INFORME = '<<<INFORME_CREATIVO>>>'

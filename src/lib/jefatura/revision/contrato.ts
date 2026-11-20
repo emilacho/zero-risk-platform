@@ -131,7 +131,7 @@ export interface SalidaDeRevision {
   respuestas: RespuestaDeFicha[]
   opinion_externa: { texto: string; modelo: string | null } | null
   /** 20-nov · pieza: el informe del segundo doctor creativo (observaciones + `datos` aparte) con su resumen; ausente si no opinó */
-  segunda_mirada?: { informe: import('./segundo-doctor').InformeCreativo; resumen: import('./segundo-doctor').ResumenDelDoctor }
+  segunda_mirada?: { informe: import('../../revision-comun').InformeCreativo; resumen: import('../../revision-comun').ResumenDelDoctor }
   imagen_por_rehacer: boolean
   /** pieza: frases que el dueño negó y siguen en lo revisado; se le avisan, no devuelven la pieza */
   avisos?: string[]
