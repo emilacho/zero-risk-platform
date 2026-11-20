@@ -162,6 +162,30 @@ describe('archivar con dos campañas vivas del mismo cliente', () => {
       expect(JSON.stringify(x.tablas)).toBe(antes)
     }
   })
+
+  it('🔴 si no se pueden leer las campañas del cliente (la lectura que decide lo mudo), no escribe nada', async () => {
+    const x = base()
+    // la primera lectura de cadena_campanas (la campaña pedida) pasa; falla la segunda: las campañas del cliente con las que se decide lo que no tiene rastro
+    let lecturas = 0
+    const db = { from: (t: string) => (t === 'cadena_campanas' && ++lecturas === 2 ? x.from('__falla__') : x.from(t)) }
+    x.fallar['__falla__'] = 'se cayó'
+    const antes = JSON.stringify(x.tablas)
+    const r = await archivarCampana(db as unknown as Db, { campana_id: VIEJA, dry_run: false }, AHORA)
+    expect(lecturas).toBeGreaterThanOrEqual(2)
+    expect(r.status).toBe(500)
+    expect(JSON.stringify(x.tablas)).toBe(antes)
+  })
+
+  it('🔴 el borde exacto: lo mudo en el instante en que la otra nace es de las dos (se declara); en el que la otra se archiva, ya es solo de esta', async () => {
+    const x = base()
+    x.tablas['cadena_campanas'] = x.tablas['cadena_campanas'].filter((f) => f.id !== NUEVA)
+    x.semilla('cadena_campanas', [{ id: 'corta', client_id: C, estado: 'reemplazada', creada_en: '2026-11-18T06:00:00Z', archivada_en: '2026-11-18T12:00:00Z', seco: false, llave_de_campana: 'tablero-corta' }])
+    x.semilla('hitl_queue', [pieza('al-nacer', '2026-11-18T06:00:00Z'), pieza('al-archivar', '2026-11-18T12:00:00Z')])
+    const r = await archivarCampana(d(x), { campana_id: VIEJA, dry_run: false }, AHORA)
+    expect(archivada(x, 'al-nacer')).toBeNull()
+    expect(r.body.sin_campana_clara).toContainEqual({ id: 'al-nacer', motivo: OTRA_VIVA })
+    expect(archivada(x, 'al-archivar')).toBe(AHORA.toISOString())
+  })
 })
 
 describe('desarchivar frena donde frena la base (índice una_viva_por_cliente: sin llave, ni cerrada ni reemplazada)', () => {
