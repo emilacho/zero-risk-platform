@@ -18,6 +18,7 @@ import { ARTEFACTO_SEGUNDA_MIRADA, cabeLaVueltaDeLaSegundaMirada, conSegundaMira
 import { leerRespuestas } from '../sentido-contra-la-ficha'
 import { sobreDeLaRevision } from '../paso-jefatura'
 import type { Estado, Plantilla } from '../tipos'
+import { loQueSigueDeLaMesa, reservaPorPasadaDeLaMesa } from '../topes-por-duracion'
 import { MARCA_DE_FIN_DEL_INFORME, MARCA_DE_INICIO_DEL_INFORME, TEXTO_HONESTO_AL_CREATIVO } from '../../segundo-doctor'
 
 const RAIZ = path.resolve(__dirname, '..', '..', '..', '..')
@@ -80,6 +81,10 @@ function revisorFalso(texto = CON_OBS, ok = true) {
 }
 const PL = POST_MESA_CON_SEGUNDA_MIRADA
 const PASO = PL.pasos.find((p) => p.clave === 'segunda_mirada')!
+/** el tope de hoy no deja lugar a la vuelta (ALTO de CC4 a LENOVO): para probar el camino de la vuelta, un tope que la cubre */
+const AMPLIO = { ...PL, limites: { ...PL.limites, tope_encargo_usd: 100 } } as Plantilla
+/** lo que cuesta volver: una pasada de la mesa + todo lo que sigue a la mesa + las rondas del dueño que quedan */
+const REHACER = reservaPorPasadaDeLaMesa(PL) + loQueSigueDeLaMesa(PL, { vueltas: {} })
 const datosDe = (r: { res: { artefacto?: Record<string, unknown> } }) => r.res.artefacto as Record<string, unknown>
 
 describe('el lugar del paso en las 4 mesas (PLAN v4 · (A) sin render)', () => {
@@ -173,7 +178,7 @@ describe('lo que ve GPT: las propuestas como le llegan al dueño', () => {
 describe('el paso', () => {
   it('con observaciones y vuelta que cabe: vuelve a la mesa con el aviso SIN firma, y los datos nunca van (CC7 5)', async () => {
     const { P, llamadas } = revisorFalso()
-    const r = await correrSegundaMirada(P, encargo(estadoAntesDeLaSegundaMirada(PL)), PL, PASO, CONTEXTO)
+    const r = await correrSegundaMirada(P, encargo(estadoAntesDeLaSegundaMirada(PL)), AMPLIO, PASO, CONTEXTO)
     const d = datosDe(r)
     expect(llamadas).toHaveLength(1)
     expect(llamadas[0].texto).toContain('el plato estrella te espera')
@@ -187,7 +192,7 @@ describe('el paso', () => {
   })
   it('guarda para medir: informe, huellas, modelo efectivo, la versión A y las imágenes (CC6 3, 4, 7)', async () => {
     const { P } = revisorFalso()
-    const d = datosDe(await correrSegundaMirada(P, encargo(estadoAntesDeLaSegundaMirada(PL)), PL, PASO, CONTEXTO))
+    const d = datosDe(await correrSegundaMirada(P, encargo(estadoAntesDeLaSegundaMirada(PL)), AMPLIO, PASO, CONTEXTO))
     expect(d.modelo_efectivo).toBe('gpt-x-2026-11-01')
     expect((d.resumen as { otro_proveedor: boolean }).otro_proveedor).toBe(true)
     expect((d.huellas as Array<{ titulo: string }>).map((h) => h.titulo)).toEqual(['Manual de marca del cliente', 'El brief de este entregable'])
@@ -197,21 +202,21 @@ describe('el paso', () => {
   })
   it('sin observaciones: guarda y sigue, sin vuelta', async () => {
     const { P } = revisorFalso(respuestaDeGpt({ observaciones: [], datos: [] }))
-    const d = datosDe(await correrSegundaMirada(P, encargo(estadoAntesDeLaSegundaMirada(PL)), PL, PASO, CONTEXTO))
+    const d = datosDe(await correrSegundaMirada(P, encargo(estadoAntesDeLaSegundaMirada(PL)), AMPLIO, PASO, CONTEXTO))
     expect(d.vuelve_a_la_mesa).toBe(false)
     expect(d.aviso_a_la_mesa).toBeUndefined()
     expect(d.sin_vuelta).toBeUndefined()
   })
   it('en ensayo (dry_run): 0 llamadas a GPT y sigue (CC7 4)', async () => {
     const { P, llamadas } = revisorFalso()
-    const r = await correrSegundaMirada(P, encargo(estadoAntesDeLaSegundaMirada(PL), { dry_run: true }), PL, PASO, CONTEXTO)
+    const r = await correrSegundaMirada(P, encargo(estadoAntesDeLaSegundaMirada(PL), { dry_run: true }), AMPLIO, PASO, CONTEXTO)
     expect(llamadas).toHaveLength(0)
     expect(datosDe(r).vuelve_a_la_mesa).toBe(false)
     expect(r.res.costo_usd).toBe(0)
   })
   it('si GPT falla, la pieza sigue sin vuelta (CC6 12)', async () => {
     const { P } = revisorFalso('', false)
-    const d = datosDe(await correrSegundaMirada(P, encargo(estadoAntesDeLaSegundaMirada(PL)), PL, PASO, CONTEXTO))
+    const d = datosDe(await correrSegundaMirada(P, encargo(estadoAntesDeLaSegundaMirada(PL)), AMPLIO, PASO, CONTEXTO))
     expect(d.sin_revision).toBe(true)
     expect(d.motivo).toBe('cayó')
     expect(d.vuelve_a_la_mesa).toBe(false)
@@ -220,10 +225,10 @@ describe('el paso', () => {
     const { P, llamadas } = revisorFalso()
     const e = estadoAntesDeLaSegundaMirada(PL)
     const i = PL.pasos.findIndex((p) => p.clave === 'segunda_mirada')
-    const r1 = await correrSegundaMirada(P, encargo(e), PL, PASO, CONTEXTO)
+    const r1 = await correrSegundaMirada(P, encargo(e), AMPLIO, PASO, CONTEXTO)
     const e2 = registrarPaso(e, PL, i, r1.res)
     expect(segundaMiradaYaDada(e2)).toBe(true)
-    const r2 = await correrSegundaMirada(P, encargo(e2), PL, PASO, CONTEXTO)
+    const r2 = await correrSegundaMirada(P, encargo(e2), AMPLIO, PASO, CONTEXTO)
     expect(llamadas).toHaveLength(1)
     expect(datosDe(r2).ya_opino).toBe(true)
     expect(datosDe(r2).vuelve_a_la_mesa).toBe(false)
@@ -233,10 +238,10 @@ describe('el paso', () => {
     const { P } = revisorFalso()
     const e = estadoAntesDeLaSegundaMirada(PL)
     const i = PL.pasos.findIndex((p) => p.clave === 'segunda_mirada')
-    const e2 = registrarPaso(e, PL, i, (await correrSegundaMirada(P, encargo(e), PL, PASO, CONTEXTO)).res)
+    const e2 = registrarPaso(e, PL, i, (await correrSegundaMirada(P, encargo(e), AMPLIO, PASO, CONTEXTO)).res)
     const iMesa = PL.pasos.findIndex((p) => p.clave === 'mesa')
     const e3 = registrarPaso(e2, PL, iMesa, { costo_usd: 0, artefacto: { texto: 'nueva', respuestas_a_la_jefatura: ['RESPUESTA A LA JEFATURA O1: tomada'] } })
-    const d = datosDe(await correrSegundaMirada(P, encargo(e3), PL, PASO, CONTEXTO))
+    const d = datosDe(await correrSegundaMirada(P, encargo(e3), AMPLIO, PASO, CONTEXTO))
     expect(d.respuestas_del_creativo).toEqual([expect.objectContaining({ id: 'O1' })])
     expect(typeof d.version_despues).toBe('string')
   })
@@ -261,6 +266,23 @@ describe('¿cabe la vuelta? la decide el paso, con el costo de rehacer (CC7 3 ·
     expect(d.vuelve_a_la_mesa).toBe(false)
     expect(d.sin_vuelta).toBe('tope')
     expect(d.aviso_a_la_mesa).toBeUndefined()
+  })
+  it('🔴 el borde exacto: gasto + lo de esta llamada + rehacer TODO (mesa, lo que sigue y las rondas de Emilio) · un centavo abajo no vuelve, justo sí (CC7 2 y 3)', async () => {
+    const e = estadoAntesDeLaSegundaMirada(PL, 2)
+    const justo = 2 + 0.07 + REHACER
+    expect(REHACER).toBeGreaterThan(20) // incluye las 2 rondas del dueño: no es solo mesa + borrador
+    const conTope = (t: number) => ({ ...PL, limites: { ...PL.limites, tope_encargo_usd: t } }) as Plantilla
+    const abajo = datosDe(await correrSegundaMirada(revisorFalso().P, encargo(e), conTope(justo - 0.01), PASO, CONTEXTO))
+    expect(abajo.vuelve_a_la_mesa).toBe(false)
+    expect(abajo.sin_vuelta).toBe('tope')
+    const arriba = datosDe(await correrSegundaMirada(revisorFalso().P, encargo(e), conTope(justo + 1e-6), PASO, CONTEXTO))
+    expect(arriba.vuelve_a_la_mesa).toBe(true)
+  })
+  it('con los topes vivos de hoy (post 15) la vuelta no cabe: el informe solo se guarda', async () => {
+    const vivo = { ...PL, limites: { ...PL.limites, tope_encargo_usd: 15 } } as Plantilla
+    const d = datosDe(await correrSegundaMirada(revisorFalso().P, encargo(estadoAntesDeLaSegundaMirada(PL)), vivo, PASO, CONTEXTO))
+    expect(d.sin_vuelta).toBe('tope')
+    expect(d.informe).toBeTruthy()
   })
   it('sin vuelta que quede (ya volvió una vez): sin_vuelta', () => {
     const e = { ...estadoAntesDeLaSegundaMirada(PL), vueltas: { segunda_mirada: 1 } }
@@ -300,7 +322,7 @@ describe('en el render, la jefatura no vuelve a llamar a GPT', () => {
     const { P } = revisorFalso()
     const e = estadoAntesDeLaSegundaMirada(PL)
     const i = PL.pasos.findIndex((p) => p.clave === 'segunda_mirada')
-    const e2 = registrarPaso(e, PL, i, (await correrSegundaMirada(P, encargo(e), PL, PASO, CONTEXTO)).res)
+    const e2 = registrarPaso(e, PL, i, (await correrSegundaMirada(P, encargo(e), AMPLIO, PASO, CONTEXTO)).res)
     expect(segundaMiradaYaDada(e2)).toBe(true)
     expect(segundaMiradaYaDada(e)).toBe(false)
     const sobre = (est: Estado) => sobreDeLaRevision({ id: 'e', client_id: 'cli-1', familia: PL.familia, tope_usd: 30, dry_run: true, sala_ref: null } as never, PL, est, { pieza: 'x', imagenes: [], contexto: [] } as never) as unknown as { payload: Record<string, unknown> }

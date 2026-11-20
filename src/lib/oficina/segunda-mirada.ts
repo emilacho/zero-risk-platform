@@ -14,7 +14,7 @@ import { ARTEFACTO_BORRADOR_IMAGEN, FUNCION_BORRADOR_IMAGEN, type BorradoresDeIm
 import { ARTEFACTO_PROPUESTAS_IMAGEN, type PropuestasDeImagen } from './mesa/propuestas-imagen'
 import { cabeLaVuelta, quedaVueltaDelPaso } from './orquestador-video'
 import { leerRespuestas, type Enviada, type RespuestaDelCreador } from './sentido-contra-la-ficha'
-import { costoDeVolver } from './topes-por-duracion'
+import { loQueSigueDeLaMesa, reservaPorPasadaDeLaMesa } from './topes-por-duracion'
 import type { Cambios, Encargo, Puertos } from './puertos'
 import type { ResultadoDePaso } from './motor'
 import type { ImagenesClave } from './video/imagen-clave'
@@ -91,12 +91,18 @@ const respuestasDelCreativo = (e: Estado, enviadas: Enviada[]): RespuestaDelCrea
   return enviadas.length ? leerRespuestas(enviadas, Array.isArray(lineas) ? lineas.filter((l): l is string => typeof l === 'string') : []) : []
 }
 
-/** ¿cabe la vuelta? la cuenta del costo de REHACER (mesa + borradores hasta este paso) y del margen de pasos (CC7 3 · CC6 10 y 11): la decide el paso, no el freno */
+/**
+ * ¿cabe la vuelta? la decide el paso, no el freno (CC7 3 · CC6 10 y 11), con el margen de pasos y la plata de TODO lo que viene si vuelve:
+ *  una pasada más de la mesa + todo lo que sigue a la mesa (borrador, este paso, la producción) + las rondas del dueño que todavía quedan (`aprobar_propuestas`
+ *  no se salta). Es la misma cuenta con que la mesa guarda lo que sigue (`loQueSigueDeLaMesa`): si la vuelta de GPT cabe, la mesa nunca se frena a medias
+ *  y Emilio conserva sus rondas (CC7 2). Si no cabe, el informe solo se guarda.
+ */
 export function cabeLaVueltaDeLaSegundaMirada(pl: Plantilla, paso: Paso, e: Estado, costoDeEsta: number): { cabe: boolean; motivo?: string } {
   if (!quedaVueltaDelPaso(paso, e)) return { cabe: false, motivo: 'sin_vuelta' }
   const iMesa = pl.pasos.findIndex((x) => x.clave === 'mesa')
   if (!(iMesa >= 0 && e.pasos_ejecutados + (pl.pasos.length - iMesa) < pl.pasos.length + pl.limites.margen)) return { cabe: false, motivo: 'tope_de_pasos' }
-  if (!cabeLaVuelta(pl, { ...e, gasto_usd: e.gasto_usd + costoDeEsta }, costoDeVolver(pl, paso))) return { cabe: false, motivo: 'tope' }
+  const rehacer = reservaPorPasadaDeLaMesa(pl) + loQueSigueDeLaMesa(pl, { vueltas: e.vueltas })
+  if (!cabeLaVuelta(pl, { ...e, gasto_usd: e.gasto_usd + costoDeEsta }, rehacer)) return { cabe: false, motivo: 'tope' }
   return { cabe: true }
 }
 
