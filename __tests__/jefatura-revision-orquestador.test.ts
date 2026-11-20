@@ -177,6 +177,14 @@ describe('pieza · el orden del PLAN v4: GPT primero y ciego (solo se guarda) �
     expect(c.final.cuerpo.resultado).toBe('limpia')
     expect(sal(c).segunda_mirada).toBeUndefined()
   })
+  it('GPT no se come el presupuesto del jefe: si su tope + el del fondo + el de lengua no caben, se salta y el jefe corre igual (CC6 1)', async () => {
+    const { P, rastro } = puertosDePrueba()
+    // 0,6 de tope: 0,5 (GPT) + 0,2 (fondo) no caben juntos; el fondo solo sí
+    const c = await correr(P, sobre('pieza', { dry_run: false, payload: { tope_restante_usd: 0.6 } }), (t) => (t.paso === 'revision_fondo' ? { texto: '{"fichas":[]}' } : { texto: '{"respuestas":[]}' }))
+    expect(rastro.llamadasAlRevisor).toHaveLength(0)
+    expect(pasosDe(c)).toEqual(['revision_fondo'])
+    expect(c.final.cuerpo.resultado).toBe('sin_segunda_mirada')
+  })
   it('guarda el modelo que de verdad contestó (CC6 3)', async () => {
     const { P } = puertosDePrueba({ revisor: () => ({ ok: true, texto: 'el color está liviano', costo_usd: 0.01, modelo: 'gpt-pedido', modelo_efectivo: 'gpt-pedido-2026-11-01', intentos: [] }) })
     const c = await correr(P, sobre('pieza', { dry_run: false }), (t) => (t.paso === 'revision_fondo' ? { texto: '{"fichas":[]}' } : { texto: '{"respuestas":[]}' }))

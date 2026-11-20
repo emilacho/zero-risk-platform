@@ -240,6 +240,12 @@ describe('el paso', () => {
     expect(d.respuestas_del_creativo).toEqual([expect.objectContaining({ id: 'O1' })])
     expect(typeof d.version_despues).toBe('string')
   })
+  it('las [O…] no cambian lo que el lector devuelve para las fichas [S…] de la jefatura: mismas, en el mismo orden (CC6 8)', () => {
+    const enviadas = [{ id: 'S1', texto: 'a', dura: true }, { id: 'S2', texto: 'b', dura: false }]
+    const sinO = ['RESPUESTA A LA JEFATURA S1: tomada', 'RESPUESTA A LA JEFATURA S2: no tomada: no aplica']
+    const conO = ['RESPUESTA A LA JEFATURA O1: tomada', sinO[0], 'RESPUESTA A LA JEFATURA O2: no tomada: no va', sinO[1]]
+    expect(leerRespuestas(enviadas, conO)).toEqual(leerRespuestas(enviadas, sinO))
+  })
   it('el lector de respuestas entiende las [O…] igual que las [S…]', () => {
     const r = leerRespuestas([{ id: 'O1', texto: 'x', dura: false }, { id: 'S2', texto: 'y', dura: false }], ['RESPUESTA A LA JEFATURA O1: tomada', 'RESPUESTA A LA JEFATURA S2: no tomada: no aplica'])
     expect(r.map((x) => x.id)).toEqual(['O1', 'S2'])
