@@ -49,6 +49,9 @@ describe('202611201100 · los topes de las 3 mesas de imagen', () => {
     }
     expect(MIG).toContain("IF EXISTS (SELECT 1 FROM public.oficina_encargos e WHERE e.estado IN ('abierto', 'en_paso') AND e.familia IN ('post_mesa', 'carrusel_mesa', 'kit_mesa')) THEN")
     expect(MIG).toContain('LOCK TABLE public.oficina_encargos IN SHARE MODE;')
+    // 🟡 CC7 12:25Z · t4 y t6: la guarda FRENA (no solo avisa) y las 3 filas quedan tomadas
+    expect(MIG).toContain("THEN\n    RAISE EXCEPTION '202611201100: hay un encargo vivo")
+    expect(MIG).toContain("WHERE tipo IN ('post_mesa', 'carrusel_mesa', 'kit_mesa') FOR UPDATE;")
     expect(MIG.indexOf('hay un encargo vivo')).toBeLessThan(MIG.indexOf('UPDATE public.oficina_tipos_de_grupo'))
     expect(MIG.indexOf('no es el leído')).toBeLessThan(MIG.indexOf('UPDATE public.oficina_tipos_de_grupo'))
   })
@@ -61,5 +64,12 @@ describe('202611201100 · los topes de las 3 mesas de imagen', () => {
     expect(REV).toContain(`(g.tipo = 'post_mesa' AND g.tope_encargo_usd = ${NUEVO.post_mesa}) OR (g.tipo IN ('carrusel_mesa', 'kit_mesa') AND g.tope_encargo_usd = ${NUEVO.carrusel_mesa})`)
     expect(REV).toContain("IF EXISTS (SELECT 1 FROM public.oficina_encargos e WHERE e.estado IN ('abierto', 'en_paso') AND e.familia IN ('post_mesa', 'carrusel_mesa', 'kit_mesa')) THEN")
     expect(REV.indexOf('hay un encargo vivo')).toBeLessThan(REV.indexOf('UPDATE public.oficina_tipos_de_grupo'))
+    // 🟡 CC7 12:25Z · t10, t11 y t6: la guarda de la reversa FRENA, exige las 3 filas (no 2 de 3) y las toma
+    expect(REV).toContain("THEN\n    RAISE EXCEPTION 'REVERSA 202611201100: hay un encargo vivo")
+    expect(REV).toContain("AND g.tope_encargo_usd = 45)) <> 3 THEN\n    RAISE EXCEPTION 'REVERSA 202611201100: los topes no son los que dejó la migración")
+    expect(REV).toContain("WHERE tipo IN ('post_mesa', 'carrusel_mesa', 'kit_mesa') FOR UPDATE;")
+    // 🟡 sin freno de CC7 · la reversa comprueba al final que quedó lo leído (como la ida)
+    expect(REV).toContain(`<> 3 THEN\n    RAISE EXCEPTION 'REVERSA 202611201100: los topes no quedaron en ${LEIDO.post_mesa}/${LEIDO.carrusel_mesa}/${LEIDO.kit_mesa}'`)
+    expect(REV.lastIndexOf('no quedaron en')).toBeGreaterThan(REV.lastIndexOf('UPDATE public.oficina_tipos_de_grupo'))
   })
 })

@@ -20,4 +20,11 @@ UPDATE public.oficina_tipos_de_grupo g SET tope_encargo_usd = 15, limites = g.li
 UPDATE public.oficina_tipos_de_grupo g SET tope_encargo_usd = 15, limites = g.limites || jsonb_build_object('tope_encargo_usd', 15), version = g.version + 1 WHERE g.tipo = 'carrusel_mesa';
 UPDATE public.oficina_tipos_de_grupo g SET tope_encargo_usd = 18, limites = g.limites || jsonb_build_object('tope_encargo_usd', 18), version = g.version + 1 WHERE g.tipo = 'kit_mesa';
 
+DO $$
+BEGIN
+  IF (SELECT count(*) FROM public.oficina_tipos_de_grupo g WHERE (g.tipo IN ('post_mesa', 'carrusel_mesa') AND g.tope_encargo_usd = 15 AND (g.limites->>'tope_encargo_usd')::numeric = 15) OR (g.tipo = 'kit_mesa' AND g.tope_encargo_usd = 18 AND (g.limites->>'tope_encargo_usd')::numeric = 18)) <> 3 THEN
+    RAISE EXCEPTION 'REVERSA 202611201100: los topes no quedaron en 15/15/18';
+  END IF;
+END $$;
+
 COMMIT;
