@@ -341,6 +341,16 @@ describe('3 · la mirada de otro proveedor decide', () => {
     expect(c.imagenes.hook.motivo_de_cierre).toBe('fallo_la_edicion')
     expect(c.imagenes.cierre.motivo_de_cierre).toBe('sin_lectura')
   })
+  it('🔴 la mirada registra su gasto: el costo del revisor en `costo_usd` y un gasto `revisor_externo` por llamada (CC7 m15)', async () => {
+    const { P, llamadas } = puertos()
+    const r = await mirarCorreccion(P, enc(paraMirar({ hook: { base: 1, cambios: 'barro' }, cierre: { base: 0, cambios: '' } }, { hook: nueva('n') })), plConCorreccion())
+    expect(llamadas.revisor).toHaveLength(2)
+    expect(r.res.costo_usd).toBeCloseTo(0.008)
+    expect(r.gastos).toEqual([
+      { concepto: 'revisor_externo', ref_tabla: null, ref_id: null, cost_usd: 0.004, base: 'usage' },
+      { concepto: 'revisor_externo', ref_tabla: null, ref_id: null, cost_usd: 0.004, base: 'usage' },
+    ])
+  })
   it('🔴 sin lectura y CON edición nueva: sale la BASE (no se elige a ciegas la editada) y una persona mira (CC6 m13 · #1250)', async () => {
     const { P } = puertos({ mirada: () => 'no sé' })
     const r = await mirarCorreccion(P, enc(paraMirar({ hook: { base: 1, cambios: 'barro' } }, { hook: nueva('https://img.test/editada.png') })), plConCorreccion())
@@ -511,9 +521,54 @@ describe('la migración 202611201400 dice lo mismo que el código', () => {
       expect(sql.trimEnd().endsWith('COMMIT;')).toBe(true)
     }
   })
+  it('🔴 las guardas de la ida frenan: candado de las 3 filas, «ya tiene la corrección», la vuelta que envuelve y la comprobación final (CC7 s5 · s8 · s10 · s11)', async () => {
+    const sql = await leer('supabase/migrations/202611201400_oficina_correccion_de_la_imagen_final.sql')
+    expect(sql).toContain("SELECT 1 FROM public.oficina_tipos_de_grupo WHERE tipo IN ('post_mesa', 'carrusel_mesa', 'kit_mesa') FOR UPDATE;")
+    expect(sql).toMatch(/WHERE p->>'clave' IN \('corregir_imagen', 'editar_imagen', 'mirar_correccion'\)\) THEN\n\s*RAISE EXCEPTION '[^']*ya tiene la corrección/)
+    expect(sql).toMatch(/IF envuelve <> 6 OR otras <> 1 OR NOT EXISTS \(SELECT 1 FROM jsonb_array_elements\(f\.pasos\) p WHERE p->>'clave' = 'jefatura' AND p->'vuelve_a'->>'paso' = 'mesa' AND \(p->'vuelve_a'->>'max'\)::int = 6\) THEN\n\s*RAISE EXCEPTION '[^']*la vuelta que envuelve/)
+    // la comprobación final (después del UPDATE): los 3 pasos entre «imagen» y «observar», la condición, los topes y las vueltas
+    const fin = sql.slice(sql.lastIndexOf('DO $$'))
+    expect(fin).toMatch(/IS DISTINCT FROM 'observar' THEN\n\s*RAISE EXCEPTION '[^']*los pasos no quedaron entre «imagen» y «observar»/)
+    expect(fin).toMatch(/THEN\n\s*RAISE EXCEPTION '[^']*la condición no es la de «imagen»/)
+    expect(fin).toMatch(/\* 0\.07, 4\)\n\s*OR .*\* 0\.26, 4\) OR \(f\.limites->>'vueltas_de_correccion_imagen'\)::int <> 3 THEN\n\s*RAISE EXCEPTION/)
+  })
+  it('🔴 la reversa toma el candado de las 3 filas y su UPDATE quita `vueltas_de_correccion_imagen` (CC7 r6)', async () => {
+    const rev = await leer('supabase/reversas/202611201400_oficina_correccion_de_la_imagen_final_REVERSA.sql')
+    expect(rev).toContain("SELECT 1 FROM public.oficina_tipos_de_grupo WHERE tipo IN ('post_mesa', 'carrusel_mesa', 'kit_mesa') FOR UPDATE;")
+    expect(rev).toContain("limites = (g.limites - 'vueltas_de_correccion_imagen') || jsonb_build_object('margen'")
+  })
   it('🔴 la ida exige la reserva por pieza de CC2 y FRENA sin ella (CC6 m19)', async () => {
     const sql = await leer('supabase/migrations/202611201400_oficina_correccion_de_la_imagen_final.sql')
     expect(sql).toMatch(/IF jsonb_typeof\(f\.limites->'reserva_por_pieza_usd'\) IS DISTINCT FROM 'number' THEN\n\s*RAISE EXCEPTION '[^']*no tiene limites\.reserva_por_pieza_usd/)
+  })
+})
+
+describe('por el camino REAL del orquestador (CC7 m20 · #1250)', () => {
+  it('🔴 el creativo responde ilegible dos veces (con su reintento): `recibirResultado` sigue por `sinLecturaDeLaCorreccion`, sin editar nada, y el encargo NO se cae', async () => {
+    const { crearMemoria } = await import('./memoria')
+    const { recibirResultado } = await import('../orquestador')
+    // como las filas vivas: todo paso trae su condición (la plantilla mínima de estas pruebas deja «siempre» implícito)
+    const pl0 = plConCorreccion()
+    const pl = { ...pl0, pasos: pl0.pasos.map((p) => ({ ...p, condicion: p.condicion ?? { tipo: 'siempre' } })) } as Plantilla
+    const M = crearMemoria({ plantilla: pl })
+    const id = '00000000-0000-4000-8000-000000000777'
+    const iImagen = pl.pasos.findIndex((p) => p.clave === 'imagen')
+    const base = estado({ extra: { direccion: { decision: { modo: 'generada' } } } })
+    const e0 = { ...base, ultimo: iImagen, pasos_ejecutados: iImagen + 1 } as unknown as Estado
+    M.encargos.set(id, { id, client_id: 'cli', parte_id: 'p', brief_id: 'b', tipo_de_grupo: pl.tipo, familia: pl.familia, version_encargo: 1, estado: 'en_paso', estado_del_motor: e0, con_desacuerdo: false, imagen_generada: true, tope_usd: 45, gasto_usd: 1, dry_run: false, sala_ref: null, salida_output_id: null, hitl_queue_id: null } as never)
+    M.turnos.set(id, new Map([[1, { n: 1, paso: PASO_CORREGIR_IMAGEN, tipo: 'agente', agente: 'design-image-prompt-engineer', estado: 'corriendo', dispatch_key: `${id}:1`, cost_usd: 0 } as never]]))
+    const r1 = await recibirResultado(M.P, id, 1, { texto: 'no sé qué decir', costo_usd: 0.01 })
+    expect((r1 as unknown as { cuerpo: { reintento_de_formato?: boolean } }).cuerpo.reintento_de_formato).toBe(true)
+    const n2 = (r1 as unknown as { cuerpo: { turno: { n: number } } }).cuerpo.turno.n
+    await recibirResultado(M.P, id, n2, { texto: 'sigue sin ser JSON', costo_usd: 0.01 })
+    const enc = M.encargos.get(id)!
+    expect(enc.estado).not.toBe('fallido')
+    const pedido = (enc.estado_del_motor.artefactos as Record<string, { datos: { sin_lectura?: boolean; por_ref: Record<string, { cambios: string }> } }>)[ARTEFACTO_PEDIDO_DE_CORRECCION].datos
+    expect(pedido.sin_lectura).toBe(true)
+    expect(Object.values(pedido.por_ref).every((x) => x.cambios === '')).toBe(true)
+    expect(M.llamadas.imagen).toBe(0)
+    expect(M.turnos.get(id)!.get(n2)).toMatchObject({ estado: 'hecho', error: expect.stringMatching(/formato ilegible tras 2 intento/) })
+    expect(enc.estado_del_motor.fichas.some((f) => /la respuesta del creativo sobre las imágenes no se pudo leer/.test(JSON.stringify(f)))).toBe(true)
   })
 })
 
@@ -538,6 +593,7 @@ describe('el adaptador real de la edición (CC6 m24 · m25 · #1250)', () => {
     const db = new DbFalsa().semilla('agent_image_generations', [
       { id: 'otro-cliente', caller: llave, client_id: 'otro', status: 'completed', image_url: 'https://b.test/otro.png', cost_usd: 0.01, created_at: '2026-11-20T10:00:00Z' },
       { id: 'pendiente', caller: llave, client_id: 'c', status: 'pending', image_url: 'https://b.test/pend.png', cost_usd: 0.01, created_at: '2026-11-20T10:01:00Z' },
+      { id: 'fallida', caller: llave, client_id: 'c', status: 'failed', image_url: 'https://b.test/fallo.png', cost_usd: 0, created_at: '2026-11-20T09:59:00Z' },
       { id: 'otra-llave', caller: 'ed:otra', client_id: 'c', status: 'completed', image_url: 'https://b.test/otra.png', cost_usd: 0.01, created_at: '2026-11-20T10:02:00Z' },
       { id: 'la-buena', caller: llave, client_id: 'c', status: 'completed', image_url: 'https://b.test/buena.png', cost_usd: 0.012, created_at: '2026-11-20T10:03:00Z' },
     ])
