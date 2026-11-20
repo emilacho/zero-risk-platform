@@ -537,6 +537,18 @@ describe('la migración 202611201400 dice lo mismo que el código', () => {
     expect(rev).toContain("SELECT 1 FROM public.oficina_tipos_de_grupo WHERE tipo IN ('post_mesa', 'carrusel_mesa', 'kit_mesa') FOR UPDATE;")
     expect(rev).toContain("limites = (g.limites - 'vueltas_de_correccion_imagen') || jsonb_build_object('margen'")
   })
+  it('🔴 la reversa FRENA si hay otra migración encima: exige la reserva EXACTA que dejó la ida y ningún paso `segunda_mirada` (CC6 ADENDA 4 · #1252)', async () => {
+    const { RESERVA_POR_PIEZA_DE_LA_CORRECCION_USD } = await import('../mesa/correccion-imagen')
+    const rev = await leer('supabase/reversas/202611201400_oficina_correccion_de_la_imagen_final_REVERSA.sql')
+    // las exactas son las de CC2 (2,95 · 3,10 · 3,10) más lo que sumó la ida
+    expect(+(2.95 + RESERVA_POR_PIEZA_DE_LA_CORRECCION_USD.post_mesa).toFixed(2)).toBe(3.35)
+    expect(+(3.1 + RESERVA_POR_PIEZA_DE_LA_CORRECCION_USD.kit_mesa).toFixed(2)).toBe(4)
+    expect(rev).toContain("    esperada := (CASE f.tipo WHEN 'post_mesa' THEN 3.35 ELSE 4.00 END);\n    IF (f.limites->>'reserva_por_pieza_usd')::numeric IS DISTINCT FROM esperada THEN\n      RAISE EXCEPTION 'REVERSA 202611201400: % tiene la reserva en %")
+    expect(rev).toContain("    IF EXISTS (SELECT 1 FROM jsonb_array_elements(f.pasos) p WHERE p->>'clave' = 'segunda_mirada') THEN\n      RAISE EXCEPTION 'REVERSA 202611201400: % tiene el paso segunda_mirada")
+    // las dos guardas van ANTES del UPDATE (frenan sin cambiar nada)
+    expect(rev.indexOf("p->>'clave' = 'segunda_mirada'")).toBeLessThan(rev.indexOf('UPDATE public.oficina_tipos_de_grupo g'))
+    expect(rev.indexOf('IS DISTINCT FROM esperada')).toBeLessThan(rev.indexOf('UPDATE public.oficina_tipos_de_grupo g'))
+  })
   it('🔴 la ida exige la reserva por pieza de CC2 y FRENA sin ella (CC6 m19)', async () => {
     const sql = await leer('supabase/migrations/202611201400_oficina_correccion_de_la_imagen_final.sql')
     expect(sql).toMatch(/IF jsonb_typeof\(f\.limites->'reserva_por_pieza_usd'\) IS DISTINCT FROM 'number' THEN\n\s*RAISE EXCEPTION '[^']*no tiene limites\.reserva_por_pieza_usd/)
