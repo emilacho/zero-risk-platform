@@ -31,6 +31,8 @@ import { TOPE_DEL_PORTERO_USD } from './datos'
 import type { RespuestaDeLlamada } from './juez'
 import { gastoDeHoy, reconciliarYEnviar, validar, type DepsDeRutas, type Respuesta } from './rutas'
 import { leerTodas } from './paginar'
+import { TOPE_DE_LO_ESCRITO } from '../limites-de-tamano'
+import { filtroReal, normalizarParaElFiltro, type Filtro } from '../cerebro/portero/recibir/seguridad'
 import { nivelDeFicha, ordenarPorEmbudo } from './embudo'
 
 type Fila = Record<string, unknown>
@@ -129,19 +131,75 @@ export function normalizarPedido(cuerpo: unknown): Respuesta | PedidoNormalizado
   const crudos = Array.isArray(b.huecos) ? b.huecos : []
   const huecos: Hueco[] = []
   for (const h of crudos) {
-    if (typeof h === 'string' && h.trim()) { huecos.push({ objetivo: h.trim().slice(0, 400) }); continue }
+    if (typeof h === 'string' && h.trim()) { huecos.push({ objetivo: h.trim() }); continue }
     if (!esObjeto(h)) continue
-    const x: Hueco = { fuente: txt(h.fuente).slice(0, 120) || undefined, tipo: txt(h.tipo).slice(0, 160) || undefined, objetivo: txt(h.objetivo).slice(0, 400) || undefined, motivo: txt(h.motivo).slice(0, 400) || undefined }
+    const x: Hueco = { fuente: txt(h.fuente) || undefined, tipo: txt(h.tipo) || undefined, objetivo: txt(h.objetivo) || undefined, motivo: txt(h.motivo) || undefined }
     if (x.fuente || x.tipo || x.objetivo || x.motivo) huecos.push(x)
   }
   // un pedido sin lista de huecos es válido: lo que dice `para` es el pedido (libre)
-  if (!huecos.length) huecos.push({ objetivo: para.slice(0, 400) })
+  if (!huecos.length) huecos.push({ objetivo: para })
   if (huecos.length > MAX_HUECOS_POR_PEDIDO) return err(400, 'entrada_invalida', `hasta ${MAX_HUECOS_POR_PEDIDO} huecos por pedido`)
+  // ENCARGO 11 · ADENDA 1 (Cerebro 19-nov 14:52Z): `para`, `objetivo` y `motivo` entran ENTEROS. Techo que RECHAZA, nunca corta (como #1222)
+  const ref = txt(b.ref_de_quien_pide)
+  const largo = [...camposDelPedido({ para, huecos }), { campo: 'pedido_por.oficina', texto: oficina }, { campo: 'pedido_por.agente', texto: agente }, { campo: 'ref_de_quien_pide', texto: ref }].find((c) => c.texto.length > TOPE_DE_LO_ESCRITO)
+  if (largo) return err(400, 'pedido_demasiado_largo', `«${largo.campo}» tiene ${largo.texto.length} caracteres y el tope es ${TOPE_DE_LO_ESCRITO}: dilo más corto (no se recorta: no se registró nada)`)
   const pid = txt(b.pedido_id)
   if (pid && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(pid)) return err(400, 'entrada_invalida', '`pedido_id` debe ser un uuid si se manda')
   const avisarA = txt(b.avisar_a)
   if (avisarA && avisarA.length > 500) return err(400, 'entrada_invalida', '`avisar_a` es demasiado largo')
-  return { client_id: v.client_id, sede_clave: txt(b.sede_clave) || null, huecos, pedido_por: { oficina: oficina.slice(0, 80), agente: agente.slice(0, 80) }, para: para.slice(0, 600), pedido_id: pid || null, avisar_a: avisarA || null, ref_de_quien_pide: txt(b.ref_de_quien_pide).slice(0, 200) || null, dry_run: v.dry_run, workflow_id: v.workflow_id, workflow_execution_id: v.workflow_execution_id }
+  return { client_id: v.client_id, sede_clave: txt(b.sede_clave) || null, huecos, pedido_por: { oficina, agente }, para, pedido_id: pid || null, avisar_a: avisarA || null, ref_de_quien_pide: ref || null, dry_run: v.dry_run, workflow_id: v.workflow_id, workflow_execution_id: v.workflow_execution_id }
+}
+/** los textos libres del pedido, con su nombre (para el techo y el filtro de seguridad) */
+export function camposDelPedido(p: { para: string; huecos: Hueco[] }): Array<{ campo: string; texto: string }> {
+  const out = [{ campo: 'para', texto: p.para }]
+  p.huecos.forEach((h, i) => { for (const k of ['objetivo', 'motivo', 'tipo', 'fuente'] as const) if (h[k]) out.push({ campo: `huecos[${i}].${k}`, texto: String(h[k]) }) })
+  return out
+}
+/** lo que el filtro revisa de UNA vez (en modo estricto, su capa de largo frena más de 8000) */
+const VENTANA_DEL_FILTRO = 7800
+const SOLAPE_DEL_FILTRO = 200
+/**
+ * Ventanas que cubren el texto ENTERO, cada una con los 200 caracteres que la siguen: un patrón partido en el borde cae entero en una ventana.
+ * Sin `slice`: el texto no se corta, se recorre.
+ */
+export function ventanasDelFiltro(texto: string): string[] {
+  if (texto.length <= VENTANA_DEL_FILTRO + SOLAPE_DEL_FILTRO) return [texto]
+  return [...texto.matchAll(new RegExp(`[\\s\\S]{1,${VENTANA_DEL_FILTRO}}(?=([\\s\\S]{0,${SOLAPE_DEL_FILTRO}}))`, 'g'))].map((m) => m[0] + (m[1] ?? ''))
+}
+/**
+ * ADENDA 1: el pedido pasa ENTERO por el filtro de seguridad (el mismo del portero que recibe: modo estricto, sin clasificador · US$ 0).
+ * Un filtro que falla rechaza (falla cerrado). Devuelve el primer campo que no pasó, o null.
+ */
+export async function revisarElPedido(p: { para: string; huecos: Hueco[]; pedido_por?: { oficina: string; agente: string }; ref_de_quien_pide?: string | null }, filtro: Filtro = filtroReal): Promise<{ campo: string; capa: string; severidad: string } | null> {
+  // quién pide también llega a la ficha archivada («a pedido de <oficina> (<agente>)»): pasa por el mismo filtro
+  const quien = p.pedido_por ? [{ campo: 'pedido_por.oficina', texto: p.pedido_por.oficina }, { campo: 'pedido_por.agente', texto: p.pedido_por.agente }] : []
+  const ref = p.ref_de_quien_pide ? [{ campo: 'ref_de_quien_pide', texto: p.ref_de_quien_pide }] : []
+  for (const c of [...camposDelPedido(p), ...quien, ...ref]) {
+    for (const v of ventanasDelFiltro(normalizarParaElFiltro(c.texto))) {
+      const d = await filtro(v).catch(() => ({ allow: false, capa: 'el filtro falló', severidad: 'desconocida' }))
+      if (!d.allow) return { campo: c.campo, capa: d.capa ?? 'desconocida', severidad: d.severidad ?? 'desconocida' }
+    }
+  }
+  return null
+}
+/** el tope de UNA consulta a un buscador externo (la web, Apify): lo pone el buscador, no el pedido */
+export const MAX_LARGO_DE_UNA_CONSULTA = 120
+/**
+ * ADENDA 1 · buscar no es guardar. Para un buscador externo con límite propio se arma una consulta DERIVADA del pedido entero: sus palabras
+ * con sentido, en orden, hasta el largo del buscador. El pedido no se toca: se guarda y se razona entero, y la consulta derivada se anota en el rastro.
+ */
+export function consultaDerivada(completo: string): string {
+  if (completo.length <= MAX_LARGO_DE_UNA_CONSULTA) return completo
+  let q = ''
+  const vistas = new Set<string>()
+  // las palabras ORIGINALES (con tildes y eñes, para el buscador); se descartan las vacías y las repetidas por su forma normalizada
+  for (const w of completo.match(/[\p{L}\p{N}]+/gu) ?? []) {
+    const n = normalizar(w)
+    if (n.length < 4 || PALABRAS_VACIAS.has(n) || vistas.has(n)) continue
+    if ((q ? q.length + 1 : 0) + w.length > MAX_LARGO_DE_UNA_CONSULTA) break
+    vistas.add(n); q = q ? `${q} ${w}` : w
+  }
+  return q || (completo.match(new RegExp(`^[\\s\\S]{1,${MAX_LARGO_DE_UNA_CONSULTA}}`)) ?? [completo])[0]
 }
 const textoDelHueco = (h: Hueco, para: string): string => [h.fuente, h.tipo, h.objetivo, h.motivo].filter(Boolean).join(' · ') || para
 export const huellaDelPedido = (p: Pick<PedidoNormalizado, 'client_id' | 'sede_clave' | 'huecos'>): string =>
@@ -231,6 +289,10 @@ export interface ResultadoDeBusqueda { resultados: Array<{ titulo: string; url: 
 export interface DepsDePedido extends DepsDeRutas {
   /** PORTERO_PEDIDOS */
   activo: boolean
+  /** ADENDA 1 · el filtro de seguridad del pedido (por omisión el real: estricto y sin modelo) */
+  filtroDelPedido?: Filtro
+  /** ADENDA 1 · la alarma de un pedido rechazado por largo (UNA por oficina y día en #alertas) */
+  alarma?: (texto: string, clave?: string) => Promise<unknown>
   nuevoId?: () => string
   /** razonar y extraer: el modelo del portero (registrado como `portero-del-cerebro`, cuenta en su tope) */
   razonar?: (instruccion: string, mensaje: string) => Promise<RespuestaDeLlamada>
@@ -344,8 +406,18 @@ export async function rutaPedido(deps: DepsDePedido, cuerpo: unknown): Promise<R
 
 async function rutaPedidoBase(deps: DepsDePedido, cuerpo: unknown): Promise<Respuesta> {
   const p = normalizarPedido(cuerpo)
-  if ('status' in p) return p
+  if ('status' in p) {
+    if (deps.activo && p.body.error === 'pedido_demasiado_largo' && deps.alarma) {
+      const pp = (cuerpo && typeof cuerpo === 'object' ? (cuerpo as Record<string, unknown>).pedido_por : null) as Record<string, unknown> | null
+      const oficina = txt(pp?.oficina) || 'sin oficina'
+      const dia = (deps.ahora ?? new Date()).toISOString().match(/^\d{4}-\d{2}-\d{2}/)?.[0] ?? ''
+      try { await deps.alarma(`🟠 Pedido al cerebro rechazado por largo (oficina ${oficina}): ${String(p.body.detalle)}`, `pedido-largo:${oficina}:${dia}`) } catch { /* la alarma no cambia la respuesta */ }
+    }
+    return p
+  }
   if (!deps.activo) return { status: 200, body: { apagado: true, detalle: 'PORTERO_PEDIDOS está apagado: no se leyó ni se escribió nada', modelos_llamados: 0 } }
+  const sospechoso = await revisarElPedido(p, deps.filtroDelPedido)
+  if (sospechoso) return err(400, 'pedido_rechazado_por_seguridad', `«${sospechoso.campo}» no pasó el filtro de seguridad (capa ${sospechoso.capa}, severidad ${sospechoso.severidad}): no se registró nada`)
   const ahora = deps.ahora ?? new Date()
   const id = deps.nuevoId ?? randomUUID
   if (p.avisar_a && !anfitrionDeAvisoPermitido(p.avisar_a, deps.anfitrionesDeAviso)) return err(400, 'entrada_invalida', '`avisar_a` debe ser una dirección https de una casa conocida (el aviso lleva la llave interna): pide que se agregue su anfitrión a PORTERO_AVISAR_HOSTS')
@@ -557,7 +629,7 @@ async function procesar(deps: DepsDePedido, p: PedidoNormalizado, c: ContextoDel
         huecos.push(r); continue
       }
       r.intentado.push('«ya está» sin una cita literal verificable en la ficha: se busca como si no estuviera')
-      d = { ...d, decision: 'web', consultas: d.consultas.length ? d.consultas : [completo.slice(0, 120)] }
+      d = { ...d, decision: 'web', consultas: d.consultas.length ? d.consultas : [consultaDerivada(completo)] }
     }
     // catálogo
     if (d.decision === 'catalogo') {
@@ -567,7 +639,7 @@ async function procesar(deps: DepsDePedido, p: PedidoNormalizado, c: ContextoDel
         huecos.push(r); continue
       }
       r.intentado.push(`catálogo: la función «${d.funcion}» no existe; se busca en la web`)
-      d = { ...d, decision: 'web', consultas: d.consultas.length ? d.consultas : [completo.slice(0, 120)] }
+      d = { ...d, decision: 'web', consultas: d.consultas.length ? d.consultas : [consultaDerivada(completo)] }
     }
     if (d.decision === 'imposible') {
       r.detalle = `esta información me falta: ${d.razon || 'no es información pública ni del negocio'}`.slice(0, 240); r.intentado.push(`razonó que no es posible: ${d.razon}`)
@@ -576,7 +648,8 @@ async function procesar(deps: DepsDePedido, p: PedidoNormalizado, c: ContextoDel
 
     // 3 · la web: búsqueda + lectura de ≤ 3 páginas + extracción con cita literal verificada
     if (!deps.buscar || !deps.leerPagina) { r.intentado.push('la web: no hay búsqueda ni lectura de páginas disponible'); r.detalle = 'esta información me falta: no pude buscarla en la web'; huecos.push(r); continue }
-    const consultas = (d.consultas.length ? d.consultas : [completo.slice(0, 120)]).slice(0, MAX_CONSULTAS_POR_HUECO)
+    const consultas = (d.consultas.length ? d.consultas : [consultaDerivada(completo)]).filter((_q, i) => i < MAX_CONSULTAS_POR_HUECO)
+    if (completo.length > MAX_LARGO_DE_UNA_CONSULTA && consultas.includes(consultaDerivada(completo))) r.intentado.push(`consulta derivada del pedido entero (${completo.length} caracteres; el buscador acepta ${MAX_LARGO_DE_UNA_CONSULTA}): «${consultaDerivada(completo)}». El pedido se guarda y se razona entero`)
     const vistos = new Set<string>()
     const paginas: Array<{ url: string; texto: string }> = []
     for (const q of consultas) {
@@ -626,7 +699,7 @@ async function procesar(deps: DepsDePedido, p: PedidoNormalizado, c: ContextoDel
       const ficha: FichaDeBrazo = {
         brazo: 'pedido', alcance, client_id: p.client_id, ref: `brazo:pedido:${huella}`, atributo: `pedido:${slugDe(textoDelHueco(h, p.para)).slice(0, 40)}:${huella.slice(0, 8)}`, clase: 'dato_de_pedido',
         titulo: `Pedido de ${p.pedido_por.oficina} · ${v.resumen}`.slice(0, 160),
-        contenido: `${v.resumen}. Cita de la página: «${v.cita}». Fuente: ${v.url}. ${rotulo} Traído el ${iso.slice(0, 10)} a pedido de ${p.pedido_por.oficina} (${p.pedido_por.agente}) para: ${p.para}`.slice(0, 1500),
+        contenido: `${v.resumen}. Cita de la página: «${v.cita}». Fuente: ${v.url}. ${rotulo} Traído el ${iso.match(/^\d{4}-\d{2}-\d{2}/)?.[0] ?? iso} a pedido de ${p.pedido_por.oficina} (${p.pedido_por.agente}) para: ${p.para}`,
         origen: 'tercero', fuente_url: v.url, fecha_fuente: iso.slice(0, 10), observado_en: iso, vigente_hasta: new Date(ahora.getTime() + VIGENCIA_DE_LO_HALLADO_DIAS * DIA_MS).toISOString(), decision: 'suma',
         sobre: hostDe(v.url), datos: { pedido_id: p.pedido_id ?? null, oficina: p.pedido_por.oficina, agente: p.pedido_por.agente, hueco: h, cita: v.cita, url: v.url, filtro: sobre.estado },
       }

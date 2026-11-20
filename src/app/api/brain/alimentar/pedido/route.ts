@@ -19,6 +19,7 @@ import { firmarVideoDelEntorno } from '@/lib/portero-alimenta/videos-del-cerebro
 import { consultaDelEntorno } from '@/lib/cerebro/portero/entorno'
 import { etiquetarPendientesDelEntorno } from '@/lib/cerebro/portero/etiquetar-entorno'
 import { avisoReal, buscarReal, dispararCadenaReal, leerPaginaReal } from '@/lib/portero-alimenta/pedidos-entorno'
+import { avisarPorIncidente } from '@/lib/portero-alimenta/alertas'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -47,6 +48,8 @@ export async function POST(request: Request) {
       segundoPlano: real ? (t) => waitUntil(t) : undefined,
       topePorPedidoUsd: num('PORTERO_PEDIDO_TOPE_USD'), topePorOficinaYDiaUsd: num('PORTERO_PEDIDO_TOPE_OFICINA_DIA_USD'),
       enviarAviso: real ? avisoReal(llave) : undefined,
+      // ADENDA 1 (encargo 11): un pedido que pasa el techo se rechaza (nunca se corta) y avisa UNA vez por oficina y día en #alertas
+      alarma: avisarPorIncidente({ db }),
       fotos: {
         listar: (clientId) => listarFotos(consultaDelEntorno(), { cliente: clientId, limite: 200 }),
         etiquetar: real ? async (clientId) => {
