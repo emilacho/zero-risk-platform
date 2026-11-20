@@ -5,6 +5,7 @@
 // =============================================================
 
 import { palabrasDuras } from './manual/palabras-con-intencion'
+import { unirTrozos } from './brain/trozos'
 import { getSupabaseAdmin } from './supabase'
 import { generateEmbedding as openaiEmbedding } from './brain/embed'
 
@@ -247,7 +248,14 @@ export async function queryClientBrain(
     rows = rows.filter((r) => sectionFilter.has(r.source_table)).slice(0, match_count)
   }
 
-  return rows
+  // ENCARGO 11 · paso 2b: un texto largo vive ENTERO en trozos numerados de la misma fuente («X · trozo 2 de 3»). Quien busca recibe el texto
+  // COMPLETO: los trozos de una misma fuente se unen en UNO (en el lugar del de mejor similitud). Si falta un trozo, NO se inventa: queda el que llegó
+  // y se declara `trozos_faltan`. Las fuentes que caben en un trozo van igual que antes.
+  const tablaReal = new Map(((data ?? []) as RpcRow[]).map((r) => [r.chunk_id, r.source_table]))
+  return unirTrozos(rows, async (q) => {
+    const { data: todos, error: e } = await supabase.from('client_brain_chunks').select('section_label, chunk_text').eq('client_id', client_id).eq('source_table', q.source_table).eq('source_id', q.source_id)
+    return e ? null : ((todos ?? []) as Array<{ section_label: string; chunk_text: string }>)
+  }, (r) => tablaReal.get(String(r.chunk_id)) ?? r.source_table)
 }
 
 // ── Core: get_client_guardrails() ────────────────────────────

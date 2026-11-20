@@ -11,7 +11,10 @@ import { lineaParaElModelo, type LineaNumerada } from './lista-numerada'
 
 export interface Pieza {
   encargo_id: string
+  /** el id de la fila del calendario, en texto (si la mesa manda el objeto `{id, hora, fecha}`, es su `id`) */
   fila: string | null
+  /** la fila tal como llegó cuando es un objeto (va entera al rastro, columna jsonb `fila_objeto`); null si llegó como texto o no llegó */
+  fila_objeto: Record<string, unknown> | null
   turno: string | null
   agente: string
   hoja: string
@@ -34,21 +37,32 @@ export function leerPieza(cuerpo: Record<string, unknown>): { ok: true; pieza: P
   for (const k of CASILLAS_QUE_YA_NO_VAN) if (cuerpo[k] !== undefined || p[k] !== undefined) errores.push(`\`${k}\` ya no va: ${MOTIVO_SIN_CASILLAS}`)
   const encargo = txt(p.encargo_id)
   if (!encargo) errores.push('falta `pieza.encargo_id`')
-  if (p.fila !== undefined && p.fila !== null && typeof p.fila !== 'string') errores.push('`pieza.fila` debe ser texto')
+  // la fila llega como texto o como el objeto real del calendario `{id, hora, fecha}` (19-nov · DECISION-CEREBRO punto 2): las dos formas valen
+  const fila = leerFila(p.fila)
+  if (!fila.ok) errores.push(fila.error)
   // la hoja se guarda TAL CUAL (completa, sin recortar ni limpiar): solo se exige que exista
   if (typeof p.hoja !== 'string' || !p.hoja.trim()) errores.push('falta `pieza.hoja` (el texto completo de la hoja de la pieza: brief + plan)')
   const agente = txt(cuerpo.agente)
   if (!agente) errores.push('falta `agente` (quién pide: va al rastro)')
   if (cuerpo.turno !== undefined && cuerpo.turno !== null && typeof cuerpo.turno !== 'string') errores.push('`turno` debe ser texto')
   if (errores.length) return { ok: false, errores }
-  return { ok: true, pieza: { encargo_id: encargo as string, fila: txt(p.fila), turno: txt(cuerpo.turno), agente: agente as string, hoja: p.hoja as string } }
+  return { ok: true, pieza: { encargo_id: encargo as string, fila: fila.ok ? fila.fila : null, fila_objeto: fila.ok ? fila.objeto : null, turno: txt(cuerpo.turno), agente: agente as string, hoja: p.hoja as string } }
+}
+
+/** la fila de la pieza: texto → ese texto; objeto → su `id` (texto o número) y el objeto entero; ausente → nada. Otra forma (lista, número suelto…) → error dicho */
+export function leerFila(v: unknown): { ok: true; fila: string | null; objeto: Record<string, unknown> | null } | { ok: false; error: string } {
+  if (v === undefined || v === null) return { ok: true, fila: null, objeto: null }
+  if (typeof v === 'string') return { ok: true, fila: txt(v), objeto: null }
+  if (!esObjeto(v)) return { ok: false, error: '`pieza.fila` debe ser texto o el objeto de la fila `{ id, hora, fecha }`' }
+  const id = typeof v.id === 'number' && Number.isFinite(v.id) ? String(v.id) : txt(v.id)
+  return { ok: true, fila: id, objeto: v }
 }
 
 /** de dónde salió una ficha, como dato (no como juicio) */
 export const fuenteDe = (f: Ficha): string => f.origen
 
-/** la sede, la fecha y la fuente de una ficha como DATO, igual en la lista, en la base y en la entrega */
-export const datosDeLaFicha = (f: Ficha) => ({ sede: txt(f.sede) ?? null, fecha_fuente: f.fecha_fuente, fuente: fuenteDe(f) })
+/** la sede, la fecha y la fuente de una ficha como DATO, igual en la lista, en la base y en la entrega (y, encargo 10, la marca de OTRO negocio si la tiene) */
+export const datosDeLaFicha = (f: Ficha) => ({ sede: txt(f.sede) ?? null, fecha_fuente: f.fecha_fuente, fuente: fuenteDe(f), no_es_de_este_cliente: f.otro_negocio ?? null })
 
 /** la línea del índice para el empleado: la de siempre más su sede y su fuente como dato (nada se marca ni se reordena) */
 export const lineaConDatos = (l: LineaNumerada): string => {
@@ -60,12 +74,12 @@ export const lineaConDatos = (l: LineaNumerada): string => {
 export const CLASES_DE_LA_BASE = ['dato_del_dueno', 'resumen_vivo'] as const
 export const vaEnLaBase = (f: Ficha): boolean => f.estante === 'E2' || (CLASES_DE_LA_BASE as readonly string[]).includes(f.clase)
 
-/** la fila del rastro en `cerebro_consultas` (columnas de hoy + las de la migración 202611181800) */
+/** la fila del rastro en `cerebro_consultas` (columnas de hoy + las de 202611181800 + `fila_objeto` de 202611191500) */
 export function filaDeRastro(o: { cliente: string; pieza: Pieza; ruta: 'indice' | 'entregar'; entregadas: string[]; noConstan: unknown[]; ms: number }): Record<string, unknown> {
   return {
     client_id: o.cliente, oficina: 'mesa', agente: o.pieza.agente, que: null, atributo: null, sede_clave: null,
     resultados: o.entregadas.length, sin_dato: o.entregadas.length === 0, ms: Math.max(0, Math.round(o.ms)),
-    ruta: o.ruta, encargo_id: o.pieza.encargo_id, fila: o.pieza.fila, turno: o.pieza.turno, hoja: o.pieza.hoja,
+    ruta: o.ruta, encargo_id: o.pieza.encargo_id, fila: o.pieza.fila, fila_objeto: o.pieza.fila_objeto, turno: o.pieza.turno, hoja: o.pieza.hoja,
     fichas_entregadas: o.entregadas, numeros_no_consta: o.noConstan,
   }
 }

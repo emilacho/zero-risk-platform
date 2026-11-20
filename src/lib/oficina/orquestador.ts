@@ -13,6 +13,7 @@ import { datos, fichaNueva, opinionExterna, reglasParaPrompts, reglasVisuales } 
 import { parsearBrief, planDeOrigen, prohibePersonas, proporcionDelBrief, protagonistasDelBrief, fechaLimiteDelBrief, type BriefLeido } from './brief'
 import { briefEsDelEncargo, claseDeLaFamilia } from './familia-del-brief'
 import { chequeosDePost, type FuentesDelCliente } from './chequeos'
+import { corregirContactoDeLaPieza } from './contacto-ajeno'
 import { comoDataUri, disenoDeAnuncio, textoEnImagenDe, textoEnImagenParaChequear } from './composicion'
 import { encajarAProporcion } from './encaje'
 import { aUtc, chequeosDeEntrega, cuandoSePublica, manifiesto, nombreDeArchivo, textoParaCopiar, leerMedidas, type ArchivoDeEntrega } from './entrega'
@@ -125,9 +126,9 @@ export async function abrirEncargo(P: Puertos, entrada: { cuerpo: unknown; clien
   if (!pl.activo && !entrada.permitir_apagada) return r(409, { error: 'plantilla_inactiva', familia: dec.familia, ...(!tienePasarela(clase) ? { sin_pasarela: true } : {}) })
   // 17-nov · T7a · los topes que crecen con la pieza (idempotente: el almacén real ya los aplicó) y la condición 1 de CC6: el tope con que nace el encargo (el menor entre
   //   el sobre y la plantilla) cubre una pasada por los pasos que gastan; si no, el encargo NO nace (antes nacía y se cortaba a medias, con lo gastado perdido)
-  // 19-nov · G5b (A′ · GO Lenovo 03:41Z) · el video: la duración la declara el brief de la pieza y los topes de ESTE encargo se calculan con ella (no con la pieza más
+  // 19-nov · G5b · el video: la duración la define la GRAN IDEA (firma de Emilio, GO Lenovo 15:05 Zúrich; la hoja la copia en `DURACIÓN`) y los topes de ESTE encargo se calculan con ella (no con la pieza más
   //   larga que admite la plantilla). El tope con que nace el encargo es el de la campaña (el sobre, hasta el techo de la plantilla): si el guion pide más, los topes
-  //   se recalculan dentro de él. La cobertura se mide con la duración declarada
+  //   se recalculan dentro de él. La cobertura se mide con la duración de la idea
   const cruda = pl.cruda ?? pl.plantilla
   let duracion: DuracionDeLaPieza | null = null
   if (topesPorSegundoDeVideo(cruda)) {
@@ -317,7 +318,22 @@ function materialDeLaRevision(pl: Plantilla, e: Estado) {
 /** la hoja de la pieza (el brief leído); un encargo sin ella no tiene ficha */
 const briefDe = (e: Estado): BriefLeido | null => (datos(e, 'encargo') as unknown as Partial<Base> | undefined)?.brief ?? null
 /** cambio 4 · lo que la aplicación necesita para el sentido: la ficha de la hoja, la pieza, la fila (la del calendario o, si no viaja, el brief, que es su id) y lo ya devuelto */
-async function sentidoDe(P: Pick<Puertos, 'hechosPorOferta'>, enc: Pick<Encargo, 'id' | 'brief_id' | 'sala_ref' | 'client_id'>, e: Estado, textoDeLaPieza: string): Promise<OpcionesDeAplicacion['sentido']> {
+/**
+ * 19-nov · caso 3 del grupo 2 (nada se frena) · ¿la pieza está en una campaña? Sin campaña, sus correcciones no tienen a quién volver en la cadena:
+ * la jefatura las manda al creador DE LA PIEZA (la vuelta a la mesa de #1182). Se decide solo con lo que se SABE: sin parte, o un parte leído sin campaña.
+ * Si la lectura falla, no se decide nada (queda como antes) · la espera de la cadena lo vuelve a mirar.
+ */
+export async function piezaSinCampana(P: Pick<Puertos, 'parte'>, enc: Pick<Encargo, 'parte_id' | 'client_id'>): Promise<boolean> {
+  if (!enc.parte_id) return true
+  try {
+    const parte = await P.parte(enc.parte_id, enc.client_id)
+    return !(typeof parte?.campana_id === 'string' && parte.campana_id.trim())
+  } catch {
+    return false
+  }
+}
+
+async function sentidoDe(P: Pick<Puertos, 'hechosPorOferta' | 'parte'>, enc: Pick<Encargo, 'id' | 'brief_id' | 'sala_ref' | 'client_id' | 'parte_id' | 'dry_run'>, e: Estado, textoDeLaPieza: string): Promise<OpcionesDeAplicacion['sentido']> {
   const fila = (enc.sala_ref?.fila as { id?: unknown } | undefined)?.id
   // firma de Emilio · si la revisión anterior mandó correcciones a la mesa, esta revisión lee lo que respondió el creador (la mesa guardó sus líneas al cerrar)
   const enviadas = datosDeLaJefatura(e)?.sentido?.enviadas ?? []
@@ -328,12 +344,19 @@ async function sentidoDe(P: Pick<Puertos, 'hechosPorOferta'>, enc: Pick<Encargo,
   const deLaHoja = fichaDeLaHoja(briefDe(e)?.texto)
   const hechos = deLaHoja.oferta && P.hechosPorOferta ? await P.hechosPorOferta(String(enc.client_id)).catch(() => null) : null
   const vivo = fichaConCierreVivo(deLaHoja, hechos, fechaDeLaFila(enc.sala_ref))
-  return { ficha: vivo.ficha, declarado: vivo.declarado, textoDeLaPieza, filaId: typeof fila === 'string' && fila ? fila : enc.brief_id || null, encargoId: enc.id, yaDevueltas: llavesYaDevueltas(e), exactos: chequeosExactos, previas }
+  // sin campaña, ninguna fila de la cadena: todo lo que vio la jefatura vuelve al creador de la pieza (`aPieza` en `sentidoDeLaRevision`).
+  //   Solo en lo real: el ensayo no toca la cadena (sus devoluciones se declaran y la pieza sigue), así que ahí no cambia nada
+  const sinCampana = !enc.dry_run && (await piezaSinCampana(P, enc))
+  return { ficha: vivo.ficha, declarado: vivo.declarado, textoDeLaPieza, filaId: sinCampana ? null : typeof fila === 'string' && fila ? fila : enc.brief_id || null, encargoId: enc.id, yaDevueltas: llavesYaDevueltas(e), exactos: chequeosExactos, previas }
 }
 
 export function puedeVolverALaMesa(pl: Plantilla, paso: Paso, e: Estado): ((costo: number) => boolean) | undefined {
   if (paso.vuelve_a?.paso !== 'mesa' || !quedaVueltaDelPaso(paso, e)) return undefined
-  return (costo) => cabeLaVuelta(pl, { ...e, gasto_usd: e.gasto_usd + costo }, costoDeVolver(pl, paso))
+  // 18-nov · con varias vueltas por regla dura, también tiene que caber en los PASOS: lo que falta desde la mesa hasta el final, dentro de plantilla + margen
+  //   (sin esto, la vuelta empezaría y el motor cerraría por tope de pasos a mitad de camino)
+  const iMesa = pl.pasos.findIndex((x) => x.clave === 'mesa')
+  const cabenLosPasos = iMesa >= 0 && e.pasos_ejecutados + (pl.pasos.length - iMesa) < pl.pasos.length + pl.limites.margen
+  return (costo) => cabenLosPasos && cabeLaVuelta(pl, { ...e, gasto_usd: e.gasto_usd + costo }, costoDeVolver(pl, paso))
 }
 
 /**
@@ -598,8 +621,11 @@ async function ejecutarCodigo(P: Puertos, enc: Encargo, pl: Plantilla, paso: Pas
     }
     case 'chequeos': {
       const b = base(e)
-      const pz = datos(e, 'pieza_post')
-      if (!pz) return { res: { costo_usd: 0, artefacto: { fichas: 0 } }, fallido: 'no hay pieza que chequear' }
+      const pz0 = datos(e, 'pieza_post')
+      if (!pz0) return { res: { costo_usd: 0, artefacto: { fichas: 0 } }, fallido: 'no hay pieza que chequear' }
+      // 18-nov · GO Lenovo «lo exacto se autocorrige»: el teléfono o el @ ajeno del texto que se publica se reemplaza por el del cliente ANTES de chequear (sin modelo)
+      const auto = corregirContactoDeLaPieza(pz0, b.F.fuentes as FuentesDelCliente)
+      const pz = auto.pieza
       const fin = datos(e, 'imagen_final') ?? {}
       const fs = chequeosDePost({
         // Mejora 5 · lo que va escrito sobre la imagen se chequea igual que el pie (prohibidas, registro, teléfonos, @ y precios); el tope del pie no lo cuenta
@@ -610,7 +636,7 @@ async function ejecutarCodigo(P: Puertos, enc: Encargo, pl: Plantilla, paso: Pas
         imagen: { generada: fin.origen === 'generada', declarada_en_bandeja: true },
       })
       const prefijo = `chk${e.pasos_ejecutados}`
-      return { res: { costo_usd: 0, artefacto: { fichas: fs.length }, fichas: fs.map((f, i) => ({ ...f, id: `${prefijo}-${i}` })), reemplazar_fichas: { origen: 'chequeo', donde: ['texto', 'hashtags'] } } }
+      return { res: { costo_usd: 0, artefacto: { fichas: fs.length, ...(auto.declarado.length ? { autocorregido: auto.declarado } : {}) }, fichas: fs.map((f, i) => ({ ...f, id: `${prefijo}-${i}` })), reemplazar_fichas: { origen: 'chequeo', donde: ['texto', 'hashtags'] }, ...(auto.declarado.length ? { otros_artefactos: { pieza_post: pz } } : {}) } }
     }
     case 'empaquetar_entrega': return empaquetar(P, enc, pl)
     case 'cierre': return { res: { costo_usd: 0, artefacto: { cerrado_en: P.ahora().toISOString() } } }
@@ -1145,8 +1171,9 @@ export async function cerrar(P: Puertos, enc: Encargo, pl: Plantilla, parcial: b
     // una alarma por incidente: si el cierre fue por tope (ya avisó a #alertas) o es la versión 2 o más del mismo brief, va al hilo (ADENDA 2 de CC7 a #1148)
     const nt = reglasDurasNoTomadas(e)
     const motivos = [...nt.map((h) => `${h.destino}: ${h.que}`), ...frenoDuro.filter((f) => !f.id.startsWith('sentido-no-tomada-')).map((f) => `${f.donde}: ${f.que ?? ''}`)]
-    await P.avisar({ canal: parcial || enc.version_encargo >= 2 ? 'hilo' : 'alertas', encargo_id: enc.id, texto: `🛑 Pieza frenada · ${enc.brief_id}: regla dura no tomada tras la vuelta — ${motivos.slice(0, 3).join(' | ')}. No se publica (firma de Emilio: se toma sí o sí).${textoDelGasto ? ` ${textoDelGasto}` : ''}`, dry_run: enc.dry_run })
-    return r(200, { accion: 'cerrado', estado: estadoFinal, con_desacuerdo: true, frenada: true, simulado: enc.dry_run, gasto_usd: e.gasto_usd, output_id: null, hitl_queue_id: null, resultado_para_la_sala: 'con_desacuerdo', sala_ref: enc.sala_ref, desacuerdos, ...(observaciones.length ? { observaciones } : {}) })
+    // 18-nov · GO Lenovo 13:52Z · ya no «frenada»: mientras cupo, la pieza volvió a su creador; aquí ya no cabe otra vuelta y queda EN CORRECCIÓN (la campaña sigue)
+    await P.avisar({ canal: parcial || enc.version_encargo >= 2 ? 'hilo' : 'alertas', encargo_id: enc.id, texto: `🔁 Pieza en corrección · ${enc.brief_id}: regla dura pendiente — ${motivos.join(' | ')}. No se publica ni va a la bandeja hasta cumplirla; su creador ya no tiene otra vuelta dentro del tope del encargo, así que espera tu criterio. Las demás piezas siguen.${textoDelGasto ? ` ${textoDelGasto}` : ''}`, dry_run: enc.dry_run })
+    return r(200, { accion: 'cerrado', estado: estadoFinal, con_desacuerdo: true, frenada: true, en_correccion: true, simulado: enc.dry_run, gasto_usd: e.gasto_usd, output_id: null, hitl_queue_id: null, resultado_para_la_sala: 'con_desacuerdo', sala_ref: enc.sala_ref, desacuerdos, ...(observaciones.length ? { observaciones } : {}) })
   }
   // la alarma de gasto sola (la pieza sigue): las versiones 2+ y el cierre por tope (ya avisó) van al hilo
   if (textoDelGasto) await P.avisar({ canal: parcial || enc.version_encargo >= 2 ? 'hilo' : 'alertas', encargo_id: enc.id, texto: `${textoDelGasto} La pieza sigue (el dinero ya se gastó).`, dry_run: enc.dry_run })

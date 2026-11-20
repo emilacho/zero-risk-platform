@@ -296,7 +296,9 @@ export function marcoDelConcepto(a: { ctx: ContextoDelCliente; estrategia: Estra
     '## Gran idea · «- nombre: …» y «- frase: …» · ## Por qué funciona · ## Cómo se ve (cita fotos propias como `foto:<id>`) · ## Cómo suena',
     '«## Cómo se ve» decide UNA vez para toda la campaña, con estas cuatro líneas (cada pieza las recibe como FIJO, no las reinventa): «- luz: … · porqué: …» · «- encuadre: … · porqué: …» · «- fotos propias: … · porqué: …» · «- nunca se muestra: … · porqué: …»; debajo, la dirección visual libre.',
     '## Capítulo <clave de fase> · qué cuenta · «- serie: S1 · nombre · qué cuenta · redes» · y debajo «### Banco de ideas» con UNA idea por línea:',
-    '`- C<fase>-I<nn> · red · formato · idea · mensaje: … · gancho: … · protagonista: … · serie: S1 · cuadros: <n> · foto:<id>|ninguna`',
+    '`- C<fase>-I<nn> · red · formato · idea · mensaje: … · gancho: … · protagonista: … · serie: S1 · cuadros: <n> · duración: <solo si es video: N s · porqué> · foto:<id>|ninguna`',
+    // 19-nov · GO Lenovo (firma de Emilio 15:01-15:03): la duración es del cómo y la define la gran idea, no el brief
+    '`duración` = en cada idea de VIDEO (reel, short, tiktok, video), cuánto dura y por qué, p. ej. «20 s · porque muestra tres momentos». Siempre la trae; el guion puede ajustarla después.',
     '`cuadros` = cuántas pantallas pide la idea tal como la imaginas (una historia o un post = 1; «swipe a…» o una secuencia = una por pantalla). La cadena lo compara con los elementos del kit y avisa si no cuadran.',
     // 17-nov · Sprint 4 · D · sin la orden «mínimo = huecos del patrón × semanas» (la mesa crea ideas, no relleno de calendario) ni «sin datos con valor» (llegan por la ficha, con su fuente)
     'Cada idea trae mensaje y gancho propios y distintos; ids únicos.',
@@ -485,8 +487,7 @@ export async function conceptoAbrir(al: Almacen, cuerpo: Record<string, unknown>
     // hueco 1 de CC3: el mismo sobre otra vez (la oficina es idempotente); el marco se rearma con la nota persistida en la fila
     const sobre: SobreParaLaOficina = {
       tipo_de_mesa: 'concepto', client_id: campana.client_id, campana_id: campana.id, version: ultimo.version, dry_run: campana.seco,
-      // 19-nov · ADENDA 1 · P2 (CC5): la gran idea también recibe el plan ENTERO (antes no: «el brief ya es su lectura», y así la hipótesis B se acortó en el reel auditado)
-      plan_texto: ctx.planTexto,
+      // 19-nov · GO Lenovo (firma de Emilio 20:39): la gran idea NO recibe el plan · parte del brief, que ya es su lectura; el plan entero va a la jefatura (deshace esa parte de #1207)
       marco_texto: marcoDelConcepto({ fichas: await fichasDeLaCampana(al, campana.id), ctx, estrategia, briefTexto: brief.texto_md ?? '', version: ultimo.version, nota: texto(ultimo.nota_de_emilio), inicio: campana.fecha_inicio, hoy: ahora.slice(0, 10), anterior: anteriorConCambios(todos, ultimo.version), perfil: await perfilParaLaMesa(al, campana.client_id, 'gran_idea') }), condiciones: condicionesDe(estrategia, await al.formatos()), insumos_del_banco: insumosDelBanco(estrategia),
     }
     return { status: 200, cuerpo: { ya_abierta: true, version: ultimo.version, concepto_id: idDeConcepto(campana.id, ultimo.version), brief_version: brief.version, sobre } }
@@ -510,8 +511,7 @@ export async function conceptoAbrir(al: Almacen, cuerpo: Record<string, unknown>
   await al.insertarConcepto(fila)
   const sobre: SobreParaLaOficina = {
     tipo_de_mesa: 'concepto', client_id: campana.client_id, campana_id: campana.id, version, dry_run: campana.seco,
-      // 19-nov · ADENDA 1 · P2 (CC5): la gran idea también recibe el plan ENTERO (antes no: «el brief ya es su lectura», y así la hipótesis B se acortó en el reel auditado)
-      plan_texto: ctx.planTexto,
+    // 19-nov · GO Lenovo (firma de Emilio 20:39): la gran idea NO recibe el plan (ver el sobre de rescate de arriba)
     marco_texto: marcoDelConcepto({ fichas: await fichasDeLaCampana(al, campana.id), ctx, estrategia, briefTexto: brief.texto_md ?? '', version, nota, inicio: campana.fecha_inicio, hoy: ahora.slice(0, 10), anterior: anteriorConCambios([...todos, fila], version), perfil: await perfilParaLaMesa(al, campana.client_id, 'gran_idea') }), condiciones: condicionesDe(estrategia, await al.formatos()), insumos_del_banco: insumosDelBanco(estrategia),
   }
   return { status: 200, cuerpo: { version, concepto_id: idDeConcepto(campana.id, version), brief_version: brief.version, plazo_mesa_min: plazoMin, sobre } }
@@ -766,16 +766,11 @@ export async function conceptoDecidir(al: Almacen, cuerpo: Record<string, unknow
   if (!apuntaA) return err(400, 'E-APUNTA-A', 'cambios necesita apunta_a: «concepto» (otra ronda de la mesa) o «brief» (brief nuevo y concepto sobre él)')
   if (!nota) return err(400, 'E-NOTA', 'cambios necesita una nota: qué cambiar (va al marco de la mesa)')
   const vueltas = cuentaDe(todos, (x) => x.aprobacion === 'cambios')
-  // 19-nov · grupo D · D2 (c) de Lenovo 08:00Z (el 3 lo firmó Emilio): pasado el tope, el pedido NO se aplica y se le PREGUNTA en el buzón; la campaña no se detiene
-  // (sigue esperando su aprobación: puede aprobar cualquier versión desde el tablero). Una pregunta por campaña y por pedido (la clave lleva la versión).
+  // 19-nov · grupo D · D2 (c): el tope es 3 (firma de Emilio). Pasado el tope, el pedido NO se aplica y la campaña no se detiene: las propuestas siguen en su pantalla
+  // de Propuestas, como siempre, y él aprueba la que quiera. Emilio 16:19 Zúrich (Lenovo 15:21Z): SIN mensaje ni alerta en el buzón; la respuesta lo dice en pantalla
   if (vueltas >= CAP_DE_VUELTAS_DE_CAMBIOS) {
-    const r = await al.avisarAlBuzon({
-      clave: `cadena:vueltas-de-cambios:${campana.id}:v${version}`, tipo: 'pregunta', client_id: campana.client_id, origen: 'cadena/mesas · grupo D', workflow_id: cadena(cuerpo.workflow_id) ?? null, workflow_execution_id: cadena(cuerpo.workflow_execution_id) ?? null,
-      titulo: `La gran idea de la campaña ${campana.id}: ya pediste cambios ${vueltas} veces`,
-      detalle: `Es tu pedido número ${vueltas + 1} sobre la gran idea (el tope firmado es ${CAP_DE_VUELTAS_DE_CAMBIOS}), y no lo apliqué. ¿Abro otra ronda con tu nota, o apruebas una de las versiones desde el tablero? Tu nota: «${nota}». La campaña sigue esperando tu aprobación; no se detiene.`,
-    })
-    return { status: 409, cuerpo: { error: 'vueltas_agotadas', necesita_humano: false, pregunta: r.ok ? 'enviada' : 'no_salio', vueltas, tope: CAP_DE_VUELTAS_DE_CAMBIOS,
-      detalle: `Ya pediste cambios ${vueltas} veces, que es el tope. Este pedido no lo apliqué: ${r.ok ? 'te dejé la pregunta en el buzón' : 'la pregunta al buzón no salió'}. Puedes aprobar una de las versiones; la campaña no se detiene.` } }
+    return { status: 409, cuerpo: { error: 'vueltas_agotadas', necesita_humano: false, vueltas, tope: CAP_DE_VUELTAS_DE_CAMBIOS,
+      detalle: `Ya pediste cambios ${vueltas} veces, que es el tope, así que este pedido no lo apliqué. Las propuestas siguen aquí: aprueba la que prefieras. La campaña no se detiene.` } }
   }
   // cambios sobre un concepto YA aprobado también valen (cambio de rumbo a mitad de campaña · nota 3 de CC3): las filas ya ordenadas conservan su idea_ref
   await al.actualizarConcepto(campana.id, version, { aprobacion: 'cambios', apunta_a: apuntaA, nota_de_emilio: nota, decidido_en: ahora })

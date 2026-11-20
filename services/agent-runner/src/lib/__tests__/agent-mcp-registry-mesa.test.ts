@@ -29,7 +29,7 @@ describe('mesa MCP · montaje', () => {
 
   // oficina de marketing (31-oct · E1): los tres de la ADENDA 2 entran a la mesa; una prueba por agente para que quitar uno se note
   // + instalaciones E1 (T7): whimsy-injector · tiktok-strategist · inclusive-visuals-specialist
-  it.each(['campaign-brief-agent', 'video-editor', 'marketing_video_optimization_specialist', 'whimsy-injector', 'tiktok-strategist', 'inclusive-visuals-specialist'])('%s está en la mesa y recibe el conector en su turno', (slug) => {
+  it.each(['campaign-brief-agent', 'video-editor', 'marketing_video_optimization_specialist', 'whimsy-injector', 'tiktok-strategist', 'inclusive-visuals-specialist', 'director-gran-idea'])('%s está en la mesa y recibe el conector en su turno', (slug) => {
     expect(MESA_ALLOW.has(slug)).toBe(true)
     const s = buildMcpServers({ agentSlug: slug, mesa: { encargoId: 'enc-9' } }).mesa
     expect(s?.env).toMatchObject({ ZR_ENCARGO_ID: 'enc-9', ZR_AGENTE: slug })
@@ -54,14 +54,14 @@ describe('mesa MCP · montaje', () => {
 describe('mesa MCP · allowedTools', () => {
   it('con el conector montado, las tres herramientas están en allowedTools; sin él, ninguna', () => {
     const con = deriveAllowedTools({ mesa: {} })
-    expect(con).toEqual(expect.arrayContaining(['mcp__mesa__mesa_pedir', 'mcp__mesa__mesa_devolver', 'mcp__mesa__pedir_material']))
+    expect(con).toEqual(expect.arrayContaining(['mcp__mesa__mesa_pedir', 'mcp__mesa__mesa_devolver', 'mcp__mesa__pedir_material', 'mcp__mesa__pedir_fichas']))
     expect(deriveAllowedTools({}).some((t) => t.startsWith('mcp__mesa__'))).toBe(false)
   })
 
   it('cada herramienta que el servidor ofrece está en allowedTools (ninguna queda muda)', () => {
     const fuente = fs.readFileSync(path.join(__dirname, '..', 'mcp', 'mesa-server.js'), 'utf8')
     const ofrecidas = [...fuente.matchAll(/servidor\.tool\(\s*'([a-z_]+)'/g)].map((m) => m[1])
-    expect(ofrecidas.sort()).toEqual(['mesa_devolver', 'mesa_pedir', 'pedir_material'])
+    expect(ofrecidas.sort()).toEqual(['mesa_devolver', 'mesa_pedir', 'pedir_fichas', 'pedir_material'])
     const lista = deriveAllowedTools({ mesa: {} })
     for (const t of ofrecidas) expect(lista, t).toContain(`mcp__mesa__${t}`)
   })

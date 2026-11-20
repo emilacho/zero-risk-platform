@@ -12,6 +12,7 @@ import { fechaLimiteDelBrief, parsearBrief, planDeOrigen, proporcionDelBrief, ty
 import { briefEsDelEncargo, claseDeLaFamilia } from './familia-del-brief'
 import { claseDe } from './clase'
 import { chequeosDePost, type FuentesDelCliente } from './chequeos'
+import { corregirContactoDeLaPieza } from './contacto-ajeno'
 import type { ContextoDelRevisor } from './ciego'
 import { aUtc, chequeosDeEntrega, cuandoSePublica, manifiesto, nombreDeArchivo, textoParaCopiar, type ArchivoDeEntrega } from './entrega'
 import { registrarPaso, siguientePaso, type ResultadoDePaso } from './motor'
@@ -220,11 +221,11 @@ async function pedido(P: Puertos, enc: Encargo, pl: Plantilla, e: Estado): Promi
     const nueva = cruda ? aplicarTopesPorDuracion(cruda, g.segundos).plantilla : null
     const segundos = Math.round(g.segundos)
     if (nueva && nueva.limites.tope_encargo_usd <= enc.tope_usd + 1e-9) {
-      duracionNueva = { duracion_s: segundos, aviso_duracion: `el guion dura ${segundos} s y el brief abrió ${abierta} s: los topes se recalcularon para ${segundos} s (encargo hasta US$ ${nueva.limites.tope_encargo_usd}), dentro del tope de la campaña (US$ ${enc.tope_usd})` }
+      duracionNueva = { duracion_s: segundos, aviso_duracion: `el guion dura ${segundos} s y la pieza se abrió con ${abierta} s: los topes se recalcularon para ${segundos} s (encargo hasta US$ ${nueva.limites.tope_encargo_usd}), dentro del tope de la campaña (US$ ${enc.tope_usd})` }
     } else {
       const porQue = nueva ? `con ${segundos} s el encargo pediría hasta US$ ${nueva.limites.tope_encargo_usd} y el tope de la campaña es US$ ${enc.tope_usd}` : 'no se pudo leer la plantilla para recalcular los topes'
-      if (quedaVueltaALaMesa(pl, e)) return { res: { costo_usd: 0, artefacto: { clave: `${enc.id}:${enc.brief_id}:v${e.artefactos['guion']?.version ?? 1}`, fotos_no_halladas: [], avisos_del_guion: g.avisos ?? [], vuelve_a_la_mesa: true, aviso_a_la_mesa: `El guion dura ${segundos} s y el brief de la pieza abrió ${abierta} s: ${porQue}. Rehaz el guion dentro de ${abierta} s, o escribe en el guion por qué esta pieza necesita más.` } } }
-      return { res: { costo_usd: 0 }, fallido: `el guion dura ${segundos} s y el brief abrió ${abierta} s: ${porQue}, y ya volvió a la mesa. No se recorta: hace falta subir el tope de la campaña o acortar el guion` }
+      if (quedaVueltaALaMesa(pl, e)) return { res: { costo_usd: 0, artefacto: { clave: `${enc.id}:${enc.brief_id}:v${e.artefactos['guion']?.version ?? 1}`, fotos_no_halladas: [], avisos_del_guion: g.avisos ?? [], vuelve_a_la_mesa: true, aviso_a_la_mesa: `El guion dura ${segundos} s y la pieza se abrió con ${abierta} s: ${porQue}. Rehaz el guion dentro de ${abierta} s, o escribe en el guion por qué esta pieza necesita más.` } } }
+      return { res: { costo_usd: 0 }, fallido: `el guion dura ${segundos} s y la pieza se abrió con ${abierta} s: ${porQue}, y ya volvió a la mesa. No se recorta: hace falta subir el tope de la campaña o acortar el guion` }
     }
   }
   const lim = (pl.limites.video ?? {}) as { resolucion?: string }
@@ -275,8 +276,11 @@ export function avisoDeFotosALaMesa(noHalladas: string[], ambiguas: string[], fo
 
 function chequeos(e: Estado, pl: Plantilla, enc?: Pick<Encargo, 'sala_ref'>): SalidaCodigoV {
   const b = baseV(e)
-  const cv = datos(e, 'copy_video')
-  if (!cv) return { res: { costo_usd: 0, artefacto: { fichas: 0 } }, fallido: 'no hay pie ni etiquetas que chequear' }
+  const cv0 = datos(e, 'copy_video')
+  if (!cv0) return { res: { costo_usd: 0, artefacto: { fichas: 0 } }, fallido: 'no hay pie ni etiquetas que chequear' }
+  // 18-nov · GO Lenovo «lo exacto se autocorrige»: el teléfono o el @ ajeno del pie se reemplaza por el del cliente ANTES de chequear (sin modelo)
+  const auto = corregirContactoDeLaPieza(cv0, b.F.fuentes as FuentesDelCliente)
+  const cv = auto.pieza
   const fs = chequeosDePost({
     pieza: { pie_de_foto: txt(cv.pie_de_foto), hashtags: arr(cv.hashtags), llamado: typeof cv.llamado === 'string' ? cv.llamado : undefined },
     fuentes: b.F.fuentes as FuentesDelCliente,
@@ -298,11 +302,13 @@ function chequeos(e: Estado, pl: Plantilla, enc?: Pick<Encargo, 'sala_ref'>): Sa
     if (typeof lim.tope_por_video_usd === 'number' && v.costo_usd > lim.tope_por_video_usd + 1e-9) nueva('sugerencia', `el video cobró US$ ${v.costo_usd.toFixed(4)}, más que el tope por video (US$ ${lim.tope_por_video_usd})`, TOPE_POR_VIDEO, 'alarma de gasto al cierre: el dinero ya se gastó, la pieza sigue (Lenovo · revisión 2, pregunta 4: no bloquea)')
   }
   for (const a of arr(pv?.avisos_del_guion)) nueva('sugerencia', `el traductor del guion avisó: ${a}`, 'guion de la mesa', 'mirar el video con eso en mente')
-  // 19-nov · G5b (A′ · GO Lenovo 03:41Z) · la duración: la de por omisión (nadie la razonó) o la que el guion subió, a la vista del dueño; nunca callada
-  const dur = enc?.sala_ref?.[CLAVE_DE_LA_DURACION] as { aviso?: unknown } | undefined
-  if (typeof dur?.aviso === 'string' && dur.aviso) nueva('sugerencia', dur.aviso, 'duración del brief de la pieza', 'que quien escribe el brief declare la duración con su porqué')
+  // 19-nov · G5b · la duración, a la vista del dueño solo cuando hay algo que decir: la idea pidió más que el techo de la cadena, o el guion la subió.
+  //   Firma de Emilio (GO Lenovo 15:05 Zúrich): la de por omisión ya no se avisa (es una guarda callada; la idea sin duración la ve la jefatura)
+  //   (un encargo abierto antes con el aviso de omisión guardado tampoco lo muestra: `por_omision` manda)
+  const dur = enc?.sala_ref?.[CLAVE_DE_LA_DURACION] as { aviso?: unknown; por_omision?: unknown } | undefined
+  if (typeof dur?.aviso === 'string' && dur.aviso && dur.por_omision !== true) nueva('sugerencia', dur.aviso, 'duración de la idea', 'mirar si la idea cabe en el techo de la cadena o se parte en piezas')
   if (typeof pv?.aviso_duracion === 'string' && pv.aviso_duracion) nueva('sugerencia', pv.aviso_duracion, 'duración del guion de la mesa', 'mirar que el largo del video lo justifique')
-  return { res: { costo_usd: 0, artefacto: { fichas: fichas.length }, fichas, reemplazar_fichas: { origen: 'chequeo', donde: ['texto', 'hashtags', 'video'] } } }
+  return { res: { costo_usd: 0, artefacto: { fichas: fichas.length, ...(auto.declarado.length ? { autocorregido: auto.declarado } : {}) }, fichas, reemplazar_fichas: { origen: 'chequeo', donde: ['texto', 'hashtags', 'video'] }, ...(auto.declarado.length ? { otros_artefactos: { copy_video: cv } } : {}) } }
 }
 
 /** un mp4 mínimo (solo la caja `ftyp`): lo que se entrega en dry_run para que la hoja, el manifiesto y los chequeos de entrega se ejerzan sin red */

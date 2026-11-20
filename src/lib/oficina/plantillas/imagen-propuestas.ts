@@ -8,7 +8,7 @@
  */
 import { COSTO_ESTIMADO_POR_IMAGEN_DEL_BORRADOR_USD, FUNCION_BORRADOR_IMAGEN, ARTEFACTO_BORRADOR_IMAGEN } from '../mesa/borrador-imagen'
 import type { Paso, Plantilla } from '../tipos'
-import { coberturaDelTope } from '../topes-por-duracion'
+import { coberturaDelTope, costoDeVolver } from '../topes-por-duracion'
 import { CARRUSEL_MESA, KIT_MESA, POST_MESA } from './mesa'
 import { PASO_APROBAR_PROPUESTAS, VUELTAS_DE_LAS_PROPUESTAS } from './video-mesa'
 
@@ -30,6 +30,10 @@ export const pasoDelBorradorDeImagen = (tope: number): Paso => ({
   clave: FUNCION_BORRADOR_IMAGEN, tipo: 'codigo', quien: 'sala', funcion: FUNCION_BORRADOR_IMAGEN, condicion: { tipo: 'siempre' }, entrada: ['mesa'], salida_artefacto: ARTEFACTO_BORRADOR_IMAGEN, tope_usd: tope,
 })
 
+/** 18-nov · lo que cuesta UNA vuelta de la jefatura a la mesa (si la plantilla la tiene): la apertura ya no la reserva (se salta si no cabe), pero el tope le deja lugar · pura */
+export const reservaDeUnaVueltaDeLaJefatura = (pl: Plantilla): number =>
+  pl.pasos.filter((s) => s.clave === 'jefatura' && Number(s.vuelve_a?.max ?? 0) > 0).reduce((a, s) => a + costoDeVolver(pl, s), 0)
+
 /** la mesa de imagen de hoy → la misma con propuestas · pura (no toca la de entrada) */
 export function conPropuestasDeImagen(pl: Plantilla): Plantilla {
   const pasos = structuredClone(pl.pasos)
@@ -38,7 +42,11 @@ export function conPropuestasDeImagen(pl: Plantilla): Plantilla {
   pasos.splice(i + 1, 0, pasoDelBorradorDeImagen(topeDelBorradorDeImagenDe(pl)), structuredClone(PASO_APROBAR_PROPUESTAS))
   const limites = { ...structuredClone(pl.limites), propuestas: { n: PROPUESTAS_DE_IMAGEN }, cota_de_la_mesa_usd: COTA_DE_LA_MESA_CON_PROPUESTAS_USD } as Plantilla['limites']
   // GO Lenovo · el tope SALE DE LA CUENTA (lo requerido con la cota de la mesa en cada pasada), redondeado hacia arriba; nunca menos que el de hoy × (1 + vueltas)
-  const requerido = coberturaDelTope({ ...pl, pasos, limites }, 0).requerido
+  // 18-nov · la vuelta de la jefatura ya no se reserva al abrir (se salta si no cabe), pero el TOPE sigue dejándole lugar a UNA, como hasta hoy (kit_mesa 18 en vivo):
+  //   así la cuenta da las mismas cifras que la migración del encendido ya aplicada y la primera vuelta por regla dura cabe
+  const conPropuestas = { ...pl, pasos, limites } as Plantilla
+  const unaVuelta = reservaDeUnaVueltaDeLaJefatura(conPropuestas)
+  const requerido = coberturaDelTope(conPropuestas, 0).requerido + unaVuelta
   const tope = Math.max(Number(pl.limites.tope_encargo_usd) * (1 + VUELTAS_DE_LAS_PROPUESTAS), Math.ceil(requerido))
   return { ...structuredClone(pl), pasos, limites: { ...limites, tope_encargo_usd: tope } as Plantilla['limites'] }
 }

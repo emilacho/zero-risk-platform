@@ -16,6 +16,7 @@
 const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js')
 const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js')
 const z = require('zod')
+const { respuestaDeFichas } = require('./mesa-fichas.js')
 
 const PLATFORM_URL = (process.env.ZR_PLATFORM_URL || '').replace(/\/+$/, '')
 const INTERNAL_KEY = process.env.INTERNAL_API_KEY || ''
@@ -80,6 +81,17 @@ servidor.tool(
   async ({ que, para_que }) => {
     const r = await llamar('pedir_material', { que, para_que })
     return r.ok ? bien(r.cuerpo) : fallo(r.error)
+  },
+)
+
+// 18-nov · la mesa lee el índice del cerebro: el empleado pide por número los originales completos y los lee en ESTE turno (texto plano, no JSON)
+servidor.tool(
+  'pedir_fichas',
+  'Te trae, en este mismo turno, el original completo de las fichas del índice «Lo que sabemos del cliente» que pidas por su número. Si un número no existe, dice «no consta».',
+  { numeros: z.array(z.number().int().positive()).min(1).describe('los números del índice que quieres leer completos') },
+  async ({ numeros }) => {
+    const r = await llamar('pedir_fichas', { numeros })
+    return respuestaDeFichas(r)
   },
 )
 

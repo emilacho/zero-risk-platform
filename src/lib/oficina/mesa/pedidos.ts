@@ -15,9 +15,11 @@ import { fichaPorOmision } from '../../video/parametros'
 import { tareaDelIngeniero, type ImagenARedactar } from './prompts'
 import { seccionDeLaCriticaParaLaDireccion, tareaDeLaCritica } from './critica'
 import { fotosALaVista, fotosDeLaLista, REGLA_DE_LOS_ELEMENTOS_REALES, rotuloDeLaFoto } from './fotos-a-la-vista'
+import { seccionDelCerebro, type IndiceDeLaMesa } from './indice-del-cerebro'
 import type { ImagenDelPedido } from '../../imagenes-del-pedido'
 import type { RellenoPendiente } from './de-la-cadena'
 import { TOPE_REAL_DEL_PEDIDO } from '../../limites-de-tamano'
+import { esDeUnAutor, tareaDelAutor } from './un-autor'
 
 export type TipoDeTurno = 'dirigir' | 'aportar' | 'responder' | 'integrar' | 'devolver_citas' | 'rellenar_banco' | 'redactar_prompts' | 'criticar'
 
@@ -29,6 +31,8 @@ export interface ContextoDeTurno {
   manual_texto: string
   plan_texto: string | null
   fotos: FotoEtiquetada[]
+  /** 18-nov · lo que el cerebro tiene del cliente para esta pieza (el índice que la mesa pidió al abrir): va ENTERO en la cabecera; sin él, la mesa trabaja como antes */
+  cerebro?: IndiceDeLaMesa
   /** lo que el portero ya trajo (texto de los aportes `material` va en el tablero) */
   tope_usd: number
   gasto_usd: number
@@ -133,7 +137,8 @@ const CONVENCION_DEL_CONCEPTO = [
   'A5 descarté: <por qué no lo usaste>',
   '```',
   'El BANCO DE IDEAS lo escriben los miembros en sus aportes de la ronda 2, una línea por idea, EXACTAMENTE así:',
-  '- C<fase>-I<nn> · <red> · <formato o cualquiera> · <idea en una línea> · mensaje: <UNA frase propia de esta idea, al servicio del mensaje de campaña> · gancho: <lo que detiene el scroll> · protagonista: <uno> · serie: S1 · cuadros: <cuántas pantallas pide la idea: una historia o un post = 1; «swipe a…» o una secuencia = una por pantalla> · foto:<id>|ninguna',
+  '- C<fase>-I<nn> · <red> · <formato o cualquiera> · <idea en una línea> · mensaje: <UNA frase propia de esta idea, al servicio del mensaje de campaña> · gancho: <lo que detiene el scroll> · protagonista: <uno> · serie: S1 · cuadros: <cuántas pantallas pide la idea: una historia o un post = 1; «swipe a…» o una secuencia = una por pantalla> · duración: <SOLO si la idea es video (reel, short, tiktok, video): cuánto dura y por qué, p. ej. «20 s · porque…»> · foto:<id>|ninguna',
+  'Cada idea de video trae SIEMPRE su duración estimada con su porqué: es parte del cómo de la idea, como su formato (el brief no la decide). El guion puede ajustarla después.',
   'Cada idea con mensaje y gancho PROPIOS (distintos entre ideas); cubre cada red de la estrategia en cada capítulo. Las ideas NO llevan datos con valor (precios, horarios, cifras): el estratega los pone con su referencia. La integración lista cuáles ideas quedan y cuáles salen.',
 ].join('\n')
 
@@ -188,7 +193,7 @@ const PLANO_DE_LA_HOJA = (n: number, tiempos: string, extra = '') => [
   'Texto en pantalla: … (solo si lo lleva; literal, corto: se compone en edición, la IA no lo escribe)',
   'Foto: foto:<id de una foto propia>, foto:<id> · <por qué la elegiste, en una frase> | ninguna   (en todo plano que muestre un elemento real del cliente: producto o plato, el local, un uniforme, un empaque; la 1.ª es el cuadro, las demás van de referencia)',
   'Personajes: <los nombres de «## Personajes» que salen en este plano> | ninguno   (solo si la pieza tiene personajes; un personaje de la marca que sale en cuadro va aquí)',
-  'Prompt de imagen: … (en inglés: el cuadro clave del plano, sin texto en la imagen)',
+  'Prompt de imagen: … (en inglés: el cuadro clave del plano, con el tipo de imagen y el estilo que fija el manual del cliente para producir con IA (si el manual no trae esa sección, su DIRECCIÓN DE FOTOGRAFÍA), sin texto en la imagen)',
   'Prompt de video: … (en inglés: solo el movimiento y la cámara desde ese cuadro, el proceso de la acción y cómo termina)',
 ].join('\n')
 
@@ -324,6 +329,9 @@ const REGLAS_DURAS = (c: ContextoDeTurno): string => [
     : '3. **La pieza debe poder dibujarse**: cada lámina es un título, un texto corto, un llamado (si lo lleva) y una imagen. Lo demás es tu criterio; sin límites de caracteres: si algo es largo, el dibujo se ajusta o el equipo lo parte.',
 ].join('\n')
 
+/** 18-nov · con el índice del cerebro, el empleado pide por número los originales completos y los lee en su mismo turno */
+const HERRAMIENTA_PEDIR_FICHAS = '- `pedir_fichas(numeros)`: te trae, en este mismo turno, el original completo de las fichas del índice «Lo que sabemos del cliente» que pidas por su número. Si un número no existe, dice «no consta».'
+
 /** 18-nov · T7d (encargo de Lenovo, arreglos 2 y 3): la forma de trato la fija el manual y la juzga el agente (no hay lista de código); el texto entregado no narra el trabajo */
 export const LA_FORMA_DE_TRATO = '- **La forma de trato es la del manual.** Si el manual tutea, tutea siempre, también en mensajes, ganchos y llamados: nunca voseo. Se escribe «pídelo», «pagas», «sabes», «ven», «mira»; nunca «pedilo», «pagás», «sabés», «vení», «mirá».'
 export const FORMA_DE_TRATO_Y_SIN_CHARLA = [
@@ -354,11 +362,14 @@ export function tareaDelRelleno(r: RellenoPendiente | undefined): string {
     ...r.redes.map((x) => `- ${x.red}: faltan ${x.faltan} (la cuota es ${x.esperadas})`),
     '',
     `Escribe SOLO las ideas que faltan, una por línea, con el formato del banco y numeradas desde **C${r.prefijo}-I${String(r.desde).padStart(2, '0')}**:`,
-    `- C${r.prefijo}-I${String(r.desde).padStart(2, '0')} · <red> · <formato> · <idea> · mensaje: <mensaje propio> · gancho: <gancho>`,
+    `- C${r.prefijo}-I${String(r.desde).padStart(2, '0')} · <red> · <formato> · <idea> · mensaje: <mensaje propio> · gancho: <gancho> · duración: <solo si es video: «N s · porqué»>`,
     'Cada idea cuenta lo que dice el capítulo en tu gran idea, con un mensaje y un gancho que no repiten los de las ideas que ya están. No inventes datos del cliente: usa lo que está en el tablero y en el marco.',
     ...(r.ya_estan.length ? ['', '## Ya están en el banco de este capítulo (no las repitas)', ...r.ya_estan.map((i) => `- ${i.id} · ${i.red} · ${i.mensaje}`)] : []),
   ].join('\n')
 }
+
+/** 19-nov · GO Lenovo «la gran idea sin el plan» (firma de Emilio 20:39, decisión del 18-nov): lo que lee la gran idea donde las demás mesas leen el plan */
+export const LA_GRAN_IDEA_SIN_PLAN = '(el brief de la campaña ya es la lectura del plan: no se repite aquí)'
 
 export function armarTarea(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarjeta | undefined; est: EstadoMesa; libro: Aporte[]; c: ContextoDeTurno; pedido?: Aporte; faltanCitas?: string; extra?: string; metodo?: string; /** Sprint 1 · mejora 4 · las imágenes a generar de la pieza integrada (turno del ingeniero de prompts) */ imagenesARedactar?: ImagenARedactar[]; /** 18-nov · relleno del banco: qué capítulo y cuántas faltan por red (lo calcula de-la-cadena con la lectura de la cadena) */ relleno?: RellenoPendiente }): string {
   if (o.c.tipo === 'reubicacion') return tareaDeReubicacion(o)
@@ -377,6 +388,7 @@ export function armarTarea(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarj
     FORMA_DE_TRATO_Y_SIN_CHARLA,
     '',
     HERRAMIENTAS(c.tipo),
+    ...(c.cerebro ? [HERRAMIENTA_PEDIR_FICHAS] : []),
     '',
     seccionDelDirectorio(est.directorio_congelado, agente),
     '',
@@ -387,7 +399,10 @@ export function armarTarea(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarj
     documento(c.tipo === 'brief' ? 'el marco de la campaña' : c.tipo === 'concepto' ? 'el brief de la campaña' : 'el brief de este entregable', recorta(c.brief_texto, DIETA[c.tipo].marco, 'el marco')),
     '',
     '## 3 · El plan de trabajo',
-    c.plan_texto ? documento('el plan de trabajo', recorta(c.plan_texto, DIETA[c.tipo].plan, 'el plan')) : '(sin plan)',
+    // 19-nov · GO Lenovo (firma de Emilio 20:39): la gran idea parte del brief, que ya es la lectura del plan; el plan entero va a la jefatura · las demás mesas lo reciben entero
+    ...(c.tipo === 'concepto' ? [LA_GRAN_IDEA_SIN_PLAN] : [
+      c.plan_texto ? documento('el plan de trabajo', recorta(c.plan_texto, DIETA[c.tipo].plan, 'el plan')) : '(sin plan)',
+    ]),
     '',
     // 19-nov · ADENDA 1 · P2b: el perfil del público, entero, como un documento más (antes la mesa no lo recibía)
     ...(c.perfil_texto ? ['## El perfil del público', documento('el perfil del público', c.perfil_texto), ''] : []),
@@ -396,6 +411,7 @@ export function armarTarea(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarj
     '',
     ...(fotosDeLaLista(c.fotos).length ? [REGLA_DE_LOS_ELEMENTOS_REALES, ''] : []),
     ...seccionDelPortero(libro),
+    ...(c.cerebro ? [seccionDelCerebro(c.cerebro), ''] : []),
     '## Tablero (aportes hasta ahora; cita con A<n>)',
     tableroEnTexto(libro, { materialArriba: true }),
     '',
@@ -455,6 +471,10 @@ export function armarTarea(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarj
     rellenar_banco: tareaDelRelleno(o.relleno),
     redactar_prompts: tareaDelIngeniero(o.imagenesARedactar ?? []),
     criticar: tareaDeLaCritica(agente),
+  }
+  // 19-nov · la tanda B (un solo autor): el autor escribe y los especialistas revisan; los turnos que cambian son dirigir, aportar e integrar (los demás, los de siempre)
+  if (esDeUnAutor(est) && (tipo === 'dirigir' || tipo === 'aportar' || tipo === 'integrar')) {
+    tu[tipo] = tareaDelAutor({ tipo, agente, libro, propuestas: c.video?.propuestas ?? est.imagen?.propuestas ?? 1, convencion: CONVENCION_DE_LA_PIEZA(c.tipo, c.video) })
   }
   return cab + seccionDeIndicacion(o.tarjeta, agente) + (o.metodo ? o.metodo + '\n\n' : '') + antesDeEscribir(tipo) + tu[tipo]
 }
@@ -617,12 +637,12 @@ export function seccionDeMetodo(agente: string, metodos: unknown, fichas: unknow
 }
 
 /** el pedido que consume el flujo de turnos de n8n (mismo molde que la v1: `agent_name`, `task`, `images`, `esquema`…) */
-export function pedidoDeAgente(o: { agente: string; task: string; encargo_id: string; client_id: string; dry_run: boolean; paso: string; reserva_usd: number; es_pieza?: boolean; /** 18-nov · las fotos propias a la vista (`imagenesDelTurno`); sin ellas, el pedido de siempre */ images?: ImagenDelPedido[] }): Record<string, unknown> {
+export function pedidoDeAgente(o: { agente: string; task: string; encargo_id: string; client_id: string; dry_run: boolean; paso: string; reserva_usd: number; es_pieza?: boolean; /** 18-nov · las fotos propias a la vista (`imagenesDelTurno`); sin ellas, el pedido de siempre */ images?: ImagenDelPedido[]; /** 18-nov · la mesa ya lee el índice del cerebro: el corredor no empuja trozos (lo lee en `extra.sin_empuje`) */ sin_empuje?: boolean }): Record<string, unknown> {
   return {
     agent_name: o.agente, task: o.task, images: o.images ?? [], esquema: 'opinion_libre.v1',
     // 04-nov · de qué trabajo es la llamada: el encargo es la pieza · las cadenas (brief, concepto) aún no tienen id firmado: «sin dato»
     ...(o.es_pieza ? { trabajo_tipo: 'pieza', trabajo_id: o.encargo_id } : {}),
-    extra: { indicacion_oficina: 'Mesa de trabajo: aportas como profesional de tu especialidad; texto libre.', paso_de_la_oficina: o.paso, encargo_id: o.encargo_id, mesa: true, mesa_agente: o.agente },
+    extra: { indicacion_oficina: 'Mesa de trabajo: aportas como profesional de tu especialidad; texto libre.', paso_de_la_oficina: o.paso, encargo_id: o.encargo_id, mesa: true, mesa_agente: o.agente, ...(o.sin_empuje ? { sin_empuje: true } : {}) },
     max_budget_usd: o.reserva_usd, thinking_mode: 'maximo', dry_run: o.dry_run, client_id: o.client_id, workflow_hint: 'oficina · turno',
     // 31-oct: la mesa NO pasa por el editor de run-sdk (los jueces de la jefatura quedan fuera de la mesa, ADR-020); la cabecera va SIEMPRE
     headers_requeridos: { [CABECERA_SALTAR_EDITOR]: '1' },

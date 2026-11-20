@@ -31,6 +31,7 @@ import type { InformeDeComentarios } from './comentarios-de-redes'
 import { leerTodas } from './paginar'
 import { cerrarPausasDeAlta } from './pausa-de-alta'
 import { claveDeAlcance, sedesDeFicha, sedesDeLaFuente, tipoDeFuenteDeUnidad } from './sedes-fuentes'
+import { cargarPruebasDelCliente, columnasDeLaMarca, marcaDeOtroNegocio } from './otro-negocio'
 
 /** las fichas de zona (`zona:ec`) que le tocan al cliente por su país */
 const zonasDelCliente = (c: Record<string, unknown>): string[] => { const iso = paisIsoDe(c.country ?? c.pais, c.market); return iso ? [idDeZona(iso)] : [] }
@@ -271,12 +272,16 @@ export async function alimentarCliente(e: EntradaDeAlimentar): Promise<Resultado
   r.decisiones = items.map(({ unidad }, i) => ({ fuente: unidad.fuente, unidad: unidad.unidad_ref.slice(0, 80), decision: decisiones[i].decision, razon: decisiones[i].razon, cita: decisiones[i].cita, decidido_por: decisiones[i].decidido_por, ...(decisiones[i].degradada_por ? { degradada_por: decisiones[i].degradada_por } : {}) }))
   r.gasto = { modelo_usd: Math.round((r.juez.costo_usd + costoDeOcr) * 1e6) / 1e6, hoy_antes_usd: gastoAntes, tope_usd: TOPE_DEL_PORTERO_USD, supero_el_tope: gastoAntes + r.juez.costo_usd + costoDeOcr > TOPE_DEL_PORTERO_USD }
 
+  // encargo 10 · las pruebas «¿es del cliente?» se leen UNA vez (con lo ya leído: la ficha y sus sedes) y sirven a los brazos, al resumen y a la escritura de abajo
+  const pruebas = e.dry_run ? null : await cargarPruebasDelCliente(e.db, e.client_id, { cliente: cliente ?? null, sedes: lista(sd.data) })
+  const pruebasListas = pruebas && pruebas.ok ? { client_id: e.client_id, pruebas: pruebas.pruebas } : undefined
+
   // ───── los nuevos brazos (apagados por omisión): archivan SUS fichas aparte, por código; sus errores no tumban el ciclo normal pero SE DICEN
   if (hayBrazoActivo(e.brazos)) {
     r.brazos = await correrBrazos({
       db: e.db, brazos: e.brazos as BrazosActivos, cliente, client_id: e.client_id, filas: lista(rr.data) as never, ahora, dry_run: e.dry_run, env: e.env, fetch: e.fetch,
       ciudad: (lista(sd.data)[0]?.ciudad as string | undefined) ?? null, workflow_id: e.workflow_id, workflow_execution_id: e.workflow_execution_id, nuevoId: e.nuevoId,
-      llamarModelo: e.llamarModelo, presupuestoUsd: Math.max(0, Math.min(0.16, TOPE_DEL_PORTERO_USD - gastoAntes - r.juez.costo_usd)),
+      pruebas: pruebasListas, llamarModelo: e.llamarModelo, presupuestoUsd: Math.max(0, Math.min(0.16, TOPE_DEL_PORTERO_USD - gastoAntes - r.juez.costo_usd)),
     })
     r.errores.push(...r.brazos.errores.map((m) => `brazos: ${m}`))
     // el modelo de los brazos (el juez de competencia por sede) cuenta en el gasto del portero
@@ -300,7 +305,7 @@ export async function alimentarCliente(e: EntradaDeAlimentar): Promise<Resultado
           if (pr.usado) { sal.cliente.datos = { ...(sal.cliente.datos ?? {}), pulido_por: pr.agente, base_huella: huellaDeFicha(sal.cliente.contenido) }; sal.cliente.contenido = pr.texto }
           if (pr.costo_usd) r.gasto = { ...r.gasto, modelo_usd: Math.round((r.gasto.modelo_usd + pr.costo_usd) * 1e6) / 1e6 }
         }
-        const ar = await archivarFichasDeBrazos({ db: e.db, fichas: [sal.cliente, ...sal.sedes], ahora, dry_run: e.dry_run, workflow_id: e.workflow_id, workflow_execution_id: e.workflow_execution_id, nuevoId: e.nuevoId })
+        const ar = await archivarFichasDeBrazos({ db: e.db, fichas: [sal.cliente, ...sal.sedes], ahora, dry_run: e.dry_run, workflow_id: e.workflow_id, workflow_execution_id: e.workflow_execution_id, nuevoId: e.nuevoId, pruebas: pruebasListas })
         r.resumen_vivo = { secciones: sal.secciones, huecos: sal.huecos, escritas: ar.escritas, iguales: ar.iguales, retiradas: ar.retiradas, ...(pulido ? { pulido } : {}) }
         r.errores.push(...ar.errores.map((m) => `resumen vivo: ${m}`))
       }
@@ -311,22 +316,27 @@ export async function alimentarCliente(e: EntradaDeAlimentar): Promise<Resultado
 
   // ───── escribir (sin dry_run). Un error de escritura se junta y se DICE; no se esconde.
   const w = async (p: Promise<{ error: { message: string } | null }>, que: string) => { const x = await p; if (x.error) r.errores.push(`${que}: ${x.error.message}`); return !x.error }
-  const origenes = [...new Set(plan.fichas.map((x) => x.origen))]
+  // encargo 10 · lo de OTRO negocio se guarda con su marca (nada se borra). Sin con qué comprobar, no se escribe a ciegas: se DICE y esas fichas esperan a la próxima corrida
+  if (pruebas && !pruebas.ok) r.errores.push(`no es de este cliente: ${pruebas.error} · no se escribieron ${plan.fichas.length} fichas`)
+  const origenes = pruebas && !pruebas.ok ? [] : [...new Set(plan.fichas.map((x) => x.origen))]
   const ingresoDe = new Map<string, string>()
   for (const o of origenes) {
     const id = (e.nuevoId ?? (() => crypto.randomUUID()))()
     const ok = await w(e.db.from('cerebro_ingresos').insert({ id, client_id: e.client_id, origen: o, fuente_ref: 'portero-alimentar', es_completa: false, huella: `${dia}:${o}`, material: null, estado: 'fichado', workflow_id: e.workflow_id ?? null, workflow_execution_id: e.workflow_execution_id ?? null }), `ingreso ${o}`)
     if (ok) ingresoDe.set(o, id)
   }
+  // sin pruebas no hay ingresos (arriba) y sin ingreso ninguna ficha se escribe: un solo freno
   await enTandas(plan.fichas, ESCRITURAS_A_LA_VEZ, async (x) => {
     const ingreso = ingresoDe.get(x.origen)
     if (!ingreso) return
+    const marca = pruebas && pruebas.ok ? marcaDeOtroNegocio(x, pruebas.pruebas) : null
     const fila = {
       id: x.id, client_id: x.client_id, ingreso_id: ingreso, ref: x.ref, clase: x.clase, titulo: x.titulo, que_es: x.que_es, contenido: x.contenido, origen: x.origen, fecha_fuente: x.fecha_fuente,
       reconfirmado_en: x.reconfirmado_en, plazo: x.plazo, vigente_hasta: x.vigente_hasta, version_de: x.version_de, huella: x.huella, propiedad: x.propiedad, porque: x.porque, juzgado_por: x.juzgado_por,
       provenance_tag: x.provenance_tag, fuente_url: x.fuente_url, observado_en: x.observado_en, atributo: x.atributo, sede: x.sede, decision: x.decision, razon_de_decision: x.razon_de_decision,
       // lo que no se pudo decidir o confirmar se archiva pero NO se entrega
       descartada: !x.entregable, motivo_descarte: x.entregable ? null : x.porque || 'sin confirmar',
+      ...columnasDeLaMarca(marca, ahora),
     }
     if (await w(e.db.from('cerebro_fichas').insert(fila), `ficha ${x.ref}`)) r.escrituras.fichas++
   })

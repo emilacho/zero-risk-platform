@@ -7,6 +7,7 @@ import crypto from 'node:crypto'
 import { datos } from '../ayudas'
 import { avanzar, cerrarPorTope, fallar, plantillaDe, type Respuesta, type ResultadoDeTurno } from '../orquestador'
 import { baseDeLaminas } from '../orquestador-laminas'
+import { corregirContactoAjeno, declaracionDeContacto } from '../contacto-ajeno'
 import { fotosDeReferencia } from '../foto-de-referencia'
 import { seccionDeCambiosDelDueno } from '../cambios-del-dueno'
 import { conCabeceraDelRelleno, devolucionDelBrief, entregarALaCadena, marcoDe, rellenoPendiente, textoDeLaMesaParaLaCadena } from './de-la-cadena'
@@ -22,6 +23,8 @@ import { condicionesDeLaPieza, direccionDe, especialistasPertinentes, ingenieroD
 import { condicionesDelVideo } from './condiciones-de-video'
 import { FORMATO_DE_PIEZA, destinatarioDe, leerRespuestaSobreNotas, quitarLineasDeNotas, rastroDeLasNotas, seccionDeNotasDelDueno, tareaParaConsultar } from './aprendizaje'
 import { separarRespuestas } from '../sentido-contra-la-ficha'
+import { leerIndice, pedidoDelIndice } from './indice-del-cerebro'
+import { leeElIndice, piezaDeLaMesa } from './pieza-de-la-mesa'
 import { integracionDevuelta, pegarCitas, tableroParaLaJefatura, textoDeLoQueFalta } from './libro'
 import { siguienteDeLaMesa, techoDe, type ContextoDeLaMesa } from './planificador'
 import { traducirPieza, hayImagenesAGenerar, pedidoDeImagen, type ConceptoDeImagen, type OpcionesDeTraduccion, type Traduccion } from './traductor'
@@ -34,6 +37,7 @@ import { desarmarReferencias, seccionDeReferencias } from '../video/referencias'
 import { aporteDePrompts, promptsParaElBrazo, type ConceptoDeLaImagen, type ImagenARedactar } from './prompts'
 import { COTAS, FAMILIAS_MESA, esDeLaCadena, type Aporte, type EstadoMesa, type LecturaDeNotas, type Tarjeta, type TipoDeAporte } from './tipos'
 import { bloqueDelPerfil } from '../../perfil-del-publico/lectores'
+import { modoDeLaPlantilla } from './un-autor'
 import type { FuentesCompletas } from '../puertos'
 
 /** 19-nov · ADENDA 1 · P2b: el perfil del público de la mesa de piezas: el mismo bloque que leen la jefatura y los pedidos de la oficina (vigente, sin leer o ninguno, DICHO) */
@@ -95,10 +99,10 @@ function contextoDe(enc: Encargo, est: EstadoMesa, tope: number = enc.tope_usd):
   // 31-oct · mesas de la cadena (brief y concepto): no hay brief de la sala ni láminas; el contexto es el marco que la cadena guardó al abrir
   if (esDeLaCadena(est.tipo)) {
     const m = marcoDe(enc.estado_del_motor)
-    return { cliente_nombre: m?.cliente_nombre ?? '', tipo: est.tipo, brief_id: enc.brief_id, brief_texto: m?.marco_texto ?? '(sin marco)', manual_texto: m?.manual_texto ?? '', plan_texto: m?.plan_texto ?? null, fotos: m?.fotos ?? [], tope_usd: tope, gasto_usd: enc.estado_del_motor.gasto_usd }
+    return { ...(est.indice ? { cerebro: est.indice } : {}), cliente_nombre: m?.cliente_nombre ?? '', tipo: est.tipo, brief_id: enc.brief_id, brief_texto: m?.marco_texto ?? '(sin marco)', manual_texto: m?.manual_texto ?? '', plan_texto: m?.plan_texto ?? null, fotos: m?.fotos ?? [], tope_usd: tope, gasto_usd: enc.estado_del_motor.gasto_usd }
   }
   const b = baseDeLaminas(enc.estado_del_motor)
-  return { cliente_nombre: b.F.cliente_nombre, tipo: est.tipo, brief_id: enc.brief_id, brief_texto: b.brief.texto, manual_texto: b.F.manual_texto, plan_texto: b.F.plan_texto, fotos: b.F.fotos, tope_usd: tope, gasto_usd: enc.estado_del_motor.gasto_usd, ...(est.video ? { video: est.video } : {}), ...perfilDeLaMesa(b.F) }
+  return { ...(est.indice ? { cerebro: est.indice } : {}), cliente_nombre: b.F.cliente_nombre, tipo: est.tipo, brief_id: enc.brief_id, brief_texto: b.brief.texto, manual_texto: b.F.manual_texto, plan_texto: b.F.plan_texto, fotos: b.F.fotos, tope_usd: tope, gasto_usd: enc.estado_del_motor.gasto_usd, ...(est.video ? { video: est.video } : {}), ...perfilDeLaMesa(b.F) }
 }
 
 /** lo que pide ESTA pieza según su brief (puro): fotos propias etiquetadas, hechos del cliente, lo más gustado; el portero decide qué hay */
@@ -194,7 +198,7 @@ export async function pedidoDelTurno(P: Puertos, enc: Encargo, est: EstadoMesa, 
   const task = armarTarea({ tipo, agente: t.agente, tarjeta, est, libro, c, pedido: pedidoAporte, faltanCitas, metodo, ...(imagenesARedactar ? { imagenesARedactar } : {}), ...(relleno ? { relleno } : {}) }) + seccionDeCambiosDelDueno(enc.sala_ref) + seccionDeNotasDelDueno(t.notas_del_dueno, t.tipo) + cierreConElObjetivo(c, tipo)
   const paso = `${PREFIJO}${t.tipo}:${t.agente}`
   const reserva = Math.max(0.1, Math.min(COTAS.RESERVA_POR_TURNO_USD, techoDe(tope) - enc.estado_del_motor.gasto_usd))
-  return { agente: t.agente, paso, pedido: pedidoDeAgente({ agente: t.agente, task, encargo_id: enc.id, client_id: enc.client_id, dry_run: enc.dry_run, paso, reserva_usd: +reserva.toFixed(4), es_pieza: !esDeLaCadena(est.tipo), images: imagenesDelTurno(tipo, c.fotos) }) }
+  return { agente: t.agente, paso, pedido: pedidoDeAgente({ agente: t.agente, task, encargo_id: enc.id, client_id: enc.client_id, dry_run: enc.dry_run, paso, reserva_usd: +reserva.toFixed(4), es_pieza: !esDeLaCadena(est.tipo), images: imagenesDelTurno(tipo, c.fotos), sin_empuje: !!c.cerebro }) }
 }
 
 /** Sprint 1 · mejora 4 · las imágenes que la pieza integrada pide generar (ref + lo que pidió la dirección), leídas con el mismo traductor que usa el cierre · puro respecto del estado */
@@ -267,7 +271,9 @@ export async function avanzarMesa(P: Puertos, enc0: Encargo, pl: Plantilla, indi
       if (!tipo) return fallar(P, enc, `la familia «${enc.familia}» no es de la mesa`)
       if (!direccionDe(dir, tipo)) return fallar(P, enc, `el directorio de la mesa no tiene una dirección creativa activa para «${tipo}» (la pieza no abre)`)
       // T8 · la mesa de video suma las condiciones de la red y el formato del brief de la hoja (`si_instagram`, `si_tiktok_o_reels`) a las del texto (`si_personas`, `si_whimsy`: el brief, el manual o el plan)
-      est = { ...estadoInicialDeLaMesa(tipo, dir), ...(tipo === 'video' ? { video: parametrosDelVideo(pl) } : {}), ...(esDeImagen(tipo) && propuestasDeLaPlantilla(pl) > 1 ? { imagen: { propuestas: propuestasDeLaPlantilla(pl) } } : {}), ...(esDeLaCadena(tipo) ? { condiciones: marcoDe(enc.estado_del_motor)?.condiciones ?? [] } : (() => { const cx = contextoDe(enc, estadoInicialDeLaMesa(tipo, dir)); const c = [...condicionesDeLaPieza(cx.brief_texto, cx.manual_texto, cx.plan_texto), ...(tipo === 'video' ? condicionesDelVideo(baseDeLaminas(enc.estado_del_motor).brief) : [])]; return c.length ? { condiciones: c } : {} })()) }
+      // 19-nov · la tanda B (un solo autor): el modo lo dice la plantilla (dato) y queda congelado al abrir
+      const modo = modoDeLaPlantilla(pl.limites)
+      est = { ...estadoInicialDeLaMesa(tipo, dir), ...(modo ? { modo } : {}), ...(tipo === 'video' ? {video: parametrosDelVideo(pl) } : {}), ...(esDeImagen(tipo) && propuestasDeLaPlantilla(pl) > 1 ? { imagen: { propuestas: propuestasDeLaPlantilla(pl) } } : {}), ...(esDeLaCadena(tipo) ? { condiciones: marcoDe(enc.estado_del_motor)?.condiciones ?? [] } : (() => { const cx = contextoDe(enc, estadoInicialDeLaMesa(tipo, dir)); const c = [...condicionesDeLaPieza(cx.brief_texto, cx.manual_texto, cx.plan_texto), ...(tipo === 'video' ? condicionesDelVideo(baseDeLaminas(enc.estado_del_motor).brief) : [])]; return c.length ? { condiciones: c } : {} })()) }
       enc = await guardarMesa(P, enc, est)
     }
     const e = enc.estado_del_motor
@@ -288,8 +294,19 @@ export async function avanzarMesa(P: Puertos, enc0: Encargo, pl: Plantilla, indi
     if (est.marcas.apertura_enriquecida !== true) {
       const portero = porteroDe(est.directorio_congelado)?.agente
       est = { ...est, marcas: { ...est.marcas, apertura_enriquecida: true } }
+      // 18-nov · LA MESA LEE EL ÍNDICE DEL CEREBRO (firma de Emilio 16:53 Zúrich), SIN CASILLAS (corrección 19:19 Zúrich): en las mesas de pieza, UNA lectura al abrir
+      //   con la HOJA completa de la pieza (brief + plan). Con el índice no sale el pedido mezclado: cada turno lee la base completa y pide por número (`pedir_fichas`).
+      //   Si el índice no responde, la mesa NO se frena: queda la marca con el motivo y abre con el pedido de siempre.
+      //   18-nov · GO Lenovo (Emilio 22:50 Zúrich): también la mesa de la gran idea (`concepto`), con el marco de la cadena como hoja
+      if (P.indice && leeElIndice(est.tipo)) {
+        const ped = pedidoDelIndice({ client_id: enc.client_id, agente: 'oficina-creativa', pieza: piezaDeLaMesa(enc, est) })
+        const r = await P.indice.indice(ped)
+        const ix = r.ok ? leerIndice(r.body) : null
+        if (ix) est = { ...est, indice: ix }
+        else est = { ...est, marcas: { ...est.marcas, indice_sin_respuesta: r.ok ? 'el índice no trajo huella ni lista' : String(r.error) } }
+      }
       // 10-nov · la mesa de reubicación decide fechas con lo que la cadena le pasa: NO abre con el cerebro (no se toca el cerebro)
-      if (P.cerebro && portero && est.tipo !== 'reubicacion' && est.tipo !== 'fallidos' && est.tipo !== 'banco') {
+      if (!est.indice && P.cerebro && portero && est.tipo !== 'reubicacion' && est.tipo !== 'fallidos' && est.tipo !== 'banco') {
         let que: string
         if (est.tipo === 'brief' || est.tipo === 'concepto') que = pedidoDeAperturaDeLaCadena(est.tipo, marcoDe(enc.estado_del_motor)?.cliente_nombre || 'este cliente')
         else {
@@ -412,8 +429,13 @@ async function cerrarLaMesa(P: Puertos, enc: Encargo, pl: Plantilla, indice: num
   // cambio 4 · firma de Emilio · la dirección responde las correcciones de la jefatura en líneas propias: se guardan aparte y NO salen en la pieza (sin ellas, el texto es el mismo)
   const resp = separarRespuestas(ult.texto)
   if (resp.lineas.length) est = { ...est, respuestas_a_la_jefatura: resp.lineas }
-  const textoPieza = quitarLineasDeNotas(resp.pieza)
   const b = baseDeLaminas(enc.estado_del_motor)
+  // 18-nov · GO Lenovo «lo exacto se autocorrige»: el teléfono o el @ que no es del cliente se reemplaza por el suyo en el texto de la mesa ANTES de traducirlo,
+  //   así llega corregido a lo que se DIBUJA (láminas), a lo que se filma (guion), al pie y a la jefatura. Sin modelo; ante la duda no se toca (ver `contacto-ajeno.ts`)
+  const autoMesa = corregirContactoAjeno(quitarLineasDeNotas(resp.pieza), b.F.fuentes)
+  const textoPieza = autoMesa.texto
+  const declarados = declaracionDeContacto(autoMesa.cambios)
+  if (declarados.length || est.autocorregido) est = { ...est, autocorregido: declarados.length ? declarados : undefined }
   const maxLaminas = Number(pl.limites?.laminas_max)
   // 17-nov · GO Lenovo (a) · el máximo de cuadros por elemento del kit es dato de la plantilla (sin dato, el traductor usa 10)
   const maxCuadros = Number(pl.limites?.cuadros_por_elemento_max)
@@ -433,6 +455,7 @@ async function cerrarLaMesa(P: Puertos, enc: Encargo, pl: Plantilla, indice: num
       p.guion.avisos.push(...deRitmo)
       tp.resultado.avisos.push(...deRitmo.map((a) => `${p.id} · ${a}`))
     }
+    tp.resultado.avisos.push(...declarados)
     return cerrarConPropuestas(P, enc, pl, indice, est, libro, textoPieza, tp.resultado, forzado, vuelta)
   }
   const opcionesDeImagen: OpcionesDeTraduccion = {
@@ -456,6 +479,7 @@ async function cerrarLaMesa(P: Puertos, enc: Encargo, pl: Plantilla, indice: num
       hayGeneradasEnAlguna = hayGeneradasEnAlguna || a.hayGeneradas
       tp.resultado.avisos.push(...a.avisos)
     })
+    tp.resultado.avisos.push(...declarados)
     return guardarElCierre(P, enc, pl, indice, est, libro, textoPieza, { [ARTEFACTO_PROPUESTAS_IMAGEN]: { ...tp.resultado, texto: textoPieza } as unknown as Record<string, unknown> }, tp.resultado.avisos, hayGeneradasEnAlguna, forzado, vuelta)
   }
   // el VIDEO (parte 2 · 31-oct): la pieza es un GUION; el traductor de láminas no aplica (sin imágenes que generar: el brazo filma)
@@ -475,6 +499,7 @@ async function cerrarLaMesa(P: Puertos, enc: Encargo, pl: Plantilla, indice: num
   const otros: Record<string, Record<string, unknown>> = {}
   const avisosDePrompts: string[] = []
   let hayGeneradas = false
+  tr.avisos.push(...declarados)
   if ('planos' in tr) {
     // 17-nov · los avisos de ritmo de la biblioteca (CC4) en el guion: avisan, no rechazan
     tr.avisos.push(...avisosDeRitmoDelGuion(tr, b.brief.red ?? null, await ritmosDelVideo(P, enc)))

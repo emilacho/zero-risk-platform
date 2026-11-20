@@ -133,6 +133,9 @@ export const PUEDEN_NOMBRARLAS = [
   /^supabase\/migrations\/202611031600_rechazo_del_indice_y_tipo_de_pausa\.sql$/,
   // cierre de permisos del cerebro (10-nov · encargo firmado por Emilio): SOLO permisos (revoke a anon/authenticated); no toca filas ni columnas
   /^supabase\/migrations\/202611102100_cerebro_permisos_1_sin_escritura_publica\.sql$/,
+  // encargo 10 (19-nov) · la marca «no es de este cliente» en cerebro_fichas
+  /^supabase\/migrations\/202611191600_cerebro_fichas_otro_negocio\.sql$/,
+  /^supabase\/reversas\/202611191600_cerebro_fichas_otro_negocio_REVERSA\.sql$/,
   /^__tests__\/cerebro-paso-2-(aislamiento|migracion)\.test\.ts$/,
   /^__tests__\/cerebro-fotos-2-columnas\.test\.ts$/,
   // oficina de creativos (sala 1) · LECTURA de las etiquetas de las fotos para descartar las que no sirven: los ÚNICOS que las nombran son el lector `fotos.ts` y el adaptador que las SELECCIONA (`adaptadores.ts`); no escriben nada

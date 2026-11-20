@@ -200,13 +200,14 @@ describe('la mesa de concepto', () => {
     expect(sobre).toMatchObject({ tipo_de_mesa: 'concepto', version: 1, dry_run: true, condiciones: ['si_instagram'] })
     expect(sobre.marco_texto).toContain('# BRIEF CREATIVO DE LA CAMPAÑA (validado)\n' + BRIEF_BUENO)
     expect(sobre.marco_texto).toContain('- f1: días 1–30')
-    // 19-nov · ADENDA 1 · P2 (CC5): la gran idea también recibe el plan ENTERO en su campo propio (antes no: «el brief ya es su lectura»)
-    expect(sobre.plan_texto).toBe(A.planTexto)
+    // 19-nov · GO Lenovo (firma de Emilio 20:39): la gran idea NO recibe el plan · parte del brief, que ya es su lectura (deshace esa parte de #1207)
+    expect(A.planTexto).toBeTruthy()
+    expect(sobre).not.toHaveProperty('plan_texto')
     expect(al.conceptos[0]).toMatchObject({ version: 1, estado: 'abierta', aprobacion: null, plazo_en: new Date(Date.parse(AHORA) + (PLAZO_DE_MESA_MIN.concepto + HOLGURA_DE_MESA_MIN) * 60_000).toISOString() })
     const rescate = await conceptoAbrir(al, wf(), AHORA)
     expect(rescate.cuerpo).toMatchObject({ ya_abierta: true, version: 1 })
-    // el sobre de rescate (la mesa abierta cuyo sobre no llegó) también lo lleva
-    expect((rescate.cuerpo.sobre as Record<string, unknown>).plan_texto).toBe(A.planTexto)
+    // el sobre de rescate (la mesa abierta cuyo sobre no llegó) tampoco lo lleva
+    expect(rescate.cuerpo.sobre as Record<string, unknown>).not.toHaveProperty('plan_texto')
     expect(al.conceptos).toHaveLength(1)
   })
   it('la gran idea entregada queda LISTA con aprobación pendiente · abre la espera que no vence y la tarjeta en la bandeja (origen cadena · tipo concepto)', async () => {
@@ -309,13 +310,13 @@ describe('la decisión de Emilio sobre la gran idea', () => {
     await conConceptoListo(al, 4)
     expect(al.avisosAlBuzon).toHaveLength(0)
     const r4 = await conceptoDecidir(al, wf({ decision: 'cambios', apunta_a: 'concepto', nota: 'la cuarta' }), AHORA)
-    expect(r4).toMatchObject({ status: 409, cuerpo: { error: 'vueltas_agotadas', necesita_humano: false, pregunta: 'enviada', vueltas: 3, tope: 3 } })
+    expect(r4).toMatchObject({ status: 409, cuerpo: { error: 'vueltas_agotadas', necesita_humano: false, vueltas: 3, tope: 3 } })
+    expect(r4.cuerpo).not.toHaveProperty('pregunta')
     expect(al.campanas[0].estado).toBe('calendario')
     expect(al.conceptos).toHaveLength(4)
     expect(al.conceptos[3].aprobacion).toBe('pendiente')
-    expect(al.avisosAlBuzon).toHaveLength(1)
-    expect(al.avisosAlBuzon[0]).toMatchObject({ tipo: 'pregunta', clave: `cadena:vueltas-de-cambios:${CAMP}:v4`, client_id: A.clientId, workflow_id: 'wf-cadena', workflow_execution_id: 'ex-1' })
-    expect(al.avisosAlBuzon[0].detalle).toContain('«la cuarta»')
+    // Emilio 16:19 Zúrich: sin mensaje ni alerta en el buzón
+    expect(al.avisosAlBuzon).toHaveLength(0)
     // la aprobación a mano sigue valiendo
     expect((await conceptoDecidir(al, wf({ decision: 'aprobar' }), AHORA)).status).toBe(200)
   })

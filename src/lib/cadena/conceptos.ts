@@ -38,6 +38,9 @@ export interface IdeaDelBanco {
   foto: string | null
   /** 17-nov · cuántos cuadros (pantallas) pide la idea, DECLARADO por quien la escribe (una historia = 1; «swipe a…» = 2). Ausente = no lo dijo (ideas viejas). La cadena solo compara */
   cuadros?: number
+  /** 19-nov · GO Lenovo (firma de Emilio 15:01-15:03): cuánto dura la idea si es VIDEO, con su porqué («20 s · porque…»), tal como la escribió el creador.
+   *  Ausente = no la dijo (ideas viejas o una falta que ve la revisión de la gran idea · ADENDA 1). La hoja la copia en `DURACIÓN` */
+  duracion?: string
   /** la línea tal cual (lo que se cita) */
   linea: string
 }
@@ -240,8 +243,8 @@ export function leerIdea(linea: string): IdeaDelBanco | null {
   const libres: string[] = []
   let ultimo: string | null = null
   for (const p of partes) {
-    const c = /^(mensaje|gancho|protagonista|serie|cuadros|foto)\s*:\s*(.*)$/i.exec(p)
-    if (c) { ultimo = c[1].toLowerCase(); campos[ultimo] = c[2].trim() }
+    const c = /^(mensaje|gancho|protagonista|serie|cuadros|duraci[oó]n|foto)\s*:\s*(.*)$/i.exec(p)
+    if (c) { ultimo = c[1].toLowerCase().replace('ó', 'o'); campos[ultimo] = c[2].trim() }
     // reserva 3 de CC3: un « · » DENTRO de un campo etiquetado no lo corta: el fragmento sin etiqueta se queda en ese campo
     else if (ultimo) campos[ultimo] = `${campos[ultimo]} · ${p}`
     else libres.push(p)
@@ -250,11 +253,14 @@ export function leerIdea(linea: string): IdeaDelBanco | null {
   const serie = (campos.serie ?? '').trim()
   // 17-nov · `cuadros: N` (entero 1..10) · otra cosa no se lee (no se adivina un número)
   const cuadros = /^\d{1,2}$/.test((campos.cuadros ?? '').trim()) ? Number(campos.cuadros.trim()) : 0
+  // 19-nov · `duración: 20 s · porque…` (el porqué puede llevar « · »: se queda en el campo, reserva 3) · se guarda TAL CUAL: no se valida aquí (ADENDA 1 · firma de Emilio:
+  //   si falta o no sirve, lo ve la revisión de la gran idea, no un chequeo de código); la oficina lee el largo con `leerDuracion`
+  const duracion = (campos.duracion ?? '').trim()
   return {
     id: m[1], capitulo: null, red: libres[0] ?? '', formato: libres[1] ?? '', idea: libres.slice(2).join(' · '),
     mensaje: campos.mensaje ?? '', gancho: campos.gancho ?? '', protagonista: campos.protagonista ?? '',
     serie: serie && RE_ID_DE_SERIE.test(serie.toUpperCase()) ? serie.toUpperCase() : serie || null,
-    foto: foto && !/^ninguna$/i.test(foto) ? foto : null, ...(cuadros >= 1 && cuadros <= MAXIMO_DE_CUADROS_POR_IDEA ? { cuadros } : {}), linea: linea.trim(),
+    foto: foto && !/^ninguna$/i.test(foto) ? foto : null, ...(cuadros >= 1 && cuadros <= MAXIMO_DE_CUADROS_POR_IDEA ? { cuadros } : {}), ...(duracion ? { duracion } : {}), linea: linea.trim(),
   }
 }
 /**
@@ -424,8 +430,7 @@ export function leerConcepto(md: string, ins: InsumosDelConcepto): ConceptoLeido
     // 17-nov · GO «quitar rejas» C4: sin gancho la idea ENTRA al banco con aviso (la mesa de la pieza lo propone); antes se descartaba
     if (!i.gancho.trim()) avisos.push(`la idea ${i.id} no trae gancho: entra al banco y la mesa de la pieza lo propone`)
     banco.push({ ...i, capitulo: cap })
-  }
-  for (const l of lineasDeIdeaNoReconocidas(md)) if (!salen.has(l.id)) ideas_descartadas.push({ id: l.id, motivo: 'formato de línea no reconocido (se espera «- C<fase>-I<nn> · red · formato · idea · mensaje: … · gancho: …»)', linea: l.linea })
+  }  for (const l of lineasDeIdeaNoReconocidas(md)) if (!salen.has(l.id)) ideas_descartadas.push({ id: l.id, motivo: 'formato de línea no reconocido (se espera «- C<fase>-I<nn> · red · formato · idea · mensaje: … · gancho: …»)', linea: l.linea })
   if (!banco.length) bloqueos.push(ideasDelTexto(md).length ? 'sin banco de ideas válido (ninguna idea con mensaje propio)' : 'sin banco de ideas (ninguna línea `- C<fase>-I<nn> · …`)')
 
   // ≥ 1 idea por red y capítulo, y el mínimo huecos × semanas
