@@ -13,6 +13,7 @@
  * El registro (`correcciones_de_imagen`) tiene una fila por (imagen, vuelta) con su `motivo_de_cierre` y su `donde`.
  */
 import { createHash } from 'node:crypto'
+import { MAX_IMAGENES } from '../../imagenes-del-pedido'
 import { datos, fichaNueva } from '../ayudas'
 import { MAX_OTRAS_FOTOS, otrasFotosDeLaImagen, type FotoDeReferencia } from '../foto-de-referencia'
 import type { ResultadoDePaso } from '../motor'
@@ -93,6 +94,8 @@ export interface Correcciones {
   filas: FilaDeCorreccion[]
   /** ¿hay otra vuelta? (la condición de la vuelta de `mirar_correccion`) */
   sigue: boolean
+  /** tanda 2 · las imágenes que ya pasaron por la vuelta EN CURSO, cuando la vuelta se parte en turnos porque no caben todas en un pedido (vacío al terminar la vuelta) */
+  hechas_en_la_vuelta?: string[]
 }
 
 const arr = <T>(x: unknown): T[] => (Array.isArray(x) ? (x as T[]) : [])
@@ -128,10 +131,30 @@ export function correccionesVigentes(e: Estado, donde: Donde = dondeDe(e)): Corr
 }
 
 export const pendientesDe = (c: Correcciones): ImagenEnCorreccion[] => Object.values(c.imagenes).filter((i) => !i.cerrada)
+/** las imágenes que ve el creativo por imagen pendiente: sus versiones más su foto real (una vez por foto en el pedido) */
+const imagenesDelPedido = (lote: ImagenEnCorreccion[], donde: Donde): number => {
+  const reales = new Set(lote.map((i) => i.foto_real_id).filter((x): x is string => !!x))
+  return lote.reduce((n, i) => n + vistasDe(i, donde).length, 0) + reales.size
+}
+/**
+ * el turno de ESTA vuelta: las pendientes que todavía no pasaron por ella, en orden, mientras quepan en un pedido (`MAX_IMAGENES`). Si no caben todas, la vuelta se parte
+ * en turnos seguidos (decisión de Lenovo 16:55Z): primero la vuelta 1 de TODAS, después la 2. Al menos una por turno, para que nunca se quede quieta · pura
+ */
+export function loteDe(c: Correcciones, max: number = MAX_IMAGENES): ImagenEnCorreccion[] {
+  const ya = new Set(c.hechas_en_la_vuelta ?? [])
+  const lote: ImagenEnCorreccion[] = []
+  for (const i of pendientesDe(c).filter((x) => !ya.has(x.ref))) {
+    if (lote.length && imagenesDelPedido([...lote, i], c.donde) > max) break
+    lote.push(i)
+  }
+  return lote
+}
 /** la vuelta que corre ahora (1, 2 o 3) */
 export const vueltaEnCurso = (c: Correcciones): number => c.vuelta + 1
-/** qué versiones ve el creativo de una imagen: en la vuelta 1, las generadas; después, la mejor y la última editada si es otra */
-export function vistasDe(i: ImagenEnCorreccion): number[] {
+/** qué versiones ve el creativo de una imagen: en la vuelta 1, las generadas; después, la mejor y la última editada si es otra.
+ *  En el video (decisión de Lenovo 16:55Z, lectura de CC5): solo la elegida, para que quepa el doble de planos en un pedido */
+export function vistasDe(i: ImagenEnCorreccion, donde: Donde = 'final'): number[] {
+  if (donde === 'video') return [i.mejor]
   if (i.versiones.every((v) => v.vuelta === 0)) return i.versiones.map((_, k) => k)
   const ultima = i.versiones.length - 1
   return ultima === i.mejor ? [i.mejor] : [i.mejor, ultima]
@@ -144,15 +167,18 @@ export function tareaDeLaCorreccion(e: Estado, o: { contrato: string; errorDeFor
   const c = correccionesVigentes(e)
   const images: string[] = []
   const bloques: string[] = []
-  for (const i of pendientesDe(c)) {
-    const lineas = vistasDe(i).map((k) => { images.push(i.versiones[k].url); return `  · imagen ${images.length}: versión ${k}${i.versiones[k].vuelta ? ` (editada en la vuelta ${i.versiones[k].vuelta})` : ' (generada)'}` })
+  const reales = new Set<string>()
+  for (const i of loteDe(c)) {
+    const lineas = vistasDe(i, c.donde).map((k) => { images.push(i.versiones[k].url); return `  · imagen ${images.length}: versión ${k}${i.versiones[k].vuelta ? ` (editada en la vuelta ${i.versiones[k].vuelta})` : ' (generada)'}` })
     const real = i.foto_real_id ? o.fotos.find((f) => f.id === i.foto_real_id) : undefined
-    if (real) images.push(real.url)
+    // cada foto real va una sola vez en el pedido (la misma cuenta que `loteDe`)
+    const yaVista = !!real && reales.has(real.id)
+    if (real && !yaVista) { images.push(real.url); reales.add(real.id) }
     bloques.push([
       `Imagen «${i.ref}»`,
       `- Lo que se pidió: ${i.prompt || '(sin prompt)'}`,
       ...lineas,
-      ...(real ? [`  · imagen ${images.length}: la FOTO REAL del cliente «${real.id}» (lo que debe conservarse)`] : []),
+      ...(real ? [yaVista ? `  · su FOTO REAL es «${real.id}», ya mostrada arriba (lo que debe conservarse)` : `  · imagen ${images.length}: la FOTO REAL del cliente «${real.id}» (lo que debe conservarse)`] : []),
       ...(i.lectura ? [`- Lo que vio otro revisor en la vuelta anterior: ${i.lectura}`] : []),
     ].join('\n'))
   }
@@ -178,8 +204,8 @@ export function pedidoDeLaCorreccion(e: Estado, valor: Record<string, unknown>):
   const c = correccionesVigentes(e)
   const dichas = new Map(arr<Record<string, unknown>>(valor.imagenes).map((x) => [str(x.ref), x]))
   const por_ref: Record<string, { base: number; cambios: string; vistas: number[] }> = {}
-  for (const i of pendientesDe(c)) {
-    const vistas = vistasDe(i)
+  for (const i of loteDe(c)) {
+    const vistas = vistasDe(i, c.donde)
     const d = dichas.get(i.ref)
     const pedida = Number(d?.elegida)
     // la versión que elige el creativo es la BASE de la edición (no una aprobación); una que no vio cae en su mejor
@@ -203,7 +229,7 @@ export function saltoDeLaCorreccion(e: Estado, dry_run = false): ResultadoDePaso
 export function sinLecturaDeLaCorreccion(e: Estado, errores: string[]): ResultadoDePaso {
   const c = correccionesVigentes(e)
   const por_ref: Record<string, { base: number; cambios: string; vistas: number[] }> = {}
-  for (const i of pendientesDe(c)) por_ref[i.ref] = { base: i.mejor, cambios: '', vistas: vistasDe(i) }
+  for (const i of loteDe(c)) por_ref[i.ref] = { base: i.mejor, cambios: '', vistas: vistasDe(i, c.donde) }
   return {
     costo_usd: 0, artefacto: { vuelta: vueltaEnCurso(c), por_ref, sin_lectura: true },
     fichas: [fichaNueva(`correccion-sin-lectura-${e.pasos_ejecutados}`, 'chequeo', 'imagen', 'sugerencia', `la respuesta del creativo sobre las imágenes no se pudo leer (${errores.join(' · ')}): en esta vuelta no se editó nada`)],
@@ -264,7 +290,7 @@ export async function editarImagenes(P: Puertos, enc: Encargo, pl?: Pick<Plantil
   const por_ref: Record<string, { version?: VersionDeImagen; costo_usd: number; llave: string; reusada?: boolean; error?: string }> = {}
   const gastos: NonNullable<Cambios['gastos']> = []
   let costo = 0
-  for (const i of pendientesDe(c)) {
+  for (const i of loteDe(c)) {
     const p = pedido[i.ref]
     if (!p || !p.cambios) continue
     const llave = llaveDeLaEdicion(enc.id, c.intento_imagenes, i.ref, vuelta)
@@ -367,12 +393,13 @@ export async function mirarCorreccion(P: Puertos, enc: Encargo, pl: Plantilla): 
   const fichas: Ficha[] = []
   let costo = 0
   const cerrar = (i: ImagenEnCorreccion, motivo: MotivoDeCierre) => { i.cerrada = true; i.motivo_de_cierre = motivo }
-  for (const i of pendientesDe(c)) {
+  const lote = loteDe(c)
+  for (const i of lote) {
     const p = pedido[i.ref] ?? { base: i.mejor, cambios: '' }
     const ed = ediciones[i.ref]
     const base = p.base in i.versiones ? p.base : i.mejor
     i.ultimos_cambios = p.cambios || i.ultimos_cambios
-    const fila: FilaDeCorreccion = { ref: i.ref, vuelta, vistas: p.vistas ?? vistasDe(i), elegida: base, queda_bien: null, cambios: p.cambios, version_nueva: null, costo_usd: ed?.costo_usd ?? 0, agente: agenteQueCorrige(c.donde), llave: ed?.llave ?? null, donde: c.donde }
+    const fila: FilaDeCorreccion = { ref: i.ref, vuelta, vistas: p.vistas ?? vistasDe(i, c.donde), elegida: base, queda_bien: null, cambios: p.cambios, version_nueva: null, costo_usd: ed?.costo_usd ?? 0, agente: agenteQueCorrige(c.donde), llave: ed?.llave ?? null, donde: c.donde }
     if (p.cambios && ed?.error) {
       // el generador no devolvió la edición: sale la mejor que hay, con su aviso (sin reintentar a ciegas)
       i.mejor = base
@@ -404,12 +431,17 @@ export async function mirarCorreccion(P: Puertos, enc: Encargo, pl: Plantilla): 
     if (i.motivo_de_cierre) fila.motivo_de_cierre = i.motivo_de_cierre
     c.filas.push(fila)
   }
-  c.vuelta = vuelta
   const pendientes = pendientesDe(c)
   const gastoTras = +(e.gasto_usd + costo).toFixed(6)
-  const cabe = pendientes.length > 0 && vuelta < VUELTAS_DE_CORRECCION_IMAGEN && cabeOtraVuelta(pl, e, gastoTras)
   const pasoMirar = pl.pasos.find((p) => p.clave === PASO_MIRAR_CORRECCION)
-  const sinVueltas = vuelta >= VUELTAS_DE_CORRECCION_IMAGEN || !pasoMirar || !quedaVueltaDelPaso(pasoMirar, e)
+  // ¿la vuelta en curso terminó? Si quedan pendientes que no pasaron por ella (no cabían en el pedido), el próximo turno es de la MISMA vuelta
+  const hechas = [...(c.hechas_en_la_vuelta ?? []), ...lote.map((i) => i.ref)]
+  const otroTurno = pendientes.some((i) => !hechas.includes(i.ref))
+  if (otroTurno) c.hechas_en_la_vuelta = hechas
+  else { c.vuelta = vuelta; c.hechas_en_la_vuelta = [] }
+  const cabe = pendientes.length > 0 && (otroTurno || vuelta < VUELTAS_DE_CORRECCION_IMAGEN) && cabeOtraVuelta(pl, e, gastoTras)
+  // sin vueltas: se acabaron las 3 (solo al terminar la vuelta) o el techo del motor
+  const sinVueltas = (!otroTurno && vuelta >= VUELTAS_DE_CORRECCION_IMAGEN) || !pasoMirar || !quedaVueltaDelPaso(pasoMirar, e)
   if (pendientes.length && !cabe) for (const i of pendientes) { cerrar(i, sinVueltas ? 'tope_de_vueltas' : 'no_cupo'); const f = c.filas.find((x) => x.ref === i.ref && x.vuelta === vuelta); if (f) f.motivo_de_cierre = i.motivo_de_cierre }
   for (const i of Object.values(c.imagenes)) {
     if (i.motivo_de_cierre !== 'tope_de_vueltas' && i.motivo_de_cierre !== 'no_cupo') continue
@@ -445,12 +477,13 @@ export const INDICACION_DE_LA_CORRECCION = { regla: 'Cuando miras las imágenes 
  * El `max` del motor es solo el TECHO DE SEGURIDAD: 2 regresos por cada pasada que puede hacer la corrección. Pasadas = 1 + los máximos de las vueltas que la ENVUELVEN
  * (hoy la de la jefatura a la mesa, 6): 2 × (1 + 6) = 14. El motor no reinicia contadores, así que con el techo nunca se queda corta una tanda nueva. Puro.
  */
-export function techoDeLaCorreccion(pasos: Paso[], desde: number, hasta: number): number {
+export function techoDeLaCorreccion(pasos: Paso[], desde: number, hasta: number, /** tanda 2 · los turnos en que se puede partir una vuelta (mesa: 1) */ turnos = 1): number {
   const pasadas = 1 + pasos.reduce((s, p, k) => {
     const t = p.vuelve_a ? pasos.findIndex((x) => x.clave === p.vuelve_a!.paso) : -1
     return t >= 0 && t < desde && k > hasta ? s + Number(p.vuelve_a!.max) : s
   }, 0)
-  return (VUELTAS_DE_CORRECCION_IMAGEN - 1) * pasadas
+  // por pasada: 3 vueltas de hasta `turnos` turnos cada una; el primer turno no es un regreso
+  return (VUELTAS_DE_CORRECCION_IMAGEN * turnos - 1) * pasadas
 }
 /** cuántos pasos de más puede ejecutar la corrección en el peor caso: el techo de regresos × 3 pasos, más 2 de holgura (reintentos de formato de la mirada del creativo) */
 export const margenDeLaCorreccion = (techo: number): number => techo * 3 + 2
@@ -483,7 +516,16 @@ export const TOPE_DE_LA_EDICION_DE_IMAGEN_CLAVE_POR_SEGUNDO_USD = 0.2
 export const TOPE_DE_LA_MIRADA_DE_IMAGEN_CLAVE_POR_SEGUNDO_USD = COSTO_RESERVADO_POR_MIRADA_DE_OTRO_PROVEEDOR_USD
 /** lo que suma al tope del encargo UNA pasada de la corrección (las vueltas 2 y 3 se saltan si no caben): el creativo fijo y lo demás por segundo */
 export const TOPE_FIJO_DE_LA_CORRECCION_DEL_VIDEO_USD = TOPE_DE_LA_MIRADA_DEL_CREATIVO_USD
-export const TOPE_DE_LA_CORRECCION_DEL_VIDEO_POR_SEGUNDO_USD = +(TOPE_DE_LA_EDICION_DE_IMAGEN_CLAVE_POR_SEGUNDO_USD + TOPE_DE_LA_MIRADA_DE_IMAGEN_CLAVE_POR_SEGUNDO_USD).toFixed(4)
+/** tanda 2 · la vuelta 1 se parte en turnos (un turno del director por cada `MAX_IMAGENES` imágenes): el director de los turnos que siguen al primero, por segundo
+ *  (0,75 × 2 imágenes por plano ÷ 20 por pedido = 0,075). Así una pasada cubre el turno fijo más uno por cada 10 s */
+export const TOPE_DEL_DIRECTOR_POR_SEGUNDO_USD = +((TOPE_DE_LA_MIRADA_DEL_CREATIVO_USD * 2) / MAX_IMAGENES).toFixed(4)
+export const TOPE_DE_LA_CORRECCION_DEL_VIDEO_POR_SEGUNDO_USD = +(TOPE_DE_LA_EDICION_DE_IMAGEN_CLAVE_POR_SEGUNDO_USD + TOPE_DE_LA_MIRADA_DE_IMAGEN_CLAVE_POR_SEGUNDO_USD + TOPE_DEL_DIRECTOR_POR_SEGUNDO_USD).toFixed(4)
+/**
+ * lo ESPERADO de la corrección en un video (sube `reserva_por_pieza_usd` de video_mesa, punto 1 de CC6; no es el peor caso): la cuenta de la tanda 1 con 15 planos
+ * (un reel de 15 s a un plano por segundo; no hay ninguna imagen clave final real en prd que medir): vuelta 1 = 2 turnos × 0,15 + 15 × 0,0493 ≈ 1,04 · vuelta 2 = 1 × 0,15 +
+ * 7,5 × 0,0493 ≈ 0,52 → 1,56 → 1,6. Con historia, manda el promedio real (`reservasDesdeLaHistoria`)
+ */
+export const RESERVA_POR_VIDEO_DE_LA_CORRECCION_USD = 1.6
 
 /** la indicación del director cuando mira las imágenes clave que pidió: pide cambios, no califica (lo decide otro proveedor) */
 export const INDICACION_DE_LA_CORRECCION_DEL_VIDEO = { regla: 'Cuando miras las imágenes clave que pediste en la hoja de planos, NO las calificas: eliges la versión sobre la que se edita y dices qué cambiar, en lenguaje llano y concreto, para que cada una cumpla su plano y se parezca a la foto real. Si no hay nada que cambiar, no inventes cambios.', aplica: 'guia' } as const
@@ -498,6 +540,12 @@ export function pasosDeLaCorreccionDelVideo(condicion: Paso['condicion'], techo:
   ]
 }
 
+/** cuántas imágenes ve el director por plano en el peor caso: la elegida y su foto real */
+export const IMAGENES_POR_PLANO_EN_EL_PEDIDO = 2
+/** en cuántos turnos se puede partir una vuelta del video: un plano por segundo de la pieza más larga (el peor caso, como los topes), `MAX_IMAGENES` por pedido · pura */
+export const turnosDeLaVueltaDelVideo = (segundosMax: number, max: number = MAX_IMAGENES): number =>
+  Math.max(1, Math.ceil((Math.max(1, Math.ceil(segundosMax)) * IMAGENES_POR_PLANO_EN_EL_PEDIDO) / Math.max(1, max)))
+
 /** suma lo mismo a cada resolución del tope por segundo del encargo (número o por resolución) · pura */
 const sumarPorSegundo = (x: unknown, mas: number): unknown =>
   typeof x === 'number' ? +(x + mas).toFixed(4)
@@ -511,7 +559,8 @@ export function conCorreccionDeImagenClave(pl: Plantilla): Plantilla {
   const i = pasos.findIndex((p) => p.clave === PASO_IMAGENES_CLAVE_FINAL)
   const j = pasos.findIndex((p) => p.clave === PASO_REVISAR_IMAGENES_CLAVE)
   if (i < 0 || j !== i + 1) throw new Error(`la plantilla ${pl.familia} no tiene «${PASO_IMAGENES_CLAVE_FINAL}» seguida de «${PASO_REVISAR_IMAGENES_CLAVE}»`)
-  const techo = techoDeLaCorreccion(pasos, i + 1, j - 1)
+  const turnos = turnosDeLaVueltaDelVideo(Number((pl.limites.video as { segundos_max?: unknown } | undefined)?.segundos_max ?? 15))
+  const techo = techoDeLaCorreccion(pasos, i + 1, j - 1, turnos)
   // la misma condición que la revisión: solo si hay imágenes clave REALES (en ensayo son simuladas y los tres pasos no corren)
   pasos.splice(j, 0, ...pasosDeLaCorreccionDelVideo(pasos[j].condicion, techo))
   const indicaciones = structuredClone(pl.indicaciones ?? {}) as Plantilla['indicaciones']
@@ -524,6 +573,8 @@ export function conCorreccionDeImagenClave(pl: Plantilla): Plantilla {
       ...l,
       margen: Number(l.margen ?? 0) + margenDeLaCorreccion(techo),
       vueltas_de_correccion_imagen: VUELTAS_DE_CORRECCION_IMAGEN,
+      turnos_de_correccion_imagen: turnos,
+      ...(typeof l.reserva_por_pieza_usd === 'number' ? { reserva_por_pieza_usd: +(l.reserva_por_pieza_usd + RESERVA_POR_VIDEO_DE_LA_CORRECCION_USD).toFixed(4) } : {}),
       tope_encargo_usd: +(Number(l.tope_encargo_usd ?? 0) + TOPE_FIJO_DE_LA_CORRECCION_DEL_VIDEO_USD).toFixed(4),
       ...(l.tope_encargo_usd_por_segundo !== undefined ? { tope_encargo_usd_por_segundo: sumarPorSegundo(l.tope_encargo_usd_por_segundo, TOPE_DE_LA_CORRECCION_DEL_VIDEO_POR_SEGUNDO_USD) } : {}),
     } as unknown as Plantilla['limites'],

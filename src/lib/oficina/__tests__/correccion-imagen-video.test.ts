@@ -5,10 +5,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   AGENTE_QUE_CORRIGE_LA_IMAGEN, AGENTE_QUE_CORRIGE_LA_IMAGEN_CLAVE, ARTEFACTO_CORRECCIONES_DE_IMAGEN, ARTEFACTO_EDICIONES_DE_IMAGEN, ARTEFACTO_PEDIDO_DE_CORRECCION,
-  INDICACION_DE_LA_CORRECCION_DEL_VIDEO, PASO_CORREGIR_IMAGEN, PASO_EDITAR_IMAGEN, PASO_MIRAR_CORRECCION, TOPE_DE_LA_CORRECCION_DEL_VIDEO_POR_SEGUNDO_USD,
+  INDICACION_DE_LA_CORRECCION_DEL_VIDEO, PASO_CORREGIR_IMAGEN, PASO_EDITAR_IMAGEN, PASO_MIRAR_CORRECCION, TOPE_DE_LA_CORRECCION_DEL_VIDEO_POR_SEGUNDO_USD, RESERVA_POR_VIDEO_DE_LA_CORRECCION_USD,
   TOPE_DE_LA_EDICION_DE_IMAGEN_CLAVE_POR_SEGUNDO_USD, TOPE_DE_LA_MIRADA_DE_IMAGEN_CLAVE_POR_SEGUNDO_USD, TOPE_FIJO_DE_LA_CORRECCION_DEL_VIDEO_USD, VUELTAS_DE_CORRECCION_IMAGEN,
   conCorreccionDeImagen, conCorreccionDeImagenClave, correccionesVigentes, dondeDe, editarImagenes, imagenesClaveConLaMejor, llaveDeLaEdicion, margenDeLaCorreccion, mirarCorreccion,
-  pedidoDeLaCorreccion, refDelPlano, saltoDeLaCorreccion, tareaDeLaCorreccion, type Correcciones,
+  loteDe, pedidoDeLaCorreccion, refDelPlano, saltoDeLaCorreccion, tareaDeLaCorreccion, turnosDeLaVueltaDelVideo, vistasDe, type Correcciones,
 } from '../mesa/correccion-imagen'
 import { PASO_IMAGENES_CLAVE_FINAL, PASO_REVISAR_IMAGENES_CLAVE, imagenesClaveVigentes } from '../video/imagen-clave'
 import { VIDEO_MESA_POR_SEGUNDO as VIDEO_MESA_POR_SEGUNDO_CODIGO } from '../plantillas/video-mesa'
@@ -33,7 +33,8 @@ function estado(o: { ic?: Record<string, unknown>; version?: number; extra?: Rec
 const conArt = (e: Estado, k: string, v: unknown, version = 1): Estado => ({ ...e, artefactos: { ...(e.artefactos as Record<string, unknown>), [k]: art(v, version) } } as unknown as Estado)
 const enc = (e: Estado, dry_run = false) => ({ id: '11111111-2222-3333-4444-555555555555', client_id: 'cli', dry_run, estado_del_motor: e }) as never
 /** la fila viva: la del código con la vuelta de la jefatura a la mesa en 6 (regla dura, 202611181530) */
-const VIDEO_MESA_POR_SEGUNDO = conVueltaPorReglaDura(VIDEO_MESA_POR_SEGUNDO_CODIGO)
+const VIDEO_MESA_POR_SEGUNDO = ((pl) => ({ ...pl, limites: { ...pl.limites, video: { ...(pl.limites.video as Record<string, unknown>), segundos_max: 120 } } }) as Plantilla)(conVueltaPorReglaDura(VIDEO_MESA_POR_SEGUNDO_CODIGO))
+/** (la fila viva tiene la pieza más larga en 120 s: 202611190500) */
 const PL = conCorreccionDeImagenClave(VIDEO_MESA_POR_SEGUNDO)
 const CARGADA = aplicarTopesPorDuracion(PL).plantilla
 
@@ -170,6 +171,95 @@ describe('tanda 2 · la mirada de otro proveedor devuelve la mejor a las imágen
   })
 })
 
+describe('tanda 2 · la vuelta se parte en turnos si no cabe en un pedido (Lenovo 16:55Z, lectura de CC5)', () => {
+  /** n planos, cada uno con su foto real propia (2 imágenes por plano en el pedido) */
+  const planos = (n: number, real: (k: number) => string | null = (k) => `f-${k}`) => Array.from({ length: n }, (_, k) => ({ n: k + 1, url: `https://img.test/ic-${k + 1}.png`, imagenes: [`https://img.test/ic-${k + 1}.png`], prompt: `plano ${k + 1}`, foto_referencia_id: real(k + 1), referencia_usada: !!real(k + 1), costo_usd: 0.04, generation_id: `g${k + 1}` }))
+  const fotos = (n: number) => Array.from({ length: n }, (_, k) => ({ id: `f-${k + 1}`, url: `https://fotos.test/${k + 1}.jpg` }))
+  const est = (n: number, real?: (k: number) => string | null, gasto = 1) => {
+    const e = estado({ ic: IC(planos(n, real)), gasto })
+    return conArt(e, 'encargo', { F: { fotos: fotos(n) } })
+  }
+  it('🔴 en el video el director ve SOLO la elegida (más su foto real), también después de una edición', () => {
+    const c = correccionesVigentes(est(1))
+    const i = c.imagenes['plano-1']
+    i.versiones.push({ vuelta: 1, url: 'https://img.test/ed.png', generation_id: 'ge' })
+    i.mejor = 0
+    expect(vistasDe(i, 'video')).toEqual([0])
+    expect(vistasDe(i)).toEqual([0, 1])
+  })
+  it('🔴 12 planos con su foto: el primer turno lleva 10 (20 imágenes), el segundo los 2 que faltan; la vuelta NO avanza hasta terminar', async () => {
+    const e = est(12)
+    expect(loteDe(correccionesVigentes(e)).map((i) => i.ref)).toEqual(Array.from({ length: 10 }, (_, k) => `plano-${k + 1}`))
+    expect(tareaDeLaCorreccion(e, { contrato: '{}', fotos: fotos(12) }).images).toHaveLength(20)
+    // turno 1: nadie pide cambios y la mirada dice que falta
+    const { P } = puertos({ mirada: () => '{"queda_bien":false,"lectura":"falta"}' })
+    const e1 = conArt(e, ARTEFACTO_PEDIDO_DE_CORRECCION, pedidoDeLaCorreccion(e, { imagenes: [] }).artefacto)
+    const m1 = await mirarCorreccion(P, enc(e1), CARGADA)
+    const c1 = m1.res.artefacto as unknown as Correcciones
+    expect(c1).toMatchObject({ vuelta: 0, sigue: true })
+    expect(c1.hechas_en_la_vuelta).toHaveLength(10)
+    expect(m1.res.otros_artefactos).toBeUndefined()
+    // turno 2: los 2 que faltan, en la MISMA vuelta (la llave lleva la vuelta 1)
+    const e2 = conArt(e, ARTEFACTO_CORRECCIONES_DE_IMAGEN, c1)
+    expect(loteDe(correccionesVigentes(e2)).map((i) => i.ref)).toEqual(['plano-11', 'plano-12'])
+    const ped2 = pedidoDeLaCorreccion(e2, { imagenes: [{ ref: 'plano-11', elegida: 0, cambios: 'más luz' }] })
+    expect(ped2.artefacto).toMatchObject({ vuelta: 1 })
+    expect(Object.keys((ped2.artefacto as { por_ref: object }).por_ref)).toEqual(['plano-11', 'plano-12'])
+    const e3 = conArt(e2, ARTEFACTO_PEDIDO_DE_CORRECCION, ped2.artefacto)
+    const ed = await editarImagenes(P, enc(e3), CARGADA)
+    expect((ed.res.artefacto as { por_ref: Record<string, { llave: string }> }).por_ref['plano-11'].llave).toBe(llaveDeLaEdicion('11111111-2222-3333-4444-555555555555', 4, 'plano-11', 1))
+    const m2 = await mirarCorreccion(P, enc(conArt(e3, ARTEFACTO_EDICIONES_DE_IMAGEN, ed.res.artefacto)), CARGADA)
+    const c2 = m2.res.artefacto as unknown as Correcciones
+    // terminó la vuelta 1 de TODAS: ahora sí avanza, y la vuelta 2 empieza otra vez por el plano 1
+    expect(c2).toMatchObject({ vuelta: 1, hechas_en_la_vuelta: [] })
+    expect(c2.filas.filter((f) => f.vuelta === 1)).toHaveLength(12)
+    expect(loteDe(correccionesVigentes(conArt(e, ARTEFACTO_CORRECCIONES_DE_IMAGEN, c2)))[0].ref).toBe('plano-1')
+  })
+  it('🔴 la misma foto real en varios planos cuenta UNA vez: 15 planos con la misma foto caben en un solo turno (16 imágenes)', () => {
+    const e = est(15, () => 'f-1')
+    const c = correccionesVigentes(e)
+    expect(loteDe(c)).toHaveLength(15)
+    const t = tareaDeLaCorreccion(e, { contrato: '{}', fotos: fotos(15) })
+    expect(t.images).toHaveLength(16)
+    expect(t.task).toMatch(/ya mostrada arriba/)
+  })
+  it('🔴 a mitad de una vuelta, si el próximo turno no cabe en el tope, TODAS las pendientes salen con su mejor y «no_cupo» (también las que no pasaron por la vuelta)', async () => {
+    const e = est(12, undefined, CARGADA.limites.tope_encargo_usd - 1)
+    const { P } = puertos({ mirada: () => '{"queda_bien":false,"lectura":"falta"}' })
+    const m = await mirarCorreccion(P, enc(conArt(e, ARTEFACTO_PEDIDO_DE_CORRECCION, pedidoDeLaCorreccion(e, { imagenes: [] }).artefacto)), CARGADA)
+    const c = m.res.artefacto as unknown as Correcciones
+    expect(c.sigue).toBe(false)
+    expect(Object.values(c.imagenes).map((i) => i.motivo_de_cierre)).toEqual(Array(12).fill('no_cupo'))
+    expect(m.res.otros_artefactos?.[PASO_IMAGENES_CLAVE_FINAL]).toBeDefined()
+  })
+  it('🔴 a mitad de la vuelta 3 no se cierra por «tope_de_vueltas» lo que todavía no tuvo su tercera vuelta', async () => {
+    const e0 = est(12)
+    const c0 = correccionesVigentes(e0)
+    const e = conArt(e0, ARTEFACTO_CORRECCIONES_DE_IMAGEN, { ...c0, vuelta: 2 })
+    const { P } = puertos({ mirada: () => '{"queda_bien":false,"lectura":"falta"}' })
+    const m = await mirarCorreccion(P, enc(conArt(e, ARTEFACTO_PEDIDO_DE_CORRECCION, pedidoDeLaCorreccion(e, { imagenes: [] }).artefacto)), CARGADA)
+    const c = m.res.artefacto as unknown as Correcciones
+    expect(c.sigue).toBe(true)
+    expect(c.imagenes['plano-1'].motivo_de_cierre).toBe('tope_de_vueltas')
+    expect(c.imagenes['plano-11'].cerrada).toBe(false)
+  })
+  it('la mesa de imagen no se parte si cabe (como en la tanda 1): un turno con todas', () => {
+    const e = { artefactos: { encargo: art({ F: { fotos: FOTOS } }), imagenes: art({ ultimo_intento: 1, items: [1, 2, 3].map((k) => ({ ref: `r${k}`, intento: 1, url: `https://img.test/${k}.png`, generation_id: `g${k}`, prompt: 'p' })) }) }, fichas: [], vueltas: {}, pasos_ejecutados: 1, gasto_usd: 0 } as unknown as Estado
+    expect(loteDe(correccionesVigentes(e))).toHaveLength(3)
+  })
+  it('los turnos por vuelta salen del largo: un plano por segundo, 2 imágenes por plano, 20 por pedido', () => {
+    expect([10, 15, 30, 120].map((s) => turnosDeLaVueltaDelVideo(s))).toEqual([1, 2, 3, 12])
+  })
+  it('🔴 el validador abre el techo por turno: con 12 turnos el techo de seguridad es 3 × 12 × (1 + 9) = 360 (encima de la cuenta exacta, 350, como en la mesa 21 sobre 14): acepta 360 y no 361; sin el dato, vuelve a 3 por pasada (30)', () => {
+    const con = (max: number) => ({ ...PL, pasos: PL.pasos.map((p) => (p.clave === PASO_MIRAR_CORRECCION ? { ...p, vuelve_a: { ...p.vuelve_a!, max } } : p)) }) as Plantilla
+    const err = (pl: Plantilla) => validarPlantilla(pl).filter((x) => /mirar_correccion.*vuelve_a\.max/.test(x))
+    expect(err(con(360))).toEqual([])
+    expect(err(con(361))).toHaveLength(1)
+    const sinTurnos = { ...con(31), limites: { ...PL.limites, turnos_de_correccion_imagen: undefined } } as unknown as Plantilla
+    expect(err(sinTurnos)).toHaveLength(1)
+  })
+})
+
 describe('tanda 2 · por el camino REAL del orquestador', () => {
   it('🔴 el director pide un cambio: el orquestador edita (con la calidad final), la mirada decide, `imagenes_clave_final` queda con la corregida y la revisión de siempre la ve', async () => {
     const { crearMemoria } = await import('./memoria')
@@ -224,21 +314,29 @@ describe('tanda 2 · la plantilla del video', () => {
     expect(PL.pasos[i + 2]).toMatchObject({ tope_usd: 0, tope_usd_por_segundo: TOPE_DE_LA_EDICION_DE_IMAGEN_CLAVE_POR_SEGUNDO_USD })
     expect(PL.pasos[i + 3]).toMatchObject({ tope_usd: 0, tope_usd_por_segundo: TOPE_DE_LA_MIRADA_DE_IMAGEN_CLAVE_POR_SEGUNDO_USD })
     const at15 = CARGADA.pasos.filter((p) => [PASO_EDITAR_IMAGEN, PASO_MIRAR_CORRECCION].includes(p.clave)).map((p) => p.tope_usd)
-    expect(at15).toEqual([3, 3.9])
+    // a 120 s (la fila viva): 0,2 × 120 y 0,26 × 120
+    expect(at15).toEqual([24, 31.2])
   })
-  it('🔴 las vueltas que la envuelven (revisión 1, pedido 1, mirada del video 1, jefatura 6) dan techo 2 × (1 + 9) = 20 y margen +62', () => {
+  it('🔴 las vueltas que la envuelven (revisión 1, pedido 1, mirada del video 1, jefatura 6) y los turnos de la vuelta (12 a 120 s) dan techo (3 × 12 − 1) × (1 + 9) = 350 y margen +1052', () => {
     const vueltas = VIDEO_MESA_POR_SEGUNDO.pasos.filter((p) => p.vuelve_a?.paso === 'mesa').map((p) => [p.clave, p.vuelve_a!.max])
     expect(vueltas).toEqual(expect.arrayContaining([[PASO_REVISAR_IMAGENES_CLAVE, 1], ['pedido', 1], ['mirar_video', 1], ['jefatura', 6], ['aprobar_propuestas', 2]]))
-    expect(PL.pasos[i + 3].vuelve_a).toEqual({ paso: PASO_CORREGIR_IMAGEN, max: 20, si: { tipo: 'si_artefacto', artefacto: ARTEFACTO_CORRECCIONES_DE_IMAGEN, campo: 'sigue', igual: true } })
-    expect(PL.limites.margen).toBe(Number(VIDEO_MESA_POR_SEGUNDO.limites.margen) + margenDeLaCorreccion(20))
-    expect(margenDeLaCorreccion(20)).toBe(62)
+    expect(PL.pasos[i + 3].vuelve_a).toEqual({ paso: PASO_CORREGIR_IMAGEN, max: 350, si: { tipo: 'si_artefacto', artefacto: ARTEFACTO_CORRECCIONES_DE_IMAGEN, campo: 'sigue', igual: true } })
+    expect(PL.limites.margen).toBe(Number(VIDEO_MESA_POR_SEGUNDO.limites.margen) + margenDeLaCorreccion(350))
+    expect(margenDeLaCorreccion(350)).toBe(1052)
+    expect((PL.limites as Record<string, unknown>).turnos_de_correccion_imagen).toBe(12)
     expect(PL.limites.vueltas_de_correccion_imagen).toBe(VUELTAS_DE_CORRECCION_IMAGEN)
   })
-  it('🔴 el tope del encargo suma una pasada: 0,75 fijo y 0,46/s en cada resolución', () => {
+  it('🔴 la reserva por pieza de video_mesa sube con lo esperado de la corrección (+1,6; punto 1 de CC6) y sin dato no se inventa', () => {
+    expect(RESERVA_POR_VIDEO_DE_LA_CORRECCION_USD).toBe(1.6)
+    expect(PL.limites.reserva_por_pieza_usd).toBe(+(Number(VIDEO_MESA_POR_SEGUNDO.limites.reserva_por_pieza_usd) + 1.6).toFixed(4))
+    const sin = conCorreccionDeImagenClave({ ...VIDEO_MESA_POR_SEGUNDO, limites: { ...VIDEO_MESA_POR_SEGUNDO.limites, reserva_por_pieza_usd: undefined } } as unknown as Plantilla)
+    expect(sin.limites.reserva_por_pieza_usd).toBeUndefined()
+  })
+  it('🔴 el tope del encargo suma una pasada: 0,75 fijo y 0,535/s en cada resolución (edición 0,2 + mirada 0,26 + el director de los turnos 0,075)', () => {
     expect(PL.limites.tope_encargo_usd).toBe(+(VIDEO_MESA_POR_SEGUNDO.limites.tope_encargo_usd + TOPE_FIJO_DE_LA_CORRECCION_DEL_VIDEO_USD).toFixed(4))
-    expect(TOPE_DE_LA_CORRECCION_DEL_VIDEO_POR_SEGUNDO_USD).toBe(0.46)
+    expect(TOPE_DE_LA_CORRECCION_DEL_VIDEO_POR_SEGUNDO_USD).toBe(0.535)
     const antes = VIDEO_MESA_POR_SEGUNDO.limites.tope_encargo_usd_por_segundo as Record<string, number>
-    expect(PL.limites.tope_encargo_usd_por_segundo).toEqual({ '720p': +(antes['720p'] + 0.46).toFixed(4), '1080p': +(antes['1080p'] + 0.46).toFixed(4) })
+    expect(PL.limites.tope_encargo_usd_por_segundo).toEqual({ '720p': +(antes['720p'] + 0.535).toFixed(4), '1080p': +(antes['1080p'] + 0.535).toFixed(4) })
   })
   it('🔴 a 15 s cubre el peor caso con la corrección (los regresos se saltan si no caben)', () => {
     const tope = CARGADA.limites.tope_encargo_usd
