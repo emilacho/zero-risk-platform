@@ -112,7 +112,8 @@ export async function abrirEncargo(P: Puertos, entrada: { cuerpo: unknown; clien
   if (!v.ok) return r(400, { error: v.codigo, errores: v.errores })
   const config = await P.almacen.leerConfig()
   // fila #19 · la plantilla se lee ANTES de la puerta: si la familia tiene pieza simple lo dice la clase de su plantilla (dato), no su nombre
-  // 17-nov · «creativos en cada paso» · con la palanca del cliente encendida, una pieza NUEVA abre la versión CON MESA de su familia (si está activa); una reapertura o una devolución del dueño sigue en la línea en que nació
+  // 17-nov · «creativos en cada paso» · una pieza NUEVA abre la versión CON MESA de su familia (si está activa; 20-nov: para cualquier cliente); una reapertura o una devolución del dueño sigue en la línea en que nació.
+  //   La ruta se elige ANTES de medir el tope: si la mesa no cubre su tope, el encargo no nace (409 `tope_no_cubre`) y NO vuelve a la línea vieja
   const ruta = entrada.target_step_id === TARGET_STEP_PRODUCIR && v.sobre.familia ? await rutaConMesa(P, v.sobre) : null
   const pl = ruta ? ruta.pl : entrada.target_step_id === TARGET_STEP_PRODUCIR && v.sobre.familia ? await P.almacen.leerPlantilla(v.sobre.familia) : null
   const clase = claseDe(pl?.plantilla)
