@@ -13,8 +13,7 @@ import { datos } from './ayudas'
 import { ARTEFACTO_BORRADOR_IMAGEN, FUNCION_BORRADOR_IMAGEN, type BorradoresDeImagen } from './mesa/borrador-imagen'
 import { ARTEFACTO_PROPUESTAS_IMAGEN, type PropuestasDeImagen } from './mesa/propuestas-imagen'
 import { cabeLaVuelta, quedaVueltaDelPaso } from './orquestador-video'
-import { FUNCION_DEL_BRIEF, FUNCION_DEL_MANUAL, FUNCION_DEL_PLAN } from './pedidos'
-import { contextoDeLaFicha, fichaDeLaHoja, leerRespuestas, type Enviada, type RespuestaDelCreador } from './sentido-contra-la-ficha'
+import { leerRespuestas, type Enviada, type RespuestaDelCreador } from './sentido-contra-la-ficha'
 import { costoDeVolver } from './topes-por-duracion'
 import type { Cambios, Encargo, Puertos } from './puertos'
 import type { ResultadoDePaso } from './motor'
@@ -52,18 +51,9 @@ export function conSegundaMirada(pl: Plantilla): Plantilla {
 // ───────────────────────── lo que ve GPT: las propuestas como le llegan a Emilio
 export interface MaterialDeLaPropuesta { revisado: string; imagenes: string[]; contexto: ContextoDelRevisor[] }
 
-interface BaseDelEncargo { brief?: { texto?: string }; F?: { manual_texto?: string; plan_texto?: string | null } }
-
-export function materialDeLaPropuesta(e: Estado): MaterialDeLaPropuesta {
-  const b = (datos(e, 'encargo') ?? {}) as BaseDelEncargo
-  const briefTexto = String(b.brief?.texto ?? '')
-  const ficha = contextoDeLaFicha(fichaDeLaHoja(briefTexto))
-  const contexto: ContextoDelRevisor[] = [
-    { titulo: 'Manual de marca del cliente', funcion: FUNCION_DEL_MANUAL, texto: String(b.F?.manual_texto ?? '') },
-    { titulo: 'Plan de trabajo del cliente', funcion: FUNCION_DEL_PLAN, texto: String(b.F?.plan_texto ?? '') },
-    { titulo: 'El brief de este entregable', funcion: FUNCION_DEL_BRIEF, texto: briefTexto },
-    ...(ficha ? [ficha] : []),
-  ].filter((c) => c.texto.trim())
+/** `contexto` = el del revisor de la pieza (`contextoDelRevisorDeLaPieza` del orquestador): el MISMO que recibe la jefatura del render */
+export function materialDeLaPropuesta(e: Estado, contexto0: ContextoDelRevisor[]): MaterialDeLaPropuesta {
+  const contexto = contexto0.filter((c) => typeof c.texto === 'string' && c.texto.trim())
   const imagenes: string[] = []
   const partes: string[] = []
   const agregar = (url: string | undefined, rotulo: string): string => {
@@ -110,10 +100,10 @@ export function cabeLaVueltaDeLaSegundaMirada(pl: Plantilla, paso: Paso, e: Esta
   return { cabe: true }
 }
 
-export async function correrSegundaMirada(P: Pick<Puertos, 'revisor'>, enc: Encargo, pl: Plantilla, paso: Paso): Promise<{ res: ResultadoDePaso; gastos: NonNullable<Cambios['gastos']> }> {
+export async function correrSegundaMirada(P: Pick<Puertos, 'revisor'>, enc: Encargo, pl: Plantilla, paso: Paso, contexto: ContextoDelRevisor[]): Promise<{ res: ResultadoDePaso; gastos: NonNullable<Cambios['gastos']> }> {
   const e = enc.estado_del_motor
   const antes = datos(e, ARTEFACTO_SEGUNDA_MIRADA) as LoGuardado | undefined
-  const m = materialDeLaPropuesta(e)
+  const m = materialDeLaPropuesta(e, contexto)
   // UNA sola vez (CC7 4): se decide por lo ya guardado en el encargo, no por la memoria del paso
   if (antes?.opino) {
     const enviadas = antes.enviadas ?? []

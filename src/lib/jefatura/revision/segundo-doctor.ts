@@ -112,9 +112,9 @@ export function verificarCita(fuente: string, cita: string, m: Pick<MaterialDelD
 function bloqueDelInforme(t: string): Record<string, unknown> | null {
   const i = t.lastIndexOf(MARCA_DE_INICIO_DEL_INFORME)
   if (i < 0) return null
-  const resto = t.slice(i + MARCA_DE_INICIO_DEL_INFORME.length)
-  const j = resto.indexOf(MARCA_DE_FIN_DEL_INFORME)
-  const crudo = (j < 0 ? resto : resto.slice(0, j)).trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '')
+  // lo que va entre las dos marcas (sin la de cierre, hasta el final): no se recorta nada del informe
+  const [entreMarcas] = t.substring(i + MARCA_DE_INICIO_DEL_INFORME.length).split(MARCA_DE_FIN_DEL_INFORME)
+  const crudo = entreMarcas.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '')
   try {
     const v = JSON.parse(crudo) as unknown
     return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : null

@@ -41,6 +41,7 @@ import { antesDeLasFotos, despuesDeUnAgente, pedirLoQueElAgenteNecesita, seccion
 import { duenoDeLaFicha, registrarPaso, siguientePaso, type ResultadoDePaso } from './motor'
 import { contextoDeHechos } from './hechos-del-negocio'
 import { construirTarea, contextoDelRevisor, CONTRATOS_EN_TEXTO, resumenParaElJefe, type ContextoDePedido } from './pedidos'
+import type { ContextoDelRevisor } from './ciego'
 import { seccionDeAutorevision, validarAutorevision, type NotaVista } from '../notas-del-dueno/autorevision'
 import type { Cambios, Encargo, FuentesCompletas, Puertos, TurnoRegistrado } from './puertos'
 import { chequearPrompts, citasExisten, derivarDecision, elegirVersion, veredictoDeImagenes, type ObservacionDeImagen, type ReglasDeImagen } from './reglas-de-imagen'
@@ -257,16 +258,7 @@ export async function avanzar(P: Puertos, encargoId: string): Promise<Respuesta>
       if (paso.tipo === 'jefatura') {
         // J8a · la pieza ya pasó los chequeos duros: se abre UNA revisión en la jefatura y se espera su cierre
         const material = materialDeLaRevision(pl, e)
-        // 01-nov · un revisor nunca tiene menos contexto que quien escribe; si el puerto falla, se dice y la revisión sigue
-        const carpeta = P.carpetaParaRevisar ? await P.carpetaParaRevisar(String(enc.client_id)).catch((x: unknown) => [{ titulo: 'La carpeta del cliente', funcion: 'lo que el negocio sabe', texto: `(no se pudo leer: ${x instanceof Error ? x.message : String(x)}. No lo tomes como que no existe.)` }]) : []
-        // 17-nov · coherencia con los hechos: el bloque de Cerebro (o el aviso de que no lo hay) va SIEMPRE como un documento más del revisor
-        const hechos = contextoDeHechos(P.hechosDelNegocio ? await P.hechosDelNegocio(String(enc.client_id)).catch((x: unknown) => ({ no_se_pudo_leer: x instanceof Error ? x.message : String(x) })) : null)
-        // cambio 4 · la ficha de la oferta, tal cual la trae la hoja: SOLO si la hay (sin ficha el pedido queda como antes)
-        const ficha = contextoDeLaFicha(fichaDeLaHoja(briefDe(e)?.texto))
-        // 19-nov · ADENDA 1 · P2b: el resumen del encargo (red, formato, objetivo, llamado) va al jefe como un documento más, en las tres familias
-        const hoja = briefDe(e)
-        const resumen = resumenParaElJefe(hoja)
-        const sobre = sobreDeLaRevision(enc, pl, e, { pieza: material.pieza, imagenes: material.imagenes, contexto: [...resumen, ...material.contexto, ...carpeta, hechos, ...(ficha ? [ficha] : [])] })
+        const sobre = sobreDeLaRevision(enc, pl, e, { pieza: material.pieza, imagenes: material.imagenes, contexto: await contextoDelRevisorDeLaPieza(P, enc, pl, e) })
         const ap = P.jefatura ? await P.jefatura(sobre) : ({ estado: 'error', motivo: 'el puerto de la jefatura no está configurado' } as const)
         if (ap.estado === 'esperando') {
           const n = turnoDe(e)
@@ -311,6 +303,24 @@ const reImagenDe = (pl: Plantilla, e: Estado) => (tomada: { razon: string } | nu
  * 17-nov · GO Lenovo (d) · ¿la pieza puede volver a la mesa desde el paso `jefatura`? Solo si la plantilla lo declara (`vuelve_a` a la mesa), le queda la vuelta y cabe en el tope
  * contando lo que costó ESTA revisión (la vuelta repite la mesa y lo que sigue, incluida otra revisión). Sin `vuelve_a`, nunca (la pieza va a la bandeja como siempre).
  */
+/**
+ * 20-nov · PLAN v4 · el contexto del revisor de la pieza, el MISMO para la jefatura del render y para la segunda mirada de la propuesta
+ * (resumen del encargo, manual/plan/brief/portero, carpeta del cliente, hechos del Cerebro y la ficha de la hoja): un revisor nunca tiene menos contexto que quien escribe
+ */
+async function contextoDelRevisorDeLaPieza(P: Puertos, enc: Encargo, pl: Plantilla, e: Estado): Promise<ContextoDelRevisor[]> {
+  const material = materialDeLaRevision(pl, e)
+  // 01-nov · un revisor nunca tiene menos contexto que quien escribe; si el puerto falla, se dice y la revisión sigue
+  const carpeta = P.carpetaParaRevisar ? await P.carpetaParaRevisar(String(enc.client_id)).catch((x: unknown) => [{ titulo: 'La carpeta del cliente', funcion: 'lo que el negocio sabe', texto: `(no se pudo leer: ${x instanceof Error ? x.message : String(x)}. No lo tomes como que no existe.)` }]) : []
+  // 17-nov · coherencia con los hechos: el bloque de Cerebro (o el aviso de que no lo hay) va SIEMPRE como un documento más del revisor
+  const hechos = contextoDeHechos(P.hechosDelNegocio ? await P.hechosDelNegocio(String(enc.client_id)).catch((x: unknown) => ({ no_se_pudo_leer: x instanceof Error ? x.message : String(x) })) : null)
+  // cambio 4 · la ficha de la oferta, tal cual la trae la hoja: SOLO si la hay (sin ficha el pedido queda como antes)
+  const ficha = contextoDeLaFicha(fichaDeLaHoja(briefDe(e)?.texto))
+  // 19-nov · ADENDA 1 · P2b: el resumen del encargo (red, formato, objetivo, llamado) va al jefe como un documento más, en las tres familias
+  const hoja = briefDe(e)
+  const resumen = resumenParaElJefe(hoja)
+  return [...resumen, ...material.contexto, ...carpeta, hechos, ...(ficha ? [ficha] : [])]
+}
+
 /** lo que ve el revisor de la jefatura (la misma función para abrir la revisión y para aplicar lo que vuelve) */
 function materialDeLaRevision(pl: Plantilla, e: Estado) {
   return familiaDeLaminas(pl) ? contextoDeRevisorL(pl, e) : familiaDeVideo(pl) ? contextoDeRevisorV(pl, e) : contextoDelRevisor(contexto(e))
@@ -661,7 +671,7 @@ async function ejecutarCodigo(P: Puertos, enc: Encargo, pl: Plantilla, paso: Pas
     // 20-nov · PLAN v4 · el segundo doctor CREATIVO opina sobre las propuestas, antes de que el dueño apruebe y antes de producir (una sola vez; su vuelta es propia)
     case 'segunda_mirada': {
       const { correrSegundaMirada } = await import('./segunda-mirada')
-      const s = await correrSegundaMirada(P, enc, pl, paso)
+      const s = await correrSegundaMirada(P, enc, pl, paso, await contextoDelRevisorDeLaPieza(P, enc, pl, e))
       return { res: s.res, ...(s.gastos.length ? { gastos: s.gastos } : {}) }
     }
     default: return familiaDeLaminas(pl) ? ejecutarCodigoL(P, enc, pl, paso) : familiaDeVideo(pl) ? ejecutarCodigoV(P, enc, pl, paso) : { res: { costo_usd: 0 }, fallido: `función de código «${paso.funcion}» sin implementar` }

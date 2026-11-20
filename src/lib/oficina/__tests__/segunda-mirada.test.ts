@@ -29,6 +29,12 @@ const claves = (pl: Plantilla) => pl.pasos.map((p) => p.clave)
 
 const MANUAL = 'Manual. La luz de la tarde debe sentirse cálida y dorada, nunca fría ni azulada en las fotos.'
 const BRIEF = 'Un atardecer en la terraza con el plato estrella servido.'
+/** lo que arma `contextoDelRevisorDeLaPieza` (el mismo de la jefatura del render); el plan vacío no debe viajar */
+const CONTEXTO = [
+  { titulo: 'Manual de marca del cliente', funcion: 'lo vigente', texto: MANUAL },
+  { titulo: 'Plan de trabajo del cliente', funcion: 'el plan', texto: '' },
+  { titulo: 'El brief de este entregable', funcion: 'el encargo', texto: BRIEF },
+]
 const PROPUESTAS = {
   ronda: 1, clase: 'post_img', avisos: [], citas: '',
   propuestas: [
@@ -151,14 +157,14 @@ describe('🔴 por qué la guarda (CC6 9 · CC7 1): el motor ubica por POSICIÓN
 })
 
 describe('lo que ve GPT: las propuestas como le llegan al dueño', () => {
-  const m = materialDeLaPropuesta(estadoAntesDeLaSegundaMirada(PL))
+  const m = materialDeLaPropuesta(estadoAntesDeLaSegundaMirada(PL), CONTEXTO)
   it('el texto de cada propuesta y sus imágenes borrador, rotuladas', () => {
     expect(m.revisado).toContain('### Propuesta P1 · La terraza')
     expect(m.revisado).toContain('el plato estrella te espera')
     expect(m.revisado).toContain('(imagen 1: propuesta P1, lámina 1)')
     expect(m.imagenes).toEqual(['https://x/p1.png', 'https://x/p2.png'])
   })
-  it('el contexto: manual y brief completos (el plan vacío no va)', () => {
+  it('el contexto: el mismo del revisor de la pieza, sin los vacíos', () => {
     expect(m.contexto.map((c) => c.titulo)).toEqual(['Manual de marca del cliente', 'El brief de este entregable'])
     expect(m.contexto[0].texto).toBe(MANUAL)
   })
@@ -167,7 +173,7 @@ describe('lo que ve GPT: las propuestas como le llegan al dueño', () => {
 describe('el paso', () => {
   it('con observaciones y vuelta que cabe: vuelve a la mesa con el aviso SIN firma, y los datos nunca van (CC7 5)', async () => {
     const { P, llamadas } = revisorFalso()
-    const r = await correrSegundaMirada(P, encargo(estadoAntesDeLaSegundaMirada(PL)), PL, PASO)
+    const r = await correrSegundaMirada(P, encargo(estadoAntesDeLaSegundaMirada(PL)), PL, PASO, CONTEXTO)
     const d = datosDe(r)
     expect(llamadas).toHaveLength(1)
     expect(llamadas[0].texto).toContain('el plato estrella te espera')
@@ -181,7 +187,7 @@ describe('el paso', () => {
   })
   it('guarda para medir: informe, huellas, modelo efectivo, la versión A y las imágenes (CC6 3, 4, 7)', async () => {
     const { P } = revisorFalso()
-    const d = datosDe(await correrSegundaMirada(P, encargo(estadoAntesDeLaSegundaMirada(PL)), PL, PASO))
+    const d = datosDe(await correrSegundaMirada(P, encargo(estadoAntesDeLaSegundaMirada(PL)), PL, PASO, CONTEXTO))
     expect(d.modelo_efectivo).toBe('gpt-x-2026-11-01')
     expect((d.resumen as { otro_proveedor: boolean }).otro_proveedor).toBe(true)
     expect((d.huellas as Array<{ titulo: string }>).map((h) => h.titulo)).toEqual(['Manual de marca del cliente', 'El brief de este entregable'])
@@ -191,21 +197,21 @@ describe('el paso', () => {
   })
   it('sin observaciones: guarda y sigue, sin vuelta', async () => {
     const { P } = revisorFalso(respuestaDeGpt({ observaciones: [], datos: [] }))
-    const d = datosDe(await correrSegundaMirada(P, encargo(estadoAntesDeLaSegundaMirada(PL)), PL, PASO))
+    const d = datosDe(await correrSegundaMirada(P, encargo(estadoAntesDeLaSegundaMirada(PL)), PL, PASO, CONTEXTO))
     expect(d.vuelve_a_la_mesa).toBe(false)
     expect(d.aviso_a_la_mesa).toBeUndefined()
     expect(d.sin_vuelta).toBeUndefined()
   })
   it('en ensayo (dry_run): 0 llamadas a GPT y sigue (CC7 4)', async () => {
     const { P, llamadas } = revisorFalso()
-    const r = await correrSegundaMirada(P, encargo(estadoAntesDeLaSegundaMirada(PL), { dry_run: true }), PL, PASO)
+    const r = await correrSegundaMirada(P, encargo(estadoAntesDeLaSegundaMirada(PL), { dry_run: true }), PL, PASO, CONTEXTO)
     expect(llamadas).toHaveLength(0)
     expect(datosDe(r).vuelve_a_la_mesa).toBe(false)
     expect(r.res.costo_usd).toBe(0)
   })
   it('si GPT falla, la pieza sigue sin vuelta (CC6 12)', async () => {
     const { P } = revisorFalso('', false)
-    const d = datosDe(await correrSegundaMirada(P, encargo(estadoAntesDeLaSegundaMirada(PL)), PL, PASO))
+    const d = datosDe(await correrSegundaMirada(P, encargo(estadoAntesDeLaSegundaMirada(PL)), PL, PASO, CONTEXTO))
     expect(d.sin_revision).toBe(true)
     expect(d.motivo).toBe('cayó')
     expect(d.vuelve_a_la_mesa).toBe(false)
@@ -214,10 +220,10 @@ describe('el paso', () => {
     const { P, llamadas } = revisorFalso()
     const e = estadoAntesDeLaSegundaMirada(PL)
     const i = PL.pasos.findIndex((p) => p.clave === 'segunda_mirada')
-    const r1 = await correrSegundaMirada(P, encargo(e), PL, PASO)
+    const r1 = await correrSegundaMirada(P, encargo(e), PL, PASO, CONTEXTO)
     const e2 = registrarPaso(e, PL, i, r1.res)
     expect(segundaMiradaYaDada(e2)).toBe(true)
-    const r2 = await correrSegundaMirada(P, encargo(e2), PL, PASO)
+    const r2 = await correrSegundaMirada(P, encargo(e2), PL, PASO, CONTEXTO)
     expect(llamadas).toHaveLength(1)
     expect(datosDe(r2).ya_opino).toBe(true)
     expect(datosDe(r2).vuelve_a_la_mesa).toBe(false)
@@ -227,10 +233,10 @@ describe('el paso', () => {
     const { P } = revisorFalso()
     const e = estadoAntesDeLaSegundaMirada(PL)
     const i = PL.pasos.findIndex((p) => p.clave === 'segunda_mirada')
-    const e2 = registrarPaso(e, PL, i, (await correrSegundaMirada(P, encargo(e), PL, PASO)).res)
+    const e2 = registrarPaso(e, PL, i, (await correrSegundaMirada(P, encargo(e), PL, PASO, CONTEXTO)).res)
     const iMesa = PL.pasos.findIndex((p) => p.clave === 'mesa')
     const e3 = registrarPaso(e2, PL, iMesa, { costo_usd: 0, artefacto: { texto: 'nueva', respuestas_a_la_jefatura: ['RESPUESTA A LA JEFATURA O1: tomada'] } })
-    const d = datosDe(await correrSegundaMirada(P, encargo(e3), PL, PASO))
+    const d = datosDe(await correrSegundaMirada(P, encargo(e3), PL, PASO, CONTEXTO))
     expect(d.respuestas_del_creativo).toEqual([expect.objectContaining({ id: 'O1' })])
     expect(typeof d.version_despues).toBe('string')
   })
@@ -245,7 +251,7 @@ describe('¿cabe la vuelta? la decide el paso, con el costo de rehacer (CC7 3 ·
     const e = estadoAntesDeLaSegundaMirada(PL, 0)
     const pl = { ...PL, limites: { ...PL.limites, tope_encargo_usd: 1 } } as Plantilla
     const { P } = revisorFalso()
-    const d = datosDe(await correrSegundaMirada(P, encargo(e), pl, PASO))
+    const d = datosDe(await correrSegundaMirada(P, encargo(e), pl, PASO, CONTEXTO))
     expect(d.vuelve_a_la_mesa).toBe(false)
     expect(d.sin_vuelta).toBe('tope')
     expect(d.aviso_a_la_mesa).toBeUndefined()
@@ -288,7 +294,7 @@ describe('en el render, la jefatura no vuelve a llamar a GPT', () => {
     const { P } = revisorFalso()
     const e = estadoAntesDeLaSegundaMirada(PL)
     const i = PL.pasos.findIndex((p) => p.clave === 'segunda_mirada')
-    const e2 = registrarPaso(e, PL, i, (await correrSegundaMirada(P, encargo(e), PL, PASO)).res)
+    const e2 = registrarPaso(e, PL, i, (await correrSegundaMirada(P, encargo(e), PL, PASO, CONTEXTO)).res)
     expect(segundaMiradaYaDada(e2)).toBe(true)
     expect(segundaMiradaYaDada(e)).toBe(false)
     const sobre = (est: Estado) => sobreDeLaRevision({ id: 'e', client_id: 'cli-1', familia: PL.familia, tope_usd: 30, dry_run: true, sala_ref: null } as never, PL, est, { pieza: 'x', imagenes: [], contexto: [] } as never) as unknown as { payload: Record<string, unknown> }
