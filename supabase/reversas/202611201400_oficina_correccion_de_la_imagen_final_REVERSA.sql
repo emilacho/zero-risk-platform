@@ -26,7 +26,7 @@ BEGIN
     IF EXISTS (SELECT 1 FROM jsonb_array_elements(f.pasos) p WHERE p->>'clave' = 'segunda_mirada' OR p->>'funcion' = 'segunda_mirada') THEN
       RAISE EXCEPTION 'REVERSA 202611201400: % tiene la segunda mirada (202611201500); primero su reversa', f.tipo;
     END IF;
-    IF (f.limites->>'reserva_por_pieza_usd')::numeric IS DISTINCT FROM CASE f.tipo WHEN 'post_mesa' THEN 3.35 ELSE 4 END THEN
+    IF (f.limites->>'reserva_por_pieza_usd')::numeric IS DISTINCT FROM (CASE f.tipo WHEN 'post_mesa' THEN 3.35 ELSE 4 END) THEN
       RAISE EXCEPTION 'REVERSA 202611201400: la reserva por pieza de % no es la exacta que dejó la migración (3.35/4/4); no se toca', f.tipo;
     END IF;
   END LOOP;
