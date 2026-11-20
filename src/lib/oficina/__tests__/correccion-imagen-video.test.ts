@@ -468,3 +468,45 @@ describe('tanda 2 · la migración 202611201600 y su reversa dicen lo mismo que 
     expect(REV).toContain("IF EXISTS (SELECT 1 FROM public.oficina_tipos_de_grupo WHERE tipo <> 'video_mesa' AND tope_encargo_usd > 650) THEN")
   })
 })
+
+describe('🔴 CC5 18:39Z · CC6 18:47Z #1254 · lo que sigue a la corrección, con la cifra escrita a mano (no calculada con la misma función)', () => {
+  // una plantilla chica, sin mesa (costoDeVolver = suma simple de topes):
+  //   abrir 0 · corregir_imagen 0,75 · editar_imagen 4 · mirar_correccion 5,2 (vuelve a corregir, se salta) · observar 0,1 ·
+  //   pedido 2 (vuelve a observar, max 2, NO se salta: costoDeVolver = 0,1 + 2 = 2,1) · jefatura 0 (vuelve a observar, max 6, se salta; reserva 1,7) · render 3
+  const PL = {
+    familia: 'chica', version: 1, clase: 'contenido', tipo: 'x', indicaciones: {},
+    limites: { tope_encargo_usd: 50, margen: 50 },
+    pasos: [
+      { clave: 'abrir', tipo: 'codigo', tope_usd: 0 },
+      { clave: 'corregir_imagen', tipo: 'agente', tope_usd: 0.75 },
+      { clave: 'editar_imagen', tipo: 'codigo', tope_usd: 4 },
+      { clave: 'mirar_correccion', tipo: 'codigo', tope_usd: 5.2, vuelve_a: { paso: 'corregir_imagen', max: 350 } },
+      { clave: 'observar', tipo: 'codigo', tope_usd: 0.1 },
+      { clave: 'pedido', tipo: 'codigo', tope_usd: 2, vuelve_a: { paso: 'observar', max: 2 } },
+      { clave: 'jefatura', tipo: 'jefatura', tope_usd: 0, vuelve_a: { paso: 'observar', max: 6 } },
+      { clave: 'render', tipo: 'codigo', tope_usd: 3 },
+    ],
+  } as unknown as Plantilla
+  const sigue = (vueltas: Record<string, number>) => loQueSigueDespuesDelPaso(PL, 'mirar_correccion', { vueltas })
+  it('sin vueltas usadas: 0,1 + 2 + 0 + 1,7 + 3 = 6,8 de una pasada, más 2 × 2,1 de las vueltas del pedido = 11,0 (no cuenta la propia mirada ni la jefatura que se salta)', () => {
+    expect(sigue({})).toBe(11)
+  })
+  it('descuenta las vueltas ya usadas de las que no se saltan: 1 usada → 8,9 · 2 usadas → 6,8 · más de las que hay → 6,8 (nunca negativo)', () => {
+    expect(sigue({ pedido: 1 })).toBe(8.9)
+    expect(sigue({ pedido: 2 })).toBe(6.8)
+    expect(sigue({ pedido: 5 })).toBe(6.8)
+  })
+  it('las vueltas que se saltan no cuentan, usadas o no (jefatura, la propia mirada)', () => {
+    expect(sigue({ jefatura: 3, mirar_correccion: 7 })).toBe(11)
+  })
+  it('con lo justo EXACTO vuelve; con 0,01 más de gasto, no: 50 − 9,95 (corregir 0,75 + editar 4 + mirar 5,2) − 11,0 = 29,05', () => {
+    const e = { artefactos: {}, fichas: [], vueltas: {}, pasos_ejecutados: 4, gasto_usd: 0 } as unknown as Estado
+    expect(costoDeVolver(PL, PL.pasos[3])).toBe(9.95)
+    expect(cabeOtraVuelta(PL, e, 29.05)).toBe(true)
+    expect(cabeOtraVuelta(PL, e, 29.06)).toBe(false)
+    // con una vuelta del pedido ya usada, lo justo sube 2,1
+    const e1 = { ...e, vueltas: { pedido: 1 } } as unknown as Estado
+    expect(cabeOtraVuelta(PL, e1, 31.15)).toBe(true)
+    expect(cabeOtraVuelta(PL, e1, 31.16)).toBe(false)
+  })
+})
