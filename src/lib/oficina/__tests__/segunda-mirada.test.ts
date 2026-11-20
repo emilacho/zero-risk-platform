@@ -19,12 +19,13 @@ import { CARRUSEL_MESA_CON_CORRECCION, KIT_MESA_CON_CORRECCION, POST_MESA_CON_CO
 import { RESERVA_POR_PIEZA_DE_LA_CORRECCION_USD } from '../mesa/correccion-imagen'
 import { VIDEO_MESA_ENCENDIDA } from '../plantillas/video-mesa'
 import type { Encargo, Puertos } from '../puertos'
-import { ARTEFACTO_SEGUNDA_MIRADA, cabeLaVueltaDeLaSegundaMirada, conSegundaMirada, correrSegundaMirada, materialDeLaPropuesta, pasoDeLaSegundaMirada, segundaMiradaYaDada } from '../segunda-mirada'
-import { leerRespuestas } from '../sentido-contra-la-ficha'
+import { ARTEFACTO_SEGUNDA_MIRADA, MAX_IMAGENES_DE_LA_SEGUNDA_MIRADA, cabeLaVueltaDeLaSegundaMirada, conSegundaMirada, correrSegundaMirada, materialDeLaPropuesta, pasoDeLaSegundaMirada, segundaMiradaYaDada } from '../segunda-mirada'
+import { leerRespuestas, separarRespuestas } from '../sentido-contra-la-ficha'
+import { ESPERAS_DEL_REVISOR_MS } from '../../revisor-gpt'
 import { sobreDeLaRevision } from '../paso-jefatura'
 import type { Estado, Plantilla } from '../tipos'
 import { coberturaDelTope, loQueSigueDeLaMesa, reservaPorPasadaDeLaMesa } from '../topes-por-duracion'
-import { MARCA_DE_FIN_DEL_INFORME, MARCA_DE_INICIO_DEL_INFORME, TEXTO_HONESTO_AL_CREATIVO } from '../../segundo-doctor'
+import { MARCA_DE_FIN_DEL_INFORME, MARCA_DE_INICIO_DEL_INFORME, PEDIDO_CREATIVO, TEXTO_HONESTO_AL_CREATIVO } from '../../segundo-doctor'
 
 const RAIZ = path.resolve(__dirname, '..', '..', '..', '..')
 const leer = (...p: string[]) => fs.readFileSync(path.join(RAIZ, 'supabase', ...p), 'utf8').replace(/\r/g, '')
@@ -52,7 +53,7 @@ const PROPUESTAS = {
 const BORRADORES = { fase: 'borrador', ronda: 1, calidad: 'low', costo_usd: 0.1, propuestas: [{ id: 'P1', costo_usd: 0.05, laminas: [{ n: 1, png_url: 'https://x/p1.png' }] }, { id: 'P2', costo_usd: 0.05, laminas: [{ n: 1, png_url: 'https://x/p2.png' }] }] }
 
 /** el estado de un post justo cuando le toca a `segunda_mirada` (la mesa, el borrador y lo que trajo `abrir`), registrado con el motor */
-function estadoAntesDeLaSegundaMirada(pl: Plantilla, gasto = 2): Estado {
+function estadoAntesDeLaSegundaMirada(pl: Plantilla, gasto = 2, borradores: unknown = BORRADORES): Estado {
   let e = estadoInicial()
   const hasta = pl.pasos.findIndex((p) => p.clave === 'segunda_mirada')
   for (let i = 0; i < hasta; i++) {
@@ -60,7 +61,7 @@ function estadoAntesDeLaSegundaMirada(pl: Plantilla, gasto = 2): Estado {
     const artefacto: Record<string, unknown> =
       p.clave === 'abrir' ? { brief: { texto: BRIEF }, F: { manual_texto: MANUAL, plan_texto: null } }
       : p.clave === 'mesa' ? { texto: 'texto de la mesa' }
-      : p.clave === ARTEFACTO_BORRADOR_IMAGEN ? BORRADORES : {}
+      : p.clave === ARTEFACTO_BORRADOR_IMAGEN ? (borradores as Record<string, unknown>) : {}
     const otros = p.clave === 'mesa' ? { otros_artefactos: { [ARTEFACTO_PROPUESTAS_IMAGEN]: PROPUESTAS } } : {}
     e = registrarPaso(e, pl, i, { costo_usd: i === 0 ? gasto : 0, artefacto, ...otros } as never)
   }
@@ -75,12 +76,12 @@ const CON_OBS = respuestaDeGpt({
   observaciones: [{ que: 'El color está muy liviano', por_que: 'resta apetito', parte: 'imagen 1', fuente: 'Manual de marca del cliente', cita: 'la luz de la tarde debe sentirse cálida y dorada' }],
   datos: [{ que: 'EL PRECIO NO COINCIDE', paso_de_origen: 'brief', parte: 'imagen 2' }],
 })
-function revisorFalso(texto = CON_OBS, ok = true) {
+function revisorFalso(texto = CON_OBS, ok = true, costoSiFalla = 0) {
   const llamadas: Array<{ texto: string; imagenes_urls: string[] }> = []
   const P = {
     async revisor(p: { texto: string; imagenes_urls: string[] }) {
       llamadas.push(p)
-      return ok ? { ok: true as const, texto, costo_usd: 0.07, modelo: 'gpt-x', modelo_efectivo: 'gpt-x-2026-11-01', intentos: [] } : { ok: false as const, error: 'cayó', costo_usd: 0, intentos: [] }
+      return ok ? { ok: true as const, texto, costo_usd: 0.07, modelo: 'gpt-x', modelo_efectivo: 'gpt-x-2026-11-01', intentos: [] } : { ok: false as const, error: 'cayó', costo_usd: costoSiFalla, intentos: [] }
     },
   } as unknown as Pick<Puertos, 'revisor'>
   return { P, llamadas }
@@ -433,3 +434,72 @@ describe('en el render, la jefatura no vuelve a llamar a GPT', () => {
 })
 
 it('el artefacto del paso se llama como el paso', () => expect(ARTEFACTO_SEGUNDA_MIRADA).toBe('segunda_mirada'))
+
+describe('🔴 los vivos de CC7 en e2c20ac y el reintento de LENOVO (CC6 2 · 16:51Z)', () => {
+  const S = sentencias(MIG)
+  const R = sentencias(REV)
+  it('m8 · si GPT falla y cobró algo, lo que costó llega al gasto del paso y a `gastos`', async () => {
+    const r = await correrSegundaMirada(revisorFalso(CON_OBS, false, 0.012).P, encargo(estadoAntesDeLaSegundaMirada(PL)), AMPLIO, PASO, CONTEXTO)
+    expect(r.res.costo_usd).toBe(0.012)
+    expect(r.gastos).toEqual([{ concepto: 'revisor_externo', ref_tabla: null, ref_id: null, cost_usd: 0.012, base: 'usage' }])
+    expect(datosDe(r).sin_revision).toBe(true)
+    expect(datosDe(r).vuelve_a_la_mesa).toBe(false)
+    // sin costo, ningún gasto en cero
+    expect((await correrSegundaMirada(revisorFalso(CON_OBS, false, 0).P, encargo(estadoAntesDeLaSegundaMirada(PL)), AMPLIO, PASO, CONTEXTO)).gastos).toEqual([])
+  })
+  it('el reintento (LENOVO 16:55Z) vive en el puerto: el paso llama UNA vez aunque falle; la pasada siguiente no llama; en ensayo, ninguna', async () => {
+    const f = revisorFalso(CON_OBS, false, 0.01)
+    const e1 = estadoAntesDeLaSegundaMirada(PL)
+    const r1 = await correrSegundaMirada(f.P, encargo(e1), AMPLIO, PASO, CONTEXTO)
+    expect(f.llamadas).toHaveLength(1)
+    // lo que quedó guardado manda: el reintento de n8n o la vuelta del dueño no vuelven a llamar
+    const iPaso = PL.pasos.findIndex((p) => p.clave === 'segunda_mirada')
+    const e2 = registrarPaso(e1, PL, iPaso, r1.res)
+    const r2 = await correrSegundaMirada(f.P, encargo(e2), AMPLIO, PASO, CONTEXTO)
+    expect(f.llamadas).toHaveLength(1)
+    expect(datosDe(r2).ya_opino).toBe(true)
+    expect(r2.gastos).toEqual([])
+    const s = revisorFalso()
+    await correrSegundaMirada(s.P, encargo(estadoAntesDeLaSegundaMirada(PL), { dry_run: true }), AMPLIO, PASO, CONTEXTO)
+    expect(s.llamadas).toHaveLength(0)
+    // y la espera del puerto son 3 reintentos (firma de Emilio, 10-oct)
+    expect(ESPERAS_DEL_REVISOR_MS).toEqual([5_000, 20_000, 60_000])
+  })
+  it('m11 · a GPT van como mucho 12 imágenes', async () => {
+    const muchas = { ...BORRADORES, propuestas: [{ id: 'P1', costo_usd: 0, laminas: Array.from({ length: 9 }, (_, i) => ({ n: i + 1, png_url: `https://x/a${i}.png` })) }, { id: 'P2', costo_usd: 0, laminas: Array.from({ length: 9 }, (_, i) => ({ n: i + 1, png_url: `https://x/b${i}.png` })) }] }
+    const f = revisorFalso()
+    await correrSegundaMirada(f.P, encargo(estadoAntesDeLaSegundaMirada(PL, 2, muchas)), AMPLIO, PASO, CONTEXTO)
+    expect(MAX_IMAGENES_DE_LA_SEGUNDA_MIRADA).toBe(12)
+    expect(f.llamadas[0].imagenes_urls).toHaveLength(12)
+  })
+  it('m12 · el pedido a GPT lleva la pregunta CREATIVA (lo que lo hace segundo doctor creativo)', async () => {
+    const f = revisorFalso()
+    await correrSegundaMirada(f.P, encargo(estadoAntesDeLaSegundaMirada(PL)), AMPLIO, PASO, CONTEXTO)
+    expect(PEDIDO_CREATIVO.length).toBeGreaterThan(40)
+    expect(f.llamadas[0].texto.endsWith(PEDIDO_CREATIVO)).toBe(true)
+  })
+  it('t2 · el lector LEE «RESPUESTA A LA JEFATURA O1: …» (no solo deja el id) y la separa de la pieza', () => {
+    const r = leerRespuestas([{ id: 'O1', texto: 'x', dura: false }, { id: 'O2', texto: 'y', dura: false }], ['RESPUESTA A LA JEFATURA O1: tomada', 'RESPUESTA A LA JEFATURA O2: no tomada: no aplica a esta foto'])
+    expect(r.map((x) => [x.id, x.respuesta, x.motivo])).toEqual([['O1', 'tomada', null], ['O2', 'no_tomada', 'no aplica a esta foto']])
+    expect(separarRespuestas('La pieza.\nRESPUESTA A LA JEFATURA O1: tomada')).toEqual({ pieza: 'La pieza.', lineas: ['RESPUESTA A LA JEFATURA O1: tomada'] })
+  })
+  it('s9 · el paso nuevo va DESPUÉS del borrador (el orden de la unión: el paso viejo 0, el nuevo 1)', () => {
+    expect(S).toContain("SELECT jsonb_agg(q ORDER BY i, j)")
+    expect(S).toContain('      SELECT p AS q, 0 AS j\n      UNION ALL\n      SELECT $s$')
+    expect(S).toMatch(/\$s\$::jsonb, 1\n\s+WHERE p->>'clave' IN \('borrador_imagen', 'imagenes_clave'\)/)
+  })
+  it('s10 · s13 · s14 · s19 · los frenos de la ida son EXCEPTION y la espera tiene techo', () => {
+    expect(S).toContain("THEN\n      RAISE EXCEPTION '202611201500: % ya tiene la segunda mirada; no se pisa', t;")
+    expect(S).toContain("THEN\n    RAISE EXCEPTION '202611201500: en video_mesa, imagenes_clave no va seguido de borrador_video; no se toca';")
+    expect(S).toContain("THEN\n      RAISE EXCEPTION '202611201500: % no quedó con mesa → borrador_imagen → segunda_mirada → aprobar_propuestas (%)', t, orden;")
+    expect(S).toContain("THEN\n    RAISE EXCEPTION '202611201500: video_mesa no quedó con mesa → imagenes_clave → segunda_mirada → borrador_video (%)', orden;")
+    expect(S).not.toMatch(/RAISE NOTICE/)
+    for (const x of [S, R]) expect(x).toContain("BEGIN;\n\nSET LOCAL lock_timeout = '5s';\nLOCK TABLE public.oficina_encargos IN SHARE MODE;")
+  })
+  it('r3 · r5 · la reversa se niega si no cambió EXACTAMENTE las 4 filas y si una no trae el paso (EXCEPTION)', () => {
+    expect(R).toContain('GET DIAGNOSTICS n = ROW_COUNT;\n  IF n <> 4 THEN\n    RAISE EXCEPTION')
+    expect(R).toContain("IS DISTINCT FROM 1 THEN\n      RAISE EXCEPTION 'REVERSA 202611201500: % no tiene el paso de la migración; no se toca', t;")
+    expect(R).not.toMatch(/RAISE NOTICE/)
+    expect(S).toContain('GET DIAGNOSTICS n = ROW_COUNT;\n  IF n <> 4 THEN\n    RAISE EXCEPTION')
+  })
+})
