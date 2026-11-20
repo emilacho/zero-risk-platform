@@ -10,12 +10,12 @@ import {
   INDICACION_DE_LA_CORRECCION_DEL_VIDEO, PASO_CORREGIR_IMAGEN, PASO_EDITAR_IMAGEN, PASO_MIRAR_CORRECCION, TOPE_DE_LA_CORRECCION_DEL_VIDEO_POR_SEGUNDO_USD, RESERVA_POR_VIDEO_DE_LA_CORRECCION_USD,
   TOPE_DE_LA_EDICION_DE_IMAGEN_CLAVE_POR_SEGUNDO_USD, TOPE_DE_LA_MIRADA_DE_IMAGEN_CLAVE_POR_SEGUNDO_USD, TOPE_FIJO_DE_LA_CORRECCION_DEL_VIDEO_USD, VUELTAS_DE_CORRECCION_IMAGEN,
   conCorreccionDeImagen, conCorreccionDeImagenClave, correccionesVigentes, dondeDe, editarImagenes, imagenesClaveConLaMejor, llaveDeLaEdicion, margenDeLaCorreccion, mirarCorreccion,
-  loteDe, pasosDeLaCorreccionDelVideo, pedidoDeLaCorreccion, refDelPlano, saltoDeLaCorreccion, tareaDeLaCorreccion, turnosDeLaVueltaDelVideo, vistasDe, type Correcciones,
+  cabeOtraVuelta, loteDe, pasosDeLaCorreccionDelVideo, pedidoDeLaCorreccion, refDelPlano, saltoDeLaCorreccion, tareaDeLaCorreccion, turnosDeLaVueltaDelVideo, vistasDe, type Correcciones,
 } from '../mesa/correccion-imagen'
 import { PASO_IMAGENES_CLAVE_FINAL, PASO_REVISAR_IMAGENES_CLAVE, imagenesClaveVigentes } from '../video/imagen-clave'
 import { VIDEO_MESA_POR_SEGUNDO as VIDEO_MESA_POR_SEGUNDO_CODIGO } from '../plantillas/video-mesa'
 import { conVueltaPorReglaDura } from '../plantillas/vuelta-por-regla-dura'
-import { aplicarTopesPorDuracion, coberturaDelTope } from '../topes-por-duracion'
+import { aplicarTopesPorDuracion, coberturaDelTope, costoDeVolver, loQueSigueDespuesDelPaso } from '../topes-por-duracion'
 import { validarPlantilla } from '../plantilla'
 import type { Estado, Plantilla } from '../tipos'
 
@@ -255,6 +255,62 @@ describe('tanda 2 · la vuelta se parte en turnos si no cabe en un pedido (Lenov
     expect(c.imagenes['plano-1'].motivo_de_cierre).toBe('tope_de_vueltas')
     expect(c.imagenes['plano-11'].motivo_de_cierre).toBe('no_cupo')
     expect(c.imagenes['plano-12'].motivo_de_cierre).toBe('no_cupo')
+  })
+  it('🔴 CC6 #1254 · la corrección guarda lo que sigue: a 120 s, con el gasto donde la regla vieja dejaba volver, ahora NO vuelve y el paso «video» cabe', () => {
+    const C = CARGADA
+    const T = C.limites.tope_encargo_usd
+    const mirar = C.pasos.find((p) => p.clave === PASO_MIRAR_CORRECCION)!
+    const volver = costoDeVolver(C, mirar)
+    const sigue = loQueSigueDespuesDelPaso(C, PASO_MIRAR_CORRECCION, { vueltas: {} })
+    const video = Number(C.pasos.find((p) => p.clave === 'video')!.tope_usd)
+    // lo que sigue lleva el clip entero (y la jefatura con su reserva)
+    expect(sigue).toBeGreaterThanOrEqual(video)
+    const e0 = est(12)
+    // un gasto donde cabía la vuelta sola pero no la vuelta MÁS lo que sigue
+    const g = +(T - volver - sigue + 1).toFixed(4)
+    expect(g + volver).toBeLessThanOrEqual(T)
+    expect(cabeOtraVuelta(C, e0, g)).toBe(false)
+    // al no volver, el clip cabe: lo que queda alcanza para lo que sigue
+    expect(g + video).toBeLessThanOrEqual(T)
+    // con lo justo, sí vuelve
+    expect(cabeOtraVuelta(C, e0, +(T - volver - sigue - 0.01).toFixed(4))).toBe(true)
+  })
+  it('🔴 CC6 #1254 · a mitad de la vuelta 1, si el turno siguiente MÁS lo que sigue no cabe, las pendientes salen con su mejor y «no_cupo»; con lo justo, sigue el turno', async () => {
+    const mirar = CARGADA.pasos.find((p) => p.clave === PASO_MIRAR_CORRECCION)!
+    const reserva = costoDeVolver(CARGADA, mirar) + loQueSigueDespuesDelPaso(CARGADA, PASO_MIRAR_CORRECCION, { vueltas: {} })
+    const correr = async (gasto: number) => {
+      const e = est(12, undefined, gasto)
+      const { P } = puertos({ mirada: () => '{"queda_bien":false,"lectura":"falta"}' })
+      const m = await mirarCorreccion(P, enc(conArt(e, ARTEFACTO_PEDIDO_DE_CORRECCION, pedidoDeLaCorreccion(e, { imagenes: [] }).artefacto)), CARGADA)
+      return m.res.artefacto as unknown as Correcciones
+    }
+    const no = await correr(+(CARGADA.limites.tope_encargo_usd - reserva + 0.5).toFixed(4))
+    expect(no.sigue).toBe(false)
+    expect(Object.values(no.imagenes).filter((i) => i.motivo_de_cierre === 'no_cupo')).toHaveLength(12)
+    const si = await correr(+(CARGADA.limites.tope_encargo_usd - reserva - 0.5).toFixed(4))
+    expect(si.sigue).toBe(true)
+    expect(si.hechas_en_la_vuelta).toHaveLength(10)
+  })
+  it('🔴 CC5 s22 · el mismo plano edita en la vuelta 1 y en la 2 con llaves DISTINTAS (la 2 no reusa la edición de la 1)', async () => {
+    const e = est(1)
+    const { P, llamadas } = puertos({ mirada: () => '{"queda_bien":false,"lectura":"falta"}' })
+    const ped1 = pedidoDeLaCorreccion(e, { imagenes: [{ ref: 'plano-1', elegida: 0, cambios: 'más luz' }] })
+    const e1 = conArt(e, ARTEFACTO_PEDIDO_DE_CORRECCION, ped1.artefacto)
+    const ed1 = await editarImagenes(P, enc(e1), CARGADA)
+    const m1 = await mirarCorreccion(P, enc(conArt(e1, ARTEFACTO_EDICIONES_DE_IMAGEN, ed1.res.artefacto)), CARGADA)
+    const c1 = m1.res.artefacto as unknown as Correcciones
+    expect(c1).toMatchObject({ vuelta: 1, sigue: true })
+    const e2 = conArt(e, ARTEFACTO_CORRECCIONES_DE_IMAGEN, c1)
+    const ped2 = pedidoDeLaCorreccion(e2, { imagenes: [{ ref: 'plano-1', elegida: c1.imagenes['plano-1'].mejor, cambios: 'el caldo más claro' }] })
+    expect(ped2.artefacto).toMatchObject({ vuelta: 2 })
+    const ed2 = await editarImagenes(P, enc(conArt(e2, ARTEFACTO_PEDIDO_DE_CORRECCION, ped2.artefacto)), CARGADA)
+    const l1 = (ed1.res.artefacto as { por_ref: Record<string, { llave: string }> }).por_ref['plano-1'].llave
+    const l2 = (ed2.res.artefacto as { por_ref: Record<string, { llave: string }> }).por_ref['plano-1'].llave
+    expect(l1).toBe(llaveDeLaEdicion('11111111-2222-3333-4444-555555555555', 4, 'plano-1', 1))
+    expect(l2).toBe(llaveDeLaEdicion('11111111-2222-3333-4444-555555555555', 4, 'plano-1', 2))
+    expect(l2).not.toBe(l1)
+    // y al proveedor le llegan las dos llaves (la 2 no es la de la 1)
+    expect(llamadas.imagen.map((x) => x.llave)).toEqual([l1, l2])
   })
   it('la mesa de imagen no se parte si cabe (como en la tanda 1): un turno con todas', () => {
     const e = { artefactos: { encargo: art({ F: { fotos: FOTOS } }), imagenes: art({ ultimo_intento: 1, items: [1, 2, 3].map((k) => ({ ref: `r${k}`, intento: 1, url: `https://img.test/${k}.png`, generation_id: `g${k}`, prompt: 'p' })) }) }, fichas: [], vueltas: {}, pasos_ejecutados: 1, gasto_usd: 0 } as unknown as Estado

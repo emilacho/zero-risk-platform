@@ -19,7 +19,7 @@ import { MAX_OTRAS_FOTOS, otrasFotosDeLaImagen, type FotoDeReferencia } from '..
 import type { ResultadoDePaso } from '../motor'
 import type { Cambios, Encargo, Puertos } from '../puertos'
 import { cabeLaVuelta, quedaVueltaDelPaso } from '../orquestador-video'
-import { costoDeVolver } from '../topes-por-duracion'
+import { costoDeVolver, loQueSigueDespuesDelPaso } from '../topes-por-duracion'
 import type { Estado, Ficha, Paso, Plantilla } from '../tipos'
 import { calidadDeLaFase, PASO_IMAGENES_CLAVE_FINAL, PASO_REVISAR_IMAGENES_CLAVE } from '../video/imagen-clave'
 
@@ -340,13 +340,14 @@ export function leerLaMirada(texto: string): { mejor?: 'A' | 'B'; queda_bien?: b
   } catch { return null }
 }
 
-/** ¿cabe OTRA vuelta entera (mirada del creativo + edición + mirada de otro proveedor, cada paso a su tope) en el tope del encargo? La misma cuenta que el freno del motor:
- *  si cabe, ningún paso de la vuelta lo dispara; si no cabe, no se vuelve y el encargo sigue · pura */
+/** ¿cabe OTRA vuelta (o turno) entera (mirada del creativo + edición + mirada de otro proveedor, cada paso a su tope) MÁS todo lo que sigue después de la corrección
+ *  (`loQueSigueDespuesDelPaso`: en el video, el clip, la revisión, la mirada del video y la jefatura) en el tope del encargo? Si cabe, ningún paso de la vuelta ni de lo
+ *  que sigue dispara el freno del motor; si no cabe, no se vuelve: sale la mejor de cada imagen con `no_cupo` y el encargo sigue (20-nov · CC6 🔴 #1254) · pura */
 export function cabeOtraVuelta(pl: Plantilla, e: Estado, gastoTrasEstaMirada: number): boolean {
   const paso = pl.pasos.find((p) => p.clave === PASO_MIRAR_CORRECCION)
   // al motor le tienen que quedar vueltas de este paso: si la jefatura devolvió la pieza a la mesa, la cuenta del encargo sigue (el motor no la reinicia)
   if (!paso || !quedaVueltaDelPaso(paso, e)) return false
-  return cabeLaVuelta(pl, { ...e, gasto_usd: gastoTrasEstaMirada }, costoDeVolver(pl, paso))
+  return cabeLaVuelta(pl, { ...e, gasto_usd: gastoTrasEstaMirada }, costoDeVolver(pl, paso) + loQueSigueDespuesDelPaso(pl, PASO_MIRAR_CORRECCION, e))
 }
 
 /** la mejor versión de cada imagen → `imagenes` con la misma forma de siempre (una versión por imagen, en la misma tanda): la cola de siempre la toma sin cambios · pura */
