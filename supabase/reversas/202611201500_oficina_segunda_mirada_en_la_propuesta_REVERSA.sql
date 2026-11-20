@@ -17,6 +17,11 @@ BEGIN
       RAISE EXCEPTION 'REVERSA 202611201500: % no tiene el paso de la migración; no se toca', t;
     END IF;
   END LOOP;
+  -- 🟡 CC6 17:14Z · la tanda 2 de CC1 va DESPUÉS de esta en video_mesa: si ya está puesta, sacar segunda_mirada dejaría una fila que no salió de ninguna ida.
+  -- Solo en el video: en las 3 de imagen esos pasos son de 202611201400, que va por debajo de esta.
+  IF EXISTS (SELECT 1 FROM public.oficina_tipos_de_grupo g, jsonb_array_elements(g.pasos) p WHERE g.tipo = 'video_mesa' AND p->>'clave' IN ('corregir_imagen', 'editar_imagen', 'mirar_correccion')) THEN
+    RAISE EXCEPTION 'REVERSA 202611201500: video_mesa trae la corrección de la tanda 2 (CC1); primero la reversa de la tanda 2';
+  END IF;
   IF (SELECT count(*) FROM public.oficina_tipos_de_grupo g WHERE (g.tipo = 'post_mesa' AND (g.limites->>'reserva_por_pieza_usd')::numeric = 5.91) OR (g.tipo IN ('carrusel_mesa', 'kit_mesa') AND (g.limites->>'reserva_por_pieza_usd')::numeric = 6.56)) <> 3 THEN
     RAISE EXCEPTION 'REVERSA 202611201500: la reserva por pieza no es la que dejó la migración (5.91/6.56/6.56); no se toca';
   END IF;

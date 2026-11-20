@@ -488,6 +488,11 @@ describe('🔴 los vivos de CC7 en e2c20ac y el reintento de LENOVO (CC6 2 · 16
     expect(S).not.toMatch(/RAISE NOTICE/)
     for (const x of [S, R]) expect(x).toContain("BEGIN;\n\nSET LOCAL lock_timeout = '5s';\nLOCK TABLE public.oficina_encargos IN SHARE MODE;")
   })
+  it('🔴 CC6 17:14Z · la reversa FRENA antes de cambiar si video_mesa ya trae la corrección de la tanda 2 de CC1 (solo el video)', () => {
+    expect(R).toContain("WHERE g.tipo = 'video_mesa' AND p->>'clave' IN ('corregir_imagen', 'editar_imagen', 'mirar_correccion')) THEN\n    RAISE EXCEPTION 'REVERSA 202611201500: video_mesa trae la corrección de la tanda 2 (CC1); primero la reversa de la tanda 2';")
+    expect(R.indexOf('trae la corrección de la tanda 2')).toBeLessThan(R.indexOf('UPDATE public.oficina_tipos_de_grupo'))
+    expect(R).not.toMatch(/g\.tipo IN \([^)]*'post_mesa'[^)]*\) AND p->>'clave' IN \('corregir_imagen'/)
+  })
   it('r3 · r5 · la reversa se niega si no cambió EXACTAMENTE las 4 filas y si una no trae el paso (EXCEPTION)', () => {
     expect(R).toContain('GET DIAGNOSTICS n = ROW_COUNT;\n  IF n <> 4 THEN\n    RAISE EXCEPTION')
     expect(R).toContain("IS DISTINCT FROM 1 THEN\n      RAISE EXCEPTION 'REVERSA 202611201500: % no tiene el paso de la migración; no se toca', t;")
