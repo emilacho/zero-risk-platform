@@ -13,6 +13,7 @@ import { crearCampana, minimoDeCampana, minimoParaElFormulario, PREFIJO_DE_LA_LL
 import { AlmacenMemoria } from '../__fixtures__/almacen-memoria'
 import { clienteA, contextoDe } from '../__fixtures__/clientes'
 import { ACCIONES } from '../../oficina/tablero/acciones'
+import { crearCampanaDelTablero } from '../../oficina/tablero/crear-campana'
 import type { Campana } from '../almacen'
 
 const CLI = '0b5d3c2a-1111-4c4c-8d8d-000000000001'
@@ -282,5 +283,57 @@ describe('abrir con el pedido', () => {
 describe('el tablero', () => {
   it('🔴 «crear-campana» es una acción del tablero', () => {
     expect(typeof ACCIONES['crear-campana']).toBe('function')
+  })
+  it('🔴 CC7 t2 · el pedido lleva a QUIEN lo pidió (el reviewer), no un nombre fijo', async () => {
+    const al = almacen()
+    const r = await crearCampanaDelTablero(() => al)({ ahora: () => new Date(AHORA) } as never, { cuerpo: { ...BUENO }, reviewer: 'socia-de-emilio' })
+    expect(r.cuerpo).toMatchObject({ ok: true, estado: 'pedida' })
+    expect(al.pedidos[0].pedido_por).toBe('socia-de-emilio')
+    expect(r.toca).toEqual({ client_id: CLI, comentario: 'Temporada de lluvias' })
+  })
+})
+
+describe('CC7 · lo que sobrevivía a #1259 f609d64', () => {
+  it('🔴 c25 · dos pedidos del mismo cliente con llaves distintas: dos sobres con llaves de sala distintas, y las dos campañas abren', async () => {
+    const al = almacen()
+    const otra = '7f1c2e3d-4a5b-4c6d-8e9f-0a1b2c3d4e60'
+    expect((await crear(al)).cuerpo).toMatchObject({ estado: 'pedida', despertado: true })
+    expect((await crear(al, { llave_formulario: otra, nombre: 'Navidad' })).cuerpo).toMatchObject({ estado: 'pedida', despertado: true })
+    const llaves = al.sobresEmitidos.map((s) => (s as { idempotency_key: string }).idempotency_key)
+    expect(new Set(llaves).size).toBe(2)
+    const abrirCon = (llave: string) => abrirCampana(al, { ...wf, client_id: CLI, seco: true, llave_de_campana: llave }, AHORA)
+    expect((await abrirCon(llaveDelPedido)).status).toBe(201)
+    expect((await abrirCon(PREFIJO_DE_LA_LLAVE + otra)).status).toBe(201)
+    expect(al.pedidos.map((p) => p.campana_id).filter(Boolean)).toHaveLength(2)
+  })
+  it('🔴 c13 · seco o ensayo escritos como texto: 400 (no se leen como «de verdad»)', async () => {
+    const al = almacen()
+    expect(await crear(al, { seco: 'true' })).toMatchObject({ status: 400, cuerpo: { campo: 'seco' } })
+    expect(await crear(al, { ensayo: 'true' })).toMatchObject({ status: 400, cuerpo: { campo: 'ensayo' } })
+    expect(al.pedidos).toHaveLength(0)
+  })
+  it('🔴 c27 · «hoy» es el del cliente: a las 22:00 de Ecuador (03:00Z del día siguiente) una campaña que empieza hoy pasa', async () => {
+    const al = new AlmacenMemoria({
+      contextos: { [CLI]: { ...contextoDe(A), zonaHoraria: 'America/Guayaquil' } },
+      planes: { [CLI]: [{ plan_id: 'plan-1', fecha: '2026-10-08' }] },
+      config: { flujos: ['wf-cadena'], puerta_workflow_id: 'wf-puerta' },
+    })
+    const r = await crearCampana(al, { ...BUENO }, 'emilio', '2026-10-13T03:00:00Z')
+    expect(r.cuerpo).toMatchObject({ ok: true, estado: 'pedida' })
+    // y el día anterior en Ecuador sí es «antes de hoy»
+    expect((await crearCampana(al, { ...BUENO, llave_formulario: '7f1c2e3d-4a5b-4c6d-8e9f-0a1b2c3d4e61', fecha_inicio: '2026-10-11' }, 'emilio', '2026-10-13T03:00:00Z')).cuerpo).toMatchObject({ campo: 'fecha_inicio', detalle: 'fechas: el inicio no puede ser antes de hoy (2026-10-12)' })
+  })
+  it('🔴 c5 · tope: 1 000 000 se acepta; 1 000 000,01 es 400', async () => {
+    expect((await crear(almacen(), { tope_usd: 1_000_000 })).cuerpo).toMatchObject({ ok: true, estado: 'pedida' })
+    expect(await crear(almacen(), { tope_usd: 1_000_000.01 })).toMatchObject({ status: 400, cuerpo: { campo: 'tope_usd' } })
+  })
+  it('🔴 c11 · el «qué» de una fecha clave: 120 caracteres pasa, 121 es 400', async () => {
+    expect((await crear(almacen(), { fechas_clave: [{ fecha: '2026-10-20', que: 'q'.repeat(120) }] })).cuerpo).toMatchObject({ estado: 'pedida' })
+    expect(await crear(almacen(), { fechas_clave: [{ fecha: '2026-10-20', que: 'q'.repeat(121) }] })).toMatchObject({ status: 400, cuerpo: { campo: 'fechas_clave' } })
+  })
+  it('🔴 c29 · el GET del mínimo con el fin antes (o igual) que el inicio: 400', async () => {
+    const al = almacen()
+    expect((await minimoParaElFormulario(al, { client_id: CLI, fecha_inicio: '2026-10-20', fecha_fin: '2026-10-12' }, AHORA)).status).toBe(400)
+    expect((await minimoParaElFormulario(al, { client_id: CLI, fecha_inicio: '2026-10-20', fecha_fin: '2026-10-20' }, AHORA)).status).toBe(400)
   })
 })
