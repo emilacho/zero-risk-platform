@@ -19,8 +19,9 @@ describe('la plantilla: el paso de lengua es dato', () => {
   it('con la clave: va justo después del fondo, lo hace el corrector, con su tope, y antes de la corrección del productor', () => {
     const p = politica('pieza', { tope_paso_usd: TOPES_PIEZA })
     const claves = plantillaDePolitica(p, p.productores, 1).pasos.map((x) => x.clave)
-    expect(claves.slice(0, 3)).toEqual(['revision_fondo', 'revision_lengua', 'correccion:content-creator'])
-    const paso = plantillaDePolitica(p, p.productores, 1).pasos[1]
+    // 20-nov · PLAN v4 · en la pieza GPT va primero (ciego, solo se guarda); lo de lengua sigue justo después del fondo
+    expect(claves.slice(0, 4)).toEqual(['segunda_mirada', 'revision_fondo', 'revision_lengua', 'correccion:content-creator'])
+    const paso = plantillaDePolitica(p, p.productores, 1).pasos.find((x) => x.clave === 'revision_lengua')!
     expect(paso.quien).toBe(REVISOR_DE_LENGUA)
     expect(paso.tope_usd).toBe(0.05)
     expect(paso.ronda).toBe(1)

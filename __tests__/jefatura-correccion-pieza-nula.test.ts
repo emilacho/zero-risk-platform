@@ -93,14 +93,20 @@ describe('punta a punta en la jefatura de la pieza (motor real, arnés en memori
     let ronda = 0
     return correr(P, sobre('pieza', { dry_run: false }), (t) => {
       if (t.paso === 'revision_fondo') return { texto: FICHAS_DEL_JEFE }
-      if (t.paso === 'correccion:content-creator') return { texto: correccion(idsDelPedido(t.pedido.task))[ronda++] ?? '', costo_usd: 0.08 }
+      // 20-nov · PLAN v4 · GPT va primero en la pieza, así que el jefe es el paso 1 y sus fichas son `jefe-1-*` (en el registro real, `jefe-0-*`):
+      //   la salida real se reproduce tal cual, solo con el número de paso de los ids llevado al de este pedido
+      if (t.paso === 'correccion:content-creator') {
+        const ids = idsDelPedido(t.pedido.task)
+        const prefijo = (ids[0] ?? 'jefe-0-0').replace(/-\d+$/, '-')
+        return { texto: (correccion(ids)[ronda++] ?? '').replace(/jefe-0-(\d+)/g, `${prefijo}$1`), costo_usd: 0.08 }
+      }
       return { texto: JSON.stringify({ respuestas: idsDelPedido(t.pedido.task).map((id) => ({ id, estado: 'no_tomada', razon: 'no aplica' })) }), costo_usd: 0.07 }
     })
   }
-  it('la corrección llega con las fichas reales que bloquean (jefe-0-1 y jefe-0-3)', async () => {
+  it('la corrección llega con las fichas reales que bloquean (la 1 y la 3 del jefe, que ahora es el paso 1: jefe-1-1 y jefe-1-3)', async () => {
     const vistos: string[][] = []
     await correrCon((ids) => { vistos.push(ids); return [PRIMERO] })
-    expect(vistos[0]).toEqual(['jefe-0-1', 'jefe-0-3'])
+    expect(vistos[0]).toEqual(['jefe-1-1', 'jefe-1-3'])
   })
   it('con la salida real: NO falla por formato; las fichas quedan no tomadas con su razón ⇒ observaciones declaradas (revisión 2 = A), pieza sin versión nueva', async () => {
     const c = await correrCon(() => [PRIMERO, SEGUNDO])

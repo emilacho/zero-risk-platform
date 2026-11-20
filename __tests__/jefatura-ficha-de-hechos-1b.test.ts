@@ -317,7 +317,7 @@ describe('CC7 3 · las cifras se numeran sobre el MISMO texto del pedido', () =>
       const id = String(a.cuerpo.revision_id)
       const t = a.cuerpo.turno as { n: number; paso: string }
       expect(t.paso).toBe('revision_fondo')
-      expect((mem.pasos.get(id)![0].traza as { jefatura: { cifras_sobre?: string } }).jefatura.cifras_sobre).toBe(huellaDelTexto(c.sostenida))
+      expect((mem.pasos.get(id)!.find((x) => x.paso === 'revision_fondo')!.traza as { jefatura: { cifras_sobre?: string } }).jefatura.cifras_sobre).toBe(huellaDelTexto(c.sostenida))
       const art = artefactos(mem.revisiones.get(id)!)
       art.revision.datos = { ...art.revision.datos, texto: `Nuevo: ${c.sinFicha} ${c.sostenida}` }
       await recibirResultado(P, id, t.n, { texto: JSON.stringify({ fichas: [ficha({ cifra: 'c1', respaldo: [c.ref] })] }) })
