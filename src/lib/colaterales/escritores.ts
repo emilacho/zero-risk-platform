@@ -10,6 +10,7 @@
  * la MISMA forma que la base (mismas llaves y tipos): un retoque cambia valores, nunca la estructura.
  * Agnóstico: ningún dato de un cliente. Nadie lo llama todavía (lo enchufa 2d).
  */
+import { briefDelDuenoDeLaCampana } from '../cadena/brief-del-dueno'
 import type { Almacen, BriefCreativoGuardado, EstrategiaGuardada } from '../cadena/almacen'
 import { insumosDelBrief, leerBriefCreativo } from '../cadena/brief-creativo'
 import { bloqueosDelBrief, MOTIVO_RETOQUE_DE_COLATERALES } from '../cadena/mesas'
@@ -58,7 +59,7 @@ export function escritorDeEstrategia(al: Pick<Almacen, 'ultimaEstrategia' | 'est
 /** el texto retocado del brief lo devolvería el verificador (un bloqueo): un retoque nunca valida lo que la mesa no podría entregar */
 export class BriefConBloqueos extends EscrituraRechazada {}
 
-type AlmacenDelBrief = Pick<Almacen, 'ultimoBriefCreativo' | 'briefsDe' | 'insertarBriefCreativoSiLibre' | 'campana' | 'cargarContexto' | 'ultimaEstrategia'>
+type AlmacenDelBrief = Pick<Almacen, 'ultimoBriefCreativo' | 'briefsDe' | 'insertarBriefCreativoSiLibre' | 'campana' | 'cargarContexto' | 'ultimaEstrategia' | 'pedidoDelDueno'>
 /**
  * BRIEF (11-nov · escritores por tramo, el primero) · por el almacén de la cadena · ref = campana_id · texto = `texto_md` (markdown: el retoque va por posición).
  *   · vigente = la ÚLTIMA versión: `borrador` = abierta (no se toca) · `devuelta` / `descartada` = no hay vigente (se va a rehacer) · solo una `validada` se retoca;
@@ -92,7 +93,7 @@ export function escritorDeBrief(al: AlmacenDelBrief): EscritorDeDocumento {
       const ctx = await al.cargarContexto(campana.client_id, campana.plan_id)
       const estr = await al.ultimaEstrategia(ref)
       // orden (línea 2 de CC7): primero el texto retocado, después SU `leido`, después los bloqueos sobre ese `leido`, recién entonces la escritura
-      const leido = leerBriefCreativo(texto, { ...insumosDelBrief(ctx, estr?.contenido.canales), registroSoloAviso: true })
+      const leido = leerBriefCreativo(texto, { ...insumosDelBrief(ctx, estr?.contenido.canales, await briefDelDuenoDeLaCampana(al, ref)), registroSoloAviso: true })
       const bloquea = bloqueosDelBrief(leido)
       if (bloquea.length) throw new BriefConBloqueos(`el brief ${ref} v${base}: el retoque lo deja con bloqueos (${bloquea.slice(0, 3).join(' · ')})`)
       const nueva = f.version + 1

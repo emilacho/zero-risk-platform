@@ -15,6 +15,7 @@
  *  · Idempotente (otra vez sobre una versión ya validada → `ya_revalidada`, sin escribir) y vuelve atrás si algo falla a medias. `ensayo: true` no escribe.
  *  · No aprueba nada que espere a Emilio: la gran idea sigue yendo a su tarjeta.
  */
+import { briefDelDuenoDeLaCampana } from './brief-del-dueno'
 import type { Almacen, BriefCreativoGuardado, Campana, ConceptoGuardado, EsperaFila } from './almacen'
 import { autorizarLlamada, cadena, compuerta, err, type Respuesta } from './autorizar'
 import { hallazgosDelBrief, insumosDelBrief, leerBriefCreativo } from './brief-creativo'
@@ -59,7 +60,7 @@ export async function briefRevalidar(al: Almacen, cuerpo: Record<string, unknown
   if (!ctx) return err(409, 'E-CONTEXTO', 'no se pudo leer el plan de la campaña')
 
   // el MISMO verificador y los MISMOS insumos que `recibirBrief`
-  const leido = leerBriefCreativo(brief.texto_md, insumosDelBrief(ctx, estr?.contenido.canales))
+  const leido = leerBriefCreativo(brief.texto_md, insumosDelBrief(ctx, estr?.contenido.canales, await briefDelDuenoDeLaCampana(al, c.id)))
   const bloquea = hallazgosDelBrief(leido).filter((h) => h.severidad === 'bloquea').map((h) => h.ficha.que)
   const antes = { bloqueos: bloqueosDe(brief.leido) }
   // caso 4 de CC7: la campaña no guarda dónde estaba antes de `necesita_humano`; se usa la misma regla con que la cadena retoma sola (pasos.ts · retomar): tanda 1 → calendario

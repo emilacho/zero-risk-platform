@@ -15,6 +15,7 @@
  * Reaperturas: brief devuelto o concepto `sin_mesa` reabren UNA vez (versión 2); a la segunda, `necesita_humano`.
  * Todo esto solo existe con la palanca `cadena_config.nuevo_orden` encendida para el cliente; apagada, la cadena de hoy no tiene estas mesas (409).
  */
+import { bloqueDelBriefDelDueno, briefDelDuenoDeLaCampana } from './brief-del-dueno'
 import type { Almacen, BriefCreativoGuardado, Campana, ConceptoGuardado, ContextoDelCliente, EsperaFila } from './almacen'
 import { autorizarLlamada, cadena, err, WORKFLOW_DEL_TABLERO, type Respuesta } from './autorizar'
 import type { ResultadoDeEmision } from './autoproducir'
@@ -265,6 +266,8 @@ export function marcoDelBrief(a: { ctx: ContextoDelCliente; estrategia: Estrateg
     ...(a.ctx.eslogan ? [`# UNA FRASE QUE EL CLIENTE USA (contexto)\n«${a.ctx.eslogan.texto}»: ${a.ctx.eslogan.regla}`] : []),
     `# PALABRAS QUE LA MARCA EVITA (contexto, no prohibición: razona la intención; un claim propio sin prueba no va, una reseña citada y atribuida sí)\n${a.ctx.forbiddenWords.length ? a.ctx.forbiddenWords.map((w) => `- ${w}`).join('\n') : '(ninguna)'}${a.ctx.palabrasDuras?.length ? `\n\n# PROHIBIDAS DE VERDAD (una norma o una orden declarada, con su cita): estas no se usan\n${a.ctx.palabrasDuras.map((w) => `- ${w}`).join('\n')}` : ''}`,
     '',
+    // 20-nov · «Crear Campaña» (entrega 3): el brief del dueño de ESTA campaña, ENTERO · manda sobre el plan; el choque, a «Faltantes» · sin él, el marco queda idéntico
+    ...(bloqueDelBriefDelDueno(a.ctx.briefDelDueno).length ? [...bloqueDelBriefDelDueno(a.ctx.briefDelDueno).filter((_, i) => i > 0), ''] : []),
     // 19-nov · G4 (CC5): el plan va ENTERO en su lugar propio del pedido («## 3 · El plan de trabajo»), no aquí: así entra una sola vez y no lo corta el tope del marco
     `# PLAN\n${PLAN_EN_SU_LUGAR}`,
   ].join('\n')
@@ -313,6 +316,8 @@ export function marcoDelConcepto(a: { ctx: ContextoDelCliente; estrategia: Estra
     '',
     '# BRIEF CREATIVO DE LA CAMPAÑA (validado)',
     a.briefTexto,
+    // 20-nov · «Crear Campaña» (respuesta 1 de Emilio): la gran idea lee el brief del dueño ENTERO, como bloque propio · sigue SIN el plan (`LA_GRAN_IDEA_SIN_PLAN`)
+    ...bloqueDelBriefDelDueno(a.ctx.briefDelDueno),
     // 10-nov · perfil del público T2: el mismo bloque que el brief · sin perfil no se agrega nada
     ...(perfil ? ['', perfil] : []),
     '',
@@ -355,7 +360,8 @@ async function cargar(al: Almacen, cuerpo: Record<string, unknown>, autorizar: b
   if (!estr || estr.estado !== 'validada') return { ok: false, r: err(409, 'E-SIN-ESTRATEGIA', 'no hay una estrategia validada: el brief creativo sale de la estrategia') }
   const ctx = await al.cargarContexto(campana.client_id, campana.plan_id)
   if (!ctx) return { ok: false, r: err(409, 'E-SIN-CONTEXTO', 'no se pudo cargar el contexto del cliente (plan, manual)') }
-  return { ok: true, c: { campana, ctx, estrategia: estr.contenido } }
+  // 20-nov · «Crear Campaña» (entrega 3): el brief del dueño de ESTA campaña viaja con el contexto de la mesa (brief creativo y gran idea)
+  return { ok: true, c: { campana, ctx: { ...ctx, briefDelDueno: await briefDelDuenoDeLaCampana(al, campana.id) }, estrategia: estr.contenido } }
 }
 const texto = (x: unknown): string | null => (typeof x === 'string' && x.trim() ? x.trim() : null)
 const masMinutos = (iso: string, min: number): string => new Date(Date.parse(iso) + min * 60_000).toISOString()
@@ -430,8 +436,8 @@ export async function recibirBrief(al: Almacen, p: EntregaDeBrief, ahora: string
   const estr = await al.ultimaEstrategia(campana.id)
   const ctx = await al.cargarContexto(campana.client_id, campana.plan_id)
   // 18-nov (T7 · GO Lenovo opción 3): hasta 3 citas no literales se bajan a resumen (sin comillas, anotadas en «Faltantes») ANTES de leer; se guarda ESE texto
-  const ins = insumosDelBrief(ctx, estr?.contenido.canales)
-  const { texto: textoDelBrief, bajadas } = bajarCitasNoLiterales(p.texto as string, { plan: ins.planTexto, manual: ins.manualTexto })
+  const ins = insumosDelBrief(ctx, estr?.contenido.canales, await briefDelDuenoDeLaCampana(al, campana.id))
+  const { texto: textoDelBrief, bajadas } = bajarCitasNoLiterales(p.texto as string, { plan: ins.planTexto, manual: ins.manualTexto, dueno: ins.duenoTexto })
   const avisosDeBajadas = avisosDeCitasBajadas(bajadas)
   // tramo 2 del revisor de registro: con la jefatura reteniendo `registro`, el registro se lee como AVISO y, si nada más bloquea, la jefatura lo revisa antes de validar
   if (await seRevisaElRegistro(al, campana, ctx)) {
@@ -626,7 +632,7 @@ async function releerParaRegistro(al: Almacen, campana: Campana, doc: DocDeRegis
   const ctx = await al.cargarContexto(campana.client_id, campana.plan_id)
   if (doc === 'brief') {
     const estr = await al.ultimaEstrategia(campana.id)
-    const brief = leerBriefCreativo(t, { ...insumosDelBrief(ctx, estr?.contenido.canales), registroSoloAviso: true })
+    const brief = leerBriefCreativo(t, { ...insumosDelBrief(ctx, estr?.contenido.canales, await briefDelDuenoDeLaCampana(al, campana.id)), registroSoloAviso: true })
     return { brief, bloqueos: bloqueosDelBrief(brief), ctx }
   }
   const concepto = leerConcepto(t, { ...(await insumosDelConcepto(al, campana)), registroSoloAviso: true })
