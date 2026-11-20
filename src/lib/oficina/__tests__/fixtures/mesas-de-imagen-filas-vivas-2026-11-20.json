@@ -1,0 +1,2533 @@
+{
+  "leido_en": "2026-11-20T12:50:42.652Z",
+  "fuente": "oficina_tipos_de_grupo (GET, solo lectura, CC2)",
+  "filas": [
+    {
+      "tipo": "carrusel_ig_v1",
+      "familia": "carrusel_ig_v1",
+      "version": 7,
+      "activo": true,
+      "tope_encargo_usd": 7,
+      "limites": {
+        "margen": 6,
+        "max_rondas": 2,
+        "plataforma": "instagram-feed",
+        "reuso_dias": 14,
+        "laminas_max": 10,
+        "laminas_min": 5,
+        "hashtags_max": 30,
+        "material_activo": true,
+        "pie_de_foto_max": 2200,
+        "largos_de_lamina": {
+          "cta": 32,
+          "body": 220,
+          "eyebrow": 24,
+          "headline": 90
+        },
+        "roles_sin_imagen": [
+          "cta",
+          "cierre"
+        ],
+        "tope_encargo_usd": 7,
+        "material_tope_usd": 0.4,
+        "versiones_por_ref": 2,
+        "material_plazo_min": 20,
+        "material_techo_min": 30,
+        "formato_por_omision": "4:5",
+        "limites_verificados": false,
+        "reserva_por_pieza_usd": 2.5,
+        "imagenes_generadas_max": 8,
+        "generar_cuando_no_hay_foto": true,
+        "material_max_pedidos_por_encargo": 1
+      },
+      "pasos": [
+        {
+          "tipo": "codigo",
+          "clave": "abrir",
+          "quien": "sala",
+          "entrada": [],
+          "funcion": "abrir_laminas",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "encargo"
+        },
+        {
+          "tipo": "portero",
+          "clave": "paquete",
+          "quien": "portero",
+          "entrada": [
+            "encargo"
+          ],
+          "tope_usd": 0.06,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "material_portero"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "asignar_fotos",
+          "quien": "sala",
+          "entrada": [
+            "material_portero"
+          ],
+          "funcion": "asignar_fotos",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "candidatas_foto"
+        },
+        {
+          "tipo": "agente",
+          "clave": "direccion_visual",
+          "quien": "marketing_instagram_curator",
+          "salida": {
+            "esquema": "direccion_imagenes.v1",
+            "reintento_formato": 1
+          },
+          "valida": [
+            "citas_existen",
+            "refs_validos"
+          ],
+          "entrada": [
+            "material_portero",
+            "candidatas_foto"
+          ],
+          "tope_usd": 0.25,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "visual_direction"
+        },
+        {
+          "tipo": "agente",
+          "clave": "prompts",
+          "quien": "design-image-prompt-engineer",
+          "salida": {
+            "esquema": "prompts_por_ref.v1",
+            "reintento_formato": 1
+          },
+          "valida": [
+            "refs_validos"
+          ],
+          "entrada": [
+            "visual_direction"
+          ],
+          "tope_usd": 0.2,
+          "condicion": {
+            "tipo": "si_artefacto",
+            "campo": "hay_generadas",
+            "igual": true,
+            "artefacto": "visual_direction"
+          },
+          "salida_artefacto": "prompts"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "chequear_prompts",
+          "quien": "sala",
+          "entrada": [
+            "prompts",
+            "visual_direction"
+          ],
+          "funcion": "chequear_prompts_ref",
+          "tope_usd": 0,
+          "vuelve_a": {
+            "si": {
+              "tipo": "si_artefacto",
+              "campo": "ninguno",
+              "igual": true,
+              "artefacto": "prompts_validos"
+            },
+            "max": 1,
+            "paso": "prompts"
+          },
+          "condicion": {
+            "tipo": "si_artefacto",
+            "campo": "hay_generadas",
+            "igual": true,
+            "artefacto": "visual_direction"
+          },
+          "salida_artefacto": "prompts_validos"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "imagen",
+          "quien": "sala",
+          "entrada": [
+            "prompts_validos"
+          ],
+          "funcion": "imagen_ref",
+          "tope_usd": 0.2,
+          "condicion": {
+            "tipo": "si_artefacto",
+            "campo": "hay_generadas",
+            "igual": true,
+            "artefacto": "visual_direction"
+          },
+          "salida_artefacto": "imagenes"
+        },
+        {
+          "tipo": "agente",
+          "clave": "mirar",
+          "quien": "marketing_instagram_curator",
+          "salida": {
+            "esquema": "observacion_imagenes.v1",
+            "reintento_formato": 1
+          },
+          "valida": [
+            "decide_imagen"
+          ],
+          "entrada": [
+            "imagenes",
+            "visual_direction"
+          ],
+          "tope_usd": 0.2,
+          "vuelve_a": {
+            "si": {
+              "tipo": "si_artefacto",
+              "campo": "veredicto.regenerar",
+              "igual": true,
+              "artefacto": "observacion_imagen"
+            },
+            "max": 2,
+            "paso": "imagen"
+          },
+          "condicion": {
+            "tipo": "si_artefacto",
+            "campo": "requiere_mirar",
+            "igual": true,
+            "artefacto": "visual_direction"
+          },
+          "salida_artefacto": "observacion_imagen"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "elegir_version",
+          "quien": "sala",
+          "entrada": [
+            "imagenes",
+            "observacion_imagen",
+            "visual_direction"
+          ],
+          "funcion": "elegir_version_ref",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "imagenes_elegidas"
+        },
+        {
+          "tipo": "agente",
+          "clave": "texto",
+          "quien": "content-creator",
+          "salida": {
+            "esquema": "copy_base.v1",
+            "reintento_formato": 1
+          },
+          "entrada": [
+            "material_portero",
+            "visual_direction",
+            "imagenes_elegidas"
+          ],
+          "tope_usd": 0.22,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "copy_carrusel"
+        },
+        {
+          "tipo": "agente",
+          "clave": "laminas",
+          "quien": "carousel-designer",
+          "salida": {
+            "esquema": "laminas.v1",
+            "reintento_formato": 1
+          },
+          "valida": [
+            "texto_laminas_en_copy",
+            "contrato_de_lamina"
+          ],
+          "entrada": [
+            "copy_carrusel",
+            "visual_direction",
+            "imagenes_elegidas"
+          ],
+          "tope_usd": 0.5,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "laminas"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "armar",
+          "quien": "sala",
+          "entrada": [
+            "copy_carrusel",
+            "laminas",
+            "imagenes_elegidas"
+          ],
+          "funcion": "armar_laminas",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "laminas_armadas"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "render",
+          "quien": "sala",
+          "entrada": [
+            "laminas_armadas"
+          ],
+          "funcion": "render_laminas",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "render"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "chequeos",
+          "quien": "sala",
+          "entrada": [
+            "copy_carrusel",
+            "laminas",
+            "laminas_armadas",
+            "render",
+            "imagenes_elegidas",
+            "observacion_imagen"
+          ],
+          "funcion": "chequeos_laminas",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "chequeos"
+        },
+        {
+          "tipo": "jefatura",
+          "clave": "jefatura",
+          "quien": "jefatura",
+          "entrada": [
+            "copy_carrusel",
+            "laminas",
+            "render",
+            "chequeos"
+          ],
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "respuesta_imagen"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "armar_2",
+          "quien": "sala",
+          "entrada": [
+            "copy_carrusel",
+            "laminas",
+            "imagenes_elegidas"
+          ],
+          "funcion": "armar_laminas",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "si_cambio",
+            "artefacto": [
+              "copy_carrusel",
+              "laminas",
+              "imagenes_elegidas"
+            ]
+          },
+          "salida_artefacto": "laminas_armadas"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "render_2",
+          "quien": "sala",
+          "entrada": [
+            "laminas_armadas"
+          ],
+          "funcion": "render_laminas",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "si_cambio",
+            "artefacto": "laminas_armadas"
+          },
+          "salida_artefacto": "render"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "chequeos_2",
+          "quien": "sala",
+          "entrada": [
+            "copy_carrusel",
+            "laminas",
+            "laminas_armadas",
+            "render",
+            "imagenes_elegidas",
+            "observacion_imagen"
+          ],
+          "funcion": "chequeos_laminas",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "si_cambio",
+            "artefacto": "render"
+          },
+          "salida_artefacto": "chequeos"
+        },
+        {
+          "tipo": "agente",
+          "clave": "reimagen_prompts",
+          "quien": "design-image-prompt-engineer",
+          "ronda": 2,
+          "salida": {
+            "esquema": "prompts_por_ref.v1",
+            "reintento_formato": 1
+          },
+          "valida": [
+            "refs_validos"
+          ],
+          "entrada": [
+            "visual_direction",
+            "fichas_externas",
+            "respuesta_imagen"
+          ],
+          "tope_usd": 0.2,
+          "condicion": {
+            "tipo": "si_artefacto",
+            "campo": "re_imagen",
+            "igual": true,
+            "artefacto": "respuesta_imagen"
+          },
+          "salida_artefacto": "prompts"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "reimagen_chequear_prompts",
+          "quien": "sala",
+          "ronda": 2,
+          "entrada": [
+            "prompts",
+            "visual_direction"
+          ],
+          "funcion": "chequear_prompts_ref",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "si_cambio",
+            "artefacto": "prompts"
+          },
+          "salida_artefacto": "prompts_validos"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "reimagen_imagen",
+          "quien": "sala",
+          "ronda": 2,
+          "entrada": [
+            "prompts_validos"
+          ],
+          "funcion": "imagen_ref",
+          "tope_usd": 0.2,
+          "condicion": {
+            "tipo": "si_cambio",
+            "artefacto": "prompts_validos"
+          },
+          "salida_artefacto": "imagenes"
+        },
+        {
+          "tipo": "agente",
+          "clave": "reimagen_mirar",
+          "quien": "marketing_instagram_curator",
+          "ronda": 2,
+          "salida": {
+            "esquema": "observacion_imagenes.v1",
+            "reintento_formato": 1
+          },
+          "valida": [
+            "decide_imagen"
+          ],
+          "entrada": [
+            "imagenes",
+            "visual_direction"
+          ],
+          "tope_usd": 0.2,
+          "condicion": {
+            "tipo": "si_cambio",
+            "artefacto": "imagenes"
+          },
+          "salida_artefacto": "observacion_imagen"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "reimagen_elegir_version",
+          "quien": "sala",
+          "ronda": 2,
+          "entrada": [
+            "imagenes",
+            "observacion_imagen",
+            "visual_direction"
+          ],
+          "funcion": "elegir_version_ref",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "si_cambio",
+            "artefacto": "observacion_imagen"
+          },
+          "salida_artefacto": "imagenes_elegidas"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "armar_3",
+          "quien": "sala",
+          "entrada": [
+            "copy_carrusel",
+            "laminas",
+            "imagenes_elegidas"
+          ],
+          "funcion": "armar_laminas",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "si_cambio",
+            "artefacto": [
+              "copy_carrusel",
+              "laminas",
+              "imagenes_elegidas"
+            ]
+          },
+          "salida_artefacto": "laminas_armadas"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "render_3",
+          "quien": "sala",
+          "entrada": [
+            "laminas_armadas"
+          ],
+          "funcion": "render_laminas",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "si_cambio",
+            "artefacto": "laminas_armadas"
+          },
+          "salida_artefacto": "render"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "chequeos_3",
+          "quien": "sala",
+          "entrada": [
+            "copy_carrusel",
+            "laminas",
+            "laminas_armadas",
+            "render",
+            "imagenes_elegidas",
+            "observacion_imagen"
+          ],
+          "funcion": "chequeos_laminas",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "si_cambio",
+            "artefacto": "render"
+          },
+          "salida_artefacto": "chequeos"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "entrega",
+          "quien": "sala",
+          "entrada": [
+            "copy_carrusel",
+            "render",
+            "chequeos",
+            "imagenes_elegidas"
+          ],
+          "funcion": "empaquetar_entrega_laminas",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "entrega"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "cierre",
+          "quien": "sala",
+          "entrada": [
+            "entrega"
+          ],
+          "funcion": "cierre",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "cierre"
+        }
+      ]
+    },
+    {
+      "tipo": "carrusel_mesa",
+      "familia": "carrusel_mesa",
+      "version": 3,
+      "activo": true,
+      "tope_encargo_usd": 45,
+      "limites": {
+        "mesa": true,
+        "margen": 50,
+        "max_rondas": 2,
+        "plataforma": "instagram-feed",
+        "propuestas": {
+          "n": 3
+        },
+        "reuso_dias": 14,
+        "laminas_max": 10,
+        "laminas_min": 5,
+        "hashtags_max": 30,
+        "pie_de_foto_max": 2200,
+        "tope_encargo_usd": 45,
+        "versiones_por_ref": 2,
+        "cota_de_la_mesa_usd": 9.54,
+        "formato_por_omision": "4:5",
+        "limites_verificados": false,
+        "imagenes_generadas_max": 8
+      },
+      "pasos": [
+        {
+          "tipo": "codigo",
+          "clave": "abrir",
+          "quien": "sala",
+          "entrada": [],
+          "funcion": "abrir_laminas",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "encargo"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "asignar_fotos",
+          "quien": "sala",
+          "entrada": [
+            "encargo"
+          ],
+          "funcion": "asignar_fotos",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "candidatas_foto"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "mesa",
+          "quien": "sala",
+          "entrada": [
+            "candidatas_foto"
+          ],
+          "funcion": "mesa",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "mesa"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "borrador_imagen",
+          "quien": "sala",
+          "entrada": [
+            "mesa"
+          ],
+          "funcion": "borrador_imagen",
+          "tope_usd": 0.48,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "borrador_imagen"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "aprobar_propuestas",
+          "quien": "sala",
+          "entrada": [
+            "mesa"
+          ],
+          "funcion": "aprobar_propuestas",
+          "tope_usd": 0,
+          "vuelve_a": {
+            "si": {
+              "tipo": "si_artefacto",
+              "campo": "vuelve_a_la_mesa",
+              "igual": true,
+              "artefacto": "aprobacion_propuestas"
+            },
+            "max": 2,
+            "paso": "mesa"
+          },
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "aprobacion_propuestas"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "imagen",
+          "quien": "sala",
+          "entrada": [
+            "prompts_validos"
+          ],
+          "funcion": "imagen_ref",
+          "tope_usd": 0.2,
+          "condicion": {
+            "tipo": "si_artefacto",
+            "campo": "hay_generadas",
+            "igual": true,
+            "artefacto": "visual_direction"
+          },
+          "salida_artefacto": "imagenes"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "observar",
+          "quien": "sala",
+          "entrada": [
+            "imagenes",
+            "visual_direction"
+          ],
+          "funcion": "mesa_observar",
+          "tope_usd": 0.1,
+          "condicion": {
+            "tipo": "si_artefacto",
+            "campo": "hay_generadas",
+            "igual": true,
+            "artefacto": "visual_direction"
+          },
+          "salida_artefacto": "observacion_imagen"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "elegir_version",
+          "quien": "sala",
+          "entrada": [
+            "imagenes",
+            "observacion_imagen",
+            "visual_direction"
+          ],
+          "funcion": "elegir_version_ref",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "imagenes_elegidas"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "armar",
+          "quien": "sala",
+          "entrada": [
+            "copy_carrusel",
+            "laminas",
+            "imagenes_elegidas"
+          ],
+          "funcion": "armar_laminas",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "laminas_armadas"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "render",
+          "quien": "sala",
+          "entrada": [
+            "laminas_armadas"
+          ],
+          "funcion": "render_laminas",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "render"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "chequeos",
+          "quien": "sala",
+          "entrada": [
+            "copy_carrusel",
+            "laminas",
+            "laminas_armadas",
+            "render",
+            "imagenes_elegidas",
+            "observacion_imagen"
+          ],
+          "funcion": "chequeos_laminas",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "chequeos"
+        },
+        {
+          "tipo": "jefatura",
+          "clave": "jefatura",
+          "quien": "jefatura",
+          "entrada": [
+            "copy_carrusel",
+            "laminas",
+            "render",
+            "chequeos"
+          ],
+          "tope_usd": 0,
+          "vuelve_a": {
+            "si": {
+              "tipo": "si_artefacto",
+              "campo": "vuelve_a_la_mesa",
+              "igual": true,
+              "artefacto": "respuesta_imagen"
+            },
+            "max": 6,
+            "paso": "mesa"
+          },
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "respuesta_imagen"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "armar_2",
+          "quien": "sala",
+          "entrada": [
+            "copy_carrusel",
+            "laminas",
+            "imagenes_elegidas"
+          ],
+          "funcion": "armar_laminas",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "si_cambio",
+            "artefacto": [
+              "copy_carrusel",
+              "laminas",
+              "imagenes_elegidas"
+            ]
+          },
+          "salida_artefacto": "laminas_armadas"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "render_2",
+          "quien": "sala",
+          "entrada": [
+            "laminas_armadas"
+          ],
+          "funcion": "render_laminas",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "si_cambio",
+            "artefacto": "laminas_armadas"
+          },
+          "salida_artefacto": "render"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "chequeos_2",
+          "quien": "sala",
+          "entrada": [
+            "copy_carrusel",
+            "laminas",
+            "laminas_armadas",
+            "render",
+            "imagenes_elegidas",
+            "observacion_imagen"
+          ],
+          "funcion": "chequeos_laminas",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "si_cambio",
+            "artefacto": "render"
+          },
+          "salida_artefacto": "chequeos"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "entrega",
+          "quien": "sala",
+          "entrada": [
+            "copy_carrusel",
+            "render",
+            "chequeos",
+            "imagenes_elegidas"
+          ],
+          "funcion": "empaquetar_entrega_laminas",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "entrega"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "cierre",
+          "quien": "sala",
+          "entrada": [
+            "entrega"
+          ],
+          "funcion": "cierre",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "cierre"
+        }
+      ]
+    },
+    {
+      "tipo": "kit_historias",
+      "familia": "kit_historias",
+      "version": 7,
+      "activo": true,
+      "tope_encargo_usd": 5,
+      "limites": {
+        "margen": 6,
+        "max_rondas": 2,
+        "plataforma": "instagram-reel",
+        "reuso_dias": 14,
+        "hashtags_max": 30,
+        "body_historia": 140,
+        "material_activo": true,
+        "pie_de_foto_max": 2200,
+        "roles_sin_imagen": [
+          "cta",
+          "cierre"
+        ],
+        "tope_encargo_usd": 5,
+        "headline_historia": 60,
+        "material_tope_usd": 0.4,
+        "versiones_por_ref": 2,
+        "acompanamiento_max": 700,
+        "material_plazo_min": 20,
+        "material_techo_min": 30,
+        "formato_por_omision": "9:16",
+        "limites_verificados": false,
+        "reserva_por_pieza_usd": 2.5,
+        "imagenes_generadas_max": 8,
+        "generar_cuando_no_hay_foto": true,
+        "material_max_pedidos_por_encargo": 1
+      },
+      "pasos": [
+        {
+          "tipo": "codigo",
+          "clave": "abrir",
+          "quien": "sala",
+          "entrada": [],
+          "funcion": "abrir_laminas",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "encargo"
+        },
+        {
+          "tipo": "portero",
+          "clave": "paquete",
+          "quien": "portero",
+          "entrada": [
+            "encargo"
+          ],
+          "tope_usd": 0.08,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "material_portero"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "asignar_fotos",
+          "quien": "sala",
+          "entrada": [
+            "material_portero"
+          ],
+          "funcion": "asignar_fotos",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "candidatas_foto"
+        },
+        {
+          "tipo": "agente",
+          "clave": "direccion_visual",
+          "quien": "marketing_instagram_curator",
+          "salida": {
+            "esquema": "direccion_imagenes.v1",
+            "reintento_formato": 1
+          },
+          "valida": [
+            "citas_existen",
+            "refs_validos"
+          ],
+          "entrada": [
+            "material_portero",
+            "candidatas_foto"
+          ],
+          "tope_usd": 0.3,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "visual_direction"
+        },
+        {
+          "tipo": "agente",
+          "clave": "narrativa",
+          "quien": "design-visual-storyteller",
+          "salida": {
+            "esquema": "estructura.v1",
+            "reintento_formato": 1
+          },
+          "valida": [
+            "sin_texto_en_estructura",
+            "refs_validos"
+          ],
+          "entrada": [
+            "visual_direction",
+            "material_portero"
+          ],
+          "tope_usd": 0.2,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "estructura"
+        },
+        {
+          "tipo": "agente",
+          "clave": "prompts",
+          "quien": "design-image-prompt-engineer",
+          "salida": {
+            "esquema": "prompts_por_ref.v1",
+            "reintento_formato": 1
+          },
+          "valida": [
+            "refs_validos"
+          ],
+          "entrada": [
+            "visual_direction"
+          ],
+          "tope_usd": 0.2,
+          "condicion": {
+            "tipo": "si_artefacto",
+            "campo": "hay_generadas",
+            "igual": true,
+            "artefacto": "visual_direction"
+          },
+          "salida_artefacto": "prompts"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "chequear_prompts",
+          "quien": "sala",
+          "entrada": [
+            "prompts",
+            "visual_direction"
+          ],
+          "funcion": "chequear_prompts_ref",
+          "tope_usd": 0,
+          "vuelve_a": {
+            "si": {
+              "tipo": "si_artefacto",
+              "campo": "ninguno",
+              "igual": true,
+              "artefacto": "prompts_validos"
+            },
+            "max": 1,
+            "paso": "prompts"
+          },
+          "condicion": {
+            "tipo": "si_artefacto",
+            "campo": "hay_generadas",
+            "igual": true,
+            "artefacto": "visual_direction"
+          },
+          "salida_artefacto": "prompts_validos"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "imagen",
+          "quien": "sala",
+          "entrada": [
+            "prompts_validos"
+          ],
+          "funcion": "imagen_ref",
+          "tope_usd": 0.2,
+          "condicion": {
+            "tipo": "si_artefacto",
+            "campo": "hay_generadas",
+            "igual": true,
+            "artefacto": "visual_direction"
+          },
+          "salida_artefacto": "imagenes"
+        },
+        {
+          "tipo": "agente",
+          "clave": "mirar",
+          "quien": "marketing_instagram_curator",
+          "salida": {
+            "esquema": "observacion_imagenes.v1",
+            "reintento_formato": 1
+          },
+          "valida": [
+            "decide_imagen"
+          ],
+          "entrada": [
+            "imagenes",
+            "visual_direction"
+          ],
+          "tope_usd": 0.2,
+          "vuelve_a": {
+            "si": {
+              "tipo": "si_artefacto",
+              "campo": "veredicto.regenerar",
+              "igual": true,
+              "artefacto": "observacion_imagen"
+            },
+            "max": 2,
+            "paso": "imagen"
+          },
+          "condicion": {
+            "tipo": "si_artefacto",
+            "campo": "requiere_mirar",
+            "igual": true,
+            "artefacto": "visual_direction"
+          },
+          "salida_artefacto": "observacion_imagen"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "elegir_version",
+          "quien": "sala",
+          "entrada": [
+            "imagenes",
+            "observacion_imagen",
+            "visual_direction"
+          ],
+          "funcion": "elegir_version_ref",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "imagenes_elegidas"
+        },
+        {
+          "tipo": "agente",
+          "clave": "texto",
+          "quien": "content-creator",
+          "salida": {
+            "esquema": "copy_kit.v1",
+            "reintento_formato": 1
+          },
+          "valida": [
+            "contrato_de_lamina",
+            "refs_validos"
+          ],
+          "entrada": [
+            "material_portero",
+            "estructura",
+            "imagenes_elegidas"
+          ],
+          "tope_usd": 0.3,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "copy_kit"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "armar",
+          "quien": "sala",
+          "entrada": [
+            "copy_kit",
+            "estructura",
+            "imagenes_elegidas"
+          ],
+          "funcion": "armar_laminas",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "laminas_armadas"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "render",
+          "quien": "sala",
+          "entrada": [
+            "laminas_armadas"
+          ],
+          "funcion": "render_laminas",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "render"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "chequeos",
+          "quien": "sala",
+          "entrada": [
+            "copy_kit",
+            "estructura",
+            "laminas_armadas",
+            "render",
+            "imagenes_elegidas",
+            "observacion_imagen"
+          ],
+          "funcion": "chequeos_laminas",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "chequeos"
+        },
+        {
+          "tipo": "jefatura",
+          "clave": "jefatura",
+          "quien": "jefatura",
+          "entrada": [
+            "copy_kit",
+            "estructura",
+            "render",
+            "chequeos"
+          ],
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "respuesta_imagen"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "armar_2",
+          "quien": "sala",
+          "entrada": [
+            "copy_kit",
+            "estructura",
+            "imagenes_elegidas"
+          ],
+          "funcion": "armar_laminas",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "si_cambio",
+            "artefacto": [
+              "copy_kit",
+              "estructura",
+              "imagenes_elegidas"
+            ]
+          },
+          "salida_artefacto": "laminas_armadas"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "render_2",
+          "quien": "sala",
+          "entrada": [
+            "laminas_armadas"
+          ],
+          "funcion": "render_laminas",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "si_cambio",
+            "artefacto": "laminas_armadas"
+          },
+          "salida_artefacto": "render"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "chequeos_2",
+          "quien": "sala",
+          "entrada": [
+            "copy_kit",
+            "estructura",
+            "laminas_armadas",
+            "render",
+            "imagenes_elegidas",
+            "observacion_imagen"
+          ],
+          "funcion": "chequeos_laminas",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "si_cambio",
+            "artefacto": "render"
+          },
+          "salida_artefacto": "chequeos"
+        },
+        {
+          "tipo": "agente",
+          "clave": "reimagen_prompts",
+          "quien": "design-image-prompt-engineer",
+          "ronda": 2,
+          "salida": {
+            "esquema": "prompts_por_ref.v1",
+            "reintento_formato": 1
+          },
+          "valida": [
+            "refs_validos"
+          ],
+          "entrada": [
+            "visual_direction",
+            "fichas_externas",
+            "respuesta_imagen"
+          ],
+          "tope_usd": 0.2,
+          "condicion": {
+            "tipo": "si_artefacto",
+            "campo": "re_imagen",
+            "igual": true,
+            "artefacto": "respuesta_imagen"
+          },
+          "salida_artefacto": "prompts"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "reimagen_chequear_prompts",
+          "quien": "sala",
+          "ronda": 2,
+          "entrada": [
+            "prompts",
+            "visual_direction"
+          ],
+          "funcion": "chequear_prompts_ref",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "si_cambio",
+            "artefacto": "prompts"
+          },
+          "salida_artefacto": "prompts_validos"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "reimagen_imagen",
+          "quien": "sala",
+          "ronda": 2,
+          "entrada": [
+            "prompts_validos"
+          ],
+          "funcion": "imagen_ref",
+          "tope_usd": 0.2,
+          "condicion": {
+            "tipo": "si_cambio",
+            "artefacto": "prompts_validos"
+          },
+          "salida_artefacto": "imagenes"
+        },
+        {
+          "tipo": "agente",
+          "clave": "reimagen_mirar",
+          "quien": "marketing_instagram_curator",
+          "ronda": 2,
+          "salida": {
+            "esquema": "observacion_imagenes.v1",
+            "reintento_formato": 1
+          },
+          "valida": [
+            "decide_imagen"
+          ],
+          "entrada": [
+            "imagenes",
+            "visual_direction"
+          ],
+          "tope_usd": 0.2,
+          "condicion": {
+            "tipo": "si_cambio",
+            "artefacto": "imagenes"
+          },
+          "salida_artefacto": "observacion_imagen"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "reimagen_elegir_version",
+          "quien": "sala",
+          "ronda": 2,
+          "entrada": [
+            "imagenes",
+            "observacion_imagen",
+            "visual_direction"
+          ],
+          "funcion": "elegir_version_ref",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "si_cambio",
+            "artefacto": "observacion_imagen"
+          },
+          "salida_artefacto": "imagenes_elegidas"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "armar_3",
+          "quien": "sala",
+          "entrada": [
+            "copy_kit",
+            "estructura",
+            "imagenes_elegidas"
+          ],
+          "funcion": "armar_laminas",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "si_cambio",
+            "artefacto": [
+              "copy_kit",
+              "estructura",
+              "imagenes_elegidas"
+            ]
+          },
+          "salida_artefacto": "laminas_armadas"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "render_3",
+          "quien": "sala",
+          "entrada": [
+            "laminas_armadas"
+          ],
+          "funcion": "render_laminas",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "si_cambio",
+            "artefacto": "laminas_armadas"
+          },
+          "salida_artefacto": "render"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "chequeos_3",
+          "quien": "sala",
+          "entrada": [
+            "copy_kit",
+            "estructura",
+            "laminas_armadas",
+            "render",
+            "imagenes_elegidas",
+            "observacion_imagen"
+          ],
+          "funcion": "chequeos_laminas",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "si_cambio",
+            "artefacto": "render"
+          },
+          "salida_artefacto": "chequeos"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "entrega",
+          "quien": "sala",
+          "entrada": [
+            "copy_kit",
+            "render",
+            "chequeos",
+            "imagenes_elegidas"
+          ],
+          "funcion": "empaquetar_entrega_laminas",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "entrega"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "cierre",
+          "quien": "sala",
+          "entrada": [
+            "entrega"
+          ],
+          "funcion": "cierre",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "cierre"
+        }
+      ]
+    },
+    {
+      "tipo": "kit_mesa",
+      "familia": "kit_mesa",
+      "version": 3,
+      "activo": true,
+      "tope_encargo_usd": 45,
+      "limites": {
+        "mesa": true,
+        "margen": 50,
+        "asientos": [
+          "marketing_instagram_curator",
+          "design-image-prompt-engineer",
+          "content-creator"
+        ],
+        "max_rondas": 2,
+        "plataforma": "instagram-reel",
+        "propuestas": {
+          "n": 3
+        },
+        "reuso_dias": 14,
+        "hashtags_max": 30,
+        "body_historia": 140,
+        "material_activo": true,
+        "pie_de_foto_max": 2200,
+        "roles_sin_imagen": [
+          "cta",
+          "cierre"
+        ],
+        "tope_encargo_usd": 45,
+        "headline_historia": 60,
+        "material_tope_usd": 0.4,
+        "rondas_de_la_mesa": 1,
+        "versiones_por_ref": 2,
+        "acompanamiento_max": 700,
+        "material_plazo_min": 20,
+        "material_techo_min": 30,
+        "cota_de_la_mesa_usd": 9.54,
+        "formato_por_omision": "9:16",
+        "limites_verificados": false,
+        "imagenes_generadas_max": 8,
+        "generar_cuando_no_hay_foto": true,
+        "material_max_pedidos_por_encargo": 1
+      },
+      "pasos": [
+        {
+          "tipo": "codigo",
+          "clave": "abrir",
+          "quien": "sala",
+          "entrada": [],
+          "funcion": "abrir_laminas",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "encargo"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "asignar_fotos",
+          "quien": "sala",
+          "entrada": [
+            "encargo"
+          ],
+          "funcion": "asignar_fotos",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "candidatas_foto"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "mesa",
+          "quien": "sala",
+          "entrada": [
+            "candidatas_foto"
+          ],
+          "funcion": "mesa",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "mesa"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "borrador_imagen",
+          "quien": "sala",
+          "entrada": [
+            "mesa"
+          ],
+          "funcion": "borrador_imagen",
+          "tope_usd": 0.48,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "borrador_imagen"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "aprobar_propuestas",
+          "quien": "sala",
+          "entrada": [
+            "mesa"
+          ],
+          "funcion": "aprobar_propuestas",
+          "tope_usd": 0,
+          "vuelve_a": {
+            "si": {
+              "tipo": "si_artefacto",
+              "campo": "vuelve_a_la_mesa",
+              "igual": true,
+              "artefacto": "aprobacion_propuestas"
+            },
+            "max": 2,
+            "paso": "mesa"
+          },
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "aprobacion_propuestas"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "imagen",
+          "quien": "sala",
+          "entrada": [
+            "prompts_validos"
+          ],
+          "funcion": "imagen_ref",
+          "tope_usd": 0.2,
+          "condicion": {
+            "tipo": "si_artefacto",
+            "campo": "hay_generadas",
+            "igual": true,
+            "artefacto": "visual_direction"
+          },
+          "salida_artefacto": "imagenes"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "observar",
+          "quien": "sala",
+          "entrada": [
+            "imagenes",
+            "visual_direction"
+          ],
+          "funcion": "mesa_observar",
+          "tope_usd": 0.1,
+          "condicion": {
+            "tipo": "si_artefacto",
+            "campo": "hay_generadas",
+            "igual": true,
+            "artefacto": "visual_direction"
+          },
+          "salida_artefacto": "observacion_imagen"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "elegir_version",
+          "quien": "sala",
+          "entrada": [
+            "imagenes",
+            "observacion_imagen",
+            "visual_direction"
+          ],
+          "funcion": "elegir_version_ref",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "imagenes_elegidas"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "armar",
+          "quien": "sala",
+          "entrada": [
+            "copy_kit",
+            "estructura",
+            "imagenes_elegidas"
+          ],
+          "funcion": "armar_laminas",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "laminas_armadas"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "render",
+          "quien": "sala",
+          "entrada": [
+            "laminas_armadas"
+          ],
+          "funcion": "render_laminas",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "render"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "chequeos",
+          "quien": "sala",
+          "entrada": [
+            "copy_kit",
+            "estructura",
+            "laminas_armadas",
+            "render",
+            "imagenes_elegidas",
+            "observacion_imagen"
+          ],
+          "funcion": "chequeos_laminas",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "chequeos"
+        },
+        {
+          "tipo": "jefatura",
+          "clave": "jefatura",
+          "quien": "jefatura",
+          "entrada": [
+            "copy_kit",
+            "estructura",
+            "render",
+            "chequeos"
+          ],
+          "tope_usd": 0,
+          "vuelve_a": {
+            "si": {
+              "tipo": "si_artefacto",
+              "campo": "vuelve_a_la_mesa",
+              "igual": true,
+              "artefacto": "respuesta_imagen"
+            },
+            "max": 6,
+            "paso": "mesa"
+          },
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "respuesta_imagen"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "armar_2",
+          "quien": "sala",
+          "entrada": [
+            "copy_kit",
+            "estructura",
+            "imagenes_elegidas"
+          ],
+          "funcion": "armar_laminas",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "si_cambio",
+            "artefacto": [
+              "copy_kit",
+              "estructura",
+              "imagenes_elegidas"
+            ]
+          },
+          "salida_artefacto": "laminas_armadas"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "render_2",
+          "quien": "sala",
+          "entrada": [
+            "laminas_armadas"
+          ],
+          "funcion": "render_laminas",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "si_cambio",
+            "artefacto": "laminas_armadas"
+          },
+          "salida_artefacto": "render"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "chequeos_2",
+          "quien": "sala",
+          "entrada": [
+            "copy_kit",
+            "estructura",
+            "laminas_armadas",
+            "render",
+            "imagenes_elegidas",
+            "observacion_imagen"
+          ],
+          "funcion": "chequeos_laminas",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "si_cambio",
+            "artefacto": "render"
+          },
+          "salida_artefacto": "chequeos"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "entrega",
+          "quien": "sala",
+          "entrada": [
+            "copy_kit",
+            "render",
+            "chequeos",
+            "imagenes_elegidas"
+          ],
+          "funcion": "empaquetar_entrega_laminas",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "entrega"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "cierre",
+          "quien": "sala",
+          "entrada": [
+            "entrega"
+          ],
+          "funcion": "cierre",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "cierre"
+        }
+      ]
+    },
+    {
+      "tipo": "post_img",
+      "familia": "post_img",
+      "version": 7,
+      "activo": true,
+      "tope_encargo_usd": 4,
+      "limites": {
+        "margen": 6,
+        "max_rondas": 2,
+        "reuso_dias": 14,
+        "hashtags_max": 30,
+        "material_activo": true,
+        "pie_de_foto_max": 2200,
+        "roles_sin_imagen": [
+          "cta",
+          "cierre"
+        ],
+        "tope_encargo_usd": 4,
+        "material_tope_usd": 0.4,
+        "material_plazo_min": 20,
+        "material_techo_min": 30,
+        "formato_por_omision": "1:1",
+        "limites_verificados": false,
+        "reserva_por_pieza_usd": 2.5,
+        "imagenes_generadas_max": 3,
+        "generar_cuando_no_hay_foto": true,
+        "material_max_pedidos_por_encargo": 1
+      },
+      "pasos": [
+        {
+          "tipo": "codigo",
+          "clave": "abrir",
+          "quien": "sala",
+          "entrada": [],
+          "funcion": "abrir",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "encargo"
+        },
+        {
+          "tipo": "portero",
+          "clave": "paquete",
+          "quien": "portero",
+          "entrada": [
+            "encargo"
+          ],
+          "tope_usd": 0.06,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "material_portero"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "elegir_foto",
+          "quien": "sala",
+          "entrada": [
+            "material_portero"
+          ],
+          "funcion": "elegir_foto",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "candidatas_foto"
+        },
+        {
+          "tipo": "agente",
+          "clave": "direccion_visual",
+          "quien": "marketing_instagram_curator",
+          "salida": {
+            "esquema": "visual_direction.v1",
+            "reintento_formato": 1
+          },
+          "valida": [
+            "citas_existen"
+          ],
+          "entrada": [
+            "material_portero",
+            "candidatas_foto"
+          ],
+          "tope_usd": 0.25,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "visual_direction"
+        },
+        {
+          "tipo": "agente",
+          "clave": "prompts",
+          "quien": "design-image-prompt-engineer",
+          "salida": {
+            "esquema": "prompts.v1",
+            "reintento_formato": 1
+          },
+          "entrada": [
+            "visual_direction"
+          ],
+          "tope_usd": 0.2,
+          "condicion": {
+            "tipo": "si_artefacto",
+            "campo": "decision.modo",
+            "igual": "generada",
+            "artefacto": "visual_direction"
+          },
+          "salida_artefacto": "prompts"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "chequear_prompts",
+          "quien": "sala",
+          "entrada": [
+            "prompts",
+            "visual_direction"
+          ],
+          "funcion": "chequear_prompts",
+          "tope_usd": 0,
+          "vuelve_a": {
+            "si": {
+              "tipo": "si_artefacto",
+              "campo": "ninguno",
+              "igual": true,
+              "artefacto": "prompts_validos"
+            },
+            "max": 1,
+            "paso": "prompts"
+          },
+          "condicion": {
+            "tipo": "si_artefacto",
+            "campo": "decision.modo",
+            "igual": "generada",
+            "artefacto": "visual_direction"
+          },
+          "salida_artefacto": "prompts_validos"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "imagen",
+          "quien": "sala",
+          "entrada": [
+            "prompts_validos"
+          ],
+          "funcion": "imagen",
+          "tope_usd": 0.1,
+          "condicion": {
+            "tipo": "si_artefacto",
+            "campo": "decision.modo",
+            "igual": "generada",
+            "artefacto": "visual_direction"
+          },
+          "salida_artefacto": "imagenes"
+        },
+        {
+          "tipo": "agente",
+          "clave": "mirar",
+          "quien": "marketing_instagram_curator",
+          "salida": {
+            "esquema": "observacion_imagen.v1",
+            "reintento_formato": 1
+          },
+          "valida": [
+            "decide_imagen"
+          ],
+          "entrada": [
+            "imagenes",
+            "visual_direction"
+          ],
+          "tope_usd": 0.2,
+          "vuelve_a": {
+            "si": {
+              "tipo": "si_artefacto",
+              "campo": "veredicto.regenerar",
+              "igual": true,
+              "artefacto": "observacion_imagen"
+            },
+            "max": 2,
+            "paso": "imagen"
+          },
+          "condicion": {
+            "tipo": "si_artefacto",
+            "campo": "decision.requiere_mirar",
+            "igual": true,
+            "artefacto": "visual_direction"
+          },
+          "salida_artefacto": "observacion_imagen"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "elegir_version",
+          "quien": "sala",
+          "entrada": [
+            "imagenes",
+            "observacion_imagen"
+          ],
+          "funcion": "elegir_version",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "si_artefacto",
+            "campo": "decision.modo",
+            "igual": "generada",
+            "artefacto": "visual_direction"
+          },
+          "salida_artefacto": "imagen_elegida"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "acabado",
+          "quien": "sala",
+          "entrada": [
+            "imagen_elegida",
+            "candidatas_foto"
+          ],
+          "funcion": "acabado_imagen",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "imagen_final"
+        },
+        {
+          "tipo": "agente",
+          "clave": "texto",
+          "quien": "content-creator",
+          "salida": {
+            "esquema": "pieza_post.v1",
+            "reintento_formato": 1
+          },
+          "entrada": [
+            "material_portero",
+            "visual_direction",
+            "observacion_imagen"
+          ],
+          "tope_usd": 0.2,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "pieza_post"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "chequeos",
+          "quien": "sala",
+          "entrada": [
+            "pieza_post",
+            "imagen_final",
+            "observacion_imagen"
+          ],
+          "funcion": "chequeos",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "chequeos"
+        },
+        {
+          "tipo": "jefatura",
+          "clave": "jefatura",
+          "quien": "jefatura",
+          "entrada": [
+            "pieza_post",
+            "imagen_final",
+            "chequeos"
+          ],
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "respuesta_imagen"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "chequeos_2",
+          "quien": "sala",
+          "entrada": [
+            "pieza_post",
+            "imagen_final"
+          ],
+          "funcion": "chequeos",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "si_cambio",
+            "artefacto": "pieza_post"
+          },
+          "salida_artefacto": "chequeos"
+        },
+        {
+          "tipo": "agente",
+          "clave": "reimagen_prompts",
+          "quien": "design-image-prompt-engineer",
+          "ronda": 2,
+          "salida": {
+            "esquema": "prompts.v1",
+            "reintento_formato": 1
+          },
+          "entrada": [
+            "visual_direction",
+            "fichas_externas",
+            "respuesta_imagen"
+          ],
+          "tope_usd": 0.2,
+          "condicion": {
+            "tipo": "si_artefacto",
+            "campo": "re_imagen",
+            "igual": true,
+            "artefacto": "respuesta_imagen"
+          },
+          "salida_artefacto": "prompts"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "reimagen_chequear_prompts",
+          "quien": "sala",
+          "ronda": 2,
+          "entrada": [
+            "prompts",
+            "visual_direction"
+          ],
+          "funcion": "chequear_prompts",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "si_cambio",
+            "artefacto": "prompts"
+          },
+          "salida_artefacto": "prompts_validos"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "reimagen_imagen",
+          "quien": "sala",
+          "ronda": 2,
+          "entrada": [
+            "prompts_validos"
+          ],
+          "funcion": "imagen",
+          "tope_usd": 0.1,
+          "condicion": {
+            "tipo": "si_cambio",
+            "artefacto": "prompts_validos"
+          },
+          "salida_artefacto": "imagenes"
+        },
+        {
+          "tipo": "agente",
+          "clave": "reimagen_mirar",
+          "quien": "marketing_instagram_curator",
+          "ronda": 2,
+          "salida": {
+            "esquema": "observacion_imagen.v1",
+            "reintento_formato": 1
+          },
+          "valida": [
+            "decide_imagen"
+          ],
+          "entrada": [
+            "imagenes",
+            "visual_direction"
+          ],
+          "tope_usd": 0.2,
+          "condicion": {
+            "tipo": "si_cambio",
+            "artefacto": "imagenes"
+          },
+          "salida_artefacto": "observacion_imagen"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "reimagen_elegir_version",
+          "quien": "sala",
+          "ronda": 2,
+          "entrada": [
+            "imagenes",
+            "observacion_imagen"
+          ],
+          "funcion": "elegir_version",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "si_cambio",
+            "artefacto": "observacion_imagen"
+          },
+          "salida_artefacto": "imagen_elegida"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "reimagen_acabado",
+          "quien": "sala",
+          "ronda": 2,
+          "entrada": [
+            "imagen_elegida",
+            "candidatas_foto"
+          ],
+          "funcion": "acabado_imagen",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "si_cambio",
+            "artefacto": "imagen_elegida"
+          },
+          "salida_artefacto": "imagen_final"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "chequeos_3",
+          "quien": "sala",
+          "entrada": [
+            "pieza_post",
+            "imagen_final"
+          ],
+          "funcion": "chequeos",
+          "tope_usd": 0,
+          "condicion": {
+            "de": [
+              {
+                "tipo": "si_cambio",
+                "artefacto": "pieza_post"
+              },
+              {
+                "tipo": "si_cambio",
+                "artefacto": "imagen_final"
+              }
+            ],
+            "tipo": "cualquiera"
+          },
+          "salida_artefacto": "chequeos"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "entrega",
+          "quien": "sala",
+          "entrada": [
+            "pieza_post",
+            "imagen_final",
+            "chequeos"
+          ],
+          "funcion": "empaquetar_entrega",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "entrega"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "cierre",
+          "quien": "sala",
+          "entrada": [
+            "entrega"
+          ],
+          "funcion": "cierre",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "cierre"
+        }
+      ]
+    },
+    {
+      "tipo": "post_mesa",
+      "familia": "post_mesa",
+      "version": 3,
+      "activo": true,
+      "tope_encargo_usd": 43,
+      "limites": {
+        "mesa": true,
+        "margen": 50,
+        "asientos": [
+          "marketing_instagram_curator",
+          "design-image-prompt-engineer",
+          "content-creator"
+        ],
+        "max_rondas": 2,
+        "propuestas": {
+          "n": 3
+        },
+        "reuso_dias": 14,
+        "hashtags_max": 30,
+        "material_activo": true,
+        "pie_de_foto_max": 2200,
+        "roles_sin_imagen": [
+          "cta",
+          "cierre"
+        ],
+        "tope_encargo_usd": 43,
+        "material_tope_usd": 0.4,
+        "rondas_de_la_mesa": 1,
+        "material_plazo_min": 20,
+        "material_techo_min": 30,
+        "cota_de_la_mesa_usd": 9.54,
+        "formato_por_omision": "1:1",
+        "limites_verificados": false,
+        "imagenes_generadas_max": 3,
+        "generar_cuando_no_hay_foto": true,
+        "material_max_pedidos_por_encargo": 1
+      },
+      "pasos": [
+        {
+          "tipo": "codigo",
+          "clave": "abrir",
+          "quien": "sala",
+          "entrada": [],
+          "funcion": "abrir",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "encargo"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "elegir_foto",
+          "quien": "sala",
+          "entrada": [
+            "encargo"
+          ],
+          "funcion": "elegir_foto",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "candidatas_foto"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "mesa",
+          "quien": "sala",
+          "entrada": [
+            "candidatas_foto"
+          ],
+          "funcion": "mesa",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "mesa"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "borrador_imagen",
+          "quien": "sala",
+          "entrada": [
+            "mesa"
+          ],
+          "funcion": "borrador_imagen",
+          "tope_usd": 0.18,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "borrador_imagen"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "aprobar_propuestas",
+          "quien": "sala",
+          "entrada": [
+            "mesa"
+          ],
+          "funcion": "aprobar_propuestas",
+          "tope_usd": 0,
+          "vuelve_a": {
+            "si": {
+              "tipo": "si_artefacto",
+              "campo": "vuelve_a_la_mesa",
+              "igual": true,
+              "artefacto": "aprobacion_propuestas"
+            },
+            "max": 2,
+            "paso": "mesa"
+          },
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "aprobacion_propuestas"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "imagen",
+          "quien": "sala",
+          "entrada": [
+            "prompts_validos"
+          ],
+          "funcion": "imagen",
+          "tope_usd": 0.1,
+          "condicion": {
+            "tipo": "si_artefacto",
+            "campo": "decision.modo",
+            "igual": "generada",
+            "artefacto": "visual_direction"
+          },
+          "salida_artefacto": "imagenes"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "observar",
+          "quien": "sala",
+          "entrada": [
+            "imagenes",
+            "visual_direction"
+          ],
+          "funcion": "mesa_observar",
+          "tope_usd": 0.1,
+          "condicion": {
+            "tipo": "si_artefacto",
+            "campo": "decision.modo",
+            "igual": "generada",
+            "artefacto": "visual_direction"
+          },
+          "salida_artefacto": "observacion_imagen"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "elegir_version",
+          "quien": "sala",
+          "entrada": [
+            "imagenes",
+            "observacion_imagen",
+            "visual_direction"
+          ],
+          "funcion": "elegir_version",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "si_artefacto",
+            "campo": "decision.modo",
+            "igual": "generada",
+            "artefacto": "visual_direction"
+          },
+          "salida_artefacto": "imagen_elegida"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "acabado",
+          "quien": "sala",
+          "entrada": [
+            "imagen_elegida",
+            "candidatas_foto"
+          ],
+          "funcion": "acabado_imagen",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "imagen_final"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "chequeos",
+          "quien": "sala",
+          "entrada": [
+            "pieza_post",
+            "imagen_final",
+            "observacion_imagen"
+          ],
+          "funcion": "chequeos",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "chequeos"
+        },
+        {
+          "tipo": "jefatura",
+          "clave": "jefatura",
+          "quien": "jefatura",
+          "entrada": [
+            "pieza_post",
+            "imagen_final",
+            "chequeos"
+          ],
+          "tope_usd": 0,
+          "vuelve_a": {
+            "si": {
+              "tipo": "si_artefacto",
+              "campo": "vuelve_a_la_mesa",
+              "igual": true,
+              "artefacto": "respuesta_imagen"
+            },
+            "max": 6,
+            "paso": "mesa"
+          },
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "respuesta_imagen"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "chequeos_2",
+          "quien": "sala",
+          "entrada": [
+            "pieza_post",
+            "imagen_final"
+          ],
+          "funcion": "chequeos",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "si_cambio",
+            "artefacto": "pieza_post"
+          },
+          "salida_artefacto": "chequeos"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "entrega",
+          "quien": "sala",
+          "entrada": [
+            "pieza_post",
+            "imagen_final",
+            "chequeos"
+          ],
+          "funcion": "empaquetar_entrega",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "entrega"
+        },
+        {
+          "tipo": "codigo",
+          "clave": "cierre",
+          "quien": "sala",
+          "entrada": [
+            "entrega"
+          ],
+          "funcion": "cierre",
+          "tope_usd": 0,
+          "condicion": {
+            "tipo": "siempre"
+          },
+          "salida_artefacto": "cierre"
+        }
+      ]
+    }
+  ]
+}
