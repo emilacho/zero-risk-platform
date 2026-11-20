@@ -359,3 +359,21 @@ describe('lo que los sabotajes encontraron sin prueba (s6, s8, s22, s26)', () =>
     }
   })
 })
+
+describe('lo que pidió CC5 (d24): la cita atribuida se comprueba contra SU fuente, no contra cualquiera', () => {
+  it('d24 · «el brief de la campaña dice: «X»» con X literal en el plan y no en el brief → bloquea, nombrando el brief de la campaña', () => {
+    const plan = contextoDe(A).planTexto
+    const delPlan = plan.split(/(?<=\.)\s+/).map((x) => x.replace(/\.$/, '').trim()).find((x) => x.length > 20 && !x.includes('«') && !x.includes('»'))!
+    expect(plan).toContain(delPlan)
+    const campana = briefDeLaCampanaEnTexto(PEDIDO_UNO)!
+    expect(campana).not.toContain(delPlan)
+    const md = conAtribuida(delPlan)
+    expect(citasQueNoAparecen(md, { plan, campana })).toEqual([{ cita: delPlan, seccion: 'Mensaje', fuente: 'campana' }])
+    const l = leerBriefCreativo(md, insumosDelBrief(contextoDe(A), A.estrategia.canales, campana))
+    expect(l.estado).toBe('devuelta')
+    expect(l.bloqueos.some((b) => b.includes(`«${delPlan.slice(0, 80)}»`) && b.includes('no está literal en el brief de la campaña'))).toBe(true)
+    // y al revés: atribuida al plan con la frase solo en el brief de la campaña → bloquea nombrando el plan
+    const md2 = BRIEF_BUENO.replace('Hay mesa desde las siete.', `Hay mesa desde las siete. El plan dice: «${FRASE_UNO}».`)
+    expect(citasQueNoAparecen(md2, { plan, campana })).toEqual([{ cita: FRASE_UNO, seccion: 'Mensaje', fuente: 'plan' }])
+  })
+})
