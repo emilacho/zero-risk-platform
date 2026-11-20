@@ -1,5 +1,5 @@
 /**
- * 20-nov · PLAN v4 (CC4) · las 4 mesas vivas CON el segundo doctor creativo en la propuesta: exactamente lo que escribe la migración 202611201200
+ * 20-nov · PLAN v4 (CC4) · las 4 mesas vivas CON el segundo doctor creativo en la propuesta: exactamente lo que escribe la migración 202611201500
  * sobre las vigentes (`conSegundaMirada`). Mismos topes y límites: el paso nuevo decide solo si su vuelta cabe (si no, guarda el informe y sigue).
  */
 import { conSegundaMirada } from '../segunda-mirada'

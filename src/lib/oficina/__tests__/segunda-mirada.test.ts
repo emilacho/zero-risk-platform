@@ -1,5 +1,5 @@
 /**
- * 20-nov · PLAN v4 (CC4) · EL SEGUNDO DOCTOR CREATIVO EN LA PROPUESTA · el paso `segunda_mirada` de la oficina, su lugar en las 4 mesas y la migración 202611201200.
+ * 20-nov · PLAN v4 (CC4) · EL SEGUNDO DOCTOR CREATIVO EN LA PROPUESTA · el paso `segunda_mirada` de la oficina, su lugar en las 4 mesas y la migración 202611201500.
  * Condiciones: CC7 11:26Z (1 → guarda, 2 contador propio, 3 «cabe» con el costo de rehacer, 4 una sola llamada y dry_run sin llamadas, 5 `datos` fuera del aviso)
  * · CC6 (1-12 de su revisión y ADENDA 2: 9 la posición, 10 margen de pasos, 11 lo decide el paso, 12 si GPT falla la pieza sigue). US$ 0, sin red.
  */
@@ -24,8 +24,8 @@ import { MARCA_DE_FIN_DEL_INFORME, MARCA_DE_INICIO_DEL_INFORME, TEXTO_HONESTO_AL
 
 const RAIZ = path.resolve(__dirname, '..', '..', '..', '..')
 const leer = (...p: string[]) => fs.readFileSync(path.join(RAIZ, 'supabase', ...p), 'utf8').replace(/\r/g, '')
-const MIG = leer('migrations', '202611201200_oficina_segunda_mirada_en_la_propuesta.sql')
-const REV = leer('reversas', '202611201200_oficina_segunda_mirada_en_la_propuesta_REVERSA.sql')
+const MIG = leer('migrations', '202611201500_oficina_segunda_mirada_en_la_propuesta.sql')
+const REV = leer('reversas', '202611201500_oficina_segunda_mirada_en_la_propuesta_REVERSA.sql')
 const sentencias = (sql: string) => sql.split('\n').filter((l) => !l.trimStart().startsWith('--')).join('\n')
 const claves = (pl: Plantilla) => pl.pasos.map((p) => p.clave)
 
@@ -114,7 +114,7 @@ describe('el lugar del paso en las 4 mesas (PLAN v4 · (A) sin render)', () => {
   it('no se mete dos veces', () => expect(() => conSegundaMirada(POST_MESA_CON_SEGUNDA_MIRADA)).toThrow(/ya tiene/))
 })
 
-describe('🔴 la migración 202611201200 escribe EXACTAMENTE el paso del código, con la guarda en la misma sentencia', () => {
+describe('🔴 la migración 202611201500 escribe EXACTAMENTE el paso del código, con la guarda en la misma sentencia', () => {
   const S = sentencias(MIG)
   it('el JSON del paso es el del código', () => {
     expect(JSON.parse(/\$s\$([\s\S]*?)\$s\$/.exec(S)![1])).toEqual(JSON.parse(JSON.stringify(pasoDeLaSegundaMirada())))
