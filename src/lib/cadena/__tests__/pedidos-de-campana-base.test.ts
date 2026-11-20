@@ -74,6 +74,29 @@ describe('crear campaña · la base de los pedidos', () => {
     expect(M).toMatch(/pg_trigger WHERE tgname = 'cadena_pedidos_de_campana_candado'[^;]*\(tgtype::int & 4\) <> 0 AND \(tgtype::int & 16\) <> 0/)
   })
 
+  it('🔴 CC7 x9 · el cuerpo ENTERO del candado queda fijado (qué rama corre al editar y cuál al insertar)', () => {
+    const cuerpo = M.slice(M.indexOf('AS $f$') + 'AS $f$'.length, M.indexOf('END $f$;')).trim()
+    expect(cuerpo).toBe([
+      'DECLARE c record;',
+      'BEGIN',
+      "  IF TG_OP = 'UPDATE' THEN",
+      "    IF (to_jsonb(NEW) - 'campana_id') IS DISTINCT FROM (to_jsonb(OLD) - 'campana_id') THEN",
+      "      RAISE EXCEPTION 'cadena_pedidos_de_campana: el pedido no se edita (solo se liga a su campaña)';",
+      '    END IF;',
+      '    IF OLD.campana_id IS NOT NULL AND NEW.campana_id IS DISTINCT FROM OLD.campana_id THEN',
+      "      RAISE EXCEPTION 'cadena_pedidos_de_campana: el pedido ya está ligado a su campaña';",
+      '    END IF;',
+      '  END IF;',
+      "  IF NEW.campana_id IS NOT NULL AND (TG_OP = 'INSERT' OR OLD.campana_id IS NULL) THEN",
+      '    SELECT client_id, seco, llave_de_campana INTO c FROM public.cadena_campanas WHERE id = NEW.campana_id;',
+      '    IF FOUND AND (c.client_id IS DISTINCT FROM NEW.client_id OR c.seco IS DISTINCT FROM NEW.seco OR c.llave_de_campana IS DISTINCT FROM NEW.llave) THEN',
+      "      RAISE EXCEPTION 'cadena_pedidos_de_campana: esa campaña no es la de este pedido (cliente, seco o llave distintos)';",
+      '    END IF;',
+      '  END IF;',
+      '  RETURN NEW;',
+    ].join('\n'))
+  })
+
   it('🔴 CC6 #1255 · el pedido solo se liga a SU campaña: mismo cliente, mismo seco y llave_de_campana = llave, al ligar y en un INSERT que ya la traiga', () => {
     expect(M).toContain("IF NEW.campana_id IS NOT NULL AND (TG_OP = 'INSERT' OR OLD.campana_id IS NULL) THEN")
     expect(M).toContain('SELECT client_id, seco, llave_de_campana INTO c FROM public.cadena_campanas WHERE id = NEW.campana_id;')
