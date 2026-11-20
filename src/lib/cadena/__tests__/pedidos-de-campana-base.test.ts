@@ -46,6 +46,20 @@ describe('crear campaña · la base de los pedidos', () => {
     expect(M).toContain('CHECK ((fecha_inicio IS NULL) = (fecha_fin IS NULL))')
     expect(M).toContain('CHECK (fecha_fin IS NULL OR (fecha_fin > fecha_inicio AND fecha_fin - fecha_inicio <= 366))')
     expect(M).toContain("CHECK (jsonb_typeof(fechas_clave) = 'array')")
+    // 🟡 CC7 q22: quién pide no puede quedar en blanco
+    expect(M).toContain('CHECK (length(btrim(pedido_por)) >= 1)')
+  })
+
+  it('🔴 CC7 q1-q3/q26 · CC6 p13 · las guardas del bloque final frenan de verdad: 7 RAISE EXCEPTION, ningún RAISE NOTICE, y la de «ya tiene filas»', () => {
+    const bloque = CODIGO.slice(CODIGO.lastIndexOf('DO $$'))
+    expect(bloque).toMatch(/END \$\$;/)
+    expect(bloque.match(/RAISE EXCEPTION/g)?.length).toBe(7)
+    expect(CODIGO).not.toMatch(/RAISE (NOTICE|WARNING|INFO|LOG|DEBUG)/)
+    expect(bloque).toMatch(/IF EXISTS \(SELECT 1 FROM public\.cadena_pedidos_de_campana\) THEN\s+RAISE EXCEPTION 'cadena_pedidos_de_campana: la tabla nueva ya tiene filas'/)
+    expect(bloque).toMatch(/IF n <> 14 THEN RAISE EXCEPTION/)
+    expect(bloque).toMatch(/table_name = 'cadena_pedidos_de_campana'\) <> 14 THEN\s+RAISE EXCEPTION/)
+    expect(bloque).toMatch(/OR has_table_privilege\('authenticated', 'public\.cadena_pedidos_de_campana', 'SELECT'\) THEN\s+RAISE EXCEPTION/)
+    expect(bloque).toMatch(/indexdef LIKE 'CREATE UNIQUE INDEX %\(campana_id\) WHERE \(campana_id IS NOT NULL\)%'\) THEN\s+RAISE EXCEPTION/)
   })
 
   it('🔴 la llave es única por cliente y seco, y una campaña tiene un solo pedido', () => {
@@ -56,8 +70,14 @@ describe('crear campaña · la base de los pedidos', () => {
   it('🔴 el pedido no se edita: el candado compara la fila entera menos campana_id, y campana_id se pone una sola vez', () => {
     expect(M).toContain("IF (to_jsonb(NEW) - 'campana_id') IS DISTINCT FROM (to_jsonb(OLD) - 'campana_id') THEN")
     expect(M).toContain('IF OLD.campana_id IS NOT NULL AND NEW.campana_id IS DISTINCT FROM OLD.campana_id THEN')
-    expect(M).toContain('CREATE TRIGGER cadena_pedidos_de_campana_no_se_edita BEFORE UPDATE ON public.cadena_pedidos_de_campana')
-    expect(M).toMatch(/pg_trigger WHERE tgname = 'cadena_pedidos_de_campana_no_se_edita'/)
+    expect(M).toContain('CREATE TRIGGER cadena_pedidos_de_campana_candado BEFORE INSERT OR UPDATE ON public.cadena_pedidos_de_campana')
+    expect(M).toMatch(/pg_trigger WHERE tgname = 'cadena_pedidos_de_campana_candado'[^;]*\(tgtype::int & 4\) <> 0 AND \(tgtype::int & 16\) <> 0/)
+  })
+
+  it('🔴 CC6 #1255 · el pedido solo se liga a SU campaña: mismo cliente, mismo seco y llave_de_campana = llave, al ligar y en un INSERT que ya la traiga', () => {
+    expect(M).toContain("IF NEW.campana_id IS NOT NULL AND (TG_OP = 'INSERT' OR OLD.campana_id IS NULL) THEN")
+    expect(M).toContain('SELECT client_id, seco, llave_de_campana INTO c FROM public.cadena_campanas WHERE id = NEW.campana_id;')
+    expect(M).toContain('IF FOUND AND (c.client_id IS DISTINCT FROM NEW.client_id OR c.seco IS DISTINCT FROM NEW.seco OR c.llave_de_campana IS DISTINCT FROM NEW.llave) THEN')
   })
 
   it('🔴 permisos de la cadena: seguridad por fila, nada para anon ni authenticated, service_role sin DELETE', () => {
@@ -74,8 +94,11 @@ describe('crear campaña · la base de los pedidos', () => {
     expect(R).toMatch(/^COMMIT;$/m)
     expect(R).toMatch(/SELECT EXISTS \(SELECT 1 FROM public\.cadena_pedidos_de_campana\)' INTO hay;\s+IF hay THEN\s+RAISE EXCEPTION/)
     expect(R.indexOf('RAISE EXCEPTION')).toBeLessThan(R.indexOf('DROP TABLE'))
+    // nota de CC7: bloquea la tabla ANTES de mirar si está vacía
+    expect(R.indexOf("EXECUTE 'LOCK TABLE public.cadena_pedidos_de_campana IN ACCESS EXCLUSIVE MODE';")).toBeGreaterThan(-1)
+    expect(R.indexOf('LOCK TABLE')).toBeLessThan(R.indexOf('SELECT EXISTS'))
     expect(R).toContain('DROP TABLE IF EXISTS public.cadena_pedidos_de_campana;')
-    expect(R).toContain('DROP FUNCTION IF EXISTS public.cadena_pedidos_de_campana_no_se_edita();')
+    expect(R).toContain('DROP FUNCTION IF EXISTS public.cadena_pedidos_de_campana_candado();')
     expect(sinComentarios(R)).not.toMatch(/\b(DELETE|TRUNCATE|cadena_campanas)\b/)
   })
 })

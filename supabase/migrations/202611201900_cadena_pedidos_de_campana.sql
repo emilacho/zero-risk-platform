@@ -5,7 +5,8 @@
 --     El público y la estrategia salen del plan y del manual (no se preguntan);
 --   · `llave`: la misma `llave_de_campana` con que nace la campaña; única por cliente y seco (la idempotencia del botón);
 --   · `campana_id`: vacío al pedir; lo pone la apertura (entrega 2) al ligar el pedido con su campaña. Una campaña, un pedido;
---   · el pedido NO se edita: lo que contestó el dueño queda como lo contestó. Lo único que cambia, una sola vez, es `campana_id` (de vacío a su campaña).
+--   · el pedido NO se edita: lo que contestó el dueño queda como lo contestó. Lo único que cambia, una sola vez, es `campana_id` (de vacío a su campaña);
+--   · 🟡 CC6 y CC7 (#1255): el pedido solo se liga a SU campaña, con el mismo cliente, el mismo seco y `llave_de_campana` = `llave`. Vale al ligar y en un INSERT que ya traiga la campaña.
 -- Lo que no puede vivir en un CHECK (que el inicio no sea antes de hoy; el tope mínimo = planificación + peor caso de una pieza) lo valida la plataforma.
 -- Reversa: supabase/reversas/202611201900_cadena_pedidos_de_campana_REVERSA.sql
 BEGIN;
@@ -39,22 +40,31 @@ CREATE TABLE IF NOT EXISTS public.cadena_pedidos_de_campana (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS cadena_pedidos_de_campana_una_campana ON public.cadena_pedidos_de_campana (campana_id) WHERE campana_id IS NOT NULL;
 
--- el pedido no se edita: solo `campana_id`, una vez, de vacío a su campaña
-CREATE OR REPLACE FUNCTION public.cadena_pedidos_de_campana_no_se_edita() RETURNS trigger
+-- el candado del pedido: no se edita (solo `campana_id`, una vez, de vacío a su campaña) y solo se liga a SU campaña
+CREATE OR REPLACE FUNCTION public.cadena_pedidos_de_campana_candado() RETURNS trigger
 LANGUAGE plpgsql SET search_path = public AS $f$
+DECLARE c record;
 BEGIN
-  IF (to_jsonb(NEW) - 'campana_id') IS DISTINCT FROM (to_jsonb(OLD) - 'campana_id') THEN
-    RAISE EXCEPTION 'cadena_pedidos_de_campana: el pedido no se edita (solo se liga a su campaña)';
+  IF TG_OP = 'UPDATE' THEN
+    IF (to_jsonb(NEW) - 'campana_id') IS DISTINCT FROM (to_jsonb(OLD) - 'campana_id') THEN
+      RAISE EXCEPTION 'cadena_pedidos_de_campana: el pedido no se edita (solo se liga a su campaña)';
+    END IF;
+    IF OLD.campana_id IS NOT NULL AND NEW.campana_id IS DISTINCT FROM OLD.campana_id THEN
+      RAISE EXCEPTION 'cadena_pedidos_de_campana: el pedido ya está ligado a su campaña';
+    END IF;
   END IF;
-  IF OLD.campana_id IS NOT NULL AND NEW.campana_id IS DISTINCT FROM OLD.campana_id THEN
-    RAISE EXCEPTION 'cadena_pedidos_de_campana: el pedido ya está ligado a su campaña';
+  IF NEW.campana_id IS NOT NULL AND (TG_OP = 'INSERT' OR OLD.campana_id IS NULL) THEN
+    SELECT client_id, seco, llave_de_campana INTO c FROM public.cadena_campanas WHERE id = NEW.campana_id;
+    IF FOUND AND (c.client_id IS DISTINCT FROM NEW.client_id OR c.seco IS DISTINCT FROM NEW.seco OR c.llave_de_campana IS DISTINCT FROM NEW.llave) THEN
+      RAISE EXCEPTION 'cadena_pedidos_de_campana: esa campaña no es la de este pedido (cliente, seco o llave distintos)';
+    END IF;
   END IF;
   RETURN NEW;
 END $f$;
-DROP TRIGGER IF EXISTS cadena_pedidos_de_campana_no_se_edita ON public.cadena_pedidos_de_campana;
-CREATE TRIGGER cadena_pedidos_de_campana_no_se_edita BEFORE UPDATE ON public.cadena_pedidos_de_campana
-  FOR EACH ROW EXECUTE FUNCTION public.cadena_pedidos_de_campana_no_se_edita();
-REVOKE ALL ON FUNCTION public.cadena_pedidos_de_campana_no_se_edita() FROM PUBLIC, anon, authenticated;
+DROP TRIGGER IF EXISTS cadena_pedidos_de_campana_candado ON public.cadena_pedidos_de_campana;
+CREATE TRIGGER cadena_pedidos_de_campana_candado BEFORE INSERT OR UPDATE ON public.cadena_pedidos_de_campana
+  FOR EACH ROW EXECUTE FUNCTION public.cadena_pedidos_de_campana_candado();
+REVOKE ALL ON FUNCTION public.cadena_pedidos_de_campana_candado() FROM PUBLIC, anon, authenticated;
 
 -- permisos iguales a las demás tablas de la cadena: solo service_role
 ALTER TABLE public.cadena_pedidos_de_campana ENABLE ROW LEVEL SECURITY;
@@ -88,8 +98,9 @@ BEGIN
                  AND indexdef LIKE 'CREATE UNIQUE INDEX %(campana_id) WHERE (campana_id IS NOT NULL)%') THEN
     RAISE EXCEPTION 'cadena_pedidos_de_campana: falta el único por campaña';
   END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'cadena_pedidos_de_campana_no_se_edita' AND tgrelid = 'public.cadena_pedidos_de_campana'::regclass) THEN
-    RAISE EXCEPTION 'cadena_pedidos_de_campana: falta el candado de «no se edita»';
+  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'cadena_pedidos_de_campana_candado' AND tgrelid = 'public.cadena_pedidos_de_campana'::regclass
+                 AND (tgtype::int & 4) <> 0 AND (tgtype::int & 16) <> 0) THEN
+    RAISE EXCEPTION 'cadena_pedidos_de_campana: falta el candado (al insertar y al editar)';
   END IF;
   IF NOT (SELECT relrowsecurity FROM pg_class WHERE oid = 'public.cadena_pedidos_de_campana'::regclass)
      OR has_table_privilege('anon', 'public.cadena_pedidos_de_campana', 'SELECT')
