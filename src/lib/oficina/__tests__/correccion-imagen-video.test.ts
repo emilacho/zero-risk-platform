@@ -170,6 +170,43 @@ describe('tanda 2 · la mirada de otro proveedor devuelve la mejor a las imágen
   })
 })
 
+describe('tanda 2 · por el camino REAL del orquestador', () => {
+  it('🔴 el director pide un cambio: el orquestador edita (con la calidad final), la mirada decide, `imagenes_clave_final` queda con la corregida y la revisión de siempre la ve', async () => {
+    const { crearMemoria } = await import('./memoria')
+    const { recibirResultado } = await import('../orquestador')
+    // una calidad final PROPIA de la fila (no la de por omisión): así se ve que la edición la lee de la plantilla que le pasa el orquestador
+    const pl = { ...CARGADA, limites: { ...CARGADA.limites, imagen_clave: { final: { quality: 'high', size: '1024x1792' } } }, pasos: CARGADA.pasos.map((p) => ({ ...p, condicion: p.condicion ?? { tipo: 'siempre' } })) } as Plantilla
+    const M = crearMemoria({ plantilla: pl })
+    M.revisorTexto = () => ({ ok: true, texto: '{"mejor":"B","queda_bien":true,"lectura":"ahora sí es de barro"}', costo_usd: 0.004, modelo: 'revisor-simulado' })
+    const id = '00000000-0000-4000-8000-000000000778'
+    const iFinal = pl.pasos.findIndex((p) => p.clave === PASO_IMAGENES_CLAVE_FINAL)
+    const e0 = { ...estado({ extra: { guion: { planos: [{ n: 1, desde: 0, hasta: 3 }, { n: 2, desde: 3, hasta: 6 }], segundos: 6 } } }), ultimo: iFinal, pasos_ejecutados: iFinal + 1 } as unknown as Estado
+    M.encargos.set(id, { id, client_id: 'cli', parte_id: 'p', brief_id: 'b', tipo_de_grupo: pl.tipo, familia: pl.familia, version_encargo: 1, estado: 'en_paso', estado_del_motor: e0, con_desacuerdo: false, imagen_generada: true, tope_usd: pl.limites.tope_encargo_usd, gasto_usd: 1, dry_run: false, sala_ref: null, salida_output_id: null, hitl_queue_id: null } as never)
+    // el turno del motor sale de los pasos ejecutados (`turnoDe`): el del director es el siguiente
+    const n = iFinal + 2
+    M.turnos.set(id, new Map([[n, { n, paso: PASO_CORREGIR_IMAGEN, tipo: 'agente', agente: AGENTE_QUE_CORRIGE_LA_IMAGEN_CLAVE, estado: 'corriendo', dispatch_key: `${id}:${n}`, cost_usd: 0 } as never]]))
+    const r = await recibirResultado(M.P, id, n, { texto: '{"imagenes":[{"ref":"plano-1","elegida":0,"cambios":"el tazón es de barro"}]}', costo_usd: 0.02 })
+    const enc = M.encargos.get(id)!
+    expect(enc.estado).not.toBe('fallido')
+    // una edición (solo el plano 1), con la calidad de la imagen clave final
+    expect(M.llamadas.imagen).toBe(1)
+    expect(M.llamadas.imagenCalidades[0]).toMatchObject({ size: '1024x1792', quality: 'high' })
+    expect(M.llamadas.imagenFotos[0]).toBe('version-0')
+    // la mirada de otro proveedor miró las 2 imágenes pendientes (plano 1 con A/B; plano 2 la única)
+    expect(M.llamadas.revisor).toBe(2)
+    const ic = (enc.estado_del_motor.artefactos as unknown as Record<string, { datos: { planos: Array<{ n: number; url: string; corregida_en_la_vuelta?: number }>; tanda_de_correccion?: number } }>)[PASO_IMAGENES_CLAVE_FINAL].datos
+    expect(ic.planos[0]).toMatchObject({ n: 1, corregida_en_la_vuelta: 1 })
+    expect(ic.planos[0].url).not.toBe(PLANOS[0].url)
+    expect(ic.planos[1].url).toBe(PLANOS[1].url)
+    expect(ic.tanda_de_correccion).toBe(4)
+    // la cola sigue: el siguiente turno es la revisión de siempre de las imágenes clave, y ve la corregida
+    const turno = (r as unknown as { cuerpo: { accion: string; turno: { paso: string; pedido: { images?: string[] } } } }).cuerpo
+    expect(turno.accion).toBe('esperar')
+    expect(turno.turno.paso).toBe(PASO_REVISAR_IMAGENES_CLAVE)
+    expect(JSON.stringify(turno.turno.pedido)).toContain(ic.planos[0].url)
+  })
+})
+
 describe('tanda 2 · la plantilla del video', () => {
   const i = PL.pasos.findIndex((p) => p.clave === PASO_IMAGENES_CLAVE_FINAL)
   it('🔴 los tres pasos van entre `imagenes_clave_final` y `revisar_imagenes_clave`, ubicados por clave, con la condición de la revisión', () => {
