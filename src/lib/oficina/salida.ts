@@ -156,6 +156,13 @@ ESQUEMAS['revision_imagenes_clave.v1'] = {
     para_la_mesa: str(0, 2000),
   },
 }
+// 20-nov · punto 3 · el creativo mira las imágenes finales y SOLO pide cambios (otro proveedor decide si quedó bien): la versión base y qué cambiar, por imagen
+ESQUEMAS['correccion_imagen.v1'] = {
+  t: 'obj', req: ['imagenes'],
+  props: {
+    imagenes: { t: 'arr', max: 20, de: { t: 'obj', req: ['ref', 'elegida'], props: { ref: str(1, 80), elegida: { t: 'num', min: 0, max: 20 }, cambios: str(0, 800) } } },
+  },
+}
 ESQUEMAS['autorevision.v1'] = {
   t: 'obj', req: ['choca'],
   props: {

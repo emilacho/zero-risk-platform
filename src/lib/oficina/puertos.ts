@@ -269,7 +269,9 @@ export interface Puertos {
   plan(planId: string, clientId: string): Promise<string | null>
   /** genera UNA imagen (1024×1024, calidad explícita); con `foto` (una foto PROPIA del cliente, sprint 1 · mejora 3) la edita sobre ella para conservar el producto real; en dry_run NO llama al proveedor */
   /** S2-3 · `size` y `quality` son opcionales (sin ellos, 1024x1024 · medium, como siempre): la imagen clave del video los pide por fase (borrador / final) */
-  imagen(p: { prompt: string; client_id: string; encargo_id: string; dry_run: boolean; foto?: import('./foto-de-referencia').FotoDeReferencia | null; /** 18-nov · las otras fotos reales que siguen a `foto` (personajes, productos, lugares), en orden */ otras_fotos?: import('./foto-de-referencia').FotoDeReferencia[]; size?: string; quality?: string }): Promise<ResultadoImagen>
+  imagen(p: { prompt: string; client_id: string; encargo_id: string; dry_run: boolean; foto?: import('./foto-de-referencia').FotoDeReferencia | null; /** 18-nov · las otras fotos reales que siguen a `foto` (personajes, productos, lugares), en orden */ otras_fotos?: import('./foto-de-referencia').FotoDeReferencia[]; size?: string; quality?: string; /** 20-nov · punto 3 · la llave de una edición (encargo, imagen, vuelta): viaja como `caller` y queda en el libro del brazo */ llave?: string }): Promise<ResultadoImagen>
+  /** 20-nov · punto 3 (CC7 2) · la edición que ya se pidió con esta llave (una fila completada del libro del brazo), para no pagarla dos veces; null si no hay. Opcional */
+  imagenYaPedida?(p: { llave: string; client_id: string }): Promise<{ url: string; generation_id: string; costo_usd: number } | null>
   /** J8a · abre UNA revisión de la pieza en la jefatura (misma función que la ruta `/api/jefatura/revisiones`, con `devolver_a` = la ruta de vuelta de la oficina). Opcional: sin él, el paso `jefatura` deja la pieza «sin revisar» */
   jefatura?(sobre: SobreDeRevisionDePieza): Promise<AperturaDeJefatura>
   /** el revisor ciego (otro proveedor); en dry_run NO llama al proveedor */

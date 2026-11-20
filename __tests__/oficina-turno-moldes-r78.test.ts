@@ -60,7 +60,8 @@ describe('turno de la oficina · moldes del modelo simulado (modo seco)', () => 
     // 11-nov · mirada_video.v1 no necesita molde: en ensayo el video es simulado, no salen cuadros y el paso que lo pide no corre (`mirar-el-video.test.ts` · «en ensayo el video no se mira»)
     // 16-nov · S2-3 · revision_imagenes_clave.v1 tampoco: en ensayo las imágenes clave son simuladas (`hay_imagenes: false`) y la revisión no corre
     //   (`video-imagen-clave.test.ts` · «en ensayo las imágenes son simuladas … NO se llama al revisor»)
-    const SIN_MOLDE_EN_ENSAYO = ['opinion_libre.v1', 'mirada_video.v1', 'revision_imagenes_clave.v1']
+    // 20-nov · punto 3 · correccion_imagen.v1 tampoco: en ensayo las imágenes son simuladas y la corrección se salta sin llamar al creativo (`saltoDeLaCorreccion` con dry_run · `correccion-imagen.test.ts`)
+    const SIN_MOLDE_EN_ENSAYO = ['opinion_libre.v1', 'mirada_video.v1', 'revision_imagenes_clave.v1', 'correccion_imagen.v1']
     const sinMolde = Object.keys(ESQUEMAS).filter((k) => !SIN_MOLDE_EN_ENSAYO.includes(k) && !DESPUES.includes(`'${k}'`))
     expect(sinMolde).toEqual([])
   })

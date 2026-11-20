@@ -3,7 +3,7 @@
  * esquema fuera de las listas NO SE PUEDE ACTIVAR (la siembra y la prueba la rechazan). Pura.
  */
 import { TIPOS_DE_CONDICION, TIPOS_DE_PASO, type Condicion, type Plantilla } from './tipos'
-import { erroresDeLosTopesPorDuracion } from './topes-por-duracion'
+import { erroresDeLosTopesPorDuracion, VUELTAS_QUE_SE_SALTAN_SI_NO_CABEN } from './topes-por-duracion'
 import { TECHO_DE_LA_PIEZA_S } from './video/techo-de-la-pieza'
 
 /** funciones de código registradas (lista CERRADA; se amplía con cada sala, por PR) */
@@ -23,9 +23,11 @@ export const FUNCIONES_REGISTRADAS = [
   'borrador_video',
   // 17-nov · propuestas en imagen · tramo 2b · el borrador de cada propuesta de imagen (imagen en baja + láminas dibujadas, antes de la parada del dueño)
   'borrador_imagen',
+  // 20-nov · punto 3 · la corrección de la imagen final: editar sobre la elegida y la mirada de otro proveedor que decide (`mesa/correccion-imagen.ts`)
+  'editar_imagen', 'mirar_correccion',
 ] as const
 /** funciones de código que SÍ gastan (un proveedor de imágenes o de video, no un modelo de texto): su tope puede ser mayor que 0 */
-export const FUNCIONES_CON_GASTO = ['imagen', 'imagen_ref', 'video', 'imagenes_clave', 'borrador_video', 'borrador_imagen'] as const
+export const FUNCIONES_CON_GASTO = ['imagen', 'imagen_ref', 'video', 'imagenes_clave', 'borrador_video', 'borrador_imagen', 'editar_imagen', 'mirar_correccion'] as const
 /** validadores de código sobre la salida de un agente */
 export const VALIDADORES_REGISTRADOS = ['citas_existen', 'chequear_prompts', 'decide_imagen', 'texto_laminas_en_copy', 'contrato_de_lamina', 'sin_texto_en_estructura', 'refs_validos'] as const
 /** esquemas de salida registrados (ver salida.ts) */
@@ -34,6 +36,8 @@ export const ESQUEMAS_REGISTRADOS = [
   'direccion_imagenes.v1', 'prompts_por_ref.v1', 'observacion_imagenes.v1', 'opinion_libre.v1', 'copy_base.v1', 'laminas.v1', 'estructura.v1', 'copy_kit.v1',
   'resolucion_copy_base.v1', 'resolucion_laminas.v1', 'resolucion_copy_kit.v1', 'resolucion_estructura.v1', 'resolucion_solo.v1', 'autorevision.v1', 'mirada_video.v1',
   'revision_imagenes_clave.v1',
+  // 20-nov · punto 3 · el creativo pide cambios sobre la imagen final
+  'correccion_imagen.v1',
 ] as const
 /** quién puede hacer cumplir una regla de indicación */
 export const APLICADORES_DE_CODIGO = [
@@ -135,16 +139,27 @@ export function validarPlantilla(p: Plantilla): string[] {
       if (t < 0) e.push(`${d}: vuelve_a apunta a «${v.paso}», que no existe`)
       else if (t > i) e.push(`${d}: vuelve_a solo puede volver hacia atrás (o a sí mismo)`)
       else rangos.push({ de: t, a: i, clave: s.clave })
-      if (!Number.isInteger(v.max) || v.max < 1 || v.max > 3) e.push(`${d}: vuelve_a.max debe ser 1, 2 o 3`)
+      // 20-nov · punto 3 (LENOVO, opción (a)): una vuelta que el código salta si no cabe y que va ANIDADA en otras lleva un techo de seguridad: hasta 3 por cada pasada
+      //   de las que la envuelven (1 + sus máximos). La cuenta que decide la lleva el código; las demás vueltas siguen limitadas a 1, 2 o 3
+      const techoAnidado = t >= 0 && t <= i && (VUELTAS_QUE_SE_SALTAN_SI_NO_CABEN.claves as readonly string[]).includes(s.clave)
+        ? 3 * (1 + p.pasos.reduce((acc, x, k) => { const tx = x.vuelve_a ? p.pasos.findIndex((y) => y.clave === x.vuelve_a!.paso) : -1; return tx >= 0 && tx < t && k > i ? acc + Number(x.vuelve_a!.max) : acc }, 0))
+        : 3
+      if (!Number.isInteger(v.max) || v.max < 1 || v.max > techoAnidado) e.push(techoAnidado > 3 ? `${d}: vuelve_a.max debe estar entre 1 y ${techoAnidado} (3 por cada pasada de las vueltas que la envuelven)` : `${d}: vuelve_a.max debe ser 1, 2 o 3`)
       else sumaVueltas += v.max
       e.push(...erroresDeCondicion(v.si, `${d} (vuelve_a.si)`, artefactos))
     }
   })
   // una vuelta no contiene otra, ni cruza una ronda de crítica · 11-nov: salvo dos vueltas al MISMO paso (p. ej. el pedido y la mirada del video vuelven a la mesa):
   //   el motor solo mira la vuelta del último paso ejecutado y cada una cuenta la suya con su máximo, así que el total sigue acotado (y el margen exige su suma)
+  // 20-nov · punto 3 · salvo una vuelta ANIDADA del todo dentro de otra (sin cruzarla) que el código salta si no cabe (`VUELTAS_QUE_SE_SALTAN_SI_NO_CABEN`):
+  //   la corrección de la imagen (`mirar_correccion` → `corregir_imagen`) vive dentro de la vuelta de la jefatura a la mesa. El motor nunca reinicia los contadores,
+  //   así que el total sigue acotado por la suma de los máximos (lo que el margen ya exige); y la vuelta interna la decide el código con lo que le queda al motor
+  const saltable = (clave: string) => (VUELTAS_QUE_SE_SALTAN_SI_NO_CABEN.claves as readonly string[]).includes(clave)
+  const dentro = (i: { de: number; a: number }, o: { de: number; a: number }) => o.de < i.de && i.a < o.a
+  const anidadaQueSeSalta = (x: { de: number; a: number; clave: string }, y: { de: number; a: number; clave: string }) => (dentro(x, y) && saltable(x.clave)) || (dentro(y, x) && saltable(y.clave))
   for (let a = 0; a < rangos.length; a++) {
     for (let b = a + 1; b < rangos.length; b++) {
-      if (rangos[a].de <= rangos[b].a && rangos[b].de <= rangos[a].a && rangos[a].de !== rangos[b].de) e.push(`las vueltas de «${rangos[a].clave}» y «${rangos[b].clave}» se solapan o se anidan`)
+      if (rangos[a].de <= rangos[b].a && rangos[b].de <= rangos[a].a && rangos[a].de !== rangos[b].de && !anidadaQueSeSalta(rangos[a], rangos[b])) e.push(`las vueltas de «${rangos[a].clave}» y «${rangos[b].clave}» se solapan o se anidan`)
     }
     for (let k = rangos[a].de; k <= rangos[a].a; k++) {
       if (p.pasos[k]?.ronda !== undefined) e.push(`la vuelta de «${rangos[a].clave}» cruza el paso de crítica «${p.pasos[k].clave}»`)
