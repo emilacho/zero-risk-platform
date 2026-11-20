@@ -276,6 +276,8 @@ export function renderManualLimpio(entrada: ManualLimpioEntrada): ManualLimpio {
     ['DIRECCIÓN DE FOTOGRAFÍA', 'direccion_de_fotografia', 'lista'],
     ['USO DEL LOGO', 'uso_del_logo', 'lista'],
     ['JERARQUÍA TIPOGRÁFICA', 'jerarquia_tipografica', 'lista'],
+    // 20-nov · GO Lenovo (decisión de Cerebro, sección firmada por Emilio el 18-nov): «Cómo se produce con IA», en prosa; si el manual no la trae, no se imprime ni se rellena
+    ['CÓMO SE PRODUCE CON IA', 'produccion_con_ia', 'prosa'],
     ['EL RECORRIDO DEL CLIENTE', 'customer_angle', 'prosa'],
     ['CÓMO SE FIDELIZA', 'retention_notes', 'prosa'],
     ['VOCABULARIO OBLIGATORIO', 'required_terminology', 'lista'],
@@ -284,7 +286,7 @@ export function renderManualLimpio(entrada: ManualLimpioEntrada): ManualLimpio {
   ]
 
   // las secciones nuevas no cuentan para el cierre: si faltan, no se declaran como omitidas
-  const NUEVAS = new Set(['historia_y_origen', 'tono_por_canal', 'reglas_de_escritura', 'direccion_de_fotografia', 'uso_del_logo', 'jerarquia_tipografica'])
+  const NUEVAS = new Set(['historia_y_origen', 'tono_por_canal', 'reglas_de_escritura', 'direccion_de_fotografia', 'uso_del_logo', 'jerarquia_tipografica', 'produccion_con_ia'])
   for (const [tit, campo, tipo] of bloques) {
     if (tipo === 'prosa') {
       const t = prosa(campo)
