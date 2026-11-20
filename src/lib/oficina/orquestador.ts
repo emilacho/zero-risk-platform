@@ -316,7 +316,7 @@ async function contextoDelRevisorDeLaPieza(P: Puertos, enc: Encargo, pl: Plantil
   // 01-nov · un revisor nunca tiene menos contexto que quien escribe; si el puerto falla, se dice y la revisión sigue
   const carpeta = P.carpetaParaRevisar ? await P.carpetaParaRevisar(String(enc.client_id)).catch((x: unknown) => [{ titulo: 'La carpeta del cliente', funcion: 'lo que el negocio sabe', texto: `(no se pudo leer: ${x instanceof Error ? x.message : String(x)}. No lo tomes como que no existe.)` }]) : []
   // 20-nov · «Crear Campaña» (entrega 3): el brief del dueño de la campaña, el mismo documento que leyeron la estrategia, el brief y la gran idea · sin él, nada cambia
-  const delDueno = P.briefDelDuenoParaRevisar && enc.campana_id ? await P.briefDelDuenoParaRevisar(String(enc.campana_id)).catch((x: unknown) => ({ titulo: 'El brief del dueño de esta campaña', funcion: 'lo que el dueño pidió', texto: `(no se pudo leer: ${x instanceof Error ? x.message : String(x)}. No lo tomes como que no existe.)` })) : null
+  const deLaCampana = P.briefDeLaCampanaParaRevisar && enc.campana_id ? await P.briefDeLaCampanaParaRevisar(String(enc.campana_id)).catch((x: unknown) => ({ titulo: 'El brief de esta campaña', funcion: 'lo que se pidió para esta campaña', texto: `(no se pudo leer: ${x instanceof Error ? x.message : String(x)}. No lo tomes como que no existe.)` })) : null
   // 17-nov · coherencia con los hechos: el bloque de Cerebro (o el aviso de que no lo hay) va SIEMPRE como un documento más del revisor
   const hechos = contextoDeHechos(P.hechosDelNegocio ? await P.hechosDelNegocio(String(enc.client_id)).catch((x: unknown) => ({ no_se_pudo_leer: x instanceof Error ? x.message : String(x) })) : null)
   // cambio 4 · la ficha de la oferta, tal cual la trae la hoja: SOLO si la hay (sin ficha el pedido queda como antes)
@@ -324,7 +324,7 @@ async function contextoDelRevisorDeLaPieza(P: Puertos, enc: Encargo, pl: Plantil
   // 19-nov · ADENDA 1 · P2b: el resumen del encargo (red, formato, objetivo, llamado) va al jefe como un documento más, en las tres familias
   const hoja = briefDe(e)
   const resumen = resumenParaElJefe(hoja)
-  return [...resumen, ...material.contexto, ...carpeta, ...(delDueno ? [delDueno] : []), hechos, ...(ficha ? [ficha] : [])]
+  return [...resumen, ...material.contexto, ...carpeta, ...(deLaCampana ? [deLaCampana] : []), hechos, ...(ficha ? [ficha] : [])]
 }
 
 /** lo que ve el revisor de la jefatura (la misma función para abrir la revisión y para aplicar lo que vuelve) */

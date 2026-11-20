@@ -1,7 +1,7 @@
 /**
  * 20-nov · «Crear Campaña» · entrega 3 · el ADAPTADOR real del pedido del dueño (lo que la base en memoria no ve):
  *   la tabla de CC1 (`cadena_pedidos_de_campana`) se lee por `campana_id`; con la tabla ausente (migración aún no aplicada) = sin pedido;
- *   cualquier OTRO error falla ruidoso (la cadena no sigue sin el brief del dueño en silencio). Base simulada: US$ 0, sin red.
+ *   cualquier OTRO error falla ruidoso (la cadena no sigue sin el brief de la campaña en silencio). Base simulada: US$ 0, sin red.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -53,17 +53,17 @@ describe('el adaptador real del pedido del dueño', () => {
   it('lee el pedido de ESA campaña (no el de otra del mismo cliente)', async () => {
     tablas[T] = [fila('camp-1', 'brief uno'), fila('camp-2', 'brief dos')]
     const al = almacenDeSupabase()
-    expect((await al.pedidoDelDueno!('camp-2'))?.brief_libre).toBe('brief dos')
-    expect((await al.pedidoDelDueno!('camp-1'))?.brief_libre).toBe('brief uno')
-    expect(await al.pedidoDelDueno!('camp-3')).toBeNull()
+    expect((await al.pedidoDeLaCampana!('camp-2'))?.brief_libre).toBe('brief dos')
+    expect((await al.pedidoDeLaCampana!('camp-1'))?.brief_libre).toBe('brief uno')
+    expect(await al.pedidoDeLaCampana!('camp-3')).toBeNull()
   })
   it('tabla ausente, en sus dos formas = sin pedido; otro error = falla', async () => {
     const al = almacenDeSupabase()
     for (const code of ['42P01', 'PGRST205']) {
       errorEn[T] = { code, message: 'no existe la tabla' }
-      expect(await al.pedidoDelDueno!('camp-1')).toBeNull()
+      expect(await al.pedidoDeLaCampana!('camp-1')).toBeNull()
     }
     errorEn[T] = { code: '57014', message: 'tiempo agotado' }
-    await expect(al.pedidoDelDueno!('camp-1')).rejects.toThrow('tiempo agotado')
+    await expect(al.pedidoDeLaCampana!('camp-1')).rejects.toThrow('tiempo agotado')
   })
 })

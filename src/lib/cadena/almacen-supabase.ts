@@ -2,7 +2,7 @@
  * ALMACÉN DE LA CADENA sobre Supabase · el ÚNICO archivo, con las rutas, que nombra las tablas `cadena_*` (lo vigila una prueba).
  * La migración NO está aplicada: hasta entonces nada llega aquí. `client_id` es TEXTO en todas las tablas de la cadena.
  */
-import type { PedidoDelDueno } from './brief-del-dueno'
+import type { PedidoDeLaCampana } from './brief-de-la-campana'
 import { planesVigentes, type PlanDelCliente } from '../direccion/decisiones-reemplazadas'
 import { palabrasDuras } from '../manual/palabras-con-intencion'
 import { getSupabaseAdmin } from '@/lib/supabase'
@@ -398,10 +398,10 @@ export function almacenDeSupabase(): Almacen {
     async campana(id) { return uno<Campana>(db.from('cadena_campanas').select('*').eq('id', id).maybeSingle()) },
     async campanaPorPlan(clientId, planId, seco) { return uno<Campana>(db.from('cadena_campanas').select('*').eq('client_id', clientId).eq('plan_id', planId).eq('seco', seco).is('llave_de_campana', null).maybeSingle()) },
     async campanaPorLlave(clientId, llave, seco) { return uno<Campana>(db.from('cadena_campanas').select('*').eq('client_id', clientId).eq('llave_de_campana', llave).eq('seco', seco).maybeSingle()) },
-    async pedidoDelDueno(campanaId) {
+    async pedidoDeLaCampana(campanaId) {
       const { data, error } = await db.from('cadena_pedidos_de_campana').select('nombre, cambio, fecha_inicio, fecha_fin, fechas_clave, brief_libre').eq('campana_id', campanaId).maybeSingle()
       if (error) { if (TABLA_AUSENTE.has(String((error as { code?: string }).code))) return null; fallo(error) }
-      return (data as PedidoDelDueno | null) ?? null
+      return (data as PedidoDeLaCampana | null) ?? null
     },
     async campanaViva(clientId, seco) { return (await lista<Campana>(db.from('cadena_campanas').select('*').eq('client_id', clientId).eq('seco', seco).is('llave_de_campana', null).not('estado', 'in', '(cerrada,reemplazada)').limit(1)))[0] ?? null },
     async insertarCampana(c) { const { data, error } = await db.from('cadena_campanas').insert(c).select().single(); if (error) fallo(error); return data as Campana },

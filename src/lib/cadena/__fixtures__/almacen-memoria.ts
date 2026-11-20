@@ -2,7 +2,7 @@
  * Almacén EN MEMORIA de la cadena · para las pruebas de los manejadores (sin base, sin red, US$ 0).
  * Imita las garantías de la base que importan: únicos, idempotencia de corridas/esperas, una campaña viva por cliente.
  */
-import type { PedidoDelDueno } from '../brief-del-dueno'
+import type { PedidoDeLaCampana } from '../brief-de-la-campana'
 import type { ResultadoDeAbrirMesa, SobreDeReubicacion } from '../reubicar'
 import type { EncargoDeLaCampana, LecturaDeArreglos, ResultadoDeAbrirMesaDeFallidos, SobreDeFallidos } from '../rehacer-fallidos'
 import type { Almacen, BriefCreativoGuardado, Campana, ConceptoGuardado, ContextoDelCliente, Corrida, EntradaDeRegistro, EsperaFila, EstrategiaGuardada, RondaDeEstrategia, FechaCobertura, FichasGuardadas, ObjetoDeValidacion, ParteSecoAGuardar, PreguntaAlDueno, ResultadoDeAbrirRegistro } from '../almacen'
@@ -188,8 +188,8 @@ export class AlmacenMemoria implements Almacen {
   async campanaPorPlan(clientId: string, planId: string, seco: boolean) { return this.copia(this.campanas.find((c) => c.client_id === clientId && c.plan_id === planId && c.seco === seco && !c.llave_de_campana)) }
   async campanaPorLlave(clientId: string, llave: string, seco: boolean) { return this.copia(this.campanas.find((c) => c.client_id === clientId && c.llave_de_campana === llave && c.seco === seco)) }
   /** 20-nov · entrega 3: los pedidos del dueño, por campana_id */
-  pedidosDelDueno: Record<string, PedidoDelDueno> = {}
-  async pedidoDelDueno(campanaId: string) { const p = this.pedidosDelDueno[campanaId]; return p ? { ...p } : null }
+  pedidosDeLaCampana: Record<string, PedidoDeLaCampana> = {}
+  async pedidoDeLaCampana(campanaId: string) { const p = this.pedidosDeLaCampana[campanaId]; return p ? { ...p } : null }
   async campanaViva(clientId: string, seco: boolean) { return this.copia(this.campanas.find((c) => c.client_id === clientId && c.seco === seco && !c.llave_de_campana && c.estado !== 'cerrada' && c.estado !== 'reemplazada')) }
   async insertarCampana(c: Omit<Campana, 'id'>) {
     // 19-nov · los mismos únicos que la base: los dos de siempre valen SOLO para las campañas sin llave; las que tienen llave, una por (cliente, seco, llave)

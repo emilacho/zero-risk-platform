@@ -8,7 +8,7 @@ import { datosDelDueno } from '../../manual/propuesta-rutas'
 import { adjuntoDelCliente, type ContextoDelCliente } from '../../portero-alimenta/contexto-del-cliente'
 import { TOPE_REAL_DEL_PEDIDO } from '../../limites-de-tamano'
 import type { ContextoDelRevisor } from '../../revision-comun'
-import { briefDelDuenoEnTexto, REGLA_DEL_BRIEF_DEL_DUENO, type PedidoDelDueno } from '../../cadena/brief-del-dueno'
+import { briefDeLaCampanaEnTexto, REGLA_DEL_BRIEF_DE_LA_CAMPANA, type PedidoDeLaCampana } from '../../cadena/brief-de-la-campana'
 
 type Db = { from(tabla: string): any }
 
@@ -41,20 +41,20 @@ export async function carpetaParaRevisar(db: Db, clientId: string): Promise<Cont
 }
 
 /** 20-nov · «Crear Campaña» (entrega 3): el título con que el revisor de la pieza recibe el brief del dueño */
-export const TITULO_DEL_BRIEF_DEL_DUENO_PARA_REVISAR = 'El brief del dueño de esta campaña'
+export const TITULO_DEL_BRIEF_DE_LA_CAMPANA_PARA_REVISAR = 'El brief de esta campaña'
 
 /**
  * El brief del dueño de la campaña de la pieza, ENTERO: el MISMO documento que recibieron la estrategia, el brief creativo y la gran idea.
  * Así el revisor no marca como inventado lo que pidió el dueño. null = la campaña no nació del botón (o la tabla aún no existe). Nunca lanza: un fallo viaja DICHO.
  */
-export async function briefDelDuenoParaRevisar(leer: (campanaId: string) => Promise<PedidoDelDueno | null>, campanaId: string): Promise<ContextoDelRevisor | null> {
-  const funcion = 'lo que el dueño pidió para ESTA campaña; manda sobre el plan'
+export async function briefDeLaCampanaParaRevisar(leer: (campanaId: string) => Promise<PedidoDeLaCampana | null>, campanaId: string): Promise<ContextoDelRevisor | null> {
+  const funcion = 'lo que se pidió para ESTA campaña; manda sobre el plan'
   try {
     // el pedido se lee por el almacén de la cadena (la tabla ausente ya vuelve como «sin pedido»; otro error, lanza y aquí viaja dicho)
-    const texto = briefDelDuenoEnTexto(await leer(campanaId))
-    return texto ? { titulo: TITULO_DEL_BRIEF_DEL_DUENO_PARA_REVISAR, funcion, texto: `${REGLA_DEL_BRIEF_DEL_DUENO}\n\n${texto}` } : null
+    const texto = briefDeLaCampanaEnTexto(await leer(campanaId))
+    return texto ? { titulo: TITULO_DEL_BRIEF_DE_LA_CAMPANA_PARA_REVISAR, funcion, texto: `${REGLA_DEL_BRIEF_DE_LA_CAMPANA}\n\n${texto}` } : null
   } catch (e) {
-    return problema(TITULO_DEL_BRIEF_DEL_DUENO_PARA_REVISAR, funcion, e)
+    return problema(TITULO_DEL_BRIEF_DE_LA_CAMPANA_PARA_REVISAR, funcion, e)
   }
 }
 
