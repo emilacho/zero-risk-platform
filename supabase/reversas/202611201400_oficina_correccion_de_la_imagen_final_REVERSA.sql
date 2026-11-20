@@ -11,6 +11,7 @@ SELECT 1 FROM public.oficina_tipos_de_grupo WHERE tipo IN ('post_mesa', 'carruse
 DO $$
 DECLARE
   f record;
+  esperada numeric;
 BEGIN
   IF EXISTS (SELECT 1 FROM public.oficina_encargos e WHERE e.estado IN ('abierto', 'en_paso') AND e.familia IN ('post_mesa', 'carrusel_mesa', 'kit_mesa')) THEN
     RAISE EXCEPTION 'REVERSA 202611201400: hay un encargo vivo de una mesa de imagen; esperar a que cierre';
@@ -20,6 +21,16 @@ BEGIN
        OR (f.limites->>'vueltas_de_correccion_imagen') IS DISTINCT FROM '3' OR (f.limites->>'margen')::numeric < 44
        OR jsonb_typeof(f.limites->'reserva_por_pieza_usd') IS DISTINCT FROM 'number' OR (f.limites->>'reserva_por_pieza_usd')::numeric < 0.9 THEN
       RAISE EXCEPTION 'REVERSA 202611201400: % no tiene lo que dejó la migración; no se toca', f.tipo;
+    END IF;
+    -- 20-nov · CC6 (ADENDA 4 de su CERTIFICACION de #1250, al certificar #1252): con otra migración encima (1500, el segundo doctor) esta reversa no frenaba,
+    --   restaba sobre lo que hubiera y dejaba una mezcla que ninguna reversa reconoce. El orden «la de encima primero» ahora lo cuida la base: la reserva tiene que
+    --   ser EXACTAMENTE la que dejó la ida (3,35 · 4,00 · 4,00) y no puede haber ningún paso `segunda_mirada`
+    esperada := (CASE f.tipo WHEN 'post_mesa' THEN 3.35 ELSE 4.00 END);
+    IF (f.limites->>'reserva_por_pieza_usd')::numeric IS DISTINCT FROM esperada THEN
+      RAISE EXCEPTION 'REVERSA 202611201400: % tiene la reserva en %, no la que dejó la migración: hay otra migración encima; deshacer primero esa', f.tipo, f.limites->>'reserva_por_pieza_usd';
+    END IF;
+    IF EXISTS (SELECT 1 FROM jsonb_array_elements(f.pasos) p WHERE p->>'clave' = 'segunda_mirada') THEN
+      RAISE EXCEPTION 'REVERSA 202611201400: % tiene el paso segunda_mirada (202611201500): deshacer primero esa', f.tipo;
     END IF;
   END LOOP;
 END $$;
