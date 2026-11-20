@@ -17,14 +17,15 @@ const CASOS = {
   pieza: [
     { caso: 'sin-fichas-gpt-vacio', sim: { fichas: 'ninguna', gpt: 'vacio' }, ...R('limpia'), sin: ['correccion', 'decision'], saltos: [1, 1] },
     { caso: 'sin-fichas-gpt-sin-hallazgos', sim: { fichas: 'ninguna', gpt: 'sin_hallazgos' }, ...R('limpia'), sin: ['correccion', 'decision'], saltos: [1, 1] },
-    { caso: 'sin-fichas-gpt-ok-toma-todo', sim: { fichas: 'ninguna', gpt: 'ok', toma: 'todo' }, ...R('limpia'), con: ['decision'], sin: ['correccion'], saltos: [2, 3] },
-    { caso: 'sin-fichas-gpt-ok-toma-nada', sim: { fichas: 'ninguna', gpt: 'ok', toma: 'nada' }, ...R('limpia'), con: ['decision'], sin: ['correccion'], saltos: [2, 3] },
+    // 20-nov · PLAN v4 (CC4) · en la pieza GPT va primero y su informe solo se guarda: NUNCA hay decisión del autor sobre su opinión
+    { caso: 'sin-fichas-gpt-ok-toma-todo', sim: { fichas: 'ninguna', gpt: 'ok', toma: 'todo' }, ...R('limpia'), sin: ['correccion', 'decision'], saltos: [1, 1] },
+    { caso: 'sin-fichas-gpt-ok-toma-nada', sim: { fichas: 'ninguna', gpt: 'ok', toma: 'nada' }, ...R('limpia'), sin: ['correccion', 'decision'], saltos: [1, 1] },
     { caso: 'sin-fichas-gpt-falla-red', sim: { fichas: 'ninguna', gpt: 'falla_red' }, ...R('sin_segunda_mirada', { sin_segunda_mirada: true }), sin: ['correccion', 'decision'], saltos: [1, 1] },
     { caso: 'sin-fichas-gpt-falla-401', sim: { fichas: 'ninguna', gpt: 'falla_401' }, ...R('sin_segunda_mirada', { sin_segunda_mirada: true }), sin: ['correccion', 'decision'], saltos: [1, 1] },
-    { caso: 'sugerencia-gpt-ok', sim: { fichas: 'sugerencia', gpt: 'ok', toma: 'todo' }, ...R('limpia'), con: ['decision'], sin: ['correccion'], saltos: [2, 3] },
-    { caso: 'bloquea-toma-todo-gpt-ok', sim: { fichas: 'bloquea', gpt: 'ok', toma: 'todo' }, ...R('limpia'), con: ['correccion', 'decision'], saltos: [3, 5] },
+    { caso: 'sugerencia-gpt-ok', sim: { fichas: 'sugerencia', gpt: 'ok', toma: 'todo' }, ...R('limpia'), sin: ['correccion', 'decision'], saltos: [1, 1] },
+    { caso: 'bloquea-toma-todo-gpt-ok', sim: { fichas: 'bloquea', gpt: 'ok', toma: 'todo' }, ...R('limpia'), con: ['correccion'], sin: ['decision'], saltos: [2, 3] },
     { caso: 'bloquea-toma-nada-gpt-ok', sim: { fichas: 'bloquea', gpt: 'ok', toma: 'nada' }, ...R('limpia'), // revisión 2 = A · el criterio no tomado es observación declarada
-      con: ['correccion'], saltos: [2, 5] },
+      con: ['correccion'], sin: ['decision'], saltos: [2, 3] },
     { caso: 'bloquea-toma-todo-gpt-vacio', sim: { fichas: 'bloquea', gpt: 'vacio', toma: 'todo' }, ...R('limpia'), con: ['correccion'], sin: ['decision'], saltos: [2, 3] },
     { caso: 'bloquea-gpt-falla-red', sim: { fichas: 'bloquea', gpt: 'falla_red', toma: 'todo' }, marcas: { sin_segunda_mirada: true }, con: ['correccion'], sin: ['decision'], saltos: [2, 3] },
     { caso: 'bloquea-formato-roto-una-vez', sim: { fichas: 'bloquea', gpt: 'vacio', toma: 'todo', productor: 'formato_roto' }, ...R('limpia'), con: ['correccion'], saltos: [3, 4] },

@@ -74,7 +74,9 @@ describe('el molde de J4 (nodo ② en seco) contesta lo que el orquestador sabe 
         expect(r.ok, `${tipo} ${t.paso} (${esquema}): ${String(cuerpo.texto).slice(0, 120)}`).toBe(true)
       }
     }
-    expect([...vistos].sort()).toEqual(expect.arrayContaining(['fichas.v1', 'plan_texto_y_resolucion.v1', 'resolucion.v1', 'resolucion_objeto.v1', 'resolucion_parcial.v1', 'resolucion_solo.v1']))
+    // 20-nov · PLAN v4 · `resolucion_solo.v1` era la decisión del dueño sobre la opinión de GPT en la pieza: ese paso ya no existe (GPT solo se guarda)
+    expect([...vistos].sort()).toEqual(expect.arrayContaining(['fichas.v1', 'plan_texto_y_resolucion.v1', 'resolucion.v1', 'resolucion_objeto.v1', 'resolucion_parcial.v1']))
+    expect(vistos.has('resolucion_solo.v1')).toBe(false)
   })
   it('el molde de J4 lee los ids de las fichas con el MISMO formato que escribe el orquestador (`- [id] (gravedad) en …`)', async () => {
     const { P } = puertosDePrueba()

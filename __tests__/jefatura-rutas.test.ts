@@ -231,10 +231,11 @@ describe('el recorrido por HTTP, en seco', () => {
     expect(rev.cerrado_en).toBeTruthy()
     expect(rev.policy_snapshot.artifact_type).toBe('pieza')
     const pasos = db().tablas.jefatura_pasos as Json[]
-    expect(pasos.map((p) => p.paso)).toEqual(expect.arrayContaining(['revision_fondo', 'segunda_mirada', 'decision:content-creator']))
+    // 20-nov · PLAN v4 · GPT va primero y su informe solo se guarda: sin decisión del dueño y sin fichas externas
+    expect(pasos.map((p) => p.paso)).toEqual(['segunda_mirada', 'revision_fondo'])
     expect(pasos.every((p) => p.estado === 'hecho')).toBe(true)
     expect(pasos.find((p) => p.paso === 'segunda_mirada')).toMatchObject({ concepto: 'revisor_externo', tipo: 'externo' })
-    expect((db().tablas.jefatura_fichas as Json[]).some((f) => f.origen === 'externa')).toBe(true)
+    expect(((db().tablas.jefatura_fichas ?? []) as Json[]).some((f) => f.origen === 'externa')).toBe(false)
   })
   it('plan con ficha que bloquea y toma algo: la salida trae las 3 versiones A, B, C con su texto', async () => {
     const r = await recorrer(sobre('plan', { simulacion: { fichas: 'bloquea', toma: 'algo' } }) as Json)
@@ -259,7 +260,8 @@ describe('el recorrido por HTTP, en seco', () => {
     const t = await llamar(TURNOS, 'turnos', { accion: 'siguiente', revision_id: a.j.revision_id })
     expect(t.j.reentrega).toBe(true)
     expect(t.j.turno.dispatch_key).toBe(a.j.turno.dispatch_key)
-    expect(db().tablas.jefatura_pasos).toHaveLength(1)
+    // 20-nov · PLAN v4 · el paso de GPT (primero en la pieza) también queda guardado: lo que no puede haber es otro paso del jefe
+    expect((db().tablas.jefatura_pasos as Json[]).filter((p) => p.paso === 'revision_fondo')).toHaveLength(1)
   })
   it('un resultado con número de paso equivocado = 409; entradas mal formadas = 400', async () => {
     const a = await llamar(REVISIONES, 'revisiones', sobre('pieza'))

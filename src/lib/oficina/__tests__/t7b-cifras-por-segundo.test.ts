@@ -113,7 +113,8 @@ describe('T7b · condición de CC6 · las rondas del dueño van DENTRO de lo req
     // 18-nov · la vuelta de la jefatura también: `puedeVolverALaMesa` la mide entera antes de devolver (regla dura, hasta 6 vueltas · 202611181530)
     // 20-nov · punto 3 · y la corrección de la imagen final: `cabeOtraVuelta` (mesa/correccion-imagen) la mide entera antes de volver
     expect(VUELTAS_QUE_SE_SALTAN_SI_NO_CABEN.claves).toEqual([PASO_REVISAR_IMAGENES_CLAVE, PASO_MIRAR_VIDEO, 'jefatura', 'mirar_correccion'])
-    expect(VUELTAS_QUE_SE_SALTAN_SI_NO_CABEN.funciones).toEqual(['pedido_de_video'])
+    // 20-nov · PLAN v4 (CC4) · la vuelta de la segunda mirada también: `cabeLaVueltaDeLaSegundaMirada` la mide entera (mesa + lo que sigue + rondas del dueño) antes de volver
+    expect(VUELTAS_QUE_SE_SALTAN_SI_NO_CABEN.funciones).toEqual(['pedido_de_video', 'segunda_mirada'])
     expect(VIDEO_MESA_ENCENDIDA.pasos.find((s) => s.funcion === 'pedido_de_video')?.vuelve_a).toBeTruthy()
   })
   it('la mesa del video guarda lo que sigue con la MISMA cuenta (pasos + jefatura + rondas que quedan), no la cifra fija de 6,5', () => {

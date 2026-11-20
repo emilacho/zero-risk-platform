@@ -131,8 +131,9 @@ export function costoDeVolver(pl: Plantilla, paso: Paso): number {
  */
 // 18-nov · GO Lenovo 13:52Z · la vuelta de la JEFATURA a la mesa también se salta si no cabe (`puedeVolverALaMesa` → `cabeLaVuelta` antes de devolver, con cada paso a su tope):
 //   nunca corta a medias. Con la vuelta por regla dura (hasta 6, 202611181530) reservarla al abrir dejaría sin abrir a casi todas las piezas; sin caber, la regla dura queda «en corrección»
+// 20-nov · PLAN v4 (CC4) · la vuelta de la SEGUNDA MIRADA (GPT en la propuesta) también se salta si no cabe (`cabeLaVueltaDeLaSegundaMirada`): no se reserva al abrir
 // 20-nov · punto 3 · la vuelta de la corrección de la imagen (`mirar_correccion` → `corregir_imagen`) también: la decide la mirada solo si cabe entera (`cabeOtraVuelta`)
-export const VUELTAS_QUE_SE_SALTAN_SI_NO_CABEN = { funciones: ['pedido_de_video'], claves: ['revisar_imagenes_clave', 'mirar_video', 'jefatura', 'mirar_correccion'] } as const
+export const VUELTAS_QUE_SE_SALTAN_SI_NO_CABEN = { funciones: ['pedido_de_video', 'segunda_mirada'], claves: ['revisar_imagenes_clave', 'mirar_video', 'jefatura', 'mirar_correccion'] } as const
 const seSalta = (s: Paso) => (VUELTAS_QUE_SE_SALTAN_SI_NO_CABEN.funciones as readonly string[]).includes(String(s.funcion ?? '')) || (VUELTAS_QUE_SE_SALTAN_SI_NO_CABEN.claves as readonly string[]).includes(s.clave)
 
 /**

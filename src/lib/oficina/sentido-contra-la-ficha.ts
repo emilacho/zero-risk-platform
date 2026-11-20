@@ -213,7 +213,8 @@ export function repartir(hallazgos: Hallazgo[], filaId: string | null, encargoId
 export const ROTULO_DE_RESPUESTA = 'RESPUESTA A LA JEFATURA'
 export type QueHizo = 'tomada' | 'tomada_en_parte' | 'no_tomada'
 export interface RespuestaDelCreador { id: string; respuesta: QueHizo | 'no_dicha'; motivo: string | null; dura: boolean; texto: string; declarado?: string }
-const RE_RESPUESTA = /^[\s>*•\-–—]*\*{0,2}RESPUESTA A LA JEFATURA\s*\[?\s*(S\d{1,2})\s*\]?\s*\*{0,2}\s*[:·–—-]\s*(.*)$/iu
+// 20-nov · PLAN v4 · también las [O…] de la opinión extra (el segundo doctor creativo): el mismo lector, el mismo rótulo
+const RE_RESPUESTA = /^[\s>*•\-–—]*\*{0,2}RESPUESTA A LA JEFATURA\s*\[?\s*([SO]\d{1,2})\s*\]?\s*\*{0,2}\s*[:·–—-]\s*(.*)$/iu
 /** lo que el autor escribe para pedirle la respuesta (va al final del aviso de la vuelta; solo si hay correcciones de sentido) */
 export function pedidoDeRespuesta(enviadas: Enviada[]): string[] {
   if (!enviadas.length) return []
