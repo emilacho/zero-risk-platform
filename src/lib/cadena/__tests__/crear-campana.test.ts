@@ -255,6 +255,21 @@ describe('abrir con el pedido', () => {
     expect(r.cuerpo.pedido_id).toBeUndefined()
     expect(al.pedidos[0].campana_id).toBeNull()
   })
+  it('🔴 CC6 m15 · pedido YA ligado: repetir el POST es «ya_pedida» con su campaña y NO vuelve a mandar el sobre', async () => {
+    const al = almacen(); await crear(al)
+    const id = idDe(await abrir(al))
+    const antes = al.sobresEmitidos.length
+    const r = await crear(al)
+    expect(r.cuerpo).toMatchObject({ ok: true, estado: 'ya_pedida', pedido_id: 'ped-1', campana_id: id })
+    expect(r.cuerpo.despertado).toBeUndefined()
+    expect(al.sobresEmitidos).toHaveLength(antes)
+  })
+  it('🔴 CC6 a4 · el sobre llega SIN nombre pero con la llave del pedido: la campaña nace con el nombre del pedido', async () => {
+    const al = almacen(); await crear(al)
+    const r = await abrirCampana(al, { ...wf, client_id: CLI, seco: true, llave_de_campana: llaveDelPedido }, AHORA)
+    expect(r.status).toBe(201)
+    expect((al.campanas.find((x) => x.id === idDe(r)) as Campana).nombre_de_campana).toBe('Temporada de lluvias')
+  })
   it('🔴 sin llave, la apertura de siempre no mira pedidos', async () => {
     const al = almacen(); await crear(al)
     const r = await abrirCampana(al, { ...wf, client_id: CLI, seco: true }, AHORA)

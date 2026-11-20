@@ -120,7 +120,7 @@ export type LecturaDelMinimo =
   | { ok: true; plan_id: string; minimo: Minimo; fecha_inicio: string; fecha_fin: string; hoy: string }
   | { ok: false; status: number; cuerpo: Record<string, unknown> }
 const sinPlan = (): LecturaDelMinimo => ({ ok: false, status: 409, cuerpo: { ok: false, error: 'sin_plan_aprobado', detalle: 'tope: el cliente no tiene un plan aprobado; sin plan no hay campaña nueva' } })
-const ilegible = (motivo: string): LecturaDelMinimo => ({ ok: false, status: 503, cuerpo: { ok: false, error: 'minimo_ilegible', detalle: `tope: no se pudo calcular el mínimo (${motivo.slice(0, 200)}); todavía no se puede crear` } })
+const ilegible = (motivo: string): LecturaDelMinimo => ({ ok: false, status: 503, cuerpo: { ok: false, error: 'minimo_ilegible', detalle: `tope: no se pudo calcular el mínimo (${motivo}); todavía no se puede crear` } })
 
 /**
  * El mínimo de ESTA campaña: el plan vigente y aprobado del cliente; las tandas salen de las fechas pedidas o, sin fechas, de la ventana del plan desde hoy (la misma de `abrirCampana`).
@@ -166,7 +166,7 @@ export function sobreDelPedido(p: Pick<PedidoGuardado, 'client_id' | 'seco' | 'l
 }
 
 const yaPedida = (p: PedidoGuardado, extra: Record<string, unknown> = {}): Respuesta => ({ status: 200, cuerpo: { ok: true, estado: 'ya_pedida', pedido_id: p.id, llave: p.llave, ...(p.campana_id ? { campana_id: p.campana_id } : {}), ...extra } })
-const despertado = (r: Awaited<ReturnType<Almacen['emitirSobre']>>): Record<string, unknown> => (r.resultado === 'rechazado' ? { despertado: false, motivo_sin_despertar: String(r.detalle ?? 'la sala no aceptó el sobre').slice(0, 300) } : { despertado: true })
+const despertado = (r: Awaited<ReturnType<Almacen['emitirSobre']>>): Record<string, unknown> => (r.resultado === 'rechazado' ? { despertado: false, motivo_sin_despertar: String(r.detalle ?? 'la sala no aceptó el sobre') } : { despertado: true })
 
 /**
  * POST crear-campana: valida → la misma llave ya guardada = «ya pedida» → la cadena admite al cliente → plan aprobado → fechas desde hoy → tope ≥ mínimo → (ensayo: lo que haría,

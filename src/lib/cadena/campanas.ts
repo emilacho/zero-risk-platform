@@ -61,7 +61,7 @@ export async function abrirCampana(al: Almacen, cuerpo: Record<string, unknown>,
   const ligar = async (campanaId: string): Promise<string | null> => {
     if (!pedido || pedido.campana_id === campanaId || !al.ligarPedidoDeCampana) return null
     if (pedido.campana_id) return `el pedido ya está ligado a otra campaña (${pedido.campana_id})`
-    try { await al.ligarPedidoDeCampana(pedido.id, campanaId); return null } catch (e) { return `no se pudo ligar el pedido: ${String(e instanceof Error ? e.message : e).slice(0, 200)}` }
+    try { await al.ligarPedidoDeCampana(pedido.id, campanaId); return null } catch (e) { return `no se pudo ligar el pedido: ${String(e instanceof Error ? e.message : e)}` }
   }
   let ya: Campana | null
   if (campanaPedida) {
