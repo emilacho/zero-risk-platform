@@ -14,14 +14,16 @@ import { CARRUSEL_MESA_CON_PROPUESTAS, KIT_MESA_CON_PROPUESTAS, POST_MESA_CON_PR
 import { CARRUSEL_MESA_CON_SEGUNDA_MIRADA, KIT_MESA_CON_SEGUNDA_MIRADA, POST_MESA_CON_SEGUNDA_MIRADA, VIDEO_MESA_CON_SEGUNDA_MIRADA } from '../plantillas/segunda-mirada'
 import { TOPES_DE_LAS_MESAS_DE_IMAGEN_USD } from '../plantillas/topes-de-las-mesas-de-imagen'
 import { RESERVA_POR_PIEZA_DE_LAS_MESAS_DE_IMAGEN_USD } from '../plantillas/reserva-de-las-mesas-de-imagen'
-import { COSTO_ESPERADO_DE_LA_SEGUNDA_MIRADA_USD, COSTO_ESPERADO_DE_LA_VUELTA_A_LA_MESA_USD, RESERVA_POR_PIEZA_CON_SEGUNDA_MIRADA_USD } from '../plantillas/segunda-mirada'
+import { COSTO_ESPERADO_DE_LA_SEGUNDA_MIRADA_USD, COSTO_ESPERADO_DE_LA_VUELTA_A_LA_MESA_USD, RESERVA_POR_PIEZA_CON_SEGUNDA_MIRADA_USD, RESERVA_POR_PIEZA_LEIDA_ANTES_DE_LA_SEGUNDA_MIRADA_USD, TOPES_CON_SEGUNDA_MIRADA_USD, TOPES_LEIDOS_ANTES_DE_LA_SEGUNDA_MIRADA_USD } from '../plantillas/segunda-mirada'
+import { CARRUSEL_MESA_CON_CORRECCION, KIT_MESA_CON_CORRECCION, POST_MESA_CON_CORRECCION } from '../plantillas/imagen-correccion'
+import { RESERVA_POR_PIEZA_DE_LA_CORRECCION_USD } from '../mesa/correccion-imagen'
 import { VIDEO_MESA_ENCENDIDA } from '../plantillas/video-mesa'
 import type { Encargo, Puertos } from '../puertos'
 import { ARTEFACTO_SEGUNDA_MIRADA, cabeLaVueltaDeLaSegundaMirada, conSegundaMirada, correrSegundaMirada, materialDeLaPropuesta, pasoDeLaSegundaMirada, segundaMiradaYaDada } from '../segunda-mirada'
 import { leerRespuestas } from '../sentido-contra-la-ficha'
 import { sobreDeLaRevision } from '../paso-jefatura'
 import type { Estado, Plantilla } from '../tipos'
-import { loQueSigueDeLaMesa, reservaPorPasadaDeLaMesa } from '../topes-por-duracion'
+import { coberturaDelTope, loQueSigueDeLaMesa, reservaPorPasadaDeLaMesa } from '../topes-por-duracion'
 import { MARCA_DE_FIN_DEL_INFORME, MARCA_DE_INICIO_DEL_INFORME, TEXTO_HONESTO_AL_CREATIVO } from '../../segundo-doctor'
 
 const RAIZ = path.resolve(__dirname, '..', '..', '..', '..')
@@ -89,6 +91,13 @@ const AMPLIO = { ...PL, limites: { ...PL.limites, tope_encargo_usd: 100 } } as P
 /** lo que cuesta volver: una pasada de la mesa + todo lo que sigue a la mesa + las rondas del dueño que quedan */
 const REHACER = reservaPorPasadaDeLaMesa(PL) + loQueSigueDeLaMesa(PL, { vueltas: {} })
 const datosDe = (r: { res: { artefacto?: Record<string, unknown> } }) => r.res.artefacto as Record<string, unknown>
+/** lo gastado en el PEOR caso justo al decidir la vuelta (la mesa a su cota y cada paso anterior a su tope, este incluido) */
+const gastadoAlDecidir = (pl: Plantilla) => {
+  const i = pl.pasos.findIndex((p) => p.clave === 'segunda_mirada')
+  return reservaPorPasadaDeLaMesa(pl) + pl.pasos.slice(0, i).filter((p) => p.funcion !== 'mesa').reduce((a, s) => a + (Number(s.tope_usd) || 0), 0)
+}
+/** el peor caso con la vuelta de GPT: lo gastado al decidir + este paso a su tope + rehacer todo (una pasada de la mesa, lo que sigue y las rondas del dueño) */
+const peorConLaVuelta = (pl: Plantilla) => gastadoAlDecidir(pl) + Number(pl.pasos.find((p) => p.clave === 'segunda_mirada')!.tope_usd) + reservaPorPasadaDeLaMesa(pl) + loQueSigueDeLaMesa(pl, { vueltas: {} })
 
 describe('el lugar del paso en las 4 mesas (PLAN v4 · (A) sin render)', () => {
   it('imagen: justo después del borrador y antes de que el dueño apruebe', () => {
@@ -99,14 +108,18 @@ describe('el lugar del paso en las 4 mesas (PLAN v4 · (A) sin render)', () => {
   it('video: después de las imágenes clave borrador y ANTES de borrador_video', () => {
     expect(claves(VIDEO_MESA_CON_SEGUNDA_MIRADA).join(',')).toContain('mesa,imagenes_clave,segunda_mirada,borrador_video,aprobar_propuestas,imagenes_clave_final')
   })
-  it('lo demás queda igual: mismos pasos, mismos topes y límites', () => {
-    for (const [con, sin] of [[POST_MESA_CON_SEGUNDA_MIRADA, POST_MESA_CON_PROPUESTAS], [CARRUSEL_MESA_CON_SEGUNDA_MIRADA, CARRUSEL_MESA_CON_PROPUESTAS], [KIT_MESA_CON_SEGUNDA_MIRADA, KIT_MESA_CON_PROPUESTAS], [VIDEO_MESA_CON_SEGUNDA_MIRADA, VIDEO_MESA_ENCENDIDA]] as const) {
+  it('lo demás queda igual que hoy en vivo (con la corrección de CC1): mismos pasos y límites; en imagen solo cambia el tope', () => {
+    for (const [con, sin] of [[POST_MESA_CON_SEGUNDA_MIRADA, POST_MESA_CON_CORRECCION], [CARRUSEL_MESA_CON_SEGUNDA_MIRADA, CARRUSEL_MESA_CON_CORRECCION], [KIT_MESA_CON_SEGUNDA_MIRADA, KIT_MESA_CON_CORRECCION], [VIDEO_MESA_CON_SEGUNDA_MIRADA, VIDEO_MESA_ENCENDIDA]] as const) {
       expect(con.pasos.filter((p) => p.clave !== 'segunda_mirada')).toEqual(sin.pasos)
-      expect(con.limites).toEqual(sin.limites)
+      const { tope_encargo_usd: _a, ...restoCon } = con.limites
+      const { tope_encargo_usd: _b, ...restoSin } = sin.limites
+      expect(restoCon).toEqual(restoSin)
     }
+    expect(VIDEO_MESA_CON_SEGUNDA_MIRADA.limites).toEqual(VIDEO_MESA_ENCENDIDA.limites)
+    expect(claves(POST_MESA_CON_SEGUNDA_MIRADA).join(',')).toContain('aprobar_propuestas,imagen,corregir_imagen,editar_imagen,mirar_correccion,observar')
   })
   it('el paso nuevo no agrega ningún error de validación a las 4; la función está registrada y tiene gasto', () => {
-    for (const [con, sin] of [[POST_MESA_CON_SEGUNDA_MIRADA, POST_MESA_CON_PROPUESTAS], [CARRUSEL_MESA_CON_SEGUNDA_MIRADA, CARRUSEL_MESA_CON_PROPUESTAS], [KIT_MESA_CON_SEGUNDA_MIRADA, KIT_MESA_CON_PROPUESTAS], [VIDEO_MESA_CON_SEGUNDA_MIRADA, VIDEO_MESA_ENCENDIDA]] as const) {
+    for (const [con, sin] of [[POST_MESA_CON_SEGUNDA_MIRADA, POST_MESA_CON_CORRECCION], [CARRUSEL_MESA_CON_SEGUNDA_MIRADA, CARRUSEL_MESA_CON_CORRECCION], [KIT_MESA_CON_SEGUNDA_MIRADA, KIT_MESA_CON_CORRECCION], [VIDEO_MESA_CON_SEGUNDA_MIRADA, VIDEO_MESA_ENCENDIDA]] as const) {
       expect(validarPlantilla(con).filter((x) => /segunda_mirada/.test(x))).toEqual([])
       expect(validarPlantilla(con)).toEqual(validarPlantilla(sin))
     }
@@ -137,30 +150,50 @@ describe('🔴 la migración 202611201500 escribe EXACTAMENTE el paso del códig
     expect(S).toMatch(/FOR UPDATE;/)
     expect(S.trimEnd().endsWith('COMMIT;')).toBe(true)
   })
-  it('no toca topes; de los límites, solo la reserva por pieza de las 3 mesas de imagen', () => {
-    expect(S).not.toMatch(/tope_encargo_usd\s*=/)
-    const sets = S.match(/SET limites = g\.limites \|\| jsonb_build_object\('([a-z_]+)'/g) ?? []
+  const T = ['post_mesa', 'carrusel_mesa', 'kit_mesa'] as const
+  const L = RESERVA_POR_PIEZA_LEIDA_ANTES_DE_LA_SEGUNDA_MIRADA_USD, N = RESERVA_POR_PIEZA_CON_SEGUNDA_MIRADA_USD
+  const TL = TOPES_LEIDOS_ANTES_DE_LA_SEGUNDA_MIRADA_USD, TN = TOPES_CON_SEGUNDA_MIRADA_USD
+  it('de los límites solo toca la reserva por pieza y el tope de las 3 mesas de imagen (columna = límite); nada del video', () => {
+    const sets = S.match(/SET tope_encargo_usd = [\d.]+, limites = g\.limites \|\| jsonb_build_object\([^)]*\)\nWHERE g\.tipo = '[a-z_]+';/g) ?? []
     expect(sets).toHaveLength(3)
-    for (const s of sets) expect(s).toContain("'reserva_por_pieza_usd'")
-    expect(S.match(/SET limites/g)).toHaveLength(3)
+    expect(S.match(/SET limites/g) ?? []).toHaveLength(0)
+    expect(S.match(/tope_encargo_usd = /g)?.length).toBeGreaterThan(0)
+    expect(S).not.toMatch(/SET [^;]*WHERE g\.tipo = 'video_mesa';/)
   })
-  it('🔴 punto 1 de CC7 (#1251) · la reserva por pieza sube a la del código: lo esperado de hoy + GPT + la vuelta a la mesa (contada siempre)', () => {
-    expect(RESERVA_POR_PIEZA_CON_SEGUNDA_MIRADA_USD).toEqual({ post_mesa: 5.51, carrusel_mesa: 5.66, kit_mesa: 5.66 })
-    for (const t of ['post_mesa', 'carrusel_mesa', 'kit_mesa'] as const) {
-      const n = RESERVA_POR_PIEZA_CON_SEGUNDA_MIRADA_USD[t]
-      expect(n).toBeCloseTo(RESERVA_POR_PIEZA_DE_LAS_MESAS_DE_IMAGEN_USD[t] + COSTO_ESPERADO_DE_LA_SEGUNDA_MIRADA_USD + COSTO_ESPERADO_DE_LA_VUELTA_A_LA_MESA_USD, 2)
-      expect(S).toContain(`SET limites = g.limites || jsonb_build_object('reserva_por_pieza_usd', ${n})\nWHERE g.tipo = '${t}';`)
+  it('🔴 va después de #1250: la reserva leída es la de CC2 + la de la corrección de CC1 (3,35 / 4 / 4) y el tope leído el de #1249 (43 / 45 / 45)', () => {
+    expect(L).toEqual({ post_mesa: 3.35, carrusel_mesa: 4, kit_mesa: 4 })
+    for (const t of T) expect(L[t]).toBeCloseTo(RESERVA_POR_PIEZA_DE_LAS_MESAS_DE_IMAGEN_USD[t] + RESERVA_POR_PIEZA_DE_LA_CORRECCION_USD[t], 2)
+    expect(TL).toEqual(TOPES_DE_LAS_MESAS_DE_IMAGEN_USD)
+  })
+  it('🔴 punto 1 de CC7 (#1251) · la reserva por pieza sube a la del código: lo leído + GPT + la vuelta a la mesa (contada siempre)', () => {
+    expect(N).toEqual({ post_mesa: 5.91, carrusel_mesa: 6.56, kit_mesa: 6.56 })
+    for (const t of T) {
+      expect(N[t]).toBeCloseTo(L[t] + COSTO_ESPERADO_DE_LA_SEGUNDA_MIRADA_USD + COSTO_ESPERADO_DE_LA_VUELTA_A_LA_MESA_USD, 2)
+      expect(S).toContain(`SET tope_encargo_usd = ${TN[t]}, limites = g.limites || jsonb_build_object('reserva_por_pieza_usd', ${N[t]}, 'tope_encargo_usd', ${TN[t]})\nWHERE g.tipo = '${t}';`)
     }
     // es lo esperado, no el peor caso: sigue muy por debajo del tope de cada mesa
-    expect(RESERVA_POR_PIEZA_CON_SEGUNDA_MIRADA_USD.post_mesa).toBeLessThan(TOPES_DE_LAS_MESAS_DE_IMAGEN_USD.post_mesa / 5)
+    for (const t of T) expect(N[t]).toBeLessThan(TN[t] / 5)
   })
-  it('🔴 exige la reserva leída (la de 202611201330) ANTES de cambiar, y comprueba al final que quedó; frenan con EXCEPTION', () => {
-    const { post_mesa: p, carrusel_mesa: c, kit_mesa: k } = RESERVA_POR_PIEZA_DE_LAS_MESAS_DE_IMAGEN_USD
-    expect(c).toBe(k)
-    expect(S).toContain(`(g.tipo = 'post_mesa' AND (g.limites->>'reserva_por_pieza_usd')::numeric = ${p}) OR (g.tipo IN ('carrusel_mesa', 'kit_mesa') AND (g.limites->>'reserva_por_pieza_usd')::numeric = ${c})) <> 3 THEN\n    RAISE EXCEPTION '202611201500: la reserva por pieza de las 3 mesas de imagen no es la leída`)
+  it('🔴 el tope nuevo cubre el peor caso con la vuelta de GPT (lo de antes a su tope + rehacer todo); uno menos, no', () => {
+    for (const pl of [POST_MESA_CON_SEGUNDA_MIRADA, CARRUSEL_MESA_CON_SEGUNDA_MIRADA, KIT_MESA_CON_SEGUNDA_MIRADA]) {
+      const t = pl.tipo as (typeof T)[number]
+      expect(pl.limites.tope_encargo_usd).toBe(TN[t])
+      const peor = peorConLaVuelta(pl)
+      expect(peor, t).toBeLessThanOrEqual(TN[t])
+      expect(peor, t).toBeGreaterThan(TN[t] - 1)
+      expect(peor, t).toBeGreaterThan(TL[t])
+      expect(coberturaDelTope(pl, TN[t]).cubre).toBe(true)
+    }
+  })
+  it('🔴 exige lo leído (reserva y tope) ANTES de cambiar, y comprueba al final que quedó; frenan con EXCEPTION', () => {
+    expect(L.carrusel_mesa).toBe(L.kit_mesa)
+    expect(TL.carrusel_mesa).toBe(TL.kit_mesa)
+    expect(S).toContain(`(g.tipo = 'post_mesa' AND (g.limites->>'reserva_por_pieza_usd')::numeric = ${L.post_mesa}) OR (g.tipo IN ('carrusel_mesa', 'kit_mesa') AND (g.limites->>'reserva_por_pieza_usd')::numeric = ${L.carrusel_mesa})) <> 3 THEN\n    RAISE EXCEPTION '202611201500: la reserva por pieza de las 3 mesas de imagen no es la leída`)
+    expect(S).toContain(`(g.tipo = 'post_mesa' AND g.tope_encargo_usd = ${TL.post_mesa} AND (g.limites->>'tope_encargo_usd')::numeric = ${TL.post_mesa}) OR (g.tipo IN ('carrusel_mesa', 'kit_mesa') AND g.tope_encargo_usd = ${TL.carrusel_mesa} AND (g.limites->>'tope_encargo_usd')::numeric = ${TL.carrusel_mesa})) <> 3 THEN\n    RAISE EXCEPTION '202611201500: el tope de las 3 mesas de imagen no es el leído`)
     expect(S.indexOf('no es la leída')).toBeLessThan(S.indexOf('UPDATE public.oficina_tipos_de_grupo'))
-    const n = RESERVA_POR_PIEZA_CON_SEGUNDA_MIRADA_USD
-    expect(S).toContain(`(g.tipo = 'post_mesa' AND (g.limites->>'reserva_por_pieza_usd')::numeric = ${n.post_mesa}) OR (g.tipo IN ('carrusel_mesa', 'kit_mesa') AND (g.limites->>'reserva_por_pieza_usd')::numeric = ${n.carrusel_mesa})) <> 3 THEN\n    RAISE EXCEPTION '202611201500: la reserva por pieza no quedó`)
+    expect(S.indexOf('no es el leído')).toBeLessThan(S.indexOf('UPDATE public.oficina_tipos_de_grupo'))
+    expect(S).toContain(`(g.tipo = 'post_mesa' AND (g.limites->>'reserva_por_pieza_usd')::numeric = ${N.post_mesa}) OR (g.tipo IN ('carrusel_mesa', 'kit_mesa') AND (g.limites->>'reserva_por_pieza_usd')::numeric = ${N.carrusel_mesa})) <> 3 THEN\n    RAISE EXCEPTION '202611201500: la reserva por pieza no quedó`)
+    expect(S).toContain(`(g.tipo = 'post_mesa' AND g.tope_encargo_usd = ${TN.post_mesa} AND (g.limites->>'tope_encargo_usd')::numeric = ${TN.post_mesa}) OR (g.tipo IN ('carrusel_mesa', 'kit_mesa') AND g.tope_encargo_usd = ${TN.carrusel_mesa} AND (g.limites->>'tope_encargo_usd')::numeric = ${TN.carrusel_mesa})) <> 3 THEN\n    RAISE EXCEPTION '202611201500: el tope no quedó`)
     expect(S.lastIndexOf('no quedó en')).toBeGreaterThan(S.lastIndexOf('UPDATE public.oficina_tipos_de_grupo'))
     // la versión crece en las 4 filas (una sola vez: va en el UPDATE de los pasos)
     expect(S.match(/version = g\.version \+ 1/g)).toHaveLength(1)
@@ -170,18 +203,19 @@ describe('🔴 la migración 202611201500 escribe EXACTAMENTE el paso del códig
     expect(R).toMatch(/WHERE p->>'clave' <> 'segunda_mirada'/)
     expect(R).toMatch(/AND NOT EXISTS \(SELECT 1 FROM public\.oficina_encargos e WHERE e\.estado IN \('abierto', 'en_paso'\) AND e\.familia IN \('post_mesa', 'carrusel_mesa', 'kit_mesa', 'video_mesa'\)\)/)
     expect(R).toMatch(/LOCK TABLE public\.oficina_encargos IN SHARE MODE;/)
-    expect(R).not.toMatch(/tope_encargo_usd\s*=/)
+    expect(R).not.toMatch(/SET [^;]*WHERE g\.tipo = 'video_mesa';/)
   })
-  it('🔴 la reversa vuelve la reserva a la leída, exige la que dejó la ida, lo comprueba al final y la versión crece', () => {
+  it('🔴 la reversa vuelve la reserva y el tope a lo leído, exige lo que dejó la ida, lo comprueba al final y la versión crece', () => {
     const R = sentencias(REV)
-    const v = RESERVA_POR_PIEZA_DE_LAS_MESAS_DE_IMAGEN_USD
-    const n = RESERVA_POR_PIEZA_CON_SEGUNDA_MIRADA_USD
-    for (const t of ['post_mesa', 'carrusel_mesa', 'kit_mesa'] as const) {
-      expect(R).toContain(`SET limites = g.limites || jsonb_build_object('reserva_por_pieza_usd', ${v[t]}) WHERE g.tipo = '${t}';`)
+    for (const t of T) {
+      expect(R).toContain(`SET tope_encargo_usd = ${TL[t]}, limites = g.limites || jsonb_build_object('reserva_por_pieza_usd', ${L[t]}, 'tope_encargo_usd', ${TL[t]}) WHERE g.tipo = '${t}';`)
     }
-    expect(R).toContain(`(g.tipo = 'post_mesa' AND (g.limites->>'reserva_por_pieza_usd')::numeric = ${n.post_mesa}) OR (g.tipo IN ('carrusel_mesa', 'kit_mesa') AND (g.limites->>'reserva_por_pieza_usd')::numeric = ${n.carrusel_mesa})) <> 3 THEN\n    RAISE EXCEPTION 'REVERSA 202611201500: la reserva por pieza no es la que dejó`)
+    expect(R).toContain(`(g.tipo = 'post_mesa' AND (g.limites->>'reserva_por_pieza_usd')::numeric = ${N.post_mesa}) OR (g.tipo IN ('carrusel_mesa', 'kit_mesa') AND (g.limites->>'reserva_por_pieza_usd')::numeric = ${N.carrusel_mesa})) <> 3 THEN\n    RAISE EXCEPTION 'REVERSA 202611201500: la reserva por pieza no es la que dejó`)
+    expect(R).toContain(`(g.tipo = 'post_mesa' AND g.tope_encargo_usd = ${TN.post_mesa} AND (g.limites->>'tope_encargo_usd')::numeric = ${TN.post_mesa}) OR (g.tipo IN ('carrusel_mesa', 'kit_mesa') AND g.tope_encargo_usd = ${TN.carrusel_mesa} AND (g.limites->>'tope_encargo_usd')::numeric = ${TN.carrusel_mesa})) <> 3 THEN\n    RAISE EXCEPTION 'REVERSA 202611201500: el tope no es el que dejó`)
     expect(R.indexOf('no es la que dejó')).toBeLessThan(R.indexOf('UPDATE public.oficina_tipos_de_grupo'))
+    expect(R.indexOf('no es el que dejó')).toBeLessThan(R.indexOf('UPDATE public.oficina_tipos_de_grupo'))
     expect(R).toContain(`<> 3 THEN\n    RAISE EXCEPTION 'REVERSA 202611201500: la reserva por pieza no volvió a`)
+    expect(R).toContain(`<> 3 THEN\n    RAISE EXCEPTION 'REVERSA 202611201500: el tope no volvió a`)
     expect(R.lastIndexOf('no volvió a')).toBeGreaterThan(R.lastIndexOf('UPDATE public.oficina_tipos_de_grupo'))
     expect(R).toMatch(/version = g\.version \+ 1/)
     expect(R.trimEnd().endsWith('COMMIT;')).toBe(true)
@@ -190,7 +224,7 @@ describe('🔴 la migración 202611201500 escribe EXACTAMENTE el paso del códig
 
 describe('🔴 por qué la guarda (CC6 9 · CC7 1): el motor ubica por POSICIÓN', () => {
   it('una pieza que espera en aprobar_propuestas con la plantilla vieja, leída con la nueva, cae en otro paso', () => {
-    const vieja = POST_MESA_CON_PROPUESTAS
+    const vieja = POST_MESA_CON_CORRECCION
     let e = estadoInicial()
     const iAprobar = vieja.pasos.findIndex((p) => p.clave === 'aprobar_propuestas')
     for (let i = 0; i <= iAprobar; i++) e = registrarPaso(e, vieja, i, { costo_usd: 0, artefacto: {} })
@@ -199,8 +233,8 @@ describe('🔴 por qué la guarda (CC6 9 · CC7 1): el motor ubica por POSICIÓN
   })
   it('una pieza antes del punto de entrada no se corre', () => {
     let e = estadoInicial()
-    const iMesa = POST_MESA_CON_PROPUESTAS.pasos.findIndex((p) => p.clave === 'mesa')
-    for (let i = 0; i <= iMesa; i++) e = registrarPaso(e, POST_MESA_CON_PROPUESTAS, i, { costo_usd: 0, artefacto: {} })
+    const iMesa = POST_MESA_CON_CORRECCION.pasos.findIndex((p) => p.clave === 'mesa')
+    for (let i = 0; i <= iMesa; i++) e = registrarPaso(e, POST_MESA_CON_CORRECCION, i, { costo_usd: 0, artefacto: {} })
     expect(PL.pasos[e.ultimo].clave).toBe('mesa')
   })
 })
@@ -322,14 +356,15 @@ describe('¿cabe la vuelta? la decide el paso, con el costo de rehacer (CC7 3 ·
     const arriba = datosDe(await correrSegundaMirada(revisorFalso().P, encargo(e), conTope(justo + 1e-6), PASO, CONTEXTO))
     expect(arriba.vuelve_a_la_mesa).toBe(true)
   })
-  it('🔴 con los topes vivos de #1249 (43/45/45) la vuelta SÍ cabe, aun con todo lo de antes gastado a su tope (la mesa a su cota y cada paso a su reserva)', async () => {
-    for (const [pl, tope] of [[POST_MESA_CON_SEGUNDA_MIRADA, TOPES_DE_LAS_MESAS_DE_IMAGEN_USD.post_mesa], [CARRUSEL_MESA_CON_SEGUNDA_MIRADA, TOPES_DE_LAS_MESAS_DE_IMAGEN_USD.carrusel_mesa], [KIT_MESA_CON_SEGUNDA_MIRADA, TOPES_DE_LAS_MESAS_DE_IMAGEN_USD.kit_mesa]] as const) {
-      const i = pl.pasos.findIndex((p) => p.clave === 'segunda_mirada')
-      const antes = reservaPorPasadaDeLaMesa(pl) + pl.pasos.slice(0, i).filter((p) => p.funcion !== 'mesa').reduce((a, s) => a + (Number(s.tope_usd) || 0), 0)
-      const paso = pl.pasos[i]
-      const vivo = { ...pl, limites: { ...pl.limites, tope_encargo_usd: tope } } as Plantilla
-      const d = datosDe(await correrSegundaMirada(revisorFalso().P, encargo(estadoAntesDeLaSegundaMirada(pl, antes)), vivo, paso, CONTEXTO))
-      expect(d.vuelve_a_la_mesa, pl.tipo).toBe(true)
+  it('🔴 con los topes de la migración (45/48/48) la vuelta SÍ cabe, aun con todo lo de antes gastado a su tope; con los de hoy (43/45/45, con la corrección de CC1), NO', async () => {
+    for (const pl of [POST_MESA_CON_SEGUNDA_MIRADA, CARRUSEL_MESA_CON_SEGUNDA_MIRADA, KIT_MESA_CON_SEGUNDA_MIRADA]) {
+      const t = pl.tipo as keyof typeof TOPES_CON_SEGUNDA_MIRADA_USD
+      const paso = pl.pasos.find((p) => p.clave === 'segunda_mirada')!
+      const correr = async (tope: number) => datosDe(await correrSegundaMirada(revisorFalso().P, encargo(estadoAntesDeLaSegundaMirada(pl, gastadoAlDecidir(pl))), { ...pl, limites: { ...pl.limites, tope_encargo_usd: tope } } as Plantilla, paso, CONTEXTO))
+      expect((await correr(TOPES_CON_SEGUNDA_MIRADA_USD[t])).vuelve_a_la_mesa, t).toBe(true)
+      const hoy = await correr(TOPES_LEIDOS_ANTES_DE_LA_SEGUNDA_MIRADA_USD[t])
+      expect(hoy.vuelve_a_la_mesa, t).toBe(false)
+      expect(hoy.sin_vuelta, t).toBe('tope')
     }
   })
   it('con los topes viejos (post 15) la vuelta no cabe: el informe solo se guarda', async () => {

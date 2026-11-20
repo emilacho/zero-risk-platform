@@ -6,7 +6,6 @@
 import { describe, expect, it } from 'vitest'
 import { fichaEnLineas, type FichaDeOferta, type HechoDelNegocioPorOferta } from '../../cadena/ficha-de-oferta'
 import { abrirEncargo, recibirResultado } from '../orquestador'
-import { CLAVE_DE_LA_PALANCA } from '../mesa/con-mesa'
 import { datosDeLaJefatura } from '../paso-jefatura'
 import { KIT_MESA } from '../plantillas/mesa'
 import { VUELTAS_POR_REGLA_DURA, conVueltaPorReglaDura } from '../plantillas/vuelta-por-regla-dura'
@@ -48,7 +47,7 @@ async function correr(desacuerdos: string[][], piezas: string[], o: { hechos?: H
   const plantillas: Record<string, { plantilla: Plantilla; activo: boolean }> = { kit_historias: { plantilla: KIT_HISTORIAS_CON_JEFATURA, activo: true }, kit_mesa: { plantilla: pl, activo: true } }
   M.P.almacen.leerPlantilla = async (f) => plantillas[f] ?? null
   const MS = crearMesaEnMemoria(DIRECTORIO)
-  M.P.mesa = { ...MS, configDeLaCadena: async (k: string) => (k === CLAVE_DE_LA_PALANCA ? { clientes: [CLIENTE] } : undefined) }
+  M.P.mesa = { ...MS }
   const revisiones: string[] = []
   let lecturasDelCerebro = 0
   if (o.hechos || o.cerebroCaido) M.P.hechosPorOferta = async () => { lecturasDelCerebro++; if (o.cerebroCaido) throw new Error('el cerebro no contesta'); return o.hechos! }

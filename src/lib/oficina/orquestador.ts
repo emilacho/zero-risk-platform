@@ -49,9 +49,10 @@ import { DESCARTAR_EYEBROW_LARGO, procesarSalida, proyectarAlEsquema, CORRECCION
 import { agotaLasVersiones, alcanzaElTechoDeCortadas, MAX_VERSIONES_CORTADAS, MAX_VERSIONES_POR_BRIEF, rastroDe, type RastroDeEncargo } from './reapertura'
 import { conCausaDelFallo, type OrigenDeCorteNuestro } from './causa-del-fallo'
 import { decidirPuerta, TARGET_STEP_PRODUCIR, validarSobre, type Sobre } from './sobre'
-import { CLAVE_DE_LA_PALANCA, FAMILIA_CON_MESA, familiaConMesa } from './mesa/con-mesa'
+import { FAMILIA_CON_MESA, familiaConMesa } from './mesa/con-mesa'
 import { claseDe, tienePasarela } from './clase'
 import { aplicarTopesPorDuracion, coberturaDelTope } from './topes-por-duracion'
+import { ESQUEMA_CORRECCION_IMAGEN, PASO_CORREGIR_IMAGEN, pedidoDeLaCorreccion, saltoDeLaCorreccion, sinLecturaDeLaCorreccion, tareaDeLaCorreccion } from './mesa/correccion-imagen'
 import { CLAVE_DE_LA_DURACION, duracionDeLaPieza, segundosDelEncargo, topesPorSegundoDeVideo, type DuracionDeLaPieza } from './video/duracion-de-la-pieza'
 import { estadoInicial, type Estado, type Ficha, type Paso, type Plantilla, type Siguiente } from './tipos'
 
@@ -93,14 +94,15 @@ function salaRefConFila(ref: Record<string, unknown> | null | undefined, s: { fi
 }
 
 /**
- * 17-nov · «creativos en cada paso» · la ruta a la versión con mesa (`mesa/con-mesa.ts`): solo una pieza NUEVA (sin reapertura ni devolución del dueño), con la palanca `creativos_con_mesa`
- * del cliente encendida y la plantilla con mesa ACTIVA. Cualquier lectura que falle = sin ruta: la pieza sigue EXACTA la línea de siempre. Devuelve la plantilla a abrir o null.
+ * 17-nov · «creativos en cada paso» · la ruta a la versión con mesa (`mesa/con-mesa.ts`): solo una pieza NUEVA (sin reapertura ni devolución del dueño) y con la plantilla con mesa ACTIVA.
+ * 20-nov · «la mesa para todos los clientes» (firma de Emilio 12:37 Zúrich): sin lista de clientes; vale para cualquier cliente. Sin la mesa conectada, o si la lectura falla = sin ruta:
+ * la pieza sigue EXACTA la línea de siempre. Devuelve la plantilla a abrir o null.
  */
-async function rutaConMesa(P: Puertos, s: Sobre, clientId: string): Promise<{ familia: string; pl: { plantilla: Plantilla; activo: boolean; cruda?: Plantilla } } | null> {
-  if (!s.familia || s.reabrir_causa_corregida || s.cambios_del_dueno || !FAMILIA_CON_MESA[s.familia] || !P.mesa?.configDeLaCadena) return null
+async function rutaConMesa(P: Puertos, s: Sobre): Promise<{ familia: string; pl: { plantilla: Plantilla; activo: boolean; cruda?: Plantilla } } | null> {
+  if (!s.familia || s.reabrir_causa_corregida || s.cambios_del_dueno || !FAMILIA_CON_MESA[s.familia] || !P.mesa) return null
   try {
-    // la actividad de la versión con mesa se mira leyendo SU plantilla (abajo): aquí solo se decide si la palanca la pide
-    const destino = familiaConMesa(s.familia, await P.mesa.configDeLaCadena(CLAVE_DE_LA_PALANCA), clientId, () => true)
+    // la actividad de la versión con mesa se mira leyendo SU plantilla (abajo): aquí solo se busca la versión con mesa de la familia
+    const destino = familiaConMesa(s.familia, () => true)
     if (!destino || destino === s.familia) return null
     const pl = await P.almacen.leerPlantilla(destino)
     return pl && pl.activo ? { familia: destino, pl } : null
@@ -112,8 +114,9 @@ export async function abrirEncargo(P: Puertos, entrada: { cuerpo: unknown; clien
   if (!v.ok) return r(400, { error: v.codigo, errores: v.errores })
   const config = await P.almacen.leerConfig()
   // fila #19 · la plantilla se lee ANTES de la puerta: si la familia tiene pieza simple lo dice la clase de su plantilla (dato), no su nombre
-  // 17-nov · «creativos en cada paso» · con la palanca del cliente encendida, una pieza NUEVA abre la versión CON MESA de su familia (si está activa); una reapertura o una devolución del dueño sigue en la línea en que nació
-  const ruta = entrada.target_step_id === TARGET_STEP_PRODUCIR && v.sobre.familia ? await rutaConMesa(P, v.sobre, entrada.client_id) : null
+  // 17-nov · «creativos en cada paso» · una pieza NUEVA abre la versión CON MESA de su familia (si está activa; 20-nov: para cualquier cliente); una reapertura o una devolución del dueño sigue en la línea en que nació.
+  //   La ruta se elige ANTES de medir el tope: si la mesa no cubre su tope, el encargo no nace (409 `tope_no_cubre`) y NO vuelve a la línea vieja
+  const ruta = entrada.target_step_id === TARGET_STEP_PRODUCIR && v.sobre.familia ? await rutaConMesa(P, v.sobre) : null
   const pl = ruta ? ruta.pl : entrada.target_step_id === TARGET_STEP_PRODUCIR && v.sobre.familia ? await P.almacen.leerPlantilla(v.sobre.familia) : null
   const clase = claseDe(pl?.plantilla)
   const dec = decidirPuerta(v.sobre, entrada.permitir_apagada ? { ...config, estado: 'encendida', familias_activas: [v.sobre.familia ?? ''] } : config, entrada.target_step_id, entrada.client_id, !tienePasarela(clase))
@@ -277,7 +280,8 @@ export async function avanzar(P: Puertos, encargoId: string): Promise<Respuesta>
         continue
       }
       // portero y agente: salto sin llamar a nadie si no hay nada que hacer
-      const salto = familiaDeLaminas(pl) ? saltoL(paso, e) : saltoPorFalta(paso, e)
+      // 20-nov · punto 3 · sin imágenes pendientes de corrección (p. ej. la jefatura devolvió la pieza y no se rehizo ninguna), el creativo no se llama: US$ 0
+      const salto = paso.clave === PASO_CORREGIR_IMAGEN ? saltoDeLaCorreccion(e, enc.dry_run) : familiaDeLaminas(pl) ? saltoL(paso, e) : saltoPorFalta(paso, e)
       if (salto) { enc = await aplicar(P, enc, pl, sig.indice, salto, { vuelta: sig.vuelta, turno: { paso: paso.clave, tipo: paso.tipo, agente: null, dispatch_key: null, cost_usd: 0 } }); continue }
       const { agente, pedido } = armarPedido(enc, pl, paso, e)
       const n = turnoDe(e)
@@ -425,6 +429,14 @@ const contexto2 = (e: Estado): ContextoDePedido | null => (datos(e, 'encargo') ?
 /** el agente y el pedido de un paso de agente o de portero (puro: sale del estado, así se puede volver a entregar) */
 function armarPedido(enc: Encargo, pl: Plantilla, paso: Paso, e: Estado, errorDeFormato?: string): { agente: string; pedido: Record<string, unknown> } {
   if (paso.revisa) return armarPedidoDeAutorevision(enc, pl, paso, e, errorDeFormato)
+  // 20-nov · punto 3 · el creativo mira las imágenes finales como imagen y pide cambios (mismo pedido en cualquier mesa de imagen)
+  if (paso.clave === PASO_CORREGIR_IMAGEN && paso.tipo === 'agente') {
+    const b = datos(e, 'encargo') as { F?: { fotos?: Array<{ id: string; url?: string | null }> }; brief?: { texto?: string } } | undefined
+    const fotos = (b?.F?.fotos ?? []).filter((f): f is { id: string; url: string } => typeof f.url === 'string' && !!f.url)
+    const esquema = paso.salida?.esquema ?? ESQUEMA_CORRECCION_IMAGEN
+    const t = tareaDeLaCorreccion(e, { contrato: CONTRATOS_EN_TEXTO[esquema] ?? '', fotos, ...(b?.brief?.texto ? { brief_texto: b.brief.texto } : {}), ...(errorDeFormato ? { errorDeFormato } : {}) })
+    return { agente: paso.quien, pedido: pedidoDe(enc, pl, paso, paso.quien, { ...t, esquema }, e) }
+  }
   if (familiaDeLaminas(pl)) {
     // salas 2 y 3: el agente de cada paso es el que dice la plantilla (los hallazgos tienen un paso por dueño)
     const t = paso.tipo === 'agente' ? armarPedidoL(pl, paso, e, errorDeFormato ? { errorDeFormato } : undefined) : null
@@ -526,7 +538,8 @@ export function sinLecturaDeMirar(paso: Paso, e: Estado, errores: string[]): Res
   }
 }
 // S2-3 · la revisión de las imágenes clave también es un «mirar»: ilegible tras su reintento, el video sigue (con su ficha de sugerencia), nunca se cae el encargo
-const ES_MIRAR = (clave: string): boolean => clave === 'mirar' || clave === 'reimagen_mirar' || clave === PASO_MIRAR_VIDEO || clave === PASO_REVISAR_IMAGENES_CLAVE
+// 20-nov · punto 3 · la mirada del creativo sobre la imagen final también: ilegible, esa vuelta no edita nada y la mirada de otro proveedor juzga lo que hay
+const ES_MIRAR = (clave: string): boolean => clave === 'mirar' || clave === 'reimagen_mirar' || clave === PASO_MIRAR_VIDEO || clave === PASO_REVISAR_IMAGENES_CLAVE || clave === PASO_CORREGIR_IMAGEN
 
 // ───────────────────────── funciones de código
 type SalidaCodigo = { res: ResultadoDePaso; gastos?: Cambios['gastos']; usos?: Cambios['usos_de_fotos']; imagen_generada?: boolean; fallido?: string }
@@ -684,6 +697,15 @@ async function ejecutarCodigo(P: Puertos, enc: Encargo, pl: Plantilla, paso: Pas
     case 'segunda_mirada': {
       const { correrSegundaMirada } = await import('./segunda-mirada')
       const s = await correrSegundaMirada(P, enc, pl, paso, await contextoDelRevisorDeLaPieza(P, enc, pl, e))
+      return { res: s.res, ...(s.gastos.length ? { gastos: s.gastos } : {}) }
+    }
+    // 20-nov · punto 3 · la corrección de la imagen final (`mesa/correccion-imagen.ts`): editar sobre la elegida y la mirada de otro proveedor que decide
+    case 'editar_imagen': {
+      const s = await (await import('./mesa/correccion-imagen')).editarImagenes(P, enc)
+      return { res: s.res, ...(s.gastos.length ? { gastos: s.gastos, imagen_generada: true } : {}) }
+    }
+    case 'mirar_correccion': {
+      const s = await (await import('./mesa/correccion-imagen')).mirarCorreccion(P, enc, pl)
       return { res: s.res, ...(s.gastos.length ? { gastos: s.gastos } : {}) }
     }
     default: return familiaDeLaminas(pl) ? ejecutarCodigoL(P, enc, pl, paso) : familiaDeVideo(pl) ? ejecutarCodigoV(P, enc, pl, paso) : { res: { costo_usd: 0 }, fallido: `función de código «${paso.funcion}» sin implementar` }
@@ -920,7 +942,7 @@ export async function recibirResultado(P: Puertos, encargoId: string, n: number,
   if (!p.ok && p.accion === 'reintentar') return pedirReintento(p.mensaje_de_error, 'formato: reintento')
   // 11-nov · «mirar» ilegible tras su reintento: la pieza sigue con la imagen SIN juzgar y una ficha que bloquea (una persona mira); nunca se cae el encargo por la forma de la respuesta
   if (!p.ok && ES_MIRAR(paso.clave)) {
-    const sl = familiaDeLaminas(pl) ? sinLecturaDeMirarL(paso, e, p.errores) : paso.clave === PASO_MIRAR_VIDEO ? sinLecturaDeMirarV(e, p.errores) : paso.clave === PASO_REVISAR_IMAGENES_CLAVE ? sinLecturaDeRevisarImagenesClaveV(e, p.errores) : sinLecturaDeMirar(paso, e, p.errores)
+    const sl = paso.clave === PASO_CORREGIR_IMAGEN ? sinLecturaDeLaCorreccion(e, p.errores) : familiaDeLaminas(pl) ? sinLecturaDeMirarL(paso, e, p.errores) : paso.clave === PASO_MIRAR_VIDEO ? sinLecturaDeMirarV(e, p.errores) : paso.clave === PASO_REVISAR_IMAGENES_CLAVE ? sinLecturaDeRevisarImagenesClaveV(e, p.errores) : sinLecturaDeMirar(paso, e, p.errores)
     const { [`fmt:${paso.clave}`]: _fm, ...vueltasSinFmt } = e.vueltas
     void _fm
     await aplicarResultado(P, { ...enc, estado_del_motor: { ...e, vueltas: vueltasSinFmt } }, pl, sig.indice, { ...sl, costo_usd: costo }, { vuelta: sig.vuelta, turno: { ...turnoBase, estado: 'hecho', error: `formato ilegible tras ${intentos + 1} intento(s): ${p.errores.slice(0, 2).join(' · ')} · sigue sin juzgar la imagen` }, gastos: gastoModelo, n })
@@ -939,7 +961,8 @@ export async function recibirResultado(P: Puertos, encargoId: string, n: number,
     await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: nuevo, gasto_usd: nuevo.gasto_usd, turno: { ...turnoBase, n, estado: 'hecho', error: 'necesito: espera al portero' }, ...(gastoModelo.length ? { gastos: gastoModelo } : {}) })
     return pedirLoQueElAgenteNecesita(P, { ...enc, estado_del_motor: nuevo, gasto_usd: nuevo.gasto_usd }, pl, paso.clave, nec.necesidades)
   }
-  const proc: { res?: ResultadoDePaso; fallido?: string; reintentar?: string } = familiaDeLaminas(pl) ? procesarValorL(paso, p.valor, enc, e, pl, intentos) : (familiaDeVideo(pl) ? procesarValorV(paso, p.valor, e, pl) : null) ?? procesarValor(paso, p.valor, enc, e, pl)
+  // 20-nov · punto 3 · lo que pidió el creativo → el pedido de corrección (en cualquier mesa de imagen; el paso no tiene validadores de la sala)
+  const proc: { res?: ResultadoDePaso; fallido?: string; reintentar?: string } = paso.clave === PASO_CORREGIR_IMAGEN ? { res: pedidoDeLaCorreccion(e, p.valor) } : familiaDeLaminas(pl) ? procesarValorL(paso, p.valor, enc, e, pl, intentos) : (familiaDeVideo(pl) ? procesarValorV(paso, p.valor, e, pl) : null) ?? procesarValor(paso, p.valor, enc, e, pl)
   if (proc.reintentar !== undefined) return pedirReintento(proc.reintentar, 'validación de la sala: reintento')
   if (proc.fallido || !proc.res) {
     await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: e, gasto_usd: +(e.gasto_usd + costo).toFixed(6), turno: { ...turnoBase, n, estado: 'fallo', error: proc.fallido ?? 'sin resultado' }, ...(gastoModelo.length ? { gastos: gastoModelo } : {}) })

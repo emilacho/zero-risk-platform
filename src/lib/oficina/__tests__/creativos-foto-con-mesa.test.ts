@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { abrirEncargo, recibirResultado } from '../orquestador'
-import { CLAVE_DE_LA_PALANCA, FAMILIA_CON_MESA, familiaConMesa, gruposHermanos } from '../mesa/con-mesa'
+import { FAMILIA_CON_MESA, familiaConMesa, gruposHermanos } from '../mesa/con-mesa'
 import { artefactosDeLaFoto } from '../mesa/orquestador'
 import { traducirPieza } from '../mesa/traductor'
 import { CONVENCION_DE_LA_PIEZA } from '../mesa/pedidos'
@@ -22,7 +22,6 @@ import type { Tarjeta } from '../mesa/tipos'
 import { CLIENTE, PARTE, crearMemoria } from './memoria'
 import { crearMesaEnMemoria } from './mesa-memoria'
 
-const ON = { clientes: [CLIENTE] }
 
 const PIEZA = (imagen: string, extra = '') => `## Objetivo
 Que vengan a probar el plato del día · Escríbenos
@@ -136,12 +135,11 @@ describe('la plantilla `post_mesa`', () => {
   })
 })
 
-describe('la palanca rutea la foto', () => {
-  it('`post_img` tiene versión con mesa; con la palanca apagada, nada cambia', () => {
+describe('la ruta lleva la foto a su mesa (20-nov: para cualquier cliente)', () => {
+  it('`post_img` tiene versión con mesa; con la mesa apagada, nada cambia', () => {
     expect(FAMILIA_CON_MESA.post_img).toBe('post_mesa')
-    expect(familiaConMesa('post_img', ON, CLIENTE, () => true)).toBe('post_mesa')
-    expect(familiaConMesa('post_img', undefined, CLIENTE, () => true)).toBe('post_img')
-    expect(familiaConMesa('post_img', ON, CLIENTE, () => false)).toBe('post_img')
+    expect(familiaConMesa('post_img', () => true)).toBe('post_mesa')
+    expect(familiaConMesa('post_img', () => false)).toBe('post_img')
     expect(gruposHermanos('post_img')).toEqual(['post_img', 'post_mesa'])
     expect(gruposHermanos('post_mesa')).toEqual(['post_mesa', 'post_img'])
   })
@@ -159,15 +157,15 @@ const DIRECTORIO_CON_POST: Tarjeta[] = [
   tarjeta('portero', 'portero', []),
 ]
 
-function montar(o: { palanca?: unknown; directorio?: Tarjeta[] } = {}) {
+function montar(o: { mesaActiva?: boolean; directorio?: Tarjeta[] } = {}) {
   const M = crearMemoria({ plantilla: POST_IMG_CON_JEFATURA, config: { familias_activas: ['post_img', 'post_mesa'] } })
   const plantillas: Record<string, { plantilla: Plantilla; activo: boolean }> = {
     post_img: { plantilla: JSON.parse(JSON.stringify(POST_IMG_CON_JEFATURA)), activo: true },
-    post_mesa: { plantilla: JSON.parse(JSON.stringify(POST_MESA)), activo: true },
+    post_mesa: { plantilla: JSON.parse(JSON.stringify(POST_MESA)), activo: o.mesaActiva ?? true },
   }
   M.P.almacen.leerPlantilla = async (f) => plantillas[f] ?? null
   const MS = crearMesaEnMemoria(o.directorio ?? DIRECTORIO_CON_POST)
-  M.P.mesa = { ...MS, configDeLaCadena: async (k: string) => (k === CLAVE_DE_LA_PALANCA ? o.palanca : undefined) }
+  M.P.mesa = { ...MS }
   const abrir = () => abrirEncargo(M.P, { cuerpo: { parte_id: PARTE, brief_id: 'BRF-0003', dry_run: true, familia: 'post_img' }, client_id: CLIENTE, target_step_id: TARGET_STEP_PRODUCIR })
   return { M, MS, abrir }
 }
@@ -194,15 +192,15 @@ async function correrLaMesa(x: ReturnType<typeof montar>, imagen: string) {
 }
 
 describe('por la puerta y la mesa reales (en seco)', () => {
-  it('palanca APAGADA: la foto abre `post_img`, EXACTO como hoy', async () => {
-    const x = montar({ palanca: undefined })
+  it('`post_mesa` APAGADA: la foto abre `post_img`, EXACTO como antes', async () => {
+    const x = montar({ mesaActiva: false })
     const r = await x.abrir()
     const enc = x.M.encargos.get(String(r.cuerpo.encargo_id))!
     expect(enc.familia).toBe('post_img')
     expect(enc.sala_ref?.con_mesa).toBeUndefined()
   })
-  it('palanca ENCENDIDA: abre `post_mesa` con el tope de la mesa y se sientan solo los asientos, más quien dirige', async () => {
-    const x = montar({ palanca: ON })
+  it('con la mesa activa: abre `post_mesa` con el tope de la mesa y se sientan solo los asientos, más quien dirige', async () => {
+    const x = montar()
     const m = await correrLaMesa(x, 'foto:f-01')
     expect(m.enc().familia).toBe('post_mesa')
     expect(m.enc().tope_usd).toBe(TOPE_DE_LA_MESA_USD)
@@ -212,7 +210,7 @@ describe('por la puerta y la mesa reales (en seco)', () => {
     expect(m.vistos.some((p) => p.startsWith('mesa:integrar'))).toBe(true)
   })
   it('foto propia: la mesa deja `visual_direction`, `prompts_validos` y `pieza_post` con la forma de la sala 1, la cola entrega la foto real y la jefatura revisa la pieza', async () => {
-    const x = montar({ palanca: ON })
+    const x = montar()
     const m = await correrLaMesa(x, 'foto:f-01')
     const e = m.enc().estado_del_motor
     expect(datos(e, 'visual_direction')?.decision).toMatchObject({ modo: 'real', foto_id: 'f-01' })
@@ -225,7 +223,7 @@ describe('por la puerta y la mesa reales (en seco)', () => {
     expect(m.r.cuerpo.accion === 'esperar' ? String(t?.paso) : String(m.r.cuerpo.accion)).toMatch(/jefatura|entreg|listo|cerr/)
   })
   it('generada: los prompts del ingeniero llegan al generador y el observador de la mesa mira la imagen (no el curador sentado)', async () => {
-    const x = montar({ palanca: ON })
+    const x = montar()
     const m = await correrLaMesa(x, 'generar: el plato del día servido sobre madera')
     expect(m.vistos.some((p) => p.startsWith('mesa:redactar_prompts:design-image-prompt-engineer'))).toBe(true)
     const e = m.enc().estado_del_motor
@@ -237,7 +235,7 @@ describe('por la puerta y la mesa reales (en seco)', () => {
   })
   it('sin la marca `post` en el directorio (hoy): la pieza no abre en la mesa y lo dice (por eso la migración las siembra)', async () => {
     const sinPost = DIRECTORIO_CON_POST.map((t) => ({ ...t, pertinente_en: t.pertinente_en.filter((p) => !p.startsWith('post')) }))
-    const x = montar({ palanca: ON, directorio: sinPost })
+    const x = montar({ directorio: sinPost })
     const m = await correrLaMesa(x, 'foto:f-01')
     expect(m.enc().estado).toBe('fallido')
     expect(JSON.stringify(m.enc())).toMatch(/dirección creativa activa para «post»/)

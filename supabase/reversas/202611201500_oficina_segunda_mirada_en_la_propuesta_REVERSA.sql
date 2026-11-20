@@ -1,7 +1,8 @@
 -- REVERSA de 202611201500 · saca el paso `segunda_mirada` de post_mesa, carrusel_mesa, kit_mesa y video_mesa: quedan como estaban (los demás pasos, en su orden)
 -- La misma guarda que la ida: el motor ubica por POSICIÓN, así que sacar un paso también corre todo lo que sigue. Se niega con CUALQUIER encargo vivo
 -- de esas familias (también el que espera al dueño), dentro del mismo UPDATE y con la tabla de encargos bloqueada; y si la fila no trae el paso de la migración.
--- Vuelve la reserva por pieza de las 3 mesas de imagen a la de 202611201330 (2,95/3,10/3,10) y lo comprueba al final.
+-- Vuelve la reserva por pieza de las 3 mesas de imagen a la que dejó 202611201400 (3,35/4,00/4,00) y el tope a 43/45/45 (columna y límite), y lo comprueba al final.
+-- Si hay que deshacer también #1250, esta va ANTES que la reversa de 202611201400 (orden inverso).
 BEGIN;
 
 SET LOCAL lock_timeout = '5s';
@@ -16,8 +17,11 @@ BEGIN
       RAISE EXCEPTION 'REVERSA 202611201500: % no tiene el paso de la migración; no se toca', t;
     END IF;
   END LOOP;
-  IF (SELECT count(*) FROM public.oficina_tipos_de_grupo g WHERE (g.tipo = 'post_mesa' AND (g.limites->>'reserva_por_pieza_usd')::numeric = 5.51) OR (g.tipo IN ('carrusel_mesa', 'kit_mesa') AND (g.limites->>'reserva_por_pieza_usd')::numeric = 5.66)) <> 3 THEN
-    RAISE EXCEPTION 'REVERSA 202611201500: la reserva por pieza no es la que dejó la migración (5.51/5.66/5.66); no se toca';
+  IF (SELECT count(*) FROM public.oficina_tipos_de_grupo g WHERE (g.tipo = 'post_mesa' AND (g.limites->>'reserva_por_pieza_usd')::numeric = 5.91) OR (g.tipo IN ('carrusel_mesa', 'kit_mesa') AND (g.limites->>'reserva_por_pieza_usd')::numeric = 6.56)) <> 3 THEN
+    RAISE EXCEPTION 'REVERSA 202611201500: la reserva por pieza no es la que dejó la migración (5.91/6.56/6.56); no se toca';
+  END IF;
+  IF (SELECT count(*) FROM public.oficina_tipos_de_grupo g WHERE (g.tipo = 'post_mesa' AND g.tope_encargo_usd = 45 AND (g.limites->>'tope_encargo_usd')::numeric = 45) OR (g.tipo IN ('carrusel_mesa', 'kit_mesa') AND g.tope_encargo_usd = 48 AND (g.limites->>'tope_encargo_usd')::numeric = 48)) <> 3 THEN
+    RAISE EXCEPTION 'REVERSA 202611201500: el tope no es el que dejó la migración (45/48/48); no se toca';
   END IF;
 END $$;
 
@@ -34,9 +38,9 @@ BEGIN
   END IF;
 END $$;
 
-UPDATE public.oficina_tipos_de_grupo g SET limites = g.limites || jsonb_build_object('reserva_por_pieza_usd', 2.95) WHERE g.tipo = 'post_mesa';
-UPDATE public.oficina_tipos_de_grupo g SET limites = g.limites || jsonb_build_object('reserva_por_pieza_usd', 3.1) WHERE g.tipo = 'carrusel_mesa';
-UPDATE public.oficina_tipos_de_grupo g SET limites = g.limites || jsonb_build_object('reserva_por_pieza_usd', 3.1) WHERE g.tipo = 'kit_mesa';
+UPDATE public.oficina_tipos_de_grupo g SET tope_encargo_usd = 43, limites = g.limites || jsonb_build_object('reserva_por_pieza_usd', 3.35, 'tope_encargo_usd', 43) WHERE g.tipo = 'post_mesa';
+UPDATE public.oficina_tipos_de_grupo g SET tope_encargo_usd = 45, limites = g.limites || jsonb_build_object('reserva_por_pieza_usd', 4, 'tope_encargo_usd', 45) WHERE g.tipo = 'carrusel_mesa';
+UPDATE public.oficina_tipos_de_grupo g SET tope_encargo_usd = 45, limites = g.limites || jsonb_build_object('reserva_por_pieza_usd', 4, 'tope_encargo_usd', 45) WHERE g.tipo = 'kit_mesa';
 
 DO $$
 DECLARE orden text;
@@ -48,8 +52,11 @@ BEGIN
   IF orden NOT LIKE '%,mesa,imagenes_clave,borrador_video,aprobar_propuestas,%' THEN
     RAISE EXCEPTION 'REVERSA 202611201500: video_mesa no quedó como antes (%)', orden;
   END IF;
-  IF (SELECT count(*) FROM public.oficina_tipos_de_grupo g WHERE (g.tipo = 'post_mesa' AND (g.limites->>'reserva_por_pieza_usd')::numeric = 2.95) OR (g.tipo IN ('carrusel_mesa', 'kit_mesa') AND (g.limites->>'reserva_por_pieza_usd')::numeric = 3.1)) <> 3 THEN
-    RAISE EXCEPTION 'REVERSA 202611201500: la reserva por pieza no volvió a 2.95/3.1/3.1';
+  IF (SELECT count(*) FROM public.oficina_tipos_de_grupo g WHERE (g.tipo = 'post_mesa' AND (g.limites->>'reserva_por_pieza_usd')::numeric = 3.35) OR (g.tipo IN ('carrusel_mesa', 'kit_mesa') AND (g.limites->>'reserva_por_pieza_usd')::numeric = 4)) <> 3 THEN
+    RAISE EXCEPTION 'REVERSA 202611201500: la reserva por pieza no volvió a 3.35/4/4';
+  END IF;
+  IF (SELECT count(*) FROM public.oficina_tipos_de_grupo g WHERE (g.tipo = 'post_mesa' AND g.tope_encargo_usd = 43 AND (g.limites->>'tope_encargo_usd')::numeric = 43) OR (g.tipo IN ('carrusel_mesa', 'kit_mesa') AND g.tope_encargo_usd = 45 AND (g.limites->>'tope_encargo_usd')::numeric = 45)) <> 3 THEN
+    RAISE EXCEPTION 'REVERSA 202611201500: el tope no volvió a 43/45/45';
   END IF;
 END $$;
 
