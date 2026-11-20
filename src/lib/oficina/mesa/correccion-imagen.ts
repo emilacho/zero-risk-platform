@@ -20,6 +20,7 @@ import type { Cambios, Encargo, Puertos } from '../puertos'
 import { cabeLaVuelta, quedaVueltaDelPaso } from '../orquestador-video'
 import { costoDeVolver } from '../topes-por-duracion'
 import type { Estado, Ficha, Paso, Plantilla } from '../tipos'
+import { calidadDeLaFase, PASO_IMAGENES_CLAVE_FINAL, PASO_REVISAR_IMAGENES_CLAVE } from '../video/imagen-clave'
 
 export const PASO_CORREGIR_IMAGEN = 'corregir_imagen'
 export const PASO_EDITAR_IMAGEN = 'editar_imagen'
@@ -49,6 +50,15 @@ export const COSTO_RESERVADO_POR_MIRADA_DE_OTRO_PROVEEDOR_USD = 0.26
 export const RESERVA_POR_PIEZA_DE_LA_CORRECCION_USD: Readonly<Record<'post_mesa' | 'carrusel_mesa' | 'kit_mesa', number>> = { post_mesa: 0.4, carrusel_mesa: 0.9, kit_mesa: 0.9 }
 export type MotivoDeCierre = 'queda_bien' | 'sin_cambios' | 'tope_de_vueltas' | 'no_cupo' | 'no_mejoro' | 'fallo_la_edicion' | 'sin_lectura'
 export type Donde = 'final' | 'video'
+
+// ───────────────────────── tanda 2 · las imágenes clave del video (diseño v3 (a): «el mismo par de pasos entre la imagen clave de cada plano y el clip»)
+/** el que pidió la imagen clave y firma la hoja de planos: el director de la mesa de video (lectura de CC5 16:36Z; la decide Lenovo) */
+export const AGENTE_QUE_CORRIGE_LA_IMAGEN_CLAVE = 'creative-director-mesa'
+export const agenteQueCorrige = (d: Donde): string => (d === 'video' ? AGENTE_QUE_CORRIGE_LA_IMAGEN_CLAVE : AGENTE_QUE_CORRIGE_LA_IMAGEN)
+/** dónde corre la corrección: en el video hay imágenes clave finales; en las mesas de imagen, no (cada familia tiene solo una de las dos fuentes) · pura */
+export const dondeDe = (e: Pick<Estado, 'artefactos'>): Donde => (e.artefactos?.[PASO_IMAGENES_CLAVE_FINAL] ? 'video' : 'final')
+/** la imagen de un plano se nombra por su número (las de la mesa, por su `ref`) */
+export const refDelPlano = (n: number): string => `plano-${n}`
 
 export interface VersionDeImagen { vuelta: number; url: string; generation_id: string | null; simulada?: boolean }
 export interface ImagenEnCorreccion {
@@ -90,13 +100,20 @@ const str = (x: unknown): string => (typeof x === 'string' ? x : '')
 
 /** la tanda vigente de `imagenes`, agrupada por imagen (`ref`; la foto de la sala 1 no lleva `ref`: es «pieza») */
 function itemsVigentes(e: Estado): { intento: number; items: Array<Record<string, unknown>> } {
+  if (dondeDe(e) === 'video') {
+    // la tanda de las imágenes clave: la versión del artefacto que dejó `imagenes_clave_final`. Al devolver la mejor se anota esa misma tanda, así la reescritura
+    //   no abre una tanda nueva; si el paso vuelve a correr (la jefatura devolvió la pieza a la mesa), sus datos llegan sin la marca y con otra versión → tanda nueva
+    const a = e.artefactos[PASO_IMAGENES_CLAVE_FINAL]
+    const intento = Number(a.datos.tanda_de_correccion ?? a.version)
+    return { intento, items: arr<Record<string, unknown>>(a.datos.planos).filter((p) => str(p.url)).map((p) => ({ ...p, ref: refDelPlano(Number(p.n)), intento })) }
+  }
   const im = datos(e, 'imagenes')
   const intento = Number(im?.ultimo_intento ?? 0)
   return { intento, items: arr<Record<string, unknown>>(im?.items).filter((x) => Number(x.intento) === intento && str(x.url)) }
 }
 
 /** el estado de la corrección: el guardado si es de la misma tanda de imágenes; si no, todas las imágenes pendientes con sus versiones generadas · pura */
-export function correccionesVigentes(e: Estado, donde: Donde = 'final'): Correcciones {
+export function correccionesVigentes(e: Estado, donde: Donde = dondeDe(e)): Correcciones {
   const { intento, items } = itemsVigentes(e)
   const prev = datos(e, ARTEFACTO_CORRECCIONES_DE_IMAGEN) as unknown as Correcciones | undefined
   if (prev && prev.intento_imagenes === intento && prev.imagenes && typeof prev.imagenes === 'object') return prev
@@ -140,7 +157,9 @@ export function tareaDeLaCorreccion(e: Estado, o: { contrato: string; errorDeFor
     ].join('\n'))
   }
   const task = [
-    `Eres el creativo que pidió estas imágenes. Míralas como imágenes (vuelta ${vueltaEnCurso(c)} de ${VUELTAS_DE_CORRECCION_IMAGEN}).`,
+    c.donde === 'video'
+      ? `Eres el director de la mesa: pediste estas imágenes clave en la hoja de planos (cada una es el primer cuadro del clip de su plano; el clip arranca de ella). Míralas como imágenes (vuelta ${vueltaEnCurso(c)} de ${VUELTAS_DE_CORRECCION_IMAGEN}).`
+      : `Eres el creativo que pidió estas imágenes. Míralas como imágenes (vuelta ${vueltaEnCurso(c)} de ${VUELTAS_DE_CORRECCION_IMAGEN}).`,
     'Para cada imagen: elige la versión sobre la que se va a editar (el número de versión) y di QUÉ CAMBIAR, en lenguaje llano y concreto, como se lo dirías a un fotógrafo',
     '(por ejemplo: «el tazón es de barro, el caldo más claro, saca la cuchara»). Si no hay nada que cambiar, deja `cambios` vacío.',
     'No calificas la imagen: otro revisor decide si quedó bien. Solo pide cambios que acerquen la imagen a lo pedido y a la foto real.',
@@ -211,6 +230,10 @@ export function fotosDeLaEdicion(real: FotoDeReferencia | null, otras: FotoDeRef
 interface FotoConUrl { id: string; url?: string | null }
 /** las otras fotos reales que nombró quien escribió el prompt de esta imagen (las mismas que viajaron al generarla) */
 function otrasDeLaImagen(e: Estado, i: ImagenEnCorreccion, propias: FotoConUrl[], real: FotoDeReferencia | null): FotoDeReferencia[] {
+  // la imagen clave guarda las otras fotos que viajaron con su base (personajes, productos, lugares): son las mismas que viajan con la edición
+  if (dondeDe(e) === 'video') {
+    return arr<string>(i.item.otras_referencias_ids).flatMap((id) => { const u = propias.find((f) => f.id === id)?.url; return u && id !== real?.id ? [{ id, url: u }] : [] })
+  }
   const pv = datos(e, 'prompts_validos')
   const porRef = (pv?.por_ref ?? null) as Record<string, { prompts?: Array<{ foto_de_referencia?: string; otras_fotos_de_referencia?: string[] }> }> | null
   const nombradas = (p?: { foto_de_referencia?: string; otras_fotos_de_referencia?: string[] }) => [p?.foto_de_referencia, ...(p?.otras_fotos_de_referencia ?? [])]
@@ -230,9 +253,11 @@ function otrasDeLaImagen(e: Estado, i: ImagenEnCorreccion, propias: FotoConUrl[]
 export interface SalidaDeLaEdicion { res: ResultadoDePaso; gastos: NonNullable<Cambios['gastos']> }
 
 /** edita SOBRE la versión elegida las imágenes con cambios pedidos · en seco no llama al generador · una edición ya pagada (misma llave) se reusa */
-export async function editarImagenes(P: Puertos, enc: Encargo): Promise<SalidaDeLaEdicion> {
+export async function editarImagenes(P: Puertos, enc: Encargo, pl?: Pick<Plantilla, 'limites'>): Promise<SalidaDeLaEdicion> {
   const e = enc.estado_del_motor
   const c = correccionesVigentes(e)
+  // la imagen clave editada sale con la MISMA calidad y forma que la final (DATO `limites.imagen_clave.final`): el clip arranca de ella
+  const calidad = c.donde === 'video' ? calidadDeLaFase(pl?.limites as Record<string, unknown> | undefined, 'final') : null
   const vuelta = vueltaEnCurso(c)
   const pedido = (datos(e, ARTEFACTO_PEDIDO_DE_CORRECCION)?.por_ref ?? {}) as Record<string, { base: number; cambios: string }>
   const propias = arr<FotoConUrl>((datos(e, 'encargo') as { F?: { fotos?: unknown } } | undefined)?.F?.fotos)
@@ -255,7 +280,7 @@ export async function editarImagenes(P: Puertos, enc: Encargo): Promise<SalidaDe
     const realUrl = i.foto_real_id ? propias.find((f) => f.id === i.foto_real_id)?.url : undefined
     const real: FotoDeReferencia | null = i.foto_real_id && realUrl ? { id: i.foto_real_id, url: realUrl } : null
     const otras = fotosDeLaEdicion(real, otrasDeLaImagen(e, i, propias, real))
-    const g = await P.imagen({ prompt: promptDeLaCorreccion(i.prompt, p.cambios), client_id: enc.client_id, encargo_id: enc.id, dry_run: false, foto: { id: `version-${p.base}`, url: base.url }, ...(otras.length ? { otras_fotos: otras } : {}), llave })
+    const g = await P.imagen({ prompt: promptDeLaCorreccion(i.prompt, p.cambios), client_id: enc.client_id, encargo_id: enc.id, dry_run: false, foto: { id: `version-${p.base}`, url: base.url }, ...(otras.length ? { otras_fotos: otras } : {}), ...(calidad ? { size: calidad.size, quality: calidad.quality } : {}), llave })
     if (!g.ok) { por_ref[i.ref] = { costo_usd: 0, llave, error: g.error }; continue }
     por_ref[i.ref] = { version: { vuelta, url: g.url, generation_id: g.generation_id }, costo_usd: g.costo_usd, llave }
     costo += g.costo_usd
@@ -311,6 +336,21 @@ export function imagenesConLaMejor(e: Estado, c: Correcciones): Record<string, u
   return { ...im, items, ultimo_intento: c.intento_imagenes }
 }
 
+/**
+ * la mejor versión de cada plano → `imagenes_clave_final` con la misma forma de siempre: `url` e `imagenes` apuntan a la mejor (lo que leen la revisión, el clip
+ * y la mirada del video), con la marca de la tanda para que la reescritura no abra una tanda nueva. Los planos sin imagen y el resto de los datos quedan igual · pura
+ */
+export function imagenesClaveConLaMejor(e: Estado, c: Correcciones): Record<string, unknown> {
+  const d = (datos(e, PASO_IMAGENES_CLAVE_FINAL) ?? {}) as Record<string, unknown>
+  const planos = arr<Record<string, unknown>>(d.planos).map((p) => {
+    const i = c.imagenes[refDelPlano(Number(p.n))]
+    const v = i ? i.versiones[i.mejor] : undefined
+    if (!v || !v.vuelta) return p
+    return { ...p, url: v.url, imagenes: [v.url], generation_id: v.generation_id ?? p.generation_id ?? null, corregida_en_la_vuelta: v.vuelta, ...(str(p.url) && str(p.url) !== v.url ? { generada_url: p.url } : {}) }
+  })
+  return { ...d, planos, tanda_de_correccion: c.intento_imagenes }
+}
+
 export interface SalidaDeLaMirada { res: ResultadoDePaso; gastos: NonNullable<Cambios['gastos']> }
 
 /** la mirada de otro proveedor decide cada imagen pendiente, y si hay otra vuelta (quedan vueltas + alguna pendiente + cabe) */
@@ -332,7 +372,7 @@ export async function mirarCorreccion(P: Puertos, enc: Encargo, pl: Plantilla): 
     const ed = ediciones[i.ref]
     const base = p.base in i.versiones ? p.base : i.mejor
     i.ultimos_cambios = p.cambios || i.ultimos_cambios
-    const fila: FilaDeCorreccion = { ref: i.ref, vuelta, vistas: p.vistas ?? vistasDe(i), elegida: base, queda_bien: null, cambios: p.cambios, version_nueva: null, costo_usd: ed?.costo_usd ?? 0, agente: AGENTE_QUE_CORRIGE_LA_IMAGEN, llave: ed?.llave ?? null, donde: c.donde }
+    const fila: FilaDeCorreccion = { ref: i.ref, vuelta, vistas: p.vistas ?? vistasDe(i), elegida: base, queda_bien: null, cambios: p.cambios, version_nueva: null, costo_usd: ed?.costo_usd ?? 0, agente: agenteQueCorrige(c.donde), llave: ed?.llave ?? null, donde: c.donde }
     if (p.cambios && ed?.error) {
       // el generador no devolvió la edición: sale la mejor que hay, con su aviso (sin reintentar a ciegas)
       i.mejor = base
@@ -380,7 +420,7 @@ export async function mirarCorreccion(P: Puertos, enc: Encargo, pl: Plantilla): 
   const res: ResultadoDePaso = { costo_usd: +costo.toFixed(6), artefacto: c as unknown as Record<string, unknown>, ...(fichas.length ? { fichas } : {}) }
   // terminó: la cola de siempre recibe la mejor versión de cada imagen
   // (sin imágenes de esta tanda no se reescribe `imagenes`: no hay nada que cambiar)
-  if (!cabe && Object.keys(c.imagenes).length) res.otros_artefactos = { imagenes: imagenesConLaMejor(e, c) }
+  if (!cabe && Object.keys(c.imagenes).length) res.otros_artefactos = c.donde === 'video' ? { [PASO_IMAGENES_CLAVE_FINAL]: imagenesClaveConLaMejor(e, c) } : { imagenes: imagenesConLaMejor(e, c) }
   return { res, gastos }
 }
 
@@ -431,4 +471,61 @@ export function conCorreccionDeImagen(pl: Plantilla): Plantilla {
   const propias = indicaciones[AGENTE_QUE_CORRIGE_LA_IMAGEN] ?? []
   if (!propias.some((r) => r.regla === INDICACION_DE_LA_CORRECCION.regla)) indicaciones[AGENTE_QUE_CORRIGE_LA_IMAGEN] = [...propias, structuredClone(INDICACION_DE_LA_CORRECCION)]
   return { ...structuredClone(pl), pasos, indicaciones, limites: { ...structuredClone(pl.limites), margen: Number(pl.limites.margen ?? 0) + margenDeLaCorreccion(techo), vueltas_de_correccion_imagen: VUELTAS_DE_CORRECCION_IMAGEN } as Plantilla['limites'] }
+}
+
+// ───────────────────────── tanda 2 · la plantilla del video
+// los topes del video crecen con el largo (`limites.video.segundos_max`), como las imágenes clave. PROPUESTA de CC1 (16:3xZ), pendiente de la decisión de Lenovo:
+//   en prd no hay ninguna imagen clave final real que medir (los 2 videos reales son los reels quietos); se parte de la tanda de imágenes clave (0,2/s) y de la mirada
+//   de otro proveedor de la tanda 1 (0,26 por imagen), contando un plano por segundo (el peor caso)
+/** la edición de las imágenes clave reserva lo mismo que una tanda de imágenes clave (`imagenes_clave_final`): como mucho, una edición por plano por vuelta */
+export const TOPE_DE_LA_EDICION_DE_IMAGEN_CLAVE_POR_SEGUNDO_USD = 0.2
+/** la mirada de otro proveedor: 0,26 por plano, contando un plano por segundo */
+export const TOPE_DE_LA_MIRADA_DE_IMAGEN_CLAVE_POR_SEGUNDO_USD = COSTO_RESERVADO_POR_MIRADA_DE_OTRO_PROVEEDOR_USD
+/** lo que suma al tope del encargo UNA pasada de la corrección (las vueltas 2 y 3 se saltan si no caben): el creativo fijo y lo demás por segundo */
+export const TOPE_FIJO_DE_LA_CORRECCION_DEL_VIDEO_USD = TOPE_DE_LA_MIRADA_DEL_CREATIVO_USD
+export const TOPE_DE_LA_CORRECCION_DEL_VIDEO_POR_SEGUNDO_USD = +(TOPE_DE_LA_EDICION_DE_IMAGEN_CLAVE_POR_SEGUNDO_USD + TOPE_DE_LA_MIRADA_DE_IMAGEN_CLAVE_POR_SEGUNDO_USD).toFixed(4)
+
+/** la indicación del director cuando mira las imágenes clave que pidió: pide cambios, no califica (lo decide otro proveedor) */
+export const INDICACION_DE_LA_CORRECCION_DEL_VIDEO = { regla: 'Cuando miras las imágenes clave que pediste en la hoja de planos, NO las calificas: eliges la versión sobre la que se edita y dices qué cambiar, en lenguaje llano y concreto, para que cada una cumpla su plano y se parezca a la foto real. Si no hay nada que cambiar, no inventes cambios.', aplica: 'guia' } as const
+
+/** los tres pasos del video: los de la mesa, con quien corrige, la fuente y los topes por segundo del video · puro */
+export function pasosDeLaCorreccionDelVideo(condicion: Paso['condicion'], techo: number): Paso[] {
+  const [corr, ed, mir] = pasosDeLaCorreccion(condicion, { limites: { imagenes_generadas_max: 0 } } as never, techo)
+  return [
+    { ...corr, quien: AGENTE_QUE_CORRIGE_LA_IMAGEN_CLAVE, entrada: [PASO_IMAGENES_CLAVE_FINAL] },
+    { ...ed, tope_usd: 0, tope_usd_por_segundo: TOPE_DE_LA_EDICION_DE_IMAGEN_CLAVE_POR_SEGUNDO_USD },
+    { ...mir, tope_usd: 0, tope_usd_por_segundo: TOPE_DE_LA_MIRADA_DE_IMAGEN_CLAVE_POR_SEGUNDO_USD },
+  ]
+}
+
+/** suma lo mismo a cada resolución del tope por segundo del encargo (número o por resolución) · pura */
+const sumarPorSegundo = (x: unknown, mas: number): unknown =>
+  typeof x === 'number' ? +(x + mas).toFixed(4)
+    : x && typeof x === 'object' ? Object.fromEntries(Object.entries(x as Record<string, unknown>).map(([k, v]) => [k, typeof v === 'number' ? +(v + mas).toFixed(4) : v]))
+      : mas
+
+/** la mesa de video → la misma con la corrección entre `imagenes_clave_final` y `revisar_imagenes_clave` (ubicada por CLAVE) · pura · si ya la tiene, la devuelve igual */
+export function conCorreccionDeImagenClave(pl: Plantilla): Plantilla {
+  if (pl.pasos.some((p) => p.clave === PASO_CORREGIR_IMAGEN)) return structuredClone(pl)
+  const pasos = structuredClone(pl.pasos)
+  const i = pasos.findIndex((p) => p.clave === PASO_IMAGENES_CLAVE_FINAL)
+  const j = pasos.findIndex((p) => p.clave === PASO_REVISAR_IMAGENES_CLAVE)
+  if (i < 0 || j !== i + 1) throw new Error(`la plantilla ${pl.familia} no tiene «${PASO_IMAGENES_CLAVE_FINAL}» seguida de «${PASO_REVISAR_IMAGENES_CLAVE}»`)
+  const techo = techoDeLaCorreccion(pasos, i + 1, j - 1)
+  // la misma condición que la revisión: solo si hay imágenes clave REALES (en ensayo son simuladas y los tres pasos no corren)
+  pasos.splice(j, 0, ...pasosDeLaCorreccionDelVideo(pasos[j].condicion, techo))
+  const indicaciones = structuredClone(pl.indicaciones ?? {}) as Plantilla['indicaciones']
+  const propias = indicaciones[AGENTE_QUE_CORRIGE_LA_IMAGEN_CLAVE] ?? []
+  if (!propias.some((r) => r.regla === INDICACION_DE_LA_CORRECCION_DEL_VIDEO.regla)) indicaciones[AGENTE_QUE_CORRIGE_LA_IMAGEN_CLAVE] = [...propias, structuredClone(INDICACION_DE_LA_CORRECCION_DEL_VIDEO)]
+  const l = structuredClone(pl.limites) as Record<string, unknown>
+  return {
+    ...structuredClone(pl), pasos, indicaciones,
+    limites: {
+      ...l,
+      margen: Number(l.margen ?? 0) + margenDeLaCorreccion(techo),
+      vueltas_de_correccion_imagen: VUELTAS_DE_CORRECCION_IMAGEN,
+      tope_encargo_usd: +(Number(l.tope_encargo_usd ?? 0) + TOPE_FIJO_DE_LA_CORRECCION_DEL_VIDEO_USD).toFixed(4),
+      ...(l.tope_encargo_usd_por_segundo !== undefined ? { tope_encargo_usd_por_segundo: sumarPorSegundo(l.tope_encargo_usd_por_segundo, TOPE_DE_LA_CORRECCION_DEL_VIDEO_POR_SEGUNDO_USD) } : {}),
+    } as unknown as Plantilla['limites'],
+  }
 }
