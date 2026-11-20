@@ -194,7 +194,8 @@ export function sinLecturaDeLaCorreccion(e: Estado, errores: string[]): Resultad
 // ───────────────────────── 2 · la edición (paso de código)
 
 /** la llave de una edición: una por (encargo, imagen, vuelta), de largo fijo (la huella md5 de los tres), para que quepa en `agent_image_generations.caller` (40): «ed:» + 32 = 35 */
-export const llaveDeLaEdicion = (encargoId: string, ref: string, vuelta: number): string => `ed:${createHash('md5').update(`${encargoId}|${ref}|${vuelta}`).digest('hex')}`
+// la tanda (intento de las imágenes) va en la llave: tras una devolución de la jefatura la vuelta vuelve a 1 y, sin ella, la tanda nueva reusaría la edición de la imagen rechazada (CC6 · 🔴 #1250)
+export const llaveDeLaEdicion = (encargoId: string, intento: number, ref: string, vuelta: number): string => `ed:${createHash('md5').update(`${encargoId}|${intento}|${ref}|${vuelta}`).digest('hex')}`
 
 /** el pedido de la edición: lo que se pidió más «cambia SOLO esto» */
 export const promptDeLaCorreccion = (prompt: string, cambios: string): string =>
@@ -241,7 +242,7 @@ export async function editarImagenes(P: Puertos, enc: Encargo): Promise<SalidaDe
   for (const i of pendientesDe(c)) {
     const p = pedido[i.ref]
     if (!p || !p.cambios) continue
-    const llave = llaveDeLaEdicion(enc.id, i.ref, vuelta)
+    const llave = llaveDeLaEdicion(enc.id, c.intento_imagenes, i.ref, vuelta)
     const base = i.versiones[p.base] ?? i.versiones[i.mejor]
     if (enc.dry_run) { por_ref[i.ref] = { version: { vuelta, url: `${base.url}#simulada-v${vuelta}`, generation_id: null, simulada: true }, costo_usd: 0, llave }; continue }
     const ya = P.imagenYaPedida ? await P.imagenYaPedida({ llave, client_id: enc.client_id }) : null

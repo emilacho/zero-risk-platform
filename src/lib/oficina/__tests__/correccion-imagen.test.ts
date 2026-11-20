@@ -145,7 +145,7 @@ describe('2 · la edición', () => {
     expect(p.foto.url).toBe('https://img.test/hook-1.png')
     expect(p.otras_fotos.map((f) => f.id)[0]).toBe('f-real')
     expect(p.prompt).toMatch(/Change ONLY this.*tazón de barro/)
-    expect(p.llave).toBe(llaveDeLaEdicion('11111111-2222-3333-4444-555555555555', 'hook', 1))
+    expect(p.llave).toBe(llaveDeLaEdicion('11111111-2222-3333-4444-555555555555', 1, 'hook', 1))
     expect(p.dry_run).toBe(false)
     expect(s.res.costo_usd).toBeCloseTo(0.012)
     expect(s.gastos).toHaveLength(1)
@@ -164,11 +164,43 @@ describe('2 · la edición', () => {
     expect(llamadas.imagen).toHaveLength(0)
     expect((s.res.artefacto as { por_ref: Record<string, { version: { url: string }; reusada: boolean }> }).por_ref.hook).toMatchObject({ reusada: true, version: { url: 'https://img.test/ya.png' } })
   })
-  it('la llave es una por (encargo, imagen, vuelta) y cabe en 40', () => {
-    const ks = new Set([llaveDeLaEdicion('a', 'hook', 1), llaveDeLaEdicion('a', 'hook', 2), llaveDeLaEdicion('a', 'cierre', 1), llaveDeLaEdicion('b', 'hook', 1)])
-    expect(ks.size).toBe(4)
+  it('la llave es una por (encargo, tanda, imagen, vuelta) y cabe en 40', () => {
+    const ks = new Set([llaveDeLaEdicion('a', 1, 'hook', 1), llaveDeLaEdicion('a', 1, 'hook', 2), llaveDeLaEdicion('a', 1, 'cierre', 1), llaveDeLaEdicion('b', 1, 'hook', 1), llaveDeLaEdicion('a', 2, 'hook', 1)])
+    expect(ks.size).toBe(5)
     for (const k of ks) expect(k.length).toBeLessThanOrEqual(40)
-    expect(llaveDeLaEdicion('a', 'hook', 1)).toBe(llaveDeLaEdicion('a', 'hook', 1))
+    expect(llaveDeLaEdicion('a', 1, 'hook', 1)).toBe(llaveDeLaEdicion('a', 1, 'hook', 1))
+  })
+  it('🔴 con un libro que recuerda lo pagado (como la tabla real): tras la devolución de la jefatura, la tanda nueva edita SU imagen rehecha; repetir el paso en la misma tanda reusa (CC6 · #1250)', async () => {
+    const pagadas = new Map<string, { url: string; generation_id: string; costo_usd: number }>()
+    const llamadas: Array<{ foto: { url: string }; llave: string }> = []
+    const P = {
+      imagen: async (p: { foto: { url: string }; llave: string }) => {
+        llamadas.push(p)
+        const r = { url: `https://img.test/ed-${llamadas.length}.png`, generation_id: `ge${llamadas.length}`, costo_usd: 0.012 }
+        pagadas.set(p.llave, r)
+        return { ok: true, ...r }
+      },
+      imagenYaPedida: async (p: { llave: string }) => pagadas.get(p.llave) ?? null,
+    } as never
+    const t1 = [{ indice: 0, ref: 'cierre', intento: 1, prompt_idx: 0, url: 'https://img.test/cierre-t1.png', generation_id: 'g1', prompt: 'q' }]
+    const e1 = estado({ items: t1, extra: { [ARTEFACTO_PEDIDO_DE_CORRECCION]: { vuelta: 1, por_ref: { cierre: { base: 0, cambios: 'más luz' } } } } })
+    await editarImagenes(P, enc(e1))
+    expect(llamadas).toHaveLength(1)
+    // la misma tanda, el mismo paso otra vez (un reintento del motor): reusa, no paga dos veces
+    const r1 = await editarImagenes(P, enc(e1))
+    expect(llamadas).toHaveLength(1)
+    expect((r1.res.artefacto as { por_ref: Record<string, { reusada?: boolean }> }).por_ref.cierre.reusada).toBe(true)
+    // la jefatura devuelve; la mesa rehace «cierre» en la tanda 2 y la corrección vuelve a su vuelta 1
+    const viejo = { ...correccionesVigentes(e1), vuelta: 1 }
+    const t2 = [...t1, { indice: 1, ref: 'cierre', intento: 2, prompt_idx: 0, url: 'https://img.test/cierre-t2.png', generation_id: 'g2', prompt: 'q' }]
+    const base2 = estado({ items: t2, extra: { [ARTEFACTO_CORRECCIONES_DE_IMAGEN]: viejo, [ARTEFACTO_PEDIDO_DE_CORRECCION]: { vuelta: 1, por_ref: { cierre: { base: 0, cambios: 'el caldo más claro' } } } } })
+    const e2 = conArt(base2, 'imagenes', { ultimo_intento: 2, items: t2 })
+    expect(correccionesVigentes(e2).vuelta).toBe(0)
+    const s2 = await editarImagenes(P, enc(e2))
+    expect((s2.res.artefacto as { por_ref: Record<string, { reusada?: boolean }> }).por_ref.cierre.reusada).toBeUndefined()
+    expect(llamadas).toHaveLength(2)
+    expect(llamadas[1].foto.url).toBe('https://img.test/cierre-t2.png')
+    expect(llamadas[1].llave).not.toBe(llamadas[0].llave)
   })
   it('nunca más de 15 otras fotos, la real primera y sin repetir', () => {
     const muchas = Array.from({ length: 20 }, (_, k) => ({ id: `f${k}`, url: `u${k}` }))
@@ -449,6 +481,13 @@ describe('la migración 202611201400 dice lo mismo que el código', () => {
     const prefijo = 'Cuando miras las imágenes finales que pediste, NO las calificas'
     expect(INDICACION_DE_LA_CORRECCION.regla.startsWith(prefijo)).toBe(true)
     expect(rev).toContain(`'${prefijo}%'`)
+    // la comprobación final de la reversa mira los VALORES contra lo de antes, no solo los pasos (CC6 🟡 #1250)
+    const fin = rev.slice(rev.lastIndexOf('DO $$'))
+    expect(fin).toContain(`(g.limites->>'margen')::numeric = a.margen - ${margenDeLaCorreccion(14)}`)
+    expect(fin).toContain(`(g.limites->>'reserva_por_pieza_usd')::numeric = a.reserva - ${caso}`)
+    expect(fin).toContain(`NOT (g.limites ? 'vueltas_de_correccion_imagen')`)
+    expect(fin).toContain(`r->>'regla' LIKE '${prefijo}%'`)
+    expect(fin).toMatch(/\) <> 3 THEN\n\s*RAISE EXCEPTION/)
   })
   it('las dos toman el candado con tiempo límite y se niegan con encargos vivos', async () => {
     for (const r of ['supabase/migrations/202611201400_oficina_correccion_de_la_imagen_final.sql', 'supabase/reversas/202611201400_oficina_correccion_de_la_imagen_final_REVERSA.sql']) {

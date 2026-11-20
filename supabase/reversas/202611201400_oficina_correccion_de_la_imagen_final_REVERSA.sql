@@ -24,6 +24,10 @@ BEGIN
   END LOOP;
 END $$;
 
+-- lo de antes, para comprobar al final los valores (no solo los pasos) · CC6 🟡 #1250
+CREATE TEMP TABLE antes_202611201400 ON COMMIT DROP AS
+  SELECT tipo, (limites->>'margen')::numeric AS margen, (limites->>'reserva_por_pieza_usd')::numeric AS reserva FROM public.oficina_tipos_de_grupo WHERE tipo IN ('post_mesa', 'carrusel_mesa', 'kit_mesa');
+
 UPDATE public.oficina_tipos_de_grupo g
 SET pasos = (SELECT jsonb_agg(z.p ORDER BY z.o) FROM jsonb_array_elements(g.pasos) WITH ORDINALITY z(p, o) WHERE z.p->>'clave' NOT IN ('corregir_imagen', 'editar_imagen', 'mirar_correccion')),
     limites = (g.limites - 'vueltas_de_correccion_imagen') || jsonb_build_object('margen', (g.limites->>'margen')::numeric - 44,
@@ -44,6 +48,13 @@ BEGIN
   IF EXISTS (SELECT 1 FROM public.oficina_tipos_de_grupo g, LATERAL (SELECT (o - 1)::int AS i FROM jsonb_array_elements(g.pasos) WITH ORDINALITY z(p, o) WHERE z.p->>'clave' = 'imagen') im
              WHERE g.tipo IN ('post_mesa', 'carrusel_mesa', 'kit_mesa') AND g.pasos->(im.i + 1)->>'clave' IS DISTINCT FROM 'observar') THEN
     RAISE EXCEPTION 'REVERSA 202611201400: «imagen» no quedó seguido de «observar»';
+  END IF;
+  IF (SELECT count(*) FROM public.oficina_tipos_de_grupo g JOIN antes_202611201400 a USING (tipo)
+      WHERE (g.limites->>'margen')::numeric = a.margen - 44
+        AND (g.limites->>'reserva_por_pieza_usd')::numeric = a.reserva - CASE g.tipo WHEN 'post_mesa' THEN 0.4 WHEN 'carrusel_mesa' THEN 0.9 WHEN 'kit_mesa' THEN 0.9 END
+        AND NOT (g.limites ? 'vueltas_de_correccion_imagen')
+        AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(COALESCE(g.indicaciones->'design-image-prompt-engineer', '[]'::jsonb)) r WHERE r->>'regla' LIKE 'Cuando miras las imágenes finales que pediste, NO las calificas%')) <> 3 THEN
+    RAISE EXCEPTION 'REVERSA 202611201400: el margen, la reserva, las vueltas o la indicación no quedaron como antes de la migración';
   END IF;
 END $$;
 
