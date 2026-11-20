@@ -10,6 +10,7 @@
 import type { PayloadDeRevision, Productor, SalidaDeRevision } from '../jefatura/revision/contrato'
 import { datos, fichaNueva } from './ayudas'
 import { claseDe } from './clase'
+import { segundaMiradaYaDada } from './segunda-mirada'
 import { quedaDesacuerdoDeHechos } from './hechos-del-negocio'
 import { esDura, hallazgosDelJefe, leerRespuestas, marcaDeVuelta, pedidoDeRespuesta, repartir, type Destino, type Devolucion, type Enviada, type FichaDeLaHoja, type Hallazgo, type RespuestaDelCreador } from './sentido-contra-la-ficha'
 import type { ContextoDelRevisor } from './ciego'
@@ -77,6 +78,8 @@ export function sobreDeLaRevision(enc: Pick<Encargo, 'id' | 'client_id' | 'famil
       dry_run: enc.dry_run,
       version: e.artefactos[nombreDeLaPieza]?.version ?? 1,
       generado_por_jefatura: null,
+      // 20-nov · PLAN v4 · el segundo doctor ya opinó en la propuesta: en la revisión del render GPT no corre (`ya_opino`)
+      ...(segundaMiradaYaDada(e) ? { segunda_mirada_ya_dada: true } : {}),
     },
   }
 }

@@ -658,6 +658,12 @@ async function ejecutarCodigo(P: Puertos, enc: Encargo, pl: Plantilla, paso: Pas
       if (aviso) await P.avisar({ canal: 'alertas', encargo_id: enc.id, texto: aviso, dry_run: enc.dry_run })
       return { res: { costo_usd: b.artefacto.costo_usd, artefacto: b.artefacto as unknown as Record<string, unknown> }, ...(b.gastos.length ? { gastos: b.gastos } : {}), ...(b.imagen_generada ? { imagen_generada: true } : {}) }
     }
+    // 20-nov · PLAN v4 · el segundo doctor CREATIVO opina sobre las propuestas, antes de que el dueño apruebe y antes de producir (una sola vez; su vuelta es propia)
+    case 'segunda_mirada': {
+      const { correrSegundaMirada } = await import('./segunda-mirada')
+      const s = await correrSegundaMirada(P, enc, pl, paso)
+      return { res: s.res, ...(s.gastos.length ? { gastos: s.gastos } : {}) }
+    }
     default: return familiaDeLaminas(pl) ? ejecutarCodigoL(P, enc, pl, paso) : familiaDeVideo(pl) ? ejecutarCodigoV(P, enc, pl, paso) : { res: { costo_usd: 0 }, fallido: `función de código «${paso.funcion}» sin implementar` }
   }
 }
