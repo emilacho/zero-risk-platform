@@ -12,6 +12,7 @@ import { ARTEFACTO_PROPUESTAS_IMAGEN } from '../mesa/propuestas-imagen'
 import { FUNCIONES_CON_GASTO, FUNCIONES_REGISTRADAS, validarPlantilla } from '../plantilla'
 import { CARRUSEL_MESA_CON_PROPUESTAS, KIT_MESA_CON_PROPUESTAS, POST_MESA_CON_PROPUESTAS } from '../plantillas/imagen-propuestas'
 import { CARRUSEL_MESA_CON_SEGUNDA_MIRADA, KIT_MESA_CON_SEGUNDA_MIRADA, POST_MESA_CON_SEGUNDA_MIRADA, VIDEO_MESA_CON_SEGUNDA_MIRADA } from '../plantillas/segunda-mirada'
+import { TOPES_DE_LAS_MESAS_DE_IMAGEN_USD } from '../plantillas/topes-de-las-mesas-de-imagen'
 import { VIDEO_MESA_ENCENDIDA } from '../plantillas/video-mesa'
 import type { Encargo, Puertos } from '../puertos'
 import { ARTEFACTO_SEGUNDA_MIRADA, cabeLaVueltaDeLaSegundaMirada, conSegundaMirada, correrSegundaMirada, materialDeLaPropuesta, pasoDeLaSegundaMirada, segundaMiradaYaDada } from '../segunda-mirada'
@@ -278,7 +279,17 @@ describe('¿cabe la vuelta? la decide el paso, con el costo de rehacer (CC7 3 ·
     const arriba = datosDe(await correrSegundaMirada(revisorFalso().P, encargo(e), conTope(justo + 1e-6), PASO, CONTEXTO))
     expect(arriba.vuelve_a_la_mesa).toBe(true)
   })
-  it('con los topes vivos de hoy (post 15) la vuelta no cabe: el informe solo se guarda', async () => {
+  it('🔴 con los topes vivos de #1249 (43/45/45) la vuelta SÍ cabe, aun con todo lo de antes gastado a su tope (la mesa a su cota y cada paso a su reserva)', async () => {
+    for (const [pl, tope] of [[POST_MESA_CON_SEGUNDA_MIRADA, TOPES_DE_LAS_MESAS_DE_IMAGEN_USD.post_mesa], [CARRUSEL_MESA_CON_SEGUNDA_MIRADA, TOPES_DE_LAS_MESAS_DE_IMAGEN_USD.carrusel_mesa], [KIT_MESA_CON_SEGUNDA_MIRADA, TOPES_DE_LAS_MESAS_DE_IMAGEN_USD.kit_mesa]] as const) {
+      const i = pl.pasos.findIndex((p) => p.clave === 'segunda_mirada')
+      const antes = reservaPorPasadaDeLaMesa(pl) + pl.pasos.slice(0, i).filter((p) => p.funcion !== 'mesa').reduce((a, s) => a + (Number(s.tope_usd) || 0), 0)
+      const paso = pl.pasos[i]
+      const vivo = { ...pl, limites: { ...pl.limites, tope_encargo_usd: tope } } as Plantilla
+      const d = datosDe(await correrSegundaMirada(revisorFalso().P, encargo(estadoAntesDeLaSegundaMirada(pl, antes)), vivo, paso, CONTEXTO))
+      expect(d.vuelve_a_la_mesa, pl.tipo).toBe(true)
+    }
+  })
+  it('con los topes viejos (post 15) la vuelta no cabe: el informe solo se guarda', async () => {
     const vivo = { ...PL, limites: { ...PL.limites, tope_encargo_usd: 15 } } as Plantilla
     const d = datosDe(await correrSegundaMirada(revisorFalso().P, encargo(estadoAntesDeLaSegundaMirada(PL)), vivo, PASO, CONTEXTO))
     expect(d.sin_vuelta).toBe('tope')
