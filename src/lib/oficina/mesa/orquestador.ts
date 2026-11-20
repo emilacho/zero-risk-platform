@@ -316,7 +316,8 @@ export async function avanzarMesa(P: Puertos, enc0: Encargo, pl: Plantilla, indi
         const ap = await P.mesa.aportar(aporteNuevo(enc, 'oficina-creativa', portero, 'pide', que))
         if (ap.ok) {
           enc = await guardarMesa(P, enc, { ...est, marcas: { ...est.marcas, material_pendiente: ap.aporte.id } })
-          return abrirMaterialDeLaMesa(P, enc, pl, [{ que: que.slice(0, 400), para_que: 'abrir la pieza con lo que el cerebro tiene de ella', bloquea: false }])
+          // 19-nov · G8 4a · el pedido va ENTERO (ADENDA CEREBRO 14:52Z): el portero lo recibe completo y rechaza con su techo, nunca corta
+          return abrirMaterialDeLaMesa(P, enc, pl, [{ que, para_que: 'abrir la pieza con lo que el cerebro tiene de ella', bloquea: false }])
         }
       }
       enc = await guardarMesa(P, enc, est)
@@ -387,7 +388,8 @@ export async function avanzarMesa(P: Puertos, enc0: Encargo, pl: Plantilla, indi
       }
       const ped = libro.find((a) => a.id === acc.pedido_id)
       enc = await guardarMesa(P, enc, { ...est, marcas: { ...est.marcas, material_pendiente: acc.pedido_id, pedidos_de_material: nPedidos + 1 } })
-      return abrirMaterialDeLaMesa(P, enc, pl, [{ que: (ped?.texto ?? acc.que).slice(0, 400), para_que: `lo pidió ${acc.de} para la pieza`, bloquea: true }])
+      // 19-nov · G8 4a · el pedido del miembro va ENTERO al portero (ADENDA CEREBRO 14:52Z)
+      return abrirMaterialDeLaMesa(P, enc, pl, [{ que: ped?.texto ?? acc.que, para_que: `lo pidió ${acc.de} para la pieza`, bloquea: true }])
     }
 
     if (acc.accion === 'turno') {
