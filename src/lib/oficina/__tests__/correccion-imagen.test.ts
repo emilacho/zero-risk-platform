@@ -403,3 +403,45 @@ describe('la plantilla', () => {
     expect(jef?.vuelve_a?.max).toBe(6)
   })
 })
+
+describe('la migración 202611201300 dice lo mismo que el código', () => {
+  const leer = async (r: string) => (await import('node:fs')).readFileSync(new URL(`../../../../${r}`, import.meta.url), 'utf8').replace(/\r/g, '')
+  it('🔴 los 3 pasos literales son los de `pasosDeLaCorreccion` con techo 14 (la condición y el tope de la edición los pone la fila)', async () => {
+    const { pasosDeLaCorreccion, techoDeLaCorreccion } = await import('../mesa/correccion-imagen')
+    const sql = await leer('supabase/migrations/202611201300_oficina_correccion_de_la_imagen_final.sql')
+    const lit = [...sql.matchAll(/-- PASO_LITERAL\n\s*\(\d, '(\{.*\})'::jsonb\)/g)].map((m) => JSON.parse(m[1]) as Record<string, unknown>)
+    expect(lit).toHaveLength(3)
+    const { con } = await kitVivoConCorreccion()
+    const i = con.pasos.findIndex((p) => p.clave === PASO_CORREGIR_IMAGEN)
+    expect(techoDeLaCorreccion(plantilla().pasos, 2, 1)).toBe(2)
+    const codigo = pasosDeLaCorreccion({ tipo: 'siempre' }, { limites: { imagenes_generadas_max: 8 } } as never, 14).map((p) => ({ ...p, condicion: null, ...(p.clave === PASO_EDITAR_IMAGEN || p.clave === PASO_MIRAR_CORRECCION ? { tope_usd: null } : {}) }))
+    expect(lit).toEqual(codigo)
+    expect(con.pasos.slice(i, i + 3).map((p) => p.vuelve_a?.max ?? null)).toEqual([null, null, 14])
+  })
+  it('🔴 el margen (+44), las vueltas (3), el 0,07 de la edición, la guarda de la jefatura (6) y la indicación son los del código', async () => {
+    const { margenDeLaCorreccion, INDICACION_DE_LA_CORRECCION, COSTO_ESTIMADO_POR_EDICION_USD, COSTO_RESERVADO_POR_MIRADA_DE_OTRO_PROVEEDOR_USD, RESERVA_POR_PIEZA_DE_LA_CORRECCION_USD: R } = await import('../mesa/correccion-imagen')
+    const { VUELTAS_POR_REGLA_DURA } = await import('../plantillas/vuelta-por-regla-dura')
+    const sql = await leer('supabase/migrations/202611201300_oficina_correccion_de_la_imagen_final.sql')
+    expect(sql).toContain(`(g.limites->>'margen')::numeric + ${margenDeLaCorreccion(2 * (1 + VUELTAS_POR_REGLA_DURA))}, 'vueltas_de_correccion_imagen', ${VUELTAS_DE_CORRECCION_IMAGEN},`)
+    expect(sql).toContain(`::numeric * ${COSTO_ESTIMADO_POR_EDICION_USD}, 4)`)
+    expect(sql).toContain(`::numeric * ${COSTO_RESERVADO_POR_MIRADA_DE_OTRO_PROVEEDOR_USD}, 4)`)
+    const caso = `CASE g.tipo WHEN 'post_mesa' THEN ${R.post_mesa} WHEN 'carrusel_mesa' THEN ${R.carrusel_mesa} WHEN 'kit_mesa' THEN ${R.kit_mesa} END`
+    expect(sql).toContain(`(g.limites->>'reserva_por_pieza_usd')::numeric + ${caso}`)
+    expect(sql).toContain(`(p->'vuelve_a'->>'max')::int = ${VUELTAS_POR_REGLA_DURA}`)
+    const ind = JSON.parse(sql.match(/-- INDICACION_LITERAL\n\s*\|\| '(\[.*\])'::jsonb/)![1])
+    expect(ind).toEqual([INDICACION_DE_LA_CORRECCION])
+    const rev = await leer('supabase/reversas/202611201300_oficina_correccion_de_la_imagen_final_REVERSA.sql')
+    expect(rev).toContain(`(g.limites->>'margen')::numeric - ${margenDeLaCorreccion(14)}`)
+    expect(rev).toContain(`(g.limites->>'reserva_por_pieza_usd')::numeric - ${caso}`)
+    const prefijo = 'Cuando miras las imágenes finales que pediste, NO las calificas'
+    expect(INDICACION_DE_LA_CORRECCION.regla.startsWith(prefijo)).toBe(true)
+    expect(rev).toContain(`'${prefijo}%'`)
+  })
+  it('las dos toman el candado con tiempo límite y se niegan con encargos vivos', async () => {
+    for (const r of ['supabase/migrations/202611201300_oficina_correccion_de_la_imagen_final.sql', 'supabase/reversas/202611201300_oficina_correccion_de_la_imagen_final_REVERSA.sql']) {
+      const sql = await leer(r)
+      expect(sql).toMatch(/SET LOCAL lock_timeout = '5s';\nLOCK TABLE public\.oficina_encargos IN SHARE MODE;/)
+      expect(sql).toMatch(/e\.estado IN \('abierto', 'en_paso'\) AND e\.familia IN \('post_mesa', 'carrusel_mesa', 'kit_mesa'\)/)
+    }
+  })
+})

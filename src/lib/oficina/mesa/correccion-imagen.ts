@@ -34,12 +34,19 @@ export const ESQUEMA_CORRECCION_IMAGEN = 'correccion_imagen.v1'
 export const AGENTE_QUE_CORRIGE_LA_IMAGEN = 'design-image-prompt-engineer'
 /** Emilio (LENOVO 22:28Z): 3 vueltas por imagen como máximo. Una vuelta = una mirada del creativo + una edición + una mirada de otro proveedor */
 export const VUELTAS_DE_CORRECCION_IMAGEN = 3
-/** la mirada del creativo: un turno de agente con visión (el mismo tope que la mirada del video) */
-export const TOPE_DE_LA_MIRADA_DEL_CREATIVO_USD = 0.5
-/** lo que se reserva por edición: lo cotizado por imagen en calidad media (0,07); lo medido en prd (20-nov, solo lectura) es ≤ 0,018 por imagen */
+// los topes, con la regla firmada (topes = 2–3× lo medido; medido en prd el 20-nov, solo lectura, 30 días):
+/** la mirada del creativo: un turno de agente con visión · `design-image-prompt-engineer` midió hasta 0,26 por turno (n = 53) sin imágenes; con ellas suma ~0,005 por imagen → 0,75 */
+export const TOPE_DE_LA_MIRADA_DEL_CREATIVO_USD = 0.75
+/** lo que se reserva por edición: lo cotizado por imagen en calidad media (0,07); lo medido es ≤ 0,018 por imagen (n = 24) */
 export const COSTO_ESTIMADO_POR_EDICION_USD = 0.07
-/** la mirada de otro proveedor: el mismo tope que `observar` (una llamada al revisor por imagen) */
-export const TOPE_DE_LA_MIRADA_DE_OTRO_PROVEEDOR_USD = 0.1
+/** lo que se reserva por cada llamada al revisor de otro proveedor (una por imagen pendiente): `revisor-externo-gpt` midió 0,038 de promedio y 0,128 de máximo (n = 25) → 0,26 */
+export const COSTO_RESERVADO_POR_MIRADA_DE_OTRO_PROVEEDOR_USD = 0.26
+/**
+ * lo que se ESPERA que gaste la corrección en una pieza (para el piso de `limites.reserva_por_pieza_usd`, no el peor caso): por vuelta, el turno del creativo (~0,15)
+ * más una edición (0,0113 de promedio) y una mirada (0,038) por imagen pendiente; se cuentan 2 vueltas (la segunda con la mitad de las imágenes).
+ * Post (1 imagen): 2 × (0,15 + 0,0113 + 0,038) ≈ 0,40 · carrusel y kit (hasta 8): 0,15 + 8 × 0,0493 + 0,15 + 4 × 0,0493 ≈ 0,89 → 0,90
+ */
+export const RESERVA_POR_PIEZA_DE_LA_CORRECCION_USD: Readonly<Record<'post_mesa' | 'carrusel_mesa' | 'kit_mesa', number>> = { post_mesa: 0.4, carrusel_mesa: 0.9, kit_mesa: 0.9 }
 export type MotivoDeCierre = 'queda_bien' | 'sin_cambios' | 'tope_de_vueltas' | 'no_cupo' | 'no_mejoro' | 'fallo_la_edicion' | 'sin_lectura'
 export type Donde = 'final' | 'video'
 
@@ -380,7 +387,7 @@ export function pasosDeLaCorreccion(generada: Paso['condicion'], pl: Pick<Planti
   return [
     { clave: PASO_CORREGIR_IMAGEN, tipo: 'agente', quien: AGENTE_QUE_CORRIGE_LA_IMAGEN, condicion: structuredClone(generada), entrada: ['imagenes'], salida_artefacto: ARTEFACTO_PEDIDO_DE_CORRECCION, tope_usd: TOPE_DE_LA_MIRADA_DEL_CREATIVO_USD, salida: { esquema: ESQUEMA_CORRECCION_IMAGEN, reintento_formato: 1 } },
     { clave: PASO_EDITAR_IMAGEN, tipo: 'codigo', quien: 'sala', funcion: FUNCION_EDITAR_IMAGEN, condicion: structuredClone(generada), entrada: [ARTEFACTO_PEDIDO_DE_CORRECCION], salida_artefacto: ARTEFACTO_EDICIONES_DE_IMAGEN, tope_usd: +(n * COSTO_ESTIMADO_POR_EDICION_USD).toFixed(4) },
-    { clave: PASO_MIRAR_CORRECCION, tipo: 'codigo', quien: 'sala', funcion: FUNCION_MIRAR_CORRECCION, condicion: structuredClone(generada), entrada: [ARTEFACTO_EDICIONES_DE_IMAGEN], salida_artefacto: ARTEFACTO_CORRECCIONES_DE_IMAGEN, tope_usd: TOPE_DE_LA_MIRADA_DE_OTRO_PROVEEDOR_USD,
+    { clave: PASO_MIRAR_CORRECCION, tipo: 'codigo', quien: 'sala', funcion: FUNCION_MIRAR_CORRECCION, condicion: structuredClone(generada), entrada: [ARTEFACTO_EDICIONES_DE_IMAGEN], salida_artefacto: ARTEFACTO_CORRECCIONES_DE_IMAGEN, tope_usd: +(n * COSTO_RESERVADO_POR_MIRADA_DE_OTRO_PROVEEDOR_USD).toFixed(4),
       vuelve_a: { paso: PASO_CORREGIR_IMAGEN, max: techo, si: { tipo: 'si_artefacto', artefacto: ARTEFACTO_CORRECCIONES_DE_IMAGEN, campo: 'sigue', igual: true } } },
   ]
 }
