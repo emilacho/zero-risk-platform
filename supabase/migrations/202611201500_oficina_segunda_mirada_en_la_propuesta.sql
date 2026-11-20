@@ -2,7 +2,8 @@
 -- Solo DATO: es exactamente `conSegundaMirada(fila viva)` de src/lib/oficina/segunda-mirada.ts.
 --   · un paso nuevo `segunda_mirada` (código, tope 0,5, vuelve a la mesa máx. 1 por su propio contador)
 --   · imagen: justo después de `borrador_imagen` (antes de `aprobar_propuestas`) · video: justo después de `imagenes_clave` (antes de `borrador_video`)
--- No toca topes, límites, indicaciones, modelos, activo ni los demás pasos.
+-- Y sube la RESERVA POR PIEZA de las 3 mesas de imagen (punto 1 de CC7 en #1251): post 2,95 → 5,51 · carrusel y kit 3,10 → 5,66 (GPT ~0,03 + la vuelta a la mesa 2,53, contada siempre).
+-- No toca topes, el resto de los límites, indicaciones, modelos, activo ni los demás pasos. version + 1 en las 4.
 -- GUARDA (CC6 9 · CC7 11:27Z): el motor ubica a la pieza por POSICIÓN (`ultimo`) y lee la plantilla viva; meter un paso corre un lugar todo lo que sigue.
 --   Por eso se niega con CUALQUIER encargo vivo de esas 4 familias, también el que solo espera al dueño (más estricta que 202611172100),
 --   y la guarda va DENTRO del mismo UPDATE, con la tabla de encargos bloqueada para escritura hasta el COMMIT: no entra un encargo entre mirar y cambiar.
@@ -34,6 +35,10 @@ BEGIN
                  WHERE g.tipo = 'video_mesa' AND a.p->>'clave' = 'imagenes_clave' AND b.q->>'clave' = 'borrador_video' AND b.k = a.i + 1) THEN
     RAISE EXCEPTION '202611201500: en video_mesa, imagenes_clave no va seguido de borrador_video; no se toca';
   END IF;
+  -- la reserva por pieza leída (la que dejó 202611201330)
+  IF (SELECT count(*) FROM public.oficina_tipos_de_grupo g WHERE (g.tipo = 'post_mesa' AND (g.limites->>'reserva_por_pieza_usd')::numeric = 2.95) OR (g.tipo IN ('carrusel_mesa', 'kit_mesa') AND (g.limites->>'reserva_por_pieza_usd')::numeric = 3.1)) <> 3 THEN
+    RAISE EXCEPTION '202611201500: la reserva por pieza de las 3 mesas de imagen no es la leída (2.95/3.1/3.1); no se toca';
+  END IF;
 END $$;
 
 -- el paso nuevo, con la guarda de encargos vivos en la MISMA sentencia; si cambió menos de las 4 filas, se niega todo
@@ -50,7 +55,7 @@ BEGIN
       SELECT $s${"clave":"segunda_mirada","tipo":"codigo","quien":"sala","funcion":"segunda_mirada","condicion":{"tipo":"siempre"},"entrada":["mesa"],"salida_artefacto":"segunda_mirada","tope_usd":0.5,"vuelve_a":{"paso":"mesa","max":1,"si":{"tipo":"si_artefacto","artefacto":"segunda_mirada","campo":"vuelve_a_la_mesa","igual":true}}}$s$::jsonb, 1
       WHERE p->>'clave' IN ('borrador_imagen', 'imagenes_clave')
     ) y
-  )
+  ), version = g.version + 1
   WHERE g.tipo IN ('post_mesa', 'carrusel_mesa', 'kit_mesa', 'video_mesa')
     AND NOT EXISTS (SELECT 1 FROM public.oficina_encargos e WHERE e.estado IN ('abierto', 'en_paso') AND e.familia IN ('post_mesa', 'carrusel_mesa', 'kit_mesa', 'video_mesa'));
   GET DIAGNOSTICS n = ROW_COUNT;
@@ -58,6 +63,19 @@ BEGIN
     RAISE EXCEPTION '202611201500: hay encargos vivos de post_mesa, carrusel_mesa, kit_mesa o video_mesa (también los que esperan al dueño); esperar a que cierren (filas cambiadas: %)', n;
   END IF;
 END $$;
+
+-- la reserva por pieza (misma transacción: los encargos siguen bloqueados y ya se comprobó que no hay vivos)
+UPDATE public.oficina_tipos_de_grupo g
+SET limites = g.limites || jsonb_build_object('reserva_por_pieza_usd', 5.51)
+WHERE g.tipo = 'post_mesa';
+
+UPDATE public.oficina_tipos_de_grupo g
+SET limites = g.limites || jsonb_build_object('reserva_por_pieza_usd', 5.66)
+WHERE g.tipo = 'carrusel_mesa';
+
+UPDATE public.oficina_tipos_de_grupo g
+SET limites = g.limites || jsonb_build_object('reserva_por_pieza_usd', 5.66)
+WHERE g.tipo = 'kit_mesa';
 
 DO $$
 DECLARE t text; orden text;
@@ -71,6 +89,9 @@ BEGIN
   SELECT string_agg(p->>'clave', ',' ORDER BY i) INTO orden FROM public.oficina_tipos_de_grupo g, jsonb_array_elements(g.pasos) WITH ORDINALITY AS x(p, i) WHERE g.tipo = 'video_mesa';
   IF orden NOT LIKE '%,mesa,imagenes_clave,segunda_mirada,borrador_video,aprobar_propuestas,%' THEN
     RAISE EXCEPTION '202611201500: video_mesa no quedó con mesa → imagenes_clave → segunda_mirada → borrador_video (%)', orden;
+  END IF;
+  IF (SELECT count(*) FROM public.oficina_tipos_de_grupo g WHERE (g.tipo = 'post_mesa' AND (g.limites->>'reserva_por_pieza_usd')::numeric = 5.51) OR (g.tipo IN ('carrusel_mesa', 'kit_mesa') AND (g.limites->>'reserva_por_pieza_usd')::numeric = 5.66)) <> 3 THEN
+    RAISE EXCEPTION '202611201500: la reserva por pieza no quedó en 5.51/5.66/5.66';
   END IF;
 END $$;
 
