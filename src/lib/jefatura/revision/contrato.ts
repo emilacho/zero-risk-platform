@@ -78,6 +78,8 @@ export interface PayloadDeRevision {
   orden_ilegible?: boolean
   /** pieza: la familia (post_img, carrusel, kit_historias) */
   familia?: string
+  /** 20-nov · pieza: el segundo doctor creativo YA opinó sobre esta pieza (revisión anterior del mismo encargo, antes de la vuelta a la mesa): en esta no corre (`ya_opino`) */
+  segunda_mirada_ya_dada?: boolean
   huecos?: HuecosDeLaPregunta
   /** si el artefacto ES producto de una revisión, el id de esa revisión: una versión producida por la jefatura NUNCA abre otra (guarda G3) */
   generado_por_jefatura?: string | null
@@ -128,6 +130,8 @@ export interface SalidaDeRevision {
   versiones: Array<{ etiqueta: 'A' | 'B' | 'C'; paso: string; texto: string; largo: number }>
   respuestas: RespuestaDeFicha[]
   opinion_externa: { texto: string; modelo: string | null } | null
+  /** 20-nov · pieza: el informe del segundo doctor creativo (observaciones + `datos` aparte) con su resumen; ausente si no opinó */
+  segunda_mirada?: { informe: import('./segundo-doctor').InformeCreativo; resumen: import('./segundo-doctor').ResumenDelDoctor }
   imagen_por_rehacer: boolean
   /** pieza: frases que el dueño negó y siguen en lo revisado; se le avisan, no devuelven la pieza */
   avisos?: string[]
@@ -177,6 +181,7 @@ export function validarEntrada(cuerpo: unknown): ResultadoDeValidar {
   if (p.marcas_heredadas !== undefined && !(lista(p.marcas_heredadas) && p.marcas_heredadas.every((m) => typeof m === 'string'))) errores.push('`payload.marcas_heredadas` debe ser una lista de textos')
   if (p.tope_restante_usd !== undefined && !(typeof p.tope_restante_usd === 'number' && Number.isFinite(p.tope_restante_usd) && p.tope_restante_usd >= 0)) errores.push('`payload.tope_restante_usd` debe ser un número ≥ 0')
   if (p.imagenes !== undefined && !(lista(p.imagenes) && p.imagenes.every((u) => typeof u === 'string'))) errores.push('`payload.imagenes` debe ser una lista de direcciones')
+  if (p.segunda_mirada_ya_dada !== undefined && typeof p.segunda_mirada_ya_dada !== 'boolean') errores.push('`payload.segunda_mirada_ya_dada` debe ser verdadero o falso')
   if (p.version !== undefined && !(Number.isInteger(p.version) && (p.version as number) >= 1)) errores.push('`payload.version` debe ser un entero ≥ 1')
   if (p.generado_por_jefatura !== undefined && p.generado_por_jefatura !== null && !texto(p.generado_por_jefatura)) errores.push('`payload.generado_por_jefatura` debe ser el id de una revisión o ir vacío')
   if (p.simulacion !== undefined) {

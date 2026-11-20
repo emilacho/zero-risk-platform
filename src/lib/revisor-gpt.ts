@@ -60,7 +60,7 @@ export function armarPedido(a: DatosDelPedido): PedidoAlRevisor {
 // ───────────────────────── la llamada
 export interface IntentoDelRevisor { n: number; resultado: string; http: number | null; costo_usd: number; espera_antes_ms: number }
 export type ResultadoDelRevisor =
-  | { ok: true; texto: string; costo_usd: number; modelo: string; intentos?: IntentoDelRevisor[] }
+  | { ok: true; texto: string; costo_usd: number; modelo: string; intentos?: IntentoDelRevisor[]; /** 20-nov · el modelo que CONTESTÓ (campo `model` de la respuesta del proveedor), no el nombre pedido (punto 3 de CC6) */ modelo_efectivo?: string | null }
   | { ok: false; error: string; costo_usd?: number; intentos?: IntentoDelRevisor[] }
 
 export const ESPERAS_DEL_REVISOR_MS = [5_000, 20_000, 60_000]
@@ -107,14 +107,14 @@ export async function llamarRevisorGpt(o: OpcionesDeLlamada): Promise<ResultadoD
     let reintentable = false
     try {
       const r = await o.f('https://api.openai.com/v1/responses', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${o.apiKey}` }, body: cuerpo, signal: AbortSignal.timeout(limite) })
-      const j = (await r.json().catch(() => ({}))) as { output_text?: string; output?: Array<{ content?: Array<{ text?: string }> }>; usage?: { input_tokens?: number; output_tokens?: number }; error?: { message?: string } }
+      const j = (await r.json().catch(() => ({}))) as { model?: string; output_text?: string; output?: Array<{ content?: Array<{ text?: string }> }>; usage?: { input_tokens?: number; output_tokens?: number }; error?: { message?: string } }
       // precio: del entorno; sin él, un valor conservador para que el freno cuente algo (se declara como estimación en el libro)
       const pin = o.precioEntrada ?? 5, pout = o.precioSalida ?? 30
       const costo = ((j.usage?.input_tokens ?? 0) * pin + (j.usage?.output_tokens ?? 0) * pout) / 1_000_000
       if (r.ok) {
         const texto = j.output_text ?? j.output?.flatMap((x) => x.content ?? []).map((c) => c.text ?? '').join('') ?? ''
         intentos.push(intento('ok', costo, r.status))
-        return { ok: true, texto, costo_usd: sumaDeIntentos(intentos), modelo: o.modelo, intentos }
+        return { ok: true, texto, costo_usd: sumaDeIntentos(intentos), modelo: o.modelo, intentos, modelo_efectivo: typeof j.model === 'string' && j.model ? j.model : null }
       }
       ultimoError = j.error?.message ?? `HTTP ${r.status}`
       reintentable = r.status === 429 || r.status >= 500

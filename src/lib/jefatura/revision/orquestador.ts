@@ -18,6 +18,7 @@ import { validarEntrada, type EntradaDeRevision, type Marcas, type PayloadDeRevi
 import { procesarSalidaDeRevision } from './formatos'
 import { armarPedidoCiego, armarPedidoDeAgente, auditarPedidoDeAgente, tareaDeCorreccion, tareaDeDecision, tareaDeRevisionDeFondo, tareaDeRevisionDeLengua, type FichaParaElDueno } from './pedidos'
 import { elegirVersion as elegirVersionPura, esProductoDeUnaRevision, etiquetaDeVersion, MAXIMO_DE_VERSIONES, planDeGuardado, resultadoTrasElegir, type EvaluacionDeVersion, type Etiqueta, type FilaExistente } from './plan'
+import { huella, leerInformeCreativo, PEDIDO_CREATIVO, resumenDelDoctor, type InformeCreativo, type ResumenDelDoctor } from './segundo-doctor'
 import { atiende, casarId, CLAVE_DE_CORRECCION, CLAVE_DE_DECISION, dondeDeLaOpinion, duenosDe, normalizarDonde, plantillaDePolitica, topeDelPaso, type Dueno } from './politicas'
 import { lecturasDeVida, vidaDelPaso, type LectorDeVida } from '../../plazo-de-vida'
 import { ESTADOS_TERMINALES, type CambiosDeRevision, type PasoRegistrado, type Puertos, type Revision } from './puertos'
@@ -249,18 +250,41 @@ export async function avanzar(P: Puertos, revisionId: string): Promise<Respuesta
 async function ejecutarExterno(P: Puertos, rev: Revision, pl: Plantilla, indice: number, paso: Paso): Promise<Revision> {
   const e = rev.estado_del_motor
   const rd = datos(e, 'revision') ?? {}
-  const pedido = armarPedidoCiego({ tipo: rev.artifact_type, texto: String(rd.texto ?? ''), imagenes: (rd.imagenes as string[] | undefined) ?? rev.entrada.imagenes, contexto: rev.entrada.contexto ?? [], huecos: rev.entrada.huecos, huecos_de_la_politica: rev.policy.huecos_pregunta })
+  const creativo = rev.artifact_type === 'pieza'
+  const base0: Omit<PasoRegistrado, 'n' | 'estado' | 'intento'> = { paso: paso.clave, tipo: 'externo', agente: paso.quien, dispatch_key: null, concepto: 'revisor_externo', base: 'usage', cost_usd: 0 }
+  if (creativo) {
+    // 20-nov · PLAN v3 · tras la vuelta a la mesa, el segundo doctor NO opina otra vez (sin vuelta a GPT): la pieza sigue
+    if (rev.entrada.segunda_mirada_ya_dada === true) return aplicar(P, rev, pl, indice, { costo_usd: 0, artefacto: { ya_opino: true } }, { paso: { ...base0, traza: trazaM1(rev, paso, { ya_opino: true }) } })
+    // punto 1 de CC6 · GPT va primero pero NO le quita su lugar a fondo y lengua: arranca solo si después de él caben sus topes enteros; si no, se salta y se anota
+    const reservaDeLosDemas = pl.pasos.filter((x) => x.clave === 'revision_fondo' || x.clave === 'revision_lengua').reduce((a, x) => a + x.tope_usd, 0)
+    if (e.gasto_usd + paso.tope_usd + reservaDeLosDemas > pl.limites.tope_encargo_usd + 1e-9) {
+      const motivo = `tope: GPT (${paso.tope_usd}) + fondo y lengua (${reservaDeLosDemas}) no caben en ${pl.limites.tope_encargo_usd} con ${e.gasto_usd.toFixed(4)} gastado`
+      return aplicar(P, rev, pl, indice, { costo_usd: 0, artefacto: { sin_revision: true, motivo, intentos: [] } }, { paso: { ...base0, error: motivo, traza: trazaM1(rev, paso, { sin_segunda_mirada: true, por_tope: true }) } })
+    }
+  }
+  const pedido0 = armarPedidoCiego({ tipo: rev.artifact_type, texto: String(rd.texto ?? ''), imagenes: (rd.imagenes as string[] | undefined) ?? rev.entrada.imagenes, contexto: rev.entrada.contexto ?? [], huecos: rev.entrada.huecos, huecos_de_la_politica: rev.policy.huecos_pregunta })
+  const pedido = creativo ? { ...pedido0, texto: `${pedido0.texto}
+
+${PEDIDO_CREATIVO}` } : pedido0
   // en seco NUNCA se llama al proveedor: se usa la simulación (US$ 0)
   const rv = rev.dry_run ? simulacionDelRevisor(rev.entrada.simulacion) : await P.revisor({ texto: pedido.texto, imagenes_urls: pedido.imagenes, dry_run: false, contexto: { revision_id: rev.id, n: turnoDe(e), client_id: rev.client_id } })
-  const base: Omit<PasoRegistrado, 'n' | 'estado' | 'intento'> = { paso: paso.clave, tipo: 'externo', agente: paso.quien, dispatch_key: null, concepto: 'revisor_externo', base: 'usage', cost_usd: 0 }
+  const base = base0
   if (!rv.ok) {
     // F5: tras los reintentos (los hace el adaptador) sigue «sin segunda mirada» + aviso (al cerrar); nunca bloquea
     const costo = rv.costo_usd ?? 0
     return aplicar(P, rev, pl, indice, { costo_usd: costo, artefacto: { sin_revision: true, motivo: rv.error, intentos: rv.intentos ?? [] } }, { paso: { ...base, cost_usd: costo, error: rv.error, traza: trazaM1(rev, paso, { sin_segunda_mirada: true, intentos: (rv.intentos ?? []).length }) } })
   }
   const opinion = rv.texto.trim()
-  const traza = trazaM1(rev, paso, { effective_model: rv.modelo, simulado: rev.dry_run })
+  const efectivo = rv.modelo_efectivo ?? null
+  const traza = trazaM1(rev, paso, { effective_model: efectivo ?? rv.modelo, ...(creativo ? { modelo_pedido: rv.modelo } : {}), simulado: rev.dry_run })
   if (!opinion) return aplicar(P, rev, pl, indice, { costo_usd: rv.costo_usd, artefacto: { opinion: null, sin_opinion: true, modelo: rv.modelo, simulado: rev.dry_run } }, { paso: { ...base, cost_usd: rv.costo_usd, traza } })
+  if (creativo) {
+    // el informe: la cita se busca en lo MISMO que recibió GPT (con su huella) y la parte en la versión A; `datos` queda aparte (diagnóstico, nunca al creativo). Sin fichas: la opinión va al creativo de la mesa
+    const contexto = (rev.entrada.contexto ?? []).filter((c) => c.texto.trim())
+    const informe = leerInformeCreativo(opinion, { contexto, version_a: String(rd.texto ?? ''), imagenes: pedido.imagenes })
+    const huellas = contexto.map((c) => ({ titulo: c.titulo, sha256: huella(c.texto) }))
+    return aplicar(P, rev, pl, indice, { costo_usd: rv.costo_usd, artefacto: { opinion, modelo: rv.modelo, modelo_efectivo: efectivo, intentos: rv.intentos ?? [], simulado: rev.dry_run, informe, resumen: resumenDelDoctor(informe, efectivo), huellas, version_a: String(rd.texto ?? ''), imagenes: pedido.imagenes } }, { paso: { ...base, cost_usd: rv.costo_usd, traza } })
+  }
   // la opinión llega a TODOS los que hicieron algo (uno por parte); cada uno decide sobre SU parte, con razón. En los tipos sin re-entrega (brief) solo se guarda como opinión.
   const fichas: Ficha[] = rev.policy.reentrega === 'ninguna' ? [] : duenosDe(rev.productores).flatMap((d) => dondeDeLaOpinion(d).map((donde) => fichaNueva(`ext-${turnoDe(e)}-${donde}`, 'externa', donde, 'sugerencia', opinion, 'opinión libre del revisor externo (sin criterios ni reglas)', `quien hizo la parte «${donde}» decide qué toma y qué no, con razón`)))
   return aplicar(P, rev, pl, indice, { costo_usd: rv.costo_usd, artefacto: { opinion, modelo: rv.modelo, intentos: rv.intentos ?? [], simulado: rev.dry_run }, fichas }, { paso: { ...base, cost_usd: rv.costo_usd, traza } })
@@ -479,6 +503,7 @@ export function armarSalida(rev: Revision, c: Cierre): SalidaDeRevision {
     versiones: h.map((x) => ({ etiqueta: x.etiqueta, paso: x.paso, texto: x.texto, largo: x.largo })),
     respuestas: c.respuestas,
     opinion_externa: typeof ext?.opinion === 'string' && ext.opinion ? { texto: ext.opinion, modelo: typeof ext.modelo === 'string' ? ext.modelo : null } : null,
+    ...(ext?.informe && ext.resumen ? { segunda_mirada: { informe: ext.informe as unknown as InformeCreativo, resumen: ext.resumen as unknown as ResumenDelDoctor } } : {}),
     imagen_por_rehacer: e.fichas.some((f) => f.id === 'imagen-por-rehacer'),
     ...(() => { const av = [...(e.avisos ?? []), ...(((datos(e, 'fichas_jefe')?.avisos_de_registro as string[] | undefined) ?? []))]; return av.length ? { avisos: av } : {} })(),
     ...(rev.artifact_type === 'colateral' ? { veredictos: veredictosDe(e, rev) } : {}),
