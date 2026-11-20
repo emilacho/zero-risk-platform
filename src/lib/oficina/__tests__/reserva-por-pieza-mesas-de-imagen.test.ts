@@ -20,8 +20,6 @@ const FILAS: Fila[] = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures'
 /** los 3 encargos reales terminados de `carrusel_mesa` (48776d13 · c6f3322e · 8adbfb3d, leídos el 20-nov): la historia que hoy le da 1,58 */
 const HISTORIA = [2.051572, 0.984574, 1.690998].map((g) => ({ familia: 'carrusel_mesa', gasto_usd: g }))
 const MESAS = ['post_mesa', 'carrusel_mesa', 'kit_mesa'] as const
-const CLIENTE = 'cliente-con-palanca'
-const PALANCA = { clientes: [CLIENTE] }
 
 /** lo que hace cada UPDATE de la migración y de la reversa, leído del SQL: `limites || {reserva}` o `limites - 'reserva_por_pieza_usd'`, y version + 1 */
 function aplicar(sql: string, filas: Fila[]): Fila[] {
@@ -35,11 +33,11 @@ function aplicar(sql: string, filas: Fila[]): Fila[] {
     return f
   })
 }
-/** el freno de la campaña, como lo arma la cadena: reservas por familia (con la historia real) y luego `topesConMesa` para un cliente con la palanca */
+/** el freno de la campaña, como lo arma la cadena: reservas por familia (con la historia real) y luego `topesConMesa` (20-nov, #1248: para cualquier cliente, sin palanca) */
 function freno(filas: Fila[]) {
   const reservas = reservasDesdeLaHistoria(filas, HISTORIA)
   const topes = Object.fromEntries(filas.map((f) => [f.familia, f.tope_encargo_usd]))
-  return topesConMesa(topes, reservas, PALANCA, CLIENTE).reservas ?? {}
+  return topesConMesa(topes, reservas).reservas ?? {}
 }
 
 describe('202611201330 · reserva por pieza de las 3 mesas de imagen', () => {
