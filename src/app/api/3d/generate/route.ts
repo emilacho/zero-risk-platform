@@ -9,7 +9,7 @@ import { checkInternalKey } from '@/lib/internal-auth'
 // Sprint #6 Brazo Meshy · 3D model generation wrapper
 //
 // POST /api/3d/generate
-// Body: { prompt, client_id?, agent_slug?, type?, format?, art_style?,
+// Body: { prompt, art_style, client_id?, agent_slug?, type?, format?,
 //         topology?, target_polycount?, caller? }
 // Uses meshy-4 (Stack canonical · STACK_FINAL_V3 Bloque 2 entry 2026-05-16).
 // Two-step API · POST /v2/text-to-3d creates a task, returns task UUID ·
@@ -23,7 +23,8 @@ const STORAGE_BUCKET = 'client-websites'
 const MESHY_API_BASE = 'https://api.meshy.ai/openapi/v2'
 const DEFAULT_MODEL = 'meshy-6'
 const DEFAULT_FORMAT = 'glb'
-const DEFAULT_ART_STYLE = 'realistic'
+// 21-nov · #6 del barrido (GO Lenovo 05:01Z): sin estilo fijo. Como las demás piezas (#1232), el estilo sale del manual del cliente
+// («cómo se produce con IA»): lo trae quien pide, en `art_style`. Sin él (o con uno que Meshy no acepta) → 400, nunca un «realistic» por omisión.
 const DEFAULT_TYPE = 'object'
 const POLL_INTERVAL_MS = 8_000
 const POLL_TIMEOUT_MS = 240_000 // 4 min cap · refine mode usually completes <2min
@@ -102,10 +103,14 @@ export async function POST(request: Request) {
     ? (typeRaw as MeshyType)
     : DEFAULT_TYPE
 
-  const artStyleRaw = sanitizeString(body.art_style as string | undefined, 20) || DEFAULT_ART_STYLE
-  const artStyle = (VALID_ART_STYLES as readonly string[]).includes(artStyleRaw)
-    ? (artStyleRaw as MeshyArtStyle)
-    : DEFAULT_ART_STYLE
+  const artStyleRaw = typeof body.art_style === 'string' ? body.art_style.trim().toLowerCase() : ''
+  if (!(VALID_ART_STYLES as readonly string[]).includes(artStyleRaw)) {
+    return NextResponse.json(
+      { error: `art_style es obligatorio y sale del manual del cliente: ${VALID_ART_STYLES.join(' | ')}`, code: 'E-3D-ESTILO' },
+      { status: 400 },
+    )
+  }
+  const artStyle = artStyleRaw as MeshyArtStyle
 
   const mode = (sanitizeString(body.mode as string | undefined, 12) || 'preview').toLowerCase()
   const validMode = mode === 'refine' ? 'refine' : 'preview'
@@ -421,7 +426,7 @@ export async function GET() {
       agent_slug: 'string (optional)',
       type: '"object" | "character" | "environment" (default object)',
       format: '"glb" | "fbx" | "obj" | "usdz" (default glb)',
-      art_style: '"realistic" | "cartoon" | "low-poly" | "sculpture" | "pbr" (default realistic)',
+      art_style: '"realistic" | "cartoon" | "low-poly" | "sculpture" | "pbr" (obligatorio · sale del manual del cliente · sin valor por omisión)',
       mode: '"preview" | "refine" (default preview · refine adds PBR maps · 2.5x cost)',
       caller: 'string (optional · audit attribution)',
     },

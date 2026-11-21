@@ -106,7 +106,7 @@ export const TECHO_DE_RESPUESTA_TOKENS = '128000'
 /** qué admite cada modelo · por prefijo del id (el corredor usa ids completos, p. ej. `claude-haiku-4-5-20251001`) */
 // 19-nov · ajuste de precisión de G1 (🟡 de CC6 a #1183; referencia oficial de la API):
 //   · Opus 4.5 SÍ acepta `effort`, pero solo `low/medium/high` (no `xhigh` ni `max`) → sale de SIN_EFFORT y va en HASTA_HIGH;
-//   · Haiku 5.5 SÍ deja apagar el razonamiento (`thinking: disabled` con `low/medium/high`; su valor por omisión es `high`) → sale de NO_SE_APAGA
+//   · Haiku 5.5 SÍ deja apagar el razonamiento (`thinking: disabled` con `low/medium/high`; su valor por omisión es `medium`) → sale de NO_SE_APAGA
 const SIN_EFFORT = ['claude-haiku-4-5', 'claude-haiku-3', 'claude-sonnet-4-5', 'claude-opus-4-1', 'claude-opus-4-0', 'claude-sonnet-4-0']
 const SIN_XHIGH = ['claude-opus-4-6', 'claude-sonnet-4-6']
 const HASTA_HIGH = ['claude-opus-4-5']
