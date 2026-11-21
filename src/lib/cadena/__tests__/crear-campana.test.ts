@@ -27,7 +27,7 @@ const almacen = (o: { encendida?: boolean } = {}) => new AlmacenMemoria({
   planes: { [CLI]: [{ plan_id: 'plan-1', fecha: '2026-10-08' }], [OTRO_CLI]: [{ plan_id: 'plan-9', fecha: '2026-10-08' }] },
   config: { flujos: ['wf-cadena'], puerta_workflow_id: 'wf-puerta', ...(o.encendida ? { estado_cadena: 'encendida' } : {}) },
 })
-const BUENO = { client_id: CLI, seco: true, llave_formulario: LLAVE, nombre: 'Temporada de lluvias', cambio: 'Que la gente sepa que abrimos de noche', brief_libre: 'Todo lo que el dueño quiere decir', fecha_inicio: '2026-10-12', fecha_fin: '2026-10-25', fechas_clave: [{ fecha: '2026-10-20', que: 'Noche de apertura' }], tope_usd: 30 }
+const BUENO = { client_id: CLI, seco: true, llave_formulario: LLAVE, nombre: 'Temporada de lluvias', cambio: 'Que la gente sepa que abrimos de noche', brief_libre: 'Todo lo que el dueño quiere decir', fecha_inicio: '2026-10-12', fecha_fin: '2026-10-25', fechas_clave: [{ fecha: '2026-10-20', que: 'Noche de apertura' }], tope_usd: 50 }
 const crear = (al: AlmacenMemoria, extra: Record<string, unknown> = {}) => crearCampana(al, { ...BUENO, ...extra }, 'emilio', AHORA)
 const llaveDelPedido = PREFIJO_DE_LA_LLAVE + LLAVE
 // la sala de prueba autentica el sobre con la llave interna
@@ -35,11 +35,11 @@ beforeEach(() => { process.env.INTERNAL_API_KEY = 'k-interna' })
 
 describe('el mínimo, con la cifra escrita a mano', () => {
   // costos del almacén de prueba: post_img tope 2,5 (sin reserva) · carrusel_mesa tope 5, reserva 3,1 · revisión de registro 0,8
-  //   1 tanda: planificación 3 × 4 × (0,7712 + 0,7261) = 17,9676 → 17,97 · pieza 3,1 · jefatura 3 × 0,8 = 2,4 → 23,47 → US$ 24
+  //   1 tanda: planificación 3 × 4 × (0,7712 + 0,7261) = 17,9676, pero el piso es el peor caso de un paso (21-nov #1260, tope temporal US$ 3): 12 × 3 = 36 · pieza 3,1 · jefatura 3 × 0,8 = 2,4 → 41,5 → US$ 42
   //   4 tandas: 3 × 4 × (0,7712 + 4 × 0,7261) = 44,1072 → 44,11 · + 3,1 + 2,4 = 49,61 → US$ 50
   const C = { topes: { post_img: 2.5, carrusel_mesa: 5 }, reservas: { carrusel_mesa: 3.1 }, tope_registro_usd: 0.8 }
-  it('🔴 una tanda: US$ 24, con su desglose', () => {
-    expect(minimoDeCampana(1, C)).toEqual({ minimo_usd: 24, detalle: { planificacion_usd: 17.97, pieza_peor_usd: 3.1, jefatura_usd: 2.4 } })
+  it('🔴 una tanda: US$ 42, con su desglose (el piso de la planificación es 12 × 3 desde el tope temporal de #1260)', () => {
+    expect(minimoDeCampana(1, C)).toEqual({ minimo_usd: 42, detalle: { planificacion_usd: 36, pieza_peor_usd: 3.1, jefatura_usd: 2.4 } })
   })
   it('🔴 cuatro tandas: US$ 50', () => {
     expect(minimoDeCampana(4, C)).toEqual({ minimo_usd: 50, detalle: { planificacion_usd: 44.11, pieza_peor_usd: 3.1, jefatura_usd: 2.4 } })
@@ -53,7 +53,7 @@ describe('el mínimo, con la cifra escrita a mano', () => {
   })
   it('🔴 la ruta del formulario: 200 con las fechas pedidas (14 días = 1 tanda) · 400 sin cliente o con una sola fecha · 409 sin plan aprobado', async () => {
     const al = almacen()
-    expect(await minimoParaElFormulario(al, { client_id: CLI, fecha_inicio: '2026-10-12', fecha_fin: '2026-10-25' }, AHORA)).toEqual({ status: 200, cuerpo: { ok: true, minimo_usd: 24, detalle: { planificacion_usd: 17.97, pieza_peor_usd: 3.1, jefatura_usd: 2.4 }, fechas: { inicio: '2026-10-12', fin: '2026-10-25' } } })
+    expect(await minimoParaElFormulario(al, { client_id: CLI, fecha_inicio: '2026-10-12', fecha_fin: '2026-10-25' }, AHORA)).toEqual({ status: 200, cuerpo: { ok: true, minimo_usd: 42, detalle: { planificacion_usd: 36, pieza_peor_usd: 3.1, jefatura_usd: 2.4 }, fechas: { inicio: '2026-10-12', fin: '2026-10-25' } } })
     expect((await minimoParaElFormulario(al, { client_id: CLI, fecha_inicio: '2026-10-12', fecha_fin: '2027-01-10' }, AHORA)).cuerpo.minimo_usd).toBe(50)
     expect((await minimoParaElFormulario(al, { client_id: 'no-uuid' }, AHORA)).status).toBe(400)
     expect((await minimoParaElFormulario(al, { client_id: CLI, fecha_inicio: '2026-10-12' }, AHORA)).status).toBe(400)
@@ -105,7 +105,7 @@ describe('crear · cada pregunta mal contestada es un 400 que la nombra, y nada 
   })
   it('🔴 la validación pura acepta lo bueno y arma la llave del pedido', () => {
     const v = validarEntrada(BUENO)
-    expect(v.ok && v.e).toMatchObject({ client_id: CLI, seco: true, llave: llaveDelPedido, tope_usd: 30, fechas_clave: [{ fecha: '2026-10-20', que: 'Noche de apertura' }] })
+    expect(v.ok && v.e).toMatchObject({ client_id: CLI, seco: true, llave: llaveDelPedido, tope_usd: 50, fechas_clave: [{ fecha: '2026-10-20', que: 'Noche de apertura' }] })
   })
 })
 
@@ -125,20 +125,20 @@ describe('crear · lo que frena antes de guardar', () => {
     expect(al.pedidos).toHaveLength(0)
     expect((await crear(almacen({ encendida: true }), { seco: false })).cuerpo).toMatchObject({ ok: true, estado: 'pedida' })
   })
-  it('🔴 tope bajo el mínimo: 409 con el mínimo (24 para 14 días), y nada guardado', async () => {
+  it('🔴 tope bajo el mínimo: 409 con el mínimo (42 para 14 días), y nada guardado', async () => {
     const al = almacen()
-    const r = await crear(al, { tope_usd: 23.99 })
-    expect(r).toMatchObject({ status: 409, cuerpo: { ok: false, error: 'tope_bajo_minimo', minimo_usd: 24 } })
+    const r = await crear(al, { tope_usd: 41.99 })
+    expect(r).toMatchObject({ status: 409, cuerpo: { ok: false, error: 'tope_bajo_minimo', minimo_usd: 42 } })
     expect(al.pedidos).toHaveLength(0)
     expect(al.sobresEmitidos).toHaveLength(0)
   })
   it('🔴 justo el mínimo crea', async () => {
-    expect((await crear(almacen(), { tope_usd: 24 })).cuerpo).toMatchObject({ ok: true, estado: 'pedida' })
+    expect((await crear(almacen(), { tope_usd: 42 })).cuerpo).toMatchObject({ ok: true, estado: 'pedida' })
   })
   it('🔴 CC5 21:48Z · rechazo por tope → la MISMA llave con un tope bueno → crea («pedida», no «ya_pedida»)', async () => {
     const al = almacen()
     expect((await crear(al, { tope_usd: 10 })).cuerpo.error).toBe('tope_bajo_minimo')
-    const r = await crear(al, { tope_usd: 30 })
+    const r = await crear(al, { tope_usd: 50 })
     expect(r).toMatchObject({ status: 200, cuerpo: { ok: true, estado: 'pedida', llave: llaveDelPedido } })
     expect(al.pedidos).toHaveLength(1)
   })
@@ -150,7 +150,7 @@ describe('crear · lo que frena antes de guardar', () => {
   it('🔴 ensayo: dice lo que haría y no escribe nada', async () => {
     const al = almacen()
     const r = await crear(al, { ensayo: true })
-    expect(r).toMatchObject({ status: 200, cuerpo: { ok: true, ensayo: true, escrituras: 0, haria: { minimo_usd: 24, pedido: { llave: llaveDelPedido, tope_usd: 30, pedido_por: 'emilio' } } } })
+    expect(r).toMatchObject({ status: 200, cuerpo: { ok: true, ensayo: true, escrituras: 0, haria: { minimo_usd: 42, pedido: { llave: llaveDelPedido, tope_usd: 50, pedido_por: 'emilio' } } } })
     expect(al.pedidos).toHaveLength(0)
     expect(al.sobresEmitidos).toHaveLength(0)
   })
@@ -161,7 +161,7 @@ describe('crear · guarda el pedido y deja el sobre', () => {
     const al = almacen()
     const r = await crear(al)
     expect(r.cuerpo).toMatchObject({ ok: true, estado: 'pedida', pedido_id: 'ped-1', llave: llaveDelPedido, despertado: true })
-    expect(al.pedidos[0]).toMatchObject({ client_id: CLI, seco: true, llave: llaveDelPedido, nombre: 'Temporada de lluvias', cambio: BUENO.cambio, brief_libre: BUENO.brief_libre, fecha_inicio: '2026-10-12', fecha_fin: '2026-10-25', fechas_clave: BUENO.fechas_clave, tope_usd: 30, pedido_por: 'emilio', campana_id: null })
+    expect(al.pedidos[0]).toMatchObject({ client_id: CLI, seco: true, llave: llaveDelPedido, nombre: 'Temporada de lluvias', cambio: BUENO.cambio, brief_libre: BUENO.brief_libre, fecha_inicio: '2026-10-12', fecha_fin: '2026-10-25', fechas_clave: BUENO.fechas_clave, tope_usd: 50, pedido_por: 'emilio', campana_id: null })
     expect(al.sobresEmitidos).toEqual([sobreDelPedido(al.pedidos[0], 'plan-1')])
     expect(al.sobresEmitidos[0]).toMatchObject({ source: 'planeacion/plan-listo', intent: 'briefear', payload: { client_id: CLI, plan_id: 'plan-1', dry_run: true, desde_worker: 'tablero/crear-campana', llave_de_campana: llaveDelPedido, nombre_de_campana: 'Temporada de lluvias' } })
   })
@@ -171,7 +171,7 @@ describe('crear · guarda el pedido y deja el sobre', () => {
     const r = await crear(al, { nombre: 'Otro nombre', tope_usd: 99 })
     expect(r.cuerpo).toMatchObject({ ok: true, estado: 'ya_pedida', pedido_id: 'ped-1', llave: llaveDelPedido, despertado: true })
     expect(al.pedidos).toHaveLength(1)
-    expect(al.pedidos[0]).toMatchObject({ nombre: 'Temporada de lluvias', tope_usd: 30 })
+    expect(al.pedidos[0]).toMatchObject({ nombre: 'Temporada de lluvias', tope_usd: 50 })
     expect(al.sobresEmitidos).toHaveLength(2)
     expect((al.sobresEmitidos[1] as { idempotency_key: string }).idempotency_key).toBe((al.sobresEmitidos[0] as { idempotency_key: string }).idempotency_key)
   })
@@ -204,7 +204,7 @@ describe('abrir con el pedido', () => {
     const r = await abrir(al)
     expect(r.status).toBe(201)
     const c = al.campanas.find((x) => x.id === idDe(r)) as Campana
-    expect(c).toMatchObject({ llave_de_campana: llaveDelPedido, fecha_inicio: '2026-10-12', fecha_fin: '2026-10-25', fecha_inicio_origen: 'emilio', tope_gasto_usd: 30, nombre_de_campana: 'Temporada de lluvias', seco: true })
+    expect(c).toMatchObject({ llave_de_campana: llaveDelPedido, fecha_inicio: '2026-10-12', fecha_fin: '2026-10-25', fecha_inicio_origen: 'emilio', tope_gasto_usd: 50, nombre_de_campana: 'Temporada de lluvias', seco: true })
     expect(r.cuerpo).toMatchObject({ pedido_id: 'ped-1' })
     expect(r.cuerpo.aviso_pedido).toBeUndefined()
     expect(al.pedidos[0].campana_id).toBe(c.id)

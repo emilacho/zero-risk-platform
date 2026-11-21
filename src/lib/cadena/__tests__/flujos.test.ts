@@ -387,8 +387,8 @@ describe('COMPORTAMIENTO · la cadena en seco con agente simulado (ensayo por la
       expect(typeof b.workflow_id).toBe('string'); expect(typeof b.workflow_execution_id).toBe('string')
       expect(p.timeout).toBe(290000)
     }
-    // 21-nov · temporal (Lenovo 01:58Z): la estrategia pide `high` (al máximo no cabía en la ventana); el lector de fichas y la tanda siguen en `maximo`
-    expect(m.reg.agente.map((p) => (p.cuerpo as { thinking_mode: string }).thinking_mode)).toEqual(['high', 'maximo', 'maximo'])
+    // 21-nov · temporal (Lenovo 01:58Z y 02:16Z): la estrategia, el lector de fichas y la tanda piden `high` (al máximo no cabían en la ventana)
+    expect(m.reg.agente.map((p) => (p.cuerpo as { thinking_mode: string }).thinking_mode)).toEqual(['high', 'high', 'high'])
     expect(m.al.corridas.map((c) => c.costo_usd)).toEqual([0.31, 0.31, 0.31])
   })
   it('🔴 17-nov · el lector de fichas NO es reja: si sus 3 llamadas fallan, la cadena abre igual, sin fichas y sin necesita_humano', async () => {

@@ -11,7 +11,17 @@ export const PASOS: readonly Paso[] = ['estrategia', 'calendario', 'fechas', 'br
 
 /** costo esperado por llamada (US$, estimación del diseño §12, no medida) · el tope de la corrida = 2 × esperado, mínimo 1,00 */
 const ESPERADO_USD: Record<Paso, number> = { estrategia: 0.45, calendario: 0.4, fechas: 0.3, brief: 0.25, fichas: 0.5 }
-export const topeDelPaso = (p: Paso): number => Math.max(1, Math.round(2 * ESPERADO_USD[p] * 100) / 100)
+/**
+ * 21-nov · ⚠️ MEDIDA TEMPORAL (decisión de Lenovo 02:16Z, modo jefe · regla firmada: el tope cubre el peor caso; un tope no es gasto) · el tope por llamada de los
+ * 4 pasos que esperan en la misma llamada y bajan a `high` (ver RAZONAMIENTO_TEMPORAL_POR_PASO). Con el techo de salida de 128K (`9463abb`), el peor caso de una
+ * llamada es ~US$ 2,7 (cota de CC3, 21-nov 01:5xZ): US$ 3 lo cubre. Estrategia US$ 3 lo fijó Lenovo; calendario y fechas, el mismo peor caso.
+ * Las fichas NO entran aquí (siguen con US$ 1, 1,5 × lo medido 0,664 en `maximo`; en `high` gastan menos): gastan de su bolsa PROPIA (`presupuesto_lector_usd`, US$ 2 por
+ * omisión) y un intento caído cuenta el tope entero (`costoEfectivo`). Con US$ 1 caben 2 intentos; con US$ 2 cabría UNO solo y un fallo las dejaría sin fichas.
+ * Subirlo a 2-3 × lo medido pide subir antes esa bolsa (escritura certificada + el valor por omisión): avisado a Lenovo.
+ * Sube el piso de la bolsa de planificación (12 × 3 = US$ 36): aceptado por Lenovo. Se QUITA con el arreglo de fondo, igual que el razonamiento temporal.
+ */
+export const TOPE_TEMPORAL_POR_PASO_USD: Readonly<Partial<Record<Paso, number>>> = { estrategia: 3, calendario: 3, fechas: 3 }
+export const topeDelPaso = (p: Paso): number => TOPE_TEMPORAL_POR_PASO_USD[p] ?? Math.max(1, Math.round(2 * ESPERADO_USD[p] * 100) / 100)
 
 export const AGENTE_POR_PASO: Record<Paso, string> = {
   estrategia: 'social-media-strategist',
@@ -32,8 +42,10 @@ export const RAZONAMIENTO_POR_DEFECTO = 'maximo'
  * Por qué: la estrategia al máximo pasó de 13:20 (504 en el tope de Vercel, campaña `2fd5f619`, 21-nov 01:32Z) y n8n corta a los ~5:46 sin bytes.
  * Se mide paso por paso con una llamada real; el que no figura aquí sigue en `maximo`.
  * Se QUITA cuando exista el arreglo de fondo (los pasos largos sin el techo de 800 s · mapa de CC4, GO aparte): entonces todo vuelve a `maximo`.
+ * 21-nov 02:16Z · Lenovo: los 4 pasos que esperan al agente en la MISMA llamada (estrategia, calendario, fechas especiales y fichas) van a `high`; el brief no
+ * (su vuelta la entrega el corredor, sin techo de 800 s), así que sigue en `maximo`.
  */
-export const RAZONAMIENTO_TEMPORAL_POR_PASO: Readonly<Partial<Record<Paso, 'high' | 'medium' | 'low'>>> = { estrategia: 'high' }
+export const RAZONAMIENTO_TEMPORAL_POR_PASO: Readonly<Partial<Record<Paso, 'high' | 'medium' | 'low'>>> = { estrategia: 'high', calendario: 'high', fechas: 'high', fichas: 'high' }
 /** el razonamiento que pide cada paso: el temporal si lo tiene; si no, el de siempre (`maximo`) */
 export const razonamientoDelPaso = (paso: Paso): string => RAZONAMIENTO_TEMPORAL_POR_PASO[paso] ?? RAZONAMIENTO_POR_DEFECTO
 export const DIAS_DE_CAMPANA = 90
@@ -108,6 +120,15 @@ export async function modeloDeLaCadena(al: Almacen): Promise<string> {
   const v = await al.leerConfig('modelo_cadena')
   return modeloPorCorridaValido(v) ? v : MODELO_POR_DEFECTO
 }
+/**
+ * 21-nov · #1260 (pedido de CC6 02:32Z) · ⚠️ MEDIDA TEMPORAL, va y se quita junto con RAZONAMIENTO_TEMPORAL_POR_PASO · el plazo de la CORRIDA de los pasos que esperan al
+ * agente en la misma llamada no puede ser menor que esa espera (800 s en n8n y en Vercel = 13:20): si lo fuera, el vigía daría la corrida por vencida y lanzaría OTRO agente
+ * con el primero vivo (lo de `2fd5f619`: 3 corridas de 5:46 con el plazo vivo en 6 min). Piso de 14 min para esos pasos; la config (`plazo_llamada_agente_minutos`) sigue
+ * mandando si es mayor, y para los demás pasos.
+ */
+export const ESPERA_DE_LA_MISMA_LLAMADA_S = 800
+export const PLAZO_MINIMO_DE_LA_MISMA_LLAMADA_MIN = 14
+export const plazoMinimoDelPaso = (paso: Paso): number => (paso in RAZONAMIENTO_TEMPORAL_POR_PASO ? PLAZO_MINIMO_DE_LA_MISMA_LLAMADA_MIN : 0)
 export async function plazoDeLlamadaMinutos(al: Almacen): Promise<number> {
   const v = await al.leerConfig('plazo_llamada_agente_minutos')
   return typeof v === 'number' && v > 0 ? v : PLAZO_DE_LLAMADA_POR_DEFECTO_MIN

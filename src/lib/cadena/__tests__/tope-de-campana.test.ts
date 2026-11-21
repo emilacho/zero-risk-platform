@@ -121,7 +121,7 @@ describe('lo gastado · la MISMA fuente que los US$ 26,28 (condición 1 de CC7) 
       cadena_brief_creativo: [{ campana_id: SEG, costo_usd: 0.3, encargo_id: null }],
     })
     const m = medirGastoDeCampana(await leer(SEG, 'parte-nuevo'), 'parte-nuevo')
-    expect(m.gastado).toBeCloseTo(10.26 + 1 + 0.4 + 0.3, 2)
+    expect(m.gastado).toBeCloseTo(10.26 + 3 + 0.4 + 0.3, 2) // la corrida caída del calendario suma su tope: US$ 3 desde el temporal de #1260
   })
   it('sabotaje · un parte de ENSAYO de la campaña (construido) no compromete dinero ni trae sus encargos', async () => {
     sembrar({ client_historical_outputs: [{ id: 'parte-seco', output_type: 'campaign_brief_pack', provenance_tag: { campana_id: NAU, seco: true, prueba_seco: true, familias_por_brief: [{ brief_id: 'S1', familia: 'carrusel_mesa' }] } }] })
