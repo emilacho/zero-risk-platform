@@ -62,7 +62,7 @@ const volverAtras = async (motivo) => {
 }
 for (const p of plan) {
   const put = await fetch(`${base}/api/v1/workflows/${p.id}`, { method: 'PUT', headers: h, body: JSON.stringify(cuerpoDelPut(p.hacia)) })
-  if (!put.ok) await volverAtras(`PUT ${p.id} → ${put.status}: ${(await put.text()).slice(0, 300)}`)
+  if (!put.ok) await volverAtras(`PUT ${p.id} → ${put.status}: ${await put.text()}`)
   escritos.push(p)
   const quedo = await leerVivo(p.id)
   if (!igual(quedo, p.hacia)) await volverAtras(`${p.id}: después del PUT el vivo no quedó igual al esperado`)

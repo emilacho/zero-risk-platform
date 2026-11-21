@@ -18,7 +18,8 @@ import { fileURLToPath } from 'node:url'
 
 const NODOS = path.join(path.dirname(fileURLToPath(import.meta.url)), 'nodos')
 const leer = (f) => fs.readFileSync(path.join(NODOS, f), 'utf8').replace(/\r\n/g, '\n')
-const uuid = (s) => { const h = createHash('md5').update(s).digest('hex'); return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}` }
+// el mismo id estable que el constructor (md5 en forma de uuid), sin cortar texto: la huella entera, partida en sus 5 grupos
+const uuid = (s) => createHash('md5').update(s).digest('hex').replace(/^(\w{8})(\w{4})(\w{4})(\w{4})(\w{12})$/, '$1-$2-$3-$4-$5')
 
 /** la espera del Wait: la MISMA que `ESPERA_DE_LA_VUELTA_S` de `src/lib/cadena/constantes.ts` (una prueba las ata) */
 export const ESPERA_S = 3600
