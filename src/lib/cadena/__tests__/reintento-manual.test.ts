@@ -271,6 +271,12 @@ describe('🟡 CC6 04:09Z · varias llaves a la vez en el mismo paso (fechas, ta
     await corre(al, 'f:fecha_comercial:pais:2026', T3, 'ok')
     expect((await pedirFechas(al, id)).cuerpo).toMatchObject({ ok: true, permiso: { clave_agotada: 'f:feriado:pais:2026' } })
   })
+  it('🔴 k5 de CC6 · A agotada y B con 1 caída (sin ok, NO agotada): sin `clave`, el permiso va a A (B no cuenta como agotada)', async () => {
+    const { al, id } = await conCaidas(0)
+    for (const t of [T1, T2, T3]) await corre(al, 'f:feriado:pais:2026', t, 'fallida')
+    await corre(al, 'f:fecha_comercial:pais:2026', '2026-10-13T01:50:00Z', 'fallida')
+    expect((await pedirFechas(al, id)).cuerpo).toMatchObject({ ok: true, permiso: { clave_agotada: 'f:feriado:pais:2026' } })
+  })
   it('🔴 m13 · sin ninguna agotada manda la ÚLTIMA corrida: ronda 0 ok, ronda 1 con 1 caída → «no agotado» (no «ya hecho»)', async () => {
     const { al, id } = await conCaidas(0)
     const r = await prepararCorrida(al, al.campanas[0], 'estrategia', 'v1:c0', 'wf-cadena', 'e', T1, 'claude-opus-5-5', null)
