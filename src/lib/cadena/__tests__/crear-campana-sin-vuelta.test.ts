@@ -290,6 +290,21 @@ describe('el estado que lee el tablero', () => {
     await repararPedidos(al2, en(10), { ejecutar: true })
     expect(await leer(al2)).toMatchObject({ status: 200, cuerpo: { estado_del_pedido: 'fallida', codigo: 'E-PLAN' } })
   })
+  it('🔴 s20 de CC6 en #1268 · la carrera: la campaña nació Y la libreta tiene la falla anotada → gana «nacida» (en el GET y en crear con la misma llave), nunca «Crear nuevamente»', async () => {
+    const al = almacen()
+    const p = await pedidoSinNacer(al)
+    // el arreglo leyó el pedido sin campaña, la apertura miró la libreta sin falla y siguió; el arreglo anotó la falla y después nació la campaña
+    al.config.set(CLAVE_LIBRETA_DE_PEDIDOS, { [p.id]: { n: 5, ultimo_en: en(130).toISOString(), ultimo: 'aceptado', fallida: { codigo: 'E-TIEMPO', en: en(190).toISOString(), detalle: 'agotado' } } })
+    al.campanas.push({ id: 'camp-de-la-carrera' } as never)
+    p.campana_id = 'camp-de-la-carrera'
+    expect(await leer(al)).toMatchObject({ status: 200, cuerpo: { estado_del_pedido: 'nacida', campana_id: 'camp-de-la-carrera' } })
+    expect((await leer(al)).cuerpo).not.toHaveProperty('codigo')
+    const antes = llavesEmitidas(al).length
+    const r = await crear(al)
+    expect(r.cuerpo).toMatchObject({ estado: 'ya_pedida', estado_del_pedido: 'nacida', campana_id: 'camp-de-la-carrera' })
+    expect(r.cuerpo).not.toHaveProperty('codigo')
+    expect(llavesEmitidas(al)).toHaveLength(antes)
+  })
   it('🔴 seco separa: el pedido en seco no se ve sin seco=true', async () => {
     const al = almacen()
     await pedidoSinNacer(al)
