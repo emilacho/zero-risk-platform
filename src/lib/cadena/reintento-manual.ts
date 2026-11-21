@@ -11,6 +11,7 @@
  *   · La misma bolsa y el mismo candado del tope de la campaña: si el intento no cabe (ni agrandando la bolsa hasta el tope), 409. Al usarse, `prepararCorrida` lo mira otra vez.
  *   · No vale para una campaña en `necesita_humano` (ni cerrada ni reemplazada) ni para las de CAMPANAS_SIN_REINTENTO_MANUAL.
  *   · Agnóstico: cualquier paso que cuenta intentos (estrategia, calendario, fechas, fichas). El brief no: su vuelta no pasa por `prepararCorrida`.
+ *   · Varias llaves a la vez (fechas, tandas del calendario): `clave` opcional elige cuál; sin ella, la única agotada.
  *   · Idempotente: si ya hay un permiso con intentos libres para esa llave, devuelve el mismo (`ya_estaba`) y no anota otro.
  */
 import type { Almacen, Corrida, EstadoCampana } from './almacen'
@@ -45,7 +46,14 @@ export async function reintentarAhora(al: Almacen, cuerpo: Record<string, unknow
   const delPaso = (await al.corridasDeCampana(c.id)).filter((x) => x.paso === paso)
   const ultima = delPaso.reduce<Corrida | null>((m, x) => (!m || x.id > m.id ? x : m), null)
   if (!ultima) return err(409, 'E-REINTENTO-SIN-CORRIDAS', `el paso ${paso} no tiene corridas en esta campaña: no hay nada agotado`)
-  const base = baseDeLaLlave(ultima.clave_idempotencia)
+  // 🟡 CC6 04:09Z · un paso puede llevar VARIAS llaves base a la vez (fechas `f:<tipo>:<ámbito>:<año>`, calendario por tandas): la agotada no es siempre la de la última corrida.
+  // Con `clave` en el cuerpo se reintenta esa; sin ella, la única base agotada del paso (varias → 409 pidiendo `clave`); ninguna agotada → la de la última corrida (y sus 409 de siempre).
+  const bases = [...new Set(delPaso.map((x) => baseDeLaLlave(x.clave_idempotencia)))]
+  const pedida = cadena(cuerpo.clave)
+  if (pedida && !bases.includes(pedida)) return err(409, 'E-REINTENTO-CLAVE', `el paso ${paso} no tiene corridas con la llave ${pedida}`, { llaves: bases })
+  const agotadas = bases.filter((b) => !delPaso.some((x) => esDeLaLlave(x.clave_idempotencia, b) && x.estado === 'ok') && estadoDeLaLlave(delPaso, b, ahora).agotada)
+  if (!pedida && agotadas.length > 1) return err(409, 'E-REINTENTO-ELEGIR-CLAVE', `el paso ${paso} tiene ${agotadas.length} llaves agotadas: di cuál con «clave»`, { llaves: agotadas })
+  const base = pedida ?? agotadas[0] ?? baseDeLaLlave(ultima.clave_idempotencia)
   const deLaBase = delPaso.filter((x) => esDeLaLlave(x.clave_idempotencia, base))
   if (deLaBase.some((x) => x.estado === 'ok')) return err(409, 'E-REINTENTO-YA-HECHO', `el paso ${paso} (${base}) ya terminó bien`)
   const viva = deLaBase.find((x) => x.estado === 'en_curso' && !(x.plazo_en && Date.parse(ahora) > Date.parse(x.plazo_en)))

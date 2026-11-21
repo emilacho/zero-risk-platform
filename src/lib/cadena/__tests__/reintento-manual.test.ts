@@ -237,6 +237,58 @@ describe('lo que sobrevivía a mis sabotajes (r4, r5, m6, m13)', () => {
   })
 })
 
+describe('🟡 CC6 04:09Z · varias llaves a la vez en el mismo paso (fechas, tandas)', () => {
+  const corre = async (al: AlmacenMemoria, clave: string, t: string, estado: 'fallida' | 'ok') => {
+    const r = await prepararCorrida(al, al.campanas[0], 'fechas', clave, 'wf-cadena', 'e', t, 'claude-opus-5-5', null)
+    expect(r.tipo).toBe('lista')
+    if (r.tipo === 'lista') await al.cerrarCorrida(r.corrida.id, { estado, costo_usd: 0.1 })
+  }
+  const pedirFechas = (al: AlmacenMemoria, id: string, extra: Record<string, unknown> = {}) => reintentarAhora(al, { ...OPERADOR, campana_id: id, paso: 'fechas', quien: 'CC7', por_que: 'p', ...extra }, AHORA)
+  it('🔴 la sonda de CC6: feriado agotado y DESPUÉS fecha_comercial ok → el permiso es para el feriado, y el preparar del feriado lo usa', async () => {
+    const { al, id } = await conCaidas(0)
+    for (const t of [T1, T2, T3]) await corre(al, 'f:feriado:pais:2026', t, 'fallida')
+    await corre(al, 'f:fecha_comercial:pais:2026', '2026-10-13T01:50:00Z', 'ok')
+    const r = await pedirFechas(al, id)
+    expect(r.cuerpo).toMatchObject({ ok: true, permiso: { clave_agotada: 'f:feriado:pais:2026', llave: 'f:feriado:pais:2026:rmanual-20261013t035600' } })
+    const p = await prepararCorrida(al, al.campanas[0], 'fechas', 'f:feriado:pais:2026', 'wf-cadena', 'e', AHORA, 'claude-opus-5-5', null)
+    expect(p).toMatchObject({ tipo: 'lista', corrida: { clave_idempotencia: 'f:feriado:pais:2026:rmanual-20261013t035600', intento: 1 } })
+  })
+  it('🔴 dos llaves agotadas: sin `clave`, 409 con la lista y nada anotado; con `clave`, esa', async () => {
+    const { al, id } = await conCaidas(0)
+    for (const t of [T1, T2, T3]) await corre(al, 'f:feriado:pais:2026', t, 'fallida')
+    for (const t of [T1, T2, T3]) await corre(al, 'f:fecha_comercial:pais:2026', t, 'fallida')
+    const sin = await pedirFechas(al, id)
+    expect(sin.cuerpo).toMatchObject({ code: 'E-REINTENTO-ELEGIR-CLAVE' })
+    expect(JSON.stringify(sin.cuerpo)).toContain('f:feriado:pais:2026')
+    expect(libreta(al)).toEqual([])
+    expect((await pedirFechas(al, id, { clave: 'f:fecha_comercial:pais:2026' })).cuerpo).toMatchObject({ ok: true, permiso: { clave_agotada: 'f:fecha_comercial:pais:2026' } })
+  })
+  it('🔴 k3 · una llave que usó sus 3 intentos pero terminó BIEN no cuenta como agotada: sin `clave`, el permiso va a la otra', async () => {
+    const { al, id } = await conCaidas(0)
+    for (const t of [T1, T2, T3]) await corre(al, 'f:feriado:pais:2026', t, 'fallida')
+    await corre(al, 'f:fecha_comercial:pais:2026', T1, 'fallida')
+    await corre(al, 'f:fecha_comercial:pais:2026', T2, 'fallida')
+    await corre(al, 'f:fecha_comercial:pais:2026', T3, 'ok')
+    expect((await pedirFechas(al, id)).cuerpo).toMatchObject({ ok: true, permiso: { clave_agotada: 'f:feriado:pais:2026' } })
+  })
+  it('🔴 m13 · sin ninguna agotada manda la ÚLTIMA corrida: ronda 0 ok, ronda 1 con 1 caída → «no agotado» (no «ya hecho»)', async () => {
+    const { al, id } = await conCaidas(0)
+    const r = await prepararCorrida(al, al.campanas[0], 'estrategia', 'v1:c0', 'wf-cadena', 'e', T1, 'claude-opus-5-5', null)
+    if (r.tipo === 'lista') await al.cerrarCorrida(r.corrida.id, { estado: 'ok', costo_usd: 0.3 })
+    const r2 = await prepararCorrida(al, al.campanas[0], 'estrategia', 'v1:c1', 'wf-cadena', 'e', T2, 'claude-opus-5-5', null)
+    if (r2.tipo === 'lista') await al.cerrarCorrida(r2.corrida.id, { estado: 'fallida', costo_usd: 0.3 })
+    expect((await pedir(al, { campana_id: id })).cuerpo).toMatchObject({ code: 'E-REINTENTO-NO-AGOTADO', llave: 'v1:c1' })
+  })
+  it('🔴 `clave` que el paso no tiene: 409; `clave` de una llave ya ok: 409 ya hecho', async () => {
+    const { al, id } = await conCaidas(0)
+    for (const t of [T1, T2, T3]) await corre(al, 'f:feriado:pais:2026', t, 'fallida')
+    await corre(al, 'f:fecha_comercial:pais:2026', '2026-10-13T01:50:00Z', 'ok')
+    expect((await pedirFechas(al, id, { clave: 'f:otra:pais:2026' })).cuerpo).toMatchObject({ code: 'E-REINTENTO-CLAVE' })
+    expect((await pedirFechas(al, id, { clave: 'f:fecha_comercial:pais:2026' })).cuerpo).toMatchObject({ code: 'E-REINTENTO-YA-HECHO' })
+    expect(libreta(al)).toEqual([])
+  })
+})
+
 describe('las piezas puras', () => {
   it('la llave manual: la base + «:rmanual-» + la hora UTC sin separadores; la base sale quitando el reintento', () => {
     expect(llaveDeReintentoManual('v1:c0', '2026-11-21T04:05:09.123Z')).toBe('v1:c0:rmanual-20261121t040509')
