@@ -54,8 +54,11 @@ describe('el tope de una llamada cubre un turno al techo de salida (punto 5)', (
   it('🔴 el DEFAULT de la columna en la base es el mismo número que la constante (la migración nueva; la vieja decía 2)', () => {
     const sql = readFileSync(join(process.cwd(), 'supabase', 'migrations', '202611210400_cadena_bolsa_del_lector_nueve.sql'), 'utf8')
     expect(sql).toContain(`ALTER TABLE public.cadena_campanas ALTER COLUMN presupuesto_lector_usd SET DEFAULT ${PRESUPUESTO_LECTOR_POR_OMISION};`)
-    // las campañas con la bolsa del valor viejo (exactamente 2) suben; una bolsa fijada a mano no se toca
-    expect(sql).toContain(`UPDATE public.cadena_campanas SET presupuesto_lector_usd = ${PRESUPUESTO_LECTOR_POR_OMISION} WHERE presupuesto_lector_usd = 2;`)
+    // las campañas con la bolsa del valor viejo (exactamente 2) suben, con candado: la bolsa de planificación + la del lector caben en el tope de la campaña
+    const codigo = sql.split('\n').filter((l) => !l.trim().startsWith('--')).join('\n').replace(/\s+/g, ' ')
+    expect(codigo).toContain(`UPDATE public.cadena_campanas SET presupuesto_lector_usd = ${PRESUPUESTO_LECTOR_POR_OMISION} WHERE presupuesto_lector_usd = 2 AND (tope_gasto_usd IS NULL OR presupuesto_planificacion_usd + ${PRESUPUESTO_LECTOR_POR_OMISION} <= tope_gasto_usd);`)
+    // nada más que el DEFAULT (ALTER TABLE … ALTER COLUMN), el UPDATE con candado y el comentario: la reversa va comentada
+    expect(codigo.match(/\b(UPDATE|ALTER|DELETE|INSERT|DROP)\b/g)).toEqual(['ALTER', 'ALTER', 'UPDATE'])
   })
   it('🔴 el piso de la bolsa de planificación es 12 vueltas × US$ 3 = US$ 36', () => {
     expect(TOPE_DE_VUELTAS_DEL_SUBFLUJO).toBe(12)
