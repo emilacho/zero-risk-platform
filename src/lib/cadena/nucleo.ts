@@ -94,6 +94,38 @@ export const tramoDeReintento = (ahora: string): string => `${ahora.slice(0, 10)
 export const llaveDeReintentoDelPaso = (base: string, ahora: string): string => `${base}:r${tramoDeReintento(ahora)}`
 /** la llave base o cualquiera de sus reintentos: un `ok` o un `en_curso` en cualquiera de ellas vale para todas */
 export const esDeLaLlave = (clave: string, base: string): boolean => clave === base || clave.startsWith(`${base}:r`)
+/** la llave base de una clave de corrida: sin su reintento (`:r<tramo>` o `:rmanual-<UTC>`) */
+export const baseDeLaLlave = (clave: string): string => clave.replace(/:r[^:]*$/, '')
+
+/**
+ * La llave con la que iría el próximo intento de un paso, y si está AGOTADA (la misma regla de `prepararCorrida`, sin escribir nada):
+ * la base con menos de 3 intentos; si no, la llave del tramo; agotada si el tramo ya usó sus 3, o si es nueva y la base se agotó en ESTE mismo tramo («no insistir en el mismo tramo»).
+ */
+export function estadoDeLaLlave(corridasDelPaso: Pick<Corrida, 'clave_idempotencia' | 'creada_en'>[], clave: string, ahora: string): { llave: string; intento: number; agotada: boolean } {
+  const usadas = (k: string) => corridasDelPaso.filter((c) => c.clave_idempotencia === k).length
+  const llave = usadas(clave) >= MAXIMO_DE_INTENTOS ? llaveDeReintentoDelPaso(clave, ahora) : clave
+  const intento = usadas(llave) + 1
+  const mismoTramo = llave !== clave && intento === 1 && corridasDelPaso.some((c) => esDeLaLlave(c.clave_idempotencia, clave) && c.creada_en && tramoDeReintento(c.creada_en) === tramoDeReintento(ahora))
+  return { llave, intento, agotada: intento > MAXIMO_DE_INTENTOS || mismoTramo }
+}
+
+/**
+ * 21-nov · REINTENTO MANUAL (GO Lenovo 03:55Z, opción c · CC4) · un operador concede a un paso AGOTADO una llave nueva `<base>:rmanual-<UTC>` con sus 3 intentos
+ * (`reintento-manual.ts`). El permiso vive en la libreta `cadena_config.reintentos_manuales` (quién, cuándo, por qué, la llave que se agotó); no se mueve ni se borra
+ * ninguna corrida. `prepararCorrida` lo usa SOLO cuando la regla de siempre dice «agotado», y pasa por la misma bolsa y el mismo candado del tope.
+ */
+export const CLAVE_DE_LA_LIBRETA_DE_REINTENTOS = 'reintentos_manuales'
+export interface PermisoDeReintento { campana_id: string; paso: string; clave_agotada: string; llave: string; quien: string; por_que: string; cuando: string }
+export const llaveDeReintentoManual = (base: string, ahora: string): string => `${base}:rmanual-${ahora.replace(/\.\d+/, '').replace(/[-:]/g, '').replace(/z$/i, '').toLowerCase()}`
+export function permisosDeLaLibreta(v: unknown): PermisoDeReintento[] {
+  if (!Array.isArray(v)) return []
+  return v.filter((p): p is PermisoDeReintento => !!p && typeof p === 'object' && ['campana_id', 'paso', 'clave_agotada', 'llave', 'quien', 'por_que', 'cuando'].every((k) => typeof (p as Record<string, unknown>)[k] === 'string'))
+}
+/** el último permiso para esa campaña, ese paso y esa llave base (o null) */
+export async function permisoVigente(al: Almacen, campanaId: string, paso: string, base: string): Promise<PermisoDeReintento | null> {
+  const propios = permisosDeLaLibreta(await al.leerConfig(CLAVE_DE_LA_LIBRETA_DE_REINTENTOS)).filter((p) => p.campana_id === campanaId && p.paso === paso && p.clave_agotada === base)
+  return propios.at(-1) ?? null
+}
 
 /**
  * 18-nov · LA BOLSA AL TRIPLE DE LO MEDIDO (firma de Emilio: todo tope = el triple de lo medido) · la bolsa de PLANIFICACIÓN que no alcanza para el paso se lleva a
@@ -136,11 +168,17 @@ export async function prepararCorrida(
   const todas = (await al.corridasDeCampana(campana.id)).filter((c) => c.paso === paso)
   const usadas = (k: string) => todas.filter((c) => c.clave_idempotencia === k).length
   // grupo A · la base agotada sigue con la llave del tramo (3 intentos nuevos); en el mismo tramo, agotados
-  const llave = usadas(clave) >= MAXIMO_DE_INTENTOS ? llaveDeReintentoDelPaso(clave, ahora) : clave
-  const intento = usadas(llave) + 1
-  if (intento > MAXIMO_DE_INTENTOS) return { tipo: 'intentos_agotados' }
-  // la llave del tramo NUEVA no se estrena en el mismo tramo en que se agotó la anterior: el reintento es «en la vuelta siguiente», no un segundo golpe seguido
-  if (llave !== clave && intento === 1 && todas.some((c) => esDeLaLlave(c.clave_idempotencia, clave) && c.creada_en && tramoDeReintento(c.creada_en) === tramoDeReintento(ahora))) return { tipo: 'intentos_agotados' }
+  // (la llave del tramo NUEVA no se estrena en el mismo tramo en que se agotó la anterior: el reintento es «en la vuelta siguiente», no un segundo golpe seguido)
+  const estado = estadoDeLaLlave(todas, clave, ahora)
+  let llave = estado.llave
+  let intento = estado.intento
+  if (estado.agotada) {
+    // 21-nov · reintento manual: solo si un operador lo concedió para ESTA llave base, y solo mientras su llave tenga intentos
+    const permiso = await permisoVigente(al, campana.id, paso, clave)
+    if (!permiso || usadas(permiso.llave) >= MAXIMO_DE_INTENTOS) return { tipo: 'intentos_agotados' }
+    llave = permiso.llave
+    intento = usadas(llave) + 1
+  }
   const bolsa = await bolsaDelPaso(al, campana, paso)
   const gastado = bolsa.gastado
   let presupuesto = bolsa.presupuesto
