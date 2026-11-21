@@ -14,7 +14,7 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { conEsperaPorElCorredor, SUBFLUJOS } from '../espera-por-el-corredor.mjs'
+import { conEsperaPorElCorredor, mismaForma, SUBFLUJOS } from '../espera-por-el-corredor.mjs'
 
 const aqui = dirname(fileURLToPath(import.meta.url))
 const FECHA = '2026-11-21'
@@ -24,8 +24,8 @@ const ejecutar = process.argv.includes('--ejecutar')
 const revertir = process.argv.includes('--revertir')
 const h = { 'X-N8N-API-KEY': key, 'Content-Type': 'application/json' }
 const leer = (id, n) => JSON.parse(readFileSync(join(aqui, `${id}-${n}-${FECHA}.json`), 'utf8'))
-const forma = (f) => JSON.stringify({ n: f.nodes, c: f.connections })
-const igual = (a, b) => forma(a) === forma(b)
+// 21-nov · claves ordenadas: n8n reordena las de un nodo con `webhookId` (ver `formaDelFlujo`); el 1.er intento de publicar frenó por eso con el vivo idéntico
+const igual = mismaForma
 const cuerpoDelPut = (f) => ({ name: f.name, nodes: f.nodes, connections: f.connections, settings: f.settings ?? {} })
 const leerVivo = async (id) => { const r = await fetch(`${base}/api/v1/workflows/${id}`, { headers: h }); if (!r.ok) throw new Error(`n8n GET ${id} → ${r.status}`); return r.json() }
 

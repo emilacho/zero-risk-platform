@@ -12,7 +12,7 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { conEsperaPorElCorredor, llamadaConCorredor, ESPERA_S, CORTE_DE_LA_LLAMADA_MS, FORMA, SUBFLUJOS } from '../scripts/worker-staging/cadena/espera-por-el-corredor.mjs'
+import { conEsperaPorElCorredor, llamadaConCorredor, mismaForma, ESPERA_S, CORTE_DE_LA_LLAMADA_MS, FORMA, SUBFLUJOS } from '../scripts/worker-staging/cadena/espera-por-el-corredor.mjs'
 import { construirFlujos } from '../scripts/worker-staging/cadena/construir.mjs'
 import { ESPERA_DE_LA_VUELTA_S, ESPERA_DE_LA_MISMA_LLAMADA_S, PLAZO_MINIMO_POR_EL_CORREDOR_MIN } from '../src/lib/cadena/constantes'
 
@@ -92,5 +92,27 @@ describe('la línea de la llamada', () => {
     expect(nuevo.match(/callback_url/g)).toHaveLength(1)
     expect(() => llamadaConCorredor(nuevo)).toThrow(/ya tiene/)
     expect(() => llamadaConCorredor('return 1')).toThrow(/no es la de antes/)
+  })
+})
+
+describe('la comparación con el vivo (al publicar #1263: n8n reordena las claves del nodo con webhookId)', () => {
+  // como lo guarda n8n (visto en la prueba A1: `id,name,webhookId,type,typeVersion,position,parameters`)
+  const comoLoGuardaN8n = (f: Flujo): Flujo => ({ ...f, nodes: f.nodes.map((n: any) => { if (!('webhookId' in n)) return n; const { id, name, webhookId, ...resto } = n; return { id, name, webhookId, ...resto } }) })
+  for (const id of Object.keys(SUBFLUJOS)) {
+    it(`🔴 ${id} · el DESPUÉS con las claves en el orden de n8n es la MISMA forma; el texto tal cual no lo era (por eso frenó)`, () => {
+      const despues = leer(id, 'DESPUES'), vivo = comoLoGuardaN8n(despues)
+      expect(JSON.stringify({ n: vivo.nodes, c: vivo.connections })).not.toBe(JSON.stringify({ n: despues.nodes, c: despues.connections }))
+      expect(mismaForma(vivo, despues)).toBe(true)
+      expect(mismaForma(leer(id, 'ANTES'), despues)).toBe(false)
+    })
+  }
+  it('🔴 un valor distinto, un nodo de más o el orden de los nodos cambiado NO son la misma forma', () => {
+    const d = leer('ZnoFdGfACA36c3qE', 'DESPUES')
+    const otroId = { ...d, nodes: d.nodes.map((n: any) => ('webhookId' in n ? { ...n, webhookId: 'otro' } : n)) }
+    const otroValor = { ...d, nodes: d.nodes.map((n: any) => (n.type === 'n8n-nodes-base.wait' ? { ...n, parameters: { ...n.parameters, resumeAmount: 3599 } } : n)) }
+    const otroOrden = { ...d, nodes: [...d.nodes].reverse() }
+    const sinUno = { ...d, nodes: d.nodes.filter((n: any) => n.type !== 'n8n-nodes-base.wait') }
+    const otroCable = JSON.parse(JSON.stringify(d)); const [k] = Object.keys(otroCable.connections); otroCable.connections[k].main.push([])
+    for (const x of [otroId, otroValor, otroOrden, sinUno, otroCable]) expect(mismaForma(x, d)).toBe(false)
   })
 })

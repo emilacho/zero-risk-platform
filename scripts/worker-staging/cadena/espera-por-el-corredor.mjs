@@ -109,6 +109,17 @@ export function conEsperaPorElCorredor(flujo, forma, opc = {}) {
   return copia
 }
 
+/**
+ * 21-nov · al publicar #1263: la forma de un flujo (nodos + cables) para compararlo con el vivo, con las CLAVES de cada objeto ordenadas.
+ * n8n guarda un nodo que trae `webhookId` con sus claves en otro orden (`id,name,webhookId,type,…`): mismo valor, otro texto. Comparar el texto tal cual
+ * frenó la publicación con el vivo idéntico. El ORDEN de las listas (nodos, cables, salidas) sí cuenta y se conserva; solo se ordenan las claves.
+ */
+export function formaDelFlujo(f) {
+  const orden = (v) => (Array.isArray(v) ? v.map(orden) : v && typeof v === 'object' ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, orden(v[k])])) : v)
+  return JSON.stringify(orden({ n: f.nodes, c: f.connections }))
+}
+export const mismaForma = (a, b) => formaDelFlujo(a) === formaDelFlujo(b)
+
 /** cuál forma tiene cada sub-flujo vivo */
 export const SUBFLUJOS = {
   ZnoFdGfACA36c3qE: { clave: 'cadena-estrategia', forma: 'paso' },
