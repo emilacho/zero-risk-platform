@@ -134,6 +134,14 @@ export interface EnrichmentResult {
   brain_chunks_untrusted_dropped?: number
   /** 02-oct · si la consulta de confianza falló: el motivo (y no se inyectó nada que no se pudiera verificar). */
   brain_trust_lookup_error?: string
+  /**
+   * Encargo 15 · ADENDA 1 (firma de Emilio 21-nov): la consulta al cerebro FALLÓ (llave, saldo, red,
+   * status ≠ 200, base). Distinto de 0 resultados (`brain_empty_for_client`) y de consulta vacía, que
+   * NO son fallos. Con esta marca el corredor detiene el paso: «no se puede crear nada sin el portero del cerebro».
+   */
+  brain_fallo?: true
+  /** Encargo 15 · el motivo real del fallo (status y cuerpo del proveedor, sin la llave), que antes se tragaba. */
+  brain_error_detalle?: string
 }
 
 interface BrainChunkRow {
@@ -145,11 +153,21 @@ interface BrainChunkRow {
   similarity: number
 }
 
-async function embedQuery(text: string): Promise<number[] | null> {
+/**
+ * Encargo 15 (21-nov) · EL MOTIVO REAL NUNCA SE TRAGA. Entre el 18 y el 21-nov el cerebro estuvo caído por saldo
+ * (el proveedor respondía «429 · insufficient_quota») y el rastro solo decía `embed_query_failed`: tres días a ciegas.
+ * Ahora un fallo vuelve con su status y su cuerpo (sin la llave, redactada por si el proveedor la eco-ea) y se
+ * distingue de «consulta vacía» (sin texto no hay qué buscar: no es un fallo del cerebro y no detiene nada).
+ */
+type ResultadoDeHuella = { embedding: number[] } | { fallo: string } | { vacia: true }
+const sinLlave = (s: string): string => s.replace(/sk-[A-Za-z0-9_-]{4,}/g, 'sk-…')
+const cabeza = (s: string): string => sinLlave(s).match(/^[\s\S]{0,200}/)?.[0] ?? ''
+
+async function embedQuery(text: string): Promise<ResultadoDeHuella> {
   const key = process.env.OPENAI_API_KEY
-  if (!key) return null
+  if (!key) return { fallo: 'sin llave: OPENAI_API_KEY no está en el entorno del corredor' }
   const input = (text ?? '').trim()
-  if (!input) return null
+  if (!input) return { vacia: true }
   try {
     const r = await fetch(`${OPENAI_API}/embeddings`, {
       method: 'POST',
@@ -160,14 +178,23 @@ async function embedQuery(text: string): Promise<number[] | null> {
         dimensions: EMBEDDING_DIMENSIONS,
       }),
     })
-    if (!r.ok) return null
+    if (!r.ok) {
+      const cuerpo = await r.text().catch(() => '')
+      let detalle = cabeza(cuerpo)
+      try {
+        const e = (JSON.parse(cuerpo) as { error?: { code?: string; type?: string; message?: string } }).error
+        if (e) detalle = [e.type, e.code, cabeza(e.message ?? '')].filter(Boolean).join(' · ')
+      } catch { /* cuerpo no-JSON: va como vino, redactado y con cabeza */ }
+      return { fallo: `el proveedor de huellas respondió ${r.status}${detalle ? ` · ${detalle}` : ''}` }
+    }
     const j = (await r.json()) as {
       data?: Array<{ embedding: number[] }>
       usage?: { total_tokens: number }
     }
-    return j.data?.[0]?.embedding ?? null
-  } catch {
-    return null
+    const embedding = j.data?.[0]?.embedding ?? null
+    return embedding ? { embedding } : { fallo: 'el proveedor de huellas respondió 200 pero sin huella en el cuerpo' }
+  } catch (e) {
+    return { fallo: `red: ${cabeza(e instanceof Error ? e.message : String(e))}` }
   }
 }
 
@@ -226,10 +253,15 @@ export async function enrichSystemPromptWithClientBrain(args: {
   const brain_query_chars = queryText.length
   const brain_query_truncated = queryText.length < queryFull.length
 
-  const queryEmbedding = await embedQuery(queryText)
-  if (!queryEmbedding) {
-    return { ...empty, brain_query_ms: Date.now() - queryStartedAt, error: 'embed_query_failed', brain_query_chars, brain_query_truncated }
+  const huella = await embedQuery(queryText)
+  if ('vacia' in huella) {
+    // sin texto no hay qué buscar: el agente sigue (no es el cerebro el que falla)
+    return { ...empty, brain_query_ms: Date.now() - queryStartedAt, error: 'consulta_vacia', brain_query_chars, brain_query_truncated }
   }
+  if ('fallo' in huella) {
+    return { ...empty, brain_fallo: true, brain_error_detalle: huella.fallo, brain_query_ms: Date.now() - queryStartedAt, error: 'embed_query_failed', brain_query_chars, brain_query_truncated }
+  }
+  const queryEmbedding = huella.embedding
 
   try {
     const topK = args.topK ?? DEFAULT_TOP_K
@@ -244,13 +276,13 @@ export async function enrichSystemPromptWithClientBrain(args: {
       p_query_embedding: queryEmbedding,
       p_top_k: topK + OLD_VERSION_MARGIN,
     })
-    if (error) return { ...empty, brain_query_ms: Date.now() - queryStartedAt, error: `rpc_error: ${error.message}`, brain_query_chars, brain_query_truncated }
+    if (error) return { ...empty, brain_fallo: true, brain_error_detalle: cabeza(String(error.message ?? 'error de la base')), brain_query_ms: Date.now() - queryStartedAt, error: `rpc_error: ${error.message}`, brain_query_chars, brain_query_truncated }
     const crudos = (data ?? []) as BrainChunkRow[]
     const vigente = await manualVigenteId(args.supabase, args.clientId)
     // 02-oct · la confianza de cada trozo (UNA consulta) · si no se puede saber, NO se inyecta lo que no se puede verificar
     const { marcas, error: errorDeConfianza } = await marcasDeLosTrozos(args.supabase, crudos.map((r) => String(r.chunk_id)))
     if (errorDeConfianza) {
-      return { ...empty, brain_hit: false, brain_query_ms: Date.now() - queryStartedAt, error: 'brain_trust_lookup_failed', brain_trust_lookup_error: errorDeConfianza, brain_query_chars, brain_query_truncated }
+      return { ...empty, brain_hit: false, brain_fallo: true, brain_error_detalle: cabeza(errorDeConfianza), brain_query_ms: Date.now() - queryStartedAt, error: 'brain_trust_lookup_failed', brain_trust_lookup_error: errorDeConfianza, brain_query_chars, brain_query_truncated }
     }
     const confiable = (r: BrainChunkRow) => {
       const m = marcas.get(String(r.chunk_id))
@@ -287,6 +319,6 @@ export async function enrichSystemPromptWithClientBrain(args: {
       grounding: 'prose_only',
     }
   } catch (e) {
-    return { ...empty, brain_query_ms: Date.now() - queryStartedAt, error: e instanceof Error ? e.message : 'unknown', brain_query_chars, brain_query_truncated }
+    return { ...empty, brain_fallo: true, brain_error_detalle: cabeza(e instanceof Error ? e.message : String(e)), brain_query_ms: Date.now() - queryStartedAt, error: e instanceof Error ? e.message : 'unknown', brain_query_chars, brain_query_truncated }
   }
 }
