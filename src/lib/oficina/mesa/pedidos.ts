@@ -13,7 +13,7 @@ import { BRIEF_GUIA_NO_REGLA } from '../brief'
 import { TITULOS_DEL_BRIEF, TITULOS_OBLIGATORIOS_DEL_BRIEF } from '../../cadena/brief-creativo'
 import { fichaPorOmision } from '../../video/parametros'
 import { tareaDelIngeniero, type ImagenARedactar } from './prompts'
-import { seccionDeLaCriticaParaLaDireccion, tareaDeLaCritica } from './critica'
+import { lineaDeLaCriticaAlDirigir, seccionDeLaCriticaParaLaDireccion, tareaDeLaCritica } from './critica'
 import { fotosALaVista, fotosDeLaLista, REGLA_DE_LOS_ELEMENTOS_REALES, rotuloDeLaFoto } from './fotos-a-la-vista'
 import { seccionDelCerebro, type IndiceDeLaMesa } from './indice-del-cerebro'
 import type { ImagenDelPedido } from '../../imagenes-del-pedido'
@@ -419,6 +419,8 @@ export function armarTarea(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarj
 
   // Sprint 4 · E · lo que la dirección sabe de la crítica de esta ronda (solo si la mesa tiene crítico; sin él, la tarea es la de siempre)
   const laCritica = tipo === 'integrar' || tipo === 'devolver_citas' ? seccionDeLaCriticaParaLaDireccion(est, libro) : null
+  // 21-nov (#36 del barrido) · al abrir, la dirección sabe que la crítica corre sola: no la pide aparte (la doble crítica de T7d)
+  const laCriticaAlDirigir = tipo === 'dirigir' ? lineaDeLaCriticaAlDirigir(est) : null
   const tu: Record<TipoDeTurno, string> = {
     dirigir: [
       '## Tu turno · DIRECCIÓN CREATIVA: abre la pieza',
@@ -430,6 +432,7 @@ export function armarTarea(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarj
         ? [`Lee el manual, luego el brief y el plan. Escribe tu **idea rectora** del video corto${(c.video?.propuestas ?? 1) > 1 ? ` y los ${c.video!.propuestas} caminos DISTINTOS que vas a proponer al dueño (cada uno con su concepto, duración, red y objetivo)` : ''}: qué vas a contar y en cuántos segundos (los propones tú según el plan, la red y el objetivo: ${duracionDe(c.video)}), con qué estructura de planos y qué rol cumple cada uno, qué fotos propias sirven de referencia y qué necesitas de cada compañero (guion y pedido al generador, storyboard, el gancho final y su puerta de retención (el coach, única voz), texto del pie, coherencia de Instagram o formato nativo de TikTok/Reels si están en la mesa).`, REGLA_DEL_GANCHO + ' Tú no propones el gancho: lo pides y lo integras en la pieza.']
         : ['Lee el manual, luego el brief y el plan. Abre con **`Objetivo de la pieza:`** qué tiene que lograr esta pieza, en una frase, y su llamado (parte del OBJETIVO y del concepto que trae el brief; si el brief no lo dice, decláralo tú y dilo). Luego escribe tu **idea rectora**: qué vas a contar, con qué tono y estructura, qué escena muestra cada lámina o elemento (no copies los planos del brief: el «visual de la campaña» es referencia), qué imágenes imaginas (fotos propias vs. generadas) y qué necesitas de cada compañero.']),
       'El equipo completo participa en cada pieza: la oficina se formó con estos especialistas por razones concretas. Cada uno aportará su especialidad; no escribas tú todo. Si ya sabes que te falta material del cliente, pídelo con `pedir_material`.',
+      ...(laCriticaAlDirigir ? [laCriticaAlDirigir] : []),
     ].join('\n'),
     aportar: [
       `## Tu turno · aporta tu especialidad (${agente})`,
