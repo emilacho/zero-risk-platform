@@ -152,13 +152,22 @@ function clienteUuid(): ClienteFixture {
   return c
 }
 
-function mundo(opts: { estado?: string; clientesEnsayo?: string[]; cliente?: ClienteFixture; agente?: (b: any) => RespuestaHttp; paginas?: Record<string, string | null | { cuerpo: string | Buffer; tipo: string }>; cableFalla?: boolean; config?: Record<string, unknown> } = {}): Mundo {
+function mundo(opts: { estado?: string; clientesEnsayo?: string[]; cliente?: ClienteFixture; agente?: (b: any) => RespuestaHttp; paginas?: Record<string, string | null | { cuerpo: string | Buffer; tipo: string }>; cableFalla?: boolean; config?: Record<string, unknown>; corredor?: 'entrega' | 'se_agota' } = {}): Mundo {
   const cliente = opts.cliente ?? clienteUuid()
   const al = new AlmacenMemoria({
     contextos: { [UUID]: contextoDe(cliente) }, planes: { [UUID]: [{ plan_id: 'plan-1', fecha: '2026-10-08' }] }, journeys: [{ journeyId: 'viaje-1', clientId: UUID }],
     config: { flujos: [...Object.values(IDS), ID_VIGIA, ID_PARTE], puerta_workflow_id: IDS.puerta, estado_cadena: opts.estado ?? 'ensayo', clientes_ensayo: opts.clientesEnsayo ?? [UUID], ...opts.config },
   })
   const reg: Registro = { cable: [], intake: [], slack: [], pasarela: [], parte: [], agente: [], cadena: [] }
+  const vueltas = new Map<string, Record<string, unknown>>()
+  // el Wait: si el corredor entrega, sale la vuelta como la deja n8n (`{ headers, params, query, body }`); si se agota, salen los ítems que entraron (el acuse 202)
+  const alEsperar = (items: Item[], ctx: { resumeUrl: string }): Item[] => {
+    if (opts.corredor !== 'entrega') return items
+    const v = vueltas.get(ctx.resumeUrl)
+    if (!v) throw new Error('el Wait despertó sin vuelta para ' + ctx.resumeUrl)
+    vueltas.delete(ctx.resumeUrl)
+    return [{ json: { headers: {}, params: {}, query: {}, body: v } }]
+  }
   const http = async (p: PeticionHttp): Promise<RespuestaHttp> => {
     const u = new URL(p.url)
     if (u.pathname.startsWith('/api/cadena/')) {
@@ -171,7 +180,16 @@ function mundo(opts: { estado?: string; clientesEnsayo?: string[]; cliente?: Cli
       const r = await m(al, p.cuerpo as Record<string, unknown>, ruta === 'campanas' && accion === 'abrir' ? ABRE : AHORA)
       return { statusCode: r.status, body: r.cuerpo }
     }
-    if (u.pathname === '/api/agents/run-sdk') { reg.agente.push(p); return (opts.agente ?? (() => ({ statusCode: 500, body: { error: 'sin agente simulado' } })))(p.cuerpo) }
+    if (u.pathname === '/api/agents/run-sdk') {
+      reg.agente.push(p)
+      const respuesta = (opts.agente ?? (() => ({ statusCode: 500, body: { error: 'sin agente simulado' } })))(p.cuerpo)
+      if (!opts.corredor) return respuesta
+      // 21-nov · opción A: run-sdk da el acuse 202 al instante y el corredor POSTea la vuelta a `callback_url` (el resumeUrl del Wait)
+      const b = p.cuerpo as { callback_url?: string; callback_mode?: string }
+      if (!b.callback_url || b.callback_mode !== 'runner') return { statusCode: 400, body: { error: 'la llamada no trae la vuelta por el corredor' } }
+      vueltas.set(b.callback_url, { ...(respuesta.body as Record<string, unknown>), delivered_by: 'runner' })
+      return { statusCode: 202, body: { accepted: true, delivered_by: 'runner', dispatch_key: 'k-' + vueltas.size } }
+    }
     if (u.pathname === '/api/sala/callback') { reg.cable.push(p.cuerpo); return opts.cableFalla ? { statusCode: 500, body: { error: 'caído' } } : { statusCode: 200, body: { ok: true, event_id: 'ev-1' } } }
     if (u.pathname === '/api/sala/intake') { reg.intake.push(p.cuerpo); return { statusCode: 200, body: { ok: true, kind: 'accepted' } } }
     if (u.hostname === 'slack.com') { reg.slack.push(p.cuerpo); return { statusCode: 200, body: { ok: true } } }
@@ -189,7 +207,7 @@ function mundo(opts: { estado?: string; clientesEnsayo?: string[]; cliente?: Cli
     const cuerpo = typeof pg === 'object' ? pg.cuerpo : pg
     return new Response(new Uint8Array(Buffer.isBuffer(cuerpo) ? cuerpo : Buffer.from(cuerpo, 'latin1')), { status: 200, headers: typeof pg === 'object' ? { 'content-type': pg.tipo } : {} })
   })
-  return { al, sim: new SimuladorN8n({ flujos: POR_ID, env: ENV, http }), reg, cliente }
+  return { al, sim: new SimuladorN8n({ flujos: POR_ID, env: ENV, http, alEsperar }), reg, cliente }
 }
 
 afterEach(() => { vi.unstubAllGlobals() })
@@ -385,11 +403,43 @@ describe('COMPORTAMIENTO · la cadena en seco con agente simulado (ensayo por la
       expect(b.output_schema.type).toBe('object')
       expect(b.max_budget_usd).toBeGreaterThanOrEqual(1)
       expect(typeof b.workflow_id).toBe('string'); expect(typeof b.workflow_execution_id).toBe('string')
-      expect(p.timeout).toBe(290000)
+      expect(p.timeout).toBe(800000) // 21-nov · opción A: el corte de la llamada misma (si no hubiera acuse); la vuelta la espera el Wait
+      expect(b).toMatchObject({ callback_mode: 'runner' }); expect(String(b.callback_url).startsWith('https://n8n/resume/')).toBe(true)
     }
     // 21-nov · opción A: la vuelta la entrega el corredor y se deshace lo temporal de #1260: los 3 piden `maximo`
     expect(m.reg.agente.map((p) => (p.cuerpo as { thinking_mode: string }).thinking_mode)).toEqual(['maximo', 'maximo', 'maximo'])
     expect(m.al.corridas.map((c) => c.costo_usd)).toEqual([0.31, 0.31, 0.31])
+  })
+  describe('🔴 21-nov · opción A · la vuelta llega por el corredor a un Wait (sin el techo de 800 s)', () => {
+    const objetos = () => ({ estrategia: clienteUuid().estrategia, calendario: tandaBuena(clienteUuid()), fichas: { fichas: [], pendientes: [] } })
+    it('🔴 con el acuse 202 y la vuelta en el Wait, la cadena abre igual que con la respuesta en la misma llamada', async () => {
+      const m = mundo({ corredor: 'entrega', agente: agenteQueDevuelve(objetos()) })
+      const r = await correr(m, sobreAbrir())
+      expect(r[0].json.resultado).toBe('cadena_abierta')
+      expect(m.reg.agente).toHaveLength(3)
+      expect(m.al.corridas.map((c) => [c.paso, c.estado, c.costo_usd])).toEqual([['estrategia', 'ok', 0.31], ['fichas', 'ok', 0.31], ['calendario', 'ok', 0.31]])
+      const esperas = m.sim.traza.filter((t) => / Esperar la vuelta$/.test(t.nodo)).map((t) => t.nodo)
+      expect(esperas).toEqual(['② Esperar la vuelta', '② Esperar la vuelta', '② Esperar la vuelta'])
+    })
+    it('🔴 si la espera se agota, la corrida queda FALLIDA con sus palabras (no se lee el acuse como respuesta) y el paso reintenta', async () => {
+      const m = mundo({ corredor: 'se_agota', agente: agenteQueDevuelve(objetos()) })
+      await correr(m, sobreAbrir())
+      const estrategias = m.al.corridas.filter((c) => c.paso === 'estrategia')
+      expect(estrategias.length).toBeGreaterThan(1)
+      for (const c of estrategias) {
+        expect(c.estado).toBe('fallida')
+        expect(c.error).toMatch(/^LLAMADA_CORTADA · LA_VUELTA_NO_LLEGO · se agotó la espera de 3600 s/)
+        expect(c.costo_usd).toBeNull()
+      }
+      expect(m.al.estrategias ?? []).toEqual([])
+    })
+    it('🔴 una vuelta FALLIDA del corredor (success:false, con lo gastado) se guarda fallida con su costo y su error', async () => {
+      const m = mundo({ corredor: 'entrega', agente: () => ({ statusCode: 200, body: { success: false, error: 'tope de US$ 3 alcanzado', error_kind: 'runner_run_failed', cost_usd: 2.5 } }) })
+      await correr(m, sobreAbrir())
+      const primera = m.al.corridas.find((c) => c.paso === 'estrategia')!
+      expect(primera).toMatchObject({ estado: 'fallida', costo_usd: 2.5 })
+      expect(primera.error).toBe('tope de US$ 3 alcanzado')
+    })
   })
   it('🔴 17-nov · el lector de fichas NO es reja: si sus 3 llamadas fallan, la cadena abre igual, sin fichas y sin necesita_humano', async () => {
     const m = mundo()

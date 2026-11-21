@@ -168,7 +168,7 @@
    "type": "n8n-nodes-base.code",
    "typeVersion": 2,
    "parameters": {
-    "jsCode": "// ② ARMAR LA LLAMADA AL AGENTE · el cuerpo COMPLETO lo armó la ruta (tarea, esquema, tope, razonamiento, modelo): aquí solo se le pone el contexto del flujo\n// 🔴 `workflow_id` + `workflow_execution_id` SIEMPRE (canon: agentes solo vía workflows) · `dry_run` EXPLÍCITO y booleano · `force_restart` para que no devuelva una respuesta vieja del checkpoint\nconst s = $input.first().json\nconst llamada = { ...s.run_sdk, workflow_id: s.workflow_id, workflow_execution_id: s.workflow_execution_id, force_restart: true, dry_run: s.seco === true }\nreturn [{ json: { ...s, llamada } }]\n"
+    "jsCode": "// ② ARMAR LA LLAMADA AL AGENTE · el cuerpo COMPLETO lo armó la ruta (tarea, esquema, tope, razonamiento, modelo): aquí solo se le pone el contexto del flujo\n// 🔴 `workflow_id` + `workflow_execution_id` SIEMPRE (canon: agentes solo vía workflows) · `dry_run` EXPLÍCITO y booleano · `force_restart` para que no devuelva una respuesta vieja del checkpoint\nconst s = $input.first().json\nconst llamada = { ...s.run_sdk, workflow_id: s.workflow_id, workflow_execution_id: s.workflow_execution_id, force_restart: true, dry_run: s.seco === true }\n// 🔴 21-nov · opción A: la vuelta la entrega el corredor de Railway al Wait de este flujo (sin el techo de 800 s de Vercel)\nllamada.callback_url = $execution.resumeUrl\nllamada.callback_mode = 'runner'\nreturn [{ json: { ...s, llamada } }]\n"
    },
    "position": [
     1960,
@@ -180,6 +180,7 @@
    "name": "② Agente (run-sdk)",
    "type": "n8n-nodes-base.httpRequest",
    "typeVersion": 4.2,
+   "onError": "continueRegularOutput",
    "parameters": {
     "method": "POST",
     "url": "={{ ($env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app') + '/api/agents/run-sdk' }}",
@@ -200,7 +201,7 @@
     "specifyBody": "json",
     "jsonBody": "={{ JSON.stringify($json.llamada) }}",
     "options": {
-     "timeout": 290000,
+     "timeout": 800000,
      "response": {
       "response": {
        "fullResponse": true,
@@ -220,7 +221,7 @@
    "type": "n8n-nodes-base.code",
    "typeVersion": 2,
    "parameters": {
-    "jsCode": "// ③ ARMAR `guardar` · lo que volvió del agente (o del simulacro) tal cual, sin interpretarlo: el código de la ruta decide si sirve\nconst entrada = $input.first().json || {}\nconst simulado = !!(entrada.agente && entrada.paso)\nconst s = simulado ? entrada : $('② Armar la llamada').last().json\nconst resp = simulado ? entrada.agente : entrada\nconst b = resp.body && typeof resp.body === 'object' ? resp.body : {}\nconst ok = Number(resp.statusCode) === 200 && b.success === true\nconst resultado = ok\n  ? { success: true, structured_output: b.structured_output, cost_usd: typeof b.cost_usd === 'number' ? b.cost_usd : null, cerrada_por_tope: b.cerrada_por_tope === true }\n  : { success: false, error: String(b.error || b.detail || ('HTTP ' + resp.statusCode)).slice(0, 400), cost_usd: typeof b.cost_usd === 'number' ? b.cost_usd : null, cerrada_por_tope: b.cerrada_por_tope === true }\nconst guardar = { accion: 'guardar', campana_id: s.campana_id, seco: s.seco, corrida_id: s.corrida_id, resultado, correccion: !!s.correccion, workflow_id: s.workflow_id, workflow_execution_id: s.workflow_execution_id }\nif (s.tanda !== null && s.tanda !== undefined) { guardar.tanda = s.tanda; guardar.modo = s.correccion && s.correccion.modo ? s.correccion.modo : 'tanda' }\nreturn [{ json: { ...s, guardar } }]\n"
+    "jsCode": "// ③ ARMAR `guardar` · lo que volvió del agente (o del simulacro) tal cual, sin interpretarlo: el código de la ruta decide si sirve\nconst entrada = $input.first().json || {}\nconst simulado = !!(entrada.agente && entrada.paso)\nconst s = simulado ? entrada : $('② Armar la llamada').last().json\nconst resp = simulado ? entrada.agente : entrada\nconst b = resp.body && typeof resp.body === 'object' ? resp.body : {}\n// un corte de la llamada (red, 290 s) llega como `{ error: { message } }` sin statusCode: se cuenta como llamada FALLIDA con sus palabras\nconst corte = resp.error && typeof resp.error === 'object' ? String(resp.error.message || resp.error.name || 'la llamada se cortó') : (typeof resp.error === 'string' ? resp.error : null)\nconst ok = Number(resp.statusCode) === 200 && b.success === true\nconst resultado = ok\n  ? { success: true, structured_output: b.structured_output, cost_usd: typeof b.cost_usd === 'number' ? b.cost_usd : null, cerrada_por_tope: b.cerrada_por_tope === true }\n  : { success: false, error: String(b.error || b.detail || (corte ? 'LLAMADA_CORTADA · ' + corte : 'HTTP ' + resp.statusCode)).slice(0, 400), cost_usd: typeof b.cost_usd === 'number' ? b.cost_usd : null, cerrada_por_tope: b.cerrada_por_tope === true }\nconst guardar = { accion: 'guardar', campana_id: s.campana_id, seco: s.seco, corrida_id: s.corrida_id, resultado, correccion: !!s.correccion, workflow_id: s.workflow_id, workflow_execution_id: s.workflow_execution_id }\nif (s.tanda !== null && s.tanda !== undefined) { guardar.tanda = s.tanda; guardar.modo = s.correccion && s.correccion.modo ? s.correccion.modo : 'tanda' }\nreturn [{ json: { ...s, guardar } }]\n"
    },
    "position": [
     2520,
@@ -319,6 +320,69 @@
     0
    ],
    "id": "a310ecaf-d9a4-3b98-6ec1-8a635e08a4b3"
+  },
+  {
+   "id": "124d19a2-3efa-236b-a8e8-f95b85a9f26c",
+   "name": "② ¿Quedó en espera?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2,
+   "position": [
+    2360,
+    360
+   ],
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "loose"
+     },
+     "combinator": "and",
+     "conditions": [
+      {
+       "leftValue": "={{ Number($json.statusCode) === 202 }}",
+       "rightValue": "",
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "846af234-34d4-3371-2ad6-0c6b5dcb9008",
+   "name": "② Esperar la vuelta",
+   "type": "n8n-nodes-base.wait",
+   "typeVersion": 1.1,
+   "position": [
+    2480,
+    360
+   ],
+   "webhookId": "cfb61656-bdf1-5eda-6dc7-8555e587f17e",
+   "parameters": {
+    "resume": "webhook",
+    "httpMethod": "POST",
+    "limitWaitTime": true,
+    "resumeAmount": 3600,
+    "resumeUnit": "seconds",
+    "options": {}
+   }
+  },
+  {
+   "id": "1b4f8714-6d2d-18ed-8f5d-e8e343149a6b",
+   "name": "② La vuelta",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    2600,
+    360
+   ],
+   "parameters": {
+    "jsCode": "// LA VUELTA DEL AGENTE · 21-nov · opción A (GO Lenovo 02:47Z · CC1) · lo que dejó el Wait, con la MISMA forma que tenía la llamada de antes\n// (`{ statusCode, body }`), para que «Armar guardar» no cambie.\n// El Wait sigue por la MISMA salida cuando llega la vuelta y cuando se agota la espera. Si se agota, sale lo que entró: el acuse 202 de run-sdk.\n// Una espera agotada NO es una vuelta vacía: se guarda como llamada FALLIDA, con sus palabras. El agente puede haber terminado igual; el plazo de\n// la corrida (62 min) cubre la espera, así que el vigía no relanza encima de un agente vivo.\nconst e = $input.first().json || {}\nif (Number(e.statusCode) === 202) {\n  return [{ json: { error: { message: 'LA_VUELTA_NO_LLEGO · se agotó la espera de 3600 s; el agente puede haber terminado igual' } } }]\n}\nconst b = e.body && typeof e.body === 'object' && !Array.isArray(e.body) ? e.body : {}\nreturn [{ json: { statusCode: 200, body: b } }]\n"
+   }
   }
  ],
  "connections": {
@@ -439,7 +503,7 @@
    "main": [
     [
      {
-      "node": "③ Armar guardar",
+      "node": "② ¿Quedó en espera?",
       "type": "main",
       "index": 0
      }
@@ -491,6 +555,46 @@
     [
      {
       "node": "① Armar el pedido",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "② ¿Quedó en espera?": {
+   "main": [
+    [
+     {
+      "node": "② Esperar la vuelta",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "③ Armar guardar",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "② Esperar la vuelta": {
+   "main": [
+    [
+     {
+      "node": "② La vuelta",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "② La vuelta": {
+   "main": [
+    [
+     {
+      "node": "③ Armar guardar",
       "type": "main",
       "index": 0
      }

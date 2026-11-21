@@ -411,7 +411,7 @@
    "type": "n8n-nodes-base.code",
    "typeVersion": 2,
    "parameters": {
-    "jsCode": "// ④ ARMAR LA LLAMADA AL AGENTE · contexto del flujo sobre el cuerpo que armó la ruta (workflow ids siempre · dry_run explícito)\nconst s = $input.first().json\nconst llamada = { ...s.run_sdk, workflow_id: s.workflow_id, workflow_execution_id: s.workflow_execution_id, force_restart: true, dry_run: s.seco === true }\nreturn [{ json: { ...s, llamada } }]\n"
+    "jsCode": "// ④ ARMAR LA LLAMADA AL AGENTE · contexto del flujo sobre el cuerpo que armó la ruta (workflow ids siempre · dry_run explícito)\nconst s = $input.first().json\nconst llamada = { ...s.run_sdk, workflow_id: s.workflow_id, workflow_execution_id: s.workflow_execution_id, force_restart: true, dry_run: s.seco === true }\n// 🔴 21-nov · opción A: la vuelta la entrega el corredor de Railway al Wait de este flujo (sin el techo de 800 s de Vercel)\nllamada.callback_url = $execution.resumeUrl\nllamada.callback_mode = 'runner'\nreturn [{ json: { ...s, llamada } }]\n"
    },
    "position": [
     3640,
@@ -444,7 +444,7 @@
     "specifyBody": "json",
     "jsonBody": "={{ JSON.stringify($json.llamada) }}",
     "options": {
-     "timeout": 290000,
+     "timeout": 800000,
      "response": {
       "response": {
        "fullResponse": true,
@@ -519,6 +519,69 @@
     0
    ],
    "id": "c0db1150-4d57-2d76-e435-6fdc9d8825e8"
+  },
+  {
+   "id": "cc8a70df-45ea-434c-a0e3-273d6d890739",
+   "name": "④ ¿Quedó en espera?",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2,
+   "position": [
+    4040,
+    360
+   ],
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "loose"
+     },
+     "combinator": "and",
+     "conditions": [
+      {
+       "leftValue": "={{ Number($json.statusCode) === 202 }}",
+       "rightValue": "",
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "d66dd746-968f-b2a9-7dc0-4227c4415ec6",
+   "name": "④ Esperar la vuelta",
+   "type": "n8n-nodes-base.wait",
+   "typeVersion": 1.1,
+   "position": [
+    4160,
+    360
+   ],
+   "webhookId": "13377d72-7e6d-6fa5-13c7-1e1ac86ca13e",
+   "parameters": {
+    "resume": "webhook",
+    "httpMethod": "POST",
+    "limitWaitTime": true,
+    "resumeAmount": 3600,
+    "resumeUnit": "seconds",
+    "options": {}
+   }
+  },
+  {
+   "id": "b9a2383f-4c5d-9ae4-c4c2-6aa179115fa7",
+   "name": "④ La vuelta",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    4280,
+    360
+   ],
+   "parameters": {
+    "jsCode": "// LA VUELTA DEL AGENTE · 21-nov · opción A (GO Lenovo 02:47Z · CC1) · lo que dejó el Wait, con la MISMA forma que tenía la llamada de antes\n// (`{ statusCode, body }`), para que «Armar guardar» no cambie.\n// El Wait sigue por la MISMA salida cuando llega la vuelta y cuando se agota la espera. Si se agota, sale lo que entró: el acuse 202 de run-sdk.\n// Una espera agotada NO es una vuelta vacía: se guarda como llamada FALLIDA, con sus palabras. El agente puede haber terminado igual; el plazo de\n// la corrida (62 min) cubre la espera, así que el vigía no relanza encima de un agente vivo.\nconst e = $input.first().json || {}\nif (Number(e.statusCode) === 202) {\n  return [{ json: { error: { message: 'LA_VUELTA_NO_LLEGO · se agotó la espera de 3600 s; el agente puede haber terminado igual' } } }]\n}\nconst b = e.body && typeof e.body === 'object' && !Array.isArray(e.body) ? e.body : {}\nreturn [{ json: { statusCode: 200, body: b } }]\n"
+   }
   }
  ],
  "connections": {
@@ -770,7 +833,7 @@
    "main": [
     [
      {
-      "node": "⑤ Armar guardar",
+      "node": "④ ¿Quedó en espera?",
       "type": "main",
       "index": 0
      }
@@ -793,6 +856,46 @@
     [
      {
       "node": "⑥ Salida",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "④ ¿Quedó en espera?": {
+   "main": [
+    [
+     {
+      "node": "④ Esperar la vuelta",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "⑤ Armar guardar",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "④ Esperar la vuelta": {
+   "main": [
+    [
+     {
+      "node": "④ La vuelta",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "④ La vuelta": {
+   "main": [
+    [
+     {
+      "node": "⑤ Armar guardar",
       "type": "main",
       "index": 0
      }
