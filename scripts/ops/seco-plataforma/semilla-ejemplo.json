@@ -1,0 +1,23 @@
+{
+  "tablas": {
+    "finanzas_config": [{ "id": 1, "estado": "encendida", "clientes_ensayo": [], "preguntas_slack": "apagado", "conversa": "enciende", "pausa_al_dueno": true, "mesa_de_estrategia": true }],
+    "cadena_config": [],
+    "clients": [{ "id": "11111111-1111-4111-8111-111111111111", "slug": "cliente_de_practica", "name": "Cliente de práctica", "config": {} }],
+    "client_sedes": [],
+    "client_sede_datos": [],
+    "cliente_de_practica.orders": [],
+    "estrategia_encargos": [],
+    "estrategia_turnos": [],
+    "estrategia_artefactos": [],
+    "finanzas_encargos": [],
+    "finanzas_turnos": [],
+    "finanzas_artefactos": [],
+    "agent_invocations": [],
+    "plan_corridas": [],
+    "jefatura_revisiones": []
+  },
+  "unicas": [
+    { "tabla": "finanzas_encargos", "columnas": ["client_id"], "donde": { "estado": ["abierto", "en_curso"] } },
+    { "tabla": "estrategia_encargos", "columnas": ["client_id"], "donde": { "estado": ["abierto", "en_curso"] } }
+  ]
+}
