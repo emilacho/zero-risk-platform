@@ -6,6 +6,7 @@
 import crypto from 'node:crypto'
 import { datos } from '../ayudas'
 import { avanzar, cerrarPorTope, fallar, plantillaDe, type Respuesta, type ResultadoDeTurno } from '../orquestador'
+import { costoDelTurno } from '../costo-del-turno'
 import { baseDeLaminas } from '../orquestador-laminas'
 import { corregirContactoAjeno, declaracionDeContacto } from '../contacto-ajeno'
 import { fotosDeReferencia } from '../foto-de-referencia'
@@ -35,7 +36,7 @@ import { ARTEFACTO_PROPUESTAS_IMAGEN, avisoDeLaParadaUnicaDeImagen, esDeImagen, 
 import { avisosDeRitmo, bibliotecaDelCliente, seccionDeLaBiblioteca, type RitmoDeVideo } from '../video/biblioteca'
 import { desarmarReferencias, seccionDeReferencias } from '../video/referencias'
 import { aporteDePrompts, promptsParaElBrazo, type ConceptoDeLaImagen, type ImagenARedactar } from './prompts'
-import { COTAS, FAMILIAS_MESA, esDeLaCadena, type Aporte, type EstadoMesa, type LecturaDeNotas, type Tarjeta, type TipoDeAporte } from './tipos'
+import { COTAS, FAMILIAS_MESA, esDeLaCadena, esperaDelTurnoS, reservaPorTurnoDe, type Aporte, type EstadoMesa, type LecturaDeNotas, type Tarjeta, type TipoDeAporte } from './tipos'
 import { bloqueDelPerfil } from '../../perfil-del-publico/lectores'
 import { modoDeLaPlantilla } from './un-autor'
 import type { FuentesCompletas } from '../puertos'
@@ -197,8 +198,10 @@ export async function pedidoDelTurno(P: Puertos, enc: Encargo, est: EstadoMesa, 
   const relleno = tipo === 'rellenar_banco' ? rellenoPendiente(marcoDe(enc.estado_del_motor), libro) ?? undefined : undefined
   const task = armarTarea({ tipo, agente: t.agente, tarjeta, est, libro, c, pedido: pedidoAporte, faltanCitas, metodo, ...(imagenesARedactar ? { imagenesARedactar } : {}), ...(relleno ? { relleno } : {}) }) + seccionDeCambiosDelDueno(enc.sala_ref) + seccionDeNotasDelDueno(t.notas_del_dueno, t.tipo) + cierreConElObjetivo(c, tipo)
   const paso = `${PREFIJO}${t.tipo}:${t.agente}`
-  const reserva = Math.max(0.1, Math.min(COTAS.RESERVA_POR_TURNO_USD, techoDe(tope) - enc.estado_del_motor.gasto_usd))
-  return { agente: t.agente, paso, pedido: pedidoDeAgente({ agente: t.agente, task, encargo_id: enc.id, client_id: enc.client_id, dry_run: enc.dry_run, paso, reserva_usd: +reserva.toFixed(4), es_pieza: !esDeLaCadena(est.tipo), images: imagenesDelTurno(tipo, c.fotos), sin_empuje: !!c.cerebro }) }
+  // 21-nov · GO Lenovo 10:19Z · la dirección de la gran idea reserva US$ 10 por turno (las demás, 0,60); siempre dentro del techo de la mesa
+  const reserva = Math.max(0.1, Math.min(reservaPorTurnoDe(est.tipo, t.agente, est.direccion), techoDe(tope) - enc.estado_del_motor.gasto_usd))
+  const espera = esperaDelTurnoS(est.tipo, t.agente, est.direccion)
+  return { agente: t.agente, paso, pedido: pedidoDeAgente({ agente: t.agente, task, encargo_id: enc.id, client_id: enc.client_id, dry_run: enc.dry_run, paso, reserva_usd: +reserva.toFixed(4), ...(espera ? { espera_s: espera } : {}), es_pieza: !esDeLaCadena(est.tipo), images: imagenesDelTurno(tipo, c.fotos), sin_empuje: !!c.cerebro }) }
 }
 
 /** Sprint 1 · mejora 4 · las imágenes que la pieza integrada pide generar (ref + lo que pidió la dirección), leídas con el mismo traductor que usa el cierre · puro respecto del estado */
@@ -651,7 +654,7 @@ export async function recibirResultadoMesa(P: Puertos, encargoId: string, n: num
     if (n < turnoDe(enc.estado_del_motor)) return avanzar(P, enc.id) // respuesta repetida: ya registrada
     return r(409, { error: 'turno_no_esperado', esperado: abierto?.n ?? null, recibido: n })
   }
-  const costo = Math.max(0, Number(res.costo_usd ?? 0))
+  const costo = costoDelTurno(res)
   const e = enc.estado_del_motor
   const gasto: NonNullable<Cambios['gastos']> = costo > 0 ? [{ concepto: 'modelo', ref_tabla: res.workflow_execution_id ? 'agent_invocations' : null, ref_id: res.workflow_execution_id ?? null, cost_usd: costo, base: 'usage' }] : []
   const nuevoGasto = +(e.gasto_usd + costo).toFixed(6)

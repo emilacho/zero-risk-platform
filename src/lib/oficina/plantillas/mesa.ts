@@ -6,6 +6,7 @@
 import type { Paso, Plantilla } from '../tipos'
 import { CARRUSEL_IG_CON_JEFATURA, KIT_HISTORIAS_CON_JEFATURA, POST_IMG_CON_JEFATURA } from './con-jefatura'
 import { ARTEFACTO_DE_LA_JEFATURA, CLAVE_DEL_PASO_JEFATURA } from '../paso-jefatura'
+import { PLAZO_DEL_TURNO_DE_LA_GRAN_IDEA_MIN } from '../mesa/tipos'
 
 /** el tope de una pieza de la mesa (Emilio, 28-oct): US$ 5 incluyendo jefatura y herramientas; el techo absoluto ×1,2 lo pone la mesa */
 export const TOPE_DE_LA_MESA_USD = 5
@@ -96,6 +97,8 @@ export const TOPE_DE_LA_MESA_DE_BRIEF_USD = 3.24
  *  Así la gran idea no cierra por tope a medias. La fila viva cambia con 202611172200 (con su reversa) */
 // 18-nov · Emilio: topes = 3 × lo medido (GO Lenovo 16:17Z): la gran idea real costó 5,93 → 17,79 (la fila viva cambia con 202611181700)
 export const TOPE_DE_LA_MESA_DE_CONCEPTO_USD = 17.79
+/** 21-nov · GO Lenovo 10:19Z · el plazo de la mesa de la gran idea: 90 min de siempre + un turno de su dirección al techo (`PLAZO_DEL_TURNO_DE_LA_GRAN_IDEA_MIN`) */
+export const PLAZO_DE_LA_MESA_DE_CONCEPTO_MIN = 90 + PLAZO_DEL_TURNO_DE_LA_GRAN_IDEA_MIN
 const PASO_DE_LA_MESA: Plantilla['pasos'][number] = { clave: 'mesa', tipo: 'codigo', quien: 'sala', funcion: 'mesa', condicion: { tipo: 'siempre' }, entrada: [], salida_artefacto: 'mesa', tope_usd: 0 }
 export const BRIEF_MESA: Plantilla = {
   tipo: 'brief_mesa', familia: 'brief_mesa', clase: 'interna',
@@ -106,7 +109,8 @@ export const BRIEF_MESA: Plantilla = {
 export const CONCEPTO_MESA: Plantilla = {
   tipo: 'concepto_mesa', familia: 'concepto_mesa', clase: 'interna',
   pasos: [{ ...PASO_DE_LA_MESA }],
-  limites: { margen: 60, tope_encargo_usd: TOPE_DE_LA_MESA_DE_CONCEPTO_USD, max_rondas: 2, rondas_minimas: 2, mesa: true, plazo_mesa_min: 90 },
+  // 21-nov · GO Lenovo 10:19Z: 90 → 340 (lo de siempre + un turno de la dirección al techo, 250 min · la fila viva cambia con 202611211130)
+  limites: { margen: 60, tope_encargo_usd: TOPE_DE_LA_MESA_DE_CONCEPTO_USD, max_rondas: 2, rondas_minimas: 2, mesa: true, plazo_mesa_min: PLAZO_DE_LA_MESA_DE_CONCEPTO_MIN },
   indicaciones: {},
 }
 

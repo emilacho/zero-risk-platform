@@ -13,8 +13,8 @@ import type { Puertos } from './puertos'
 import { cerrar, fallar, jefaturaSinRespuesta, plantillaDe } from './orquestador'
 import { ARTEFACTO_ESPERA_DE_LA_CADENA } from './espera-de-la-cadena'
 import { resolverMaterialVencido } from './material-orquestador'
-import { entregarPorTopeDeLaMesa, esTurnoDeLaMesa, recibirResultadoMesa } from './mesa/orquestador'
-import { FAMILIAS_MESA, esDeLaCadena } from './mesa/tipos'
+import { entregarPorTopeDeLaMesa, esTurnoDeLaMesa, estadoDeLaMesa, recibirResultadoMesa } from './mesa/orquestador'
+import { FAMILIAS_MESA, esDeLaCadena, pisoDelTurnoMin } from './mesa/tipos'
 import { entregarALaCadena } from './mesa/de-la-cadena'
 import { AGENTE_DEL_BRAZO, MINUTOS_PARA_ESPERAR_AL_BRAZO, sondearVideos } from './orquestador-video'
 import { CORRIDAS_QUE_SE_MIRAN, lecturasDeVida, lectorDeVidaDeSupabase, techoMedidoMs, vidaDelPaso, type LectorDeVida } from '../plazo-de-vida'
@@ -167,7 +167,10 @@ export async function revisarPasosMuertos(P: Puertos, db: Db, ahora: Date, lecto
       continue
     }
     // 11-nov · #21 · ¿sigue vivo? el techo medido de SU agente y su latido (nunca más corto que los 12 min de hoy). Lo que no se puede leer no mata: se anota y sigue igual
-    const v = vidaDelPaso({ inicio: t.inicio as string | null, pisoMs: MINUTOS_PARA_DAR_POR_MUERTO * 60_000, duraciones: await vida.duraciones(t.agente as string | null), despacho: await vida.despacho(t.workflow_execution_id as string | null, t.agente as string | null) }, ahora)
+    // 21-nov · GO Lenovo 10:19Z · el turno de la dirección de la gran idea reserva US$ 10: su piso es el plazo de esa reserva (`PLAZO_DEL_TURNO_DE_LA_GRAN_IDEA_MIN`), no los 12 min
+    const mesaDelTurno = esTurnoDeLaMesa(String(t.paso)) ? estadoDeLaMesa(enc.estado_del_motor) : null
+    const pisoMin = mesaDelTurno ? pisoDelTurnoMin(mesaDelTurno.tipo, t.agente as string | null, mesaDelTurno.direccion, MINUTOS_PARA_DAR_POR_MUERTO) : MINUTOS_PARA_DAR_POR_MUERTO
+    const v = vidaDelPaso({ inicio: t.inicio as string | null, pisoMs: pisoMin * 60_000, duraciones: await vida.duraciones(t.agente as string | null), despacho: await vida.despacho(t.workflow_execution_id as string | null, t.agente as string | null) }, ahora)
     if (v.estado === 'sin_dato') { sin_dato.push({ encargo_id: enc.id, paso: String(t.paso), motivo: v.motivo }); continue }
     if (v.estado === 'vivo') continue
     const sinVuelta = v.motivo

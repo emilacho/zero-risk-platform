@@ -102,7 +102,7 @@ describe('la elegibilidad', () => {
     expect(vueltaPorElCorredorElegible(pedido({ agent: 'chief-financial-officer', callback_mode: 'runner' }) as never)).toMatchObject({ elegible: false })
     // ronda 69 · decisión explícita: + los dos agentes de diseño de la oficina (sin efectos propios de Vercel); el texto editorial y el descubrimiento siguen fuera
     // 06-nov · DALE (a) de Emilio: + el redactor del plan
-    expect(AGENTES_CON_VUELTA_POR_EL_CORREDOR).toEqual(['campaign-brief-agent', 'carousel-designer', 'design-visual-storyteller', 'jefe-marketing'])
+    expect(AGENTES_CON_VUELTA_POR_EL_CORREDOR).toEqual(['campaign-brief-agent', 'carousel-designer', 'design-visual-storyteller', 'director-gran-idea', 'jefe-marketing'])
     expect(vueltaPorElCorredorElegible(pedido({ agent: 'content-creator', callback_mode: 'runner' }) as never)).toMatchObject({ elegible: false })
   })
   it('el pedido interno lleva la entrega delegada, y un `_runner_delivery` de afuera se PISA', async () => {

@@ -55,6 +55,7 @@ import { aplicarTopesPorDuracion, coberturaDelTope } from './topes-por-duracion'
 import { ESQUEMA_CORRECCION_IMAGEN, PASO_CORREGIR_IMAGEN, pedidoDeLaCorreccion, saltoDeLaCorreccion, sinLecturaDeLaCorreccion, tareaDeLaCorreccion } from './mesa/correccion-imagen'
 import { CLAVE_DE_LA_DURACION, duracionDeLaPieza, segundosDelEncargo, topesPorSegundoDeVideo, type DuracionDeLaPieza } from './video/duracion-de-la-pieza'
 import { estadoInicial, type Estado, type Ficha, type Paso, type Plantilla, type Siguiente } from './tipos'
+import { costoDelTurno } from './costo-del-turno'
 
 export interface Respuesta { status: number; cuerpo: Record<string, unknown> }
 const r = (status: number, cuerpo: Record<string, unknown>): Respuesta => ({ status, cuerpo })
@@ -870,7 +871,8 @@ export const corteNuestroDeLaVuelta = (res: ResultadoDeTurno): OrigenDeCorteNues
  * Sin ejecución no se puede saber si ya se anotó: no se suma (se evita contar dos veces). Nunca frena el avance.
  */
 export async function anotarCostoDeLaCopia(P: Puertos, encargoId: string, res: ResultadoDeTurno): Promise<'anotado' | 'ya_estaba' | 'sin_costo' | 'sin_ejecucion' | 'sin_capacidad'> {
-  const costo = Math.max(0, Number(res.costo_usd ?? 0))
+  // 21-nov · una copia cortada por tope trae lo gastado en el error (GO Lenovo 10:19Z)
+  const costo = costoDelTurno(res)
   if (!(costo > 0)) return 'sin_costo'
   if (!res.workflow_execution_id) return 'sin_ejecucion'
   if (typeof P.almacen.anotarGastoDeCopia !== 'function') return 'sin_capacidad'

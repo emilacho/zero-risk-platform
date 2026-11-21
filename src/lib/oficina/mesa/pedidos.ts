@@ -637,13 +637,15 @@ export function seccionDeMetodo(agente: string, metodos: unknown, fichas: unknow
 }
 
 /** el pedido que consume el flujo de turnos de n8n (mismo molde que la v1: `agent_name`, `task`, `images`, `esquema`…) */
-export function pedidoDeAgente(o: { agente: string; task: string; encargo_id: string; client_id: string; dry_run: boolean; paso: string; reserva_usd: number; es_pieza?: boolean; /** 18-nov · las fotos propias a la vista (`imagenesDelTurno`); sin ellas, el pedido de siempre */ images?: ImagenDelPedido[]; /** 18-nov · la mesa ya lee el índice del cerebro: el corredor no empuja trozos (lo lee en `extra.sin_empuje`) */ sin_empuje?: boolean }): Record<string, unknown> {
+export function pedidoDeAgente(o: { agente: string; task: string; encargo_id: string; client_id: string; dry_run: boolean; paso: string; reserva_usd: number; /** 21-nov · GO Lenovo 10:19Z · cuánto espera el flujo «oficina · turno» la vuelta de ESTE turno (s); sin dato, la espera de siempre del flujo (1800) */ espera_s?: number; es_pieza?: boolean; /** 18-nov · las fotos propias a la vista (`imagenesDelTurno`); sin ellas, el pedido de siempre */ images?: ImagenDelPedido[]; /** 18-nov · la mesa ya lee el índice del cerebro: el corredor no empuja trozos (lo lee en `extra.sin_empuje`) */ sin_empuje?: boolean }): Record<string, unknown> {
   return {
     agent_name: o.agente, task: o.task, images: o.images ?? [], esquema: 'opinion_libre.v1',
     // 04-nov · de qué trabajo es la llamada: el encargo es la pieza · las cadenas (brief, concepto) aún no tienen id firmado: «sin dato»
     ...(o.es_pieza ? { trabajo_tipo: 'pieza', trabajo_id: o.encargo_id } : {}),
     extra: { indicacion_oficina: 'Mesa de trabajo: aportas como profesional de tu especialidad; texto libre.', paso_de_la_oficina: o.paso, encargo_id: o.encargo_id, mesa: true, mesa_agente: o.agente, ...(o.sin_empuje ? { sin_empuje: true } : {}) },
     max_budget_usd: o.reserva_usd, thinking_mode: 'maximo', dry_run: o.dry_run, client_id: o.client_id, workflow_hint: 'oficina · turno',
+    // 21-nov · la espera del Wait del flujo para este turno (el flujo la lee de aquí; NO viaja a run-sdk: el flujo arma ese cuerpo campo por campo)
+    ...(o.espera_s ? { espera_s: o.espera_s } : {}),
     // 31-oct: la mesa NO pasa por el editor de run-sdk (los jueces de la jefatura quedan fuera de la mesa, ADR-020); la cabecera va SIEMPRE
     headers_requeridos: { [CABECERA_SALTAR_EDITOR]: '1' },
   }

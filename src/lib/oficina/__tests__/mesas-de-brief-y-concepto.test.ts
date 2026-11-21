@@ -98,10 +98,11 @@ describe('las plantillas y la migración', () => {
     expect(tomar('brief_mesa', 'pasos')).toEqual(JSON.parse(JSON.stringify(BRIEF_MESA.pasos)))
     expect(tomar('brief_mesa', 'lim')).toEqual(JSON.parse(JSON.stringify({ ...BRIEF_MESA.limites, tope_encargo_usd: 1.6 })))
     expect(tomar('concepto_mesa', 'pasos2')).toEqual(JSON.parse(JSON.stringify(CONCEPTO_MESA.pasos)))
-    expect(tomar('concepto_mesa', 'lim2')).toEqual(JSON.parse(JSON.stringify({ ...CONCEPTO_MESA.limites, tope_encargo_usd: 5 })))
+    // 21-nov · el plazo del concepto lo subió la 202611211130 (90 → 340): la siembra conserva 90
+    expect(tomar('concepto_mesa', 'lim2')).toEqual(JSON.parse(JSON.stringify({ ...CONCEPTO_MESA.limites, tope_encargo_usd: 5, plazo_mesa_min: 90 })))
     expect(BRIEF_MESA.limites).toMatchObject({ tope_encargo_usd: TOPE_DE_LA_MESA_DE_BRIEF_USD, max_rondas: 1, mesa: true })
     expect(TOPE_DE_LA_MESA_DE_BRIEF_USD).toBe(3.24)
-    expect(CONCEPTO_MESA.limites).toMatchObject({ tope_encargo_usd: TOPE_DE_LA_MESA_DE_CONCEPTO_USD, max_rondas: 2, rondas_minimas: 2, plazo_mesa_min: 90, mesa: true })
+    expect(CONCEPTO_MESA.limites).toMatchObject({ tope_encargo_usd: TOPE_DE_LA_MESA_DE_CONCEPTO_USD, max_rondas: 2, rondas_minimas: 2, plazo_mesa_min: 340, mesa: true })
     expect(BRIEF_MESA.pasos).toHaveLength(1)
     expect(CONCEPTO_MESA.pasos[0].funcion).toBe('mesa')
     expect(MIGRACION).toMatch(/1, 1\.60, true\s*\)/)
@@ -597,8 +598,8 @@ describe('el plazo de la mesa entera (vigía)', () => {
     const db = new DbFalsa().semilla('oficina_encargos', [{ id: m.id, familia: tipo === 'brief' ? 'brief_mesa' : 'concepto_mesa', estado: 'en_paso', creado_en: ABIERTA }])
     return { m, db }
   }
-  it('el brief vence a los 30 min y el concepto a los 90: antes del plazo no se toca', async () => {
-    for (const [tipo, plazo] of [['brief', 30], ['concepto', 90]] as const) {
+  it('el brief vence a los 30 min y el concepto a los 340 (21-nov · GO Lenovo 10:19Z): antes del plazo no se toca', async () => {
+    for (const [tipo, plazo] of [['brief', 30], ['concepto', 340]] as const) {
       const { m, db } = await conMesa(tipo)
       expect((await vencerMesasPorPlazo(m.M.P, db, a(plazo - 1))).vencidas).toEqual([])
       expect(m.M.encargos.get(m.id)!.estado).not.toBe('cerrado_por_tope')
@@ -608,14 +609,14 @@ describe('el plazo de la mesa entera (vigía)', () => {
   it('al vencer, lo escrito va a la cadena con motivo de plazo (nunca a la bandeja) y es idempotente', async () => {
     const { m, db } = await conMesa('concepto')
     await jugar(m, undefined, 2)
-    const r = await vencerMesasPorPlazo(m.M.P, db, a(120))
+    const r = await vencerMesasPorPlazo(m.M.P, db, a(350))
     expect(r.vencidas).toEqual([m.id])
     expect(m.M.encargos.get(m.id)!.estado).toBe('cerrado_por_tope')
     expect(m.hecho.conceptos).toHaveLength(1)
-    expect(m.hecho.conceptos[0].motivo).toMatch(/plazo de la mesa agotado \(90 min\)/)
+    expect(m.hecho.conceptos[0].motivo).toMatch(/plazo de la mesa agotado \(340 min\)/)
     expect(m.hecho.conceptos[0].texto).toBeTruthy()
     expect(m.M.llamadas.bandeja).toHaveLength(0)
-    expect((await vencerMesasPorPlazo(m.M.P, db, a(200))).vencidas).toEqual([])
+    expect((await vencerMesasPorPlazo(m.M.P, db, a(400))).vencidas).toEqual([])
     expect(m.hecho.conceptos).toHaveLength(1)
   })
   it('un tablero vacío se entrega sin texto y una mesa ya cerrada no se vuelve a tocar', async () => {
