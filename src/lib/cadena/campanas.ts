@@ -10,6 +10,7 @@ import { ventanaDelPlan } from './fechas-en-texto'
 import { nuevoOrdenEncendido } from './mesas'
 import { topeDeLaCampana } from './tope-de-campana'
 import { abrirEsperaDe, cancelarEsperasDeCampana, ponerNecesitaHumano, resolverEsperas } from './nucleo'
+import { fallaDelPedido } from './libreta-de-pedidos'
 
 // r75 · 'cadena_apagada': con la cadena apagada la puerta ya NO reenvía al brief viejo (un solo camino de briefs): deja el plan guardado, anota que no se generan briefs y cierra el viaje con este resultado
 export const RESULTADOS_DE_CABLE = ['cadena_abierta', 'lote_briefeado', 'necesita_humano', 'plan_no_coincide', 'pasarela_ok', 'cadena_apagada'] as const
@@ -82,6 +83,13 @@ export async function abrirCampana(al: Almacen, cuerpo: Record<string, unknown>,
     }
     return { status: 200, cuerpo: { ya_abierta: true, campana: ya } }
   }
+  // 21-nov · «Crear Campaña» sin vuelta atrás (GO Lenovo 10:28Z): un pedido que el arreglo propio ya dio por FALLIDO no nace nunca. El dueño ya vio «El intento falló» y pudo
+  //    pedirla de nuevo con otra llave: un sobre tardío de la llave vieja haría una segunda campaña. Una libreta ilegible tampoco deja nacer (409, se reintenta después).
+  if (pedido && !pedido.campana_id) {
+    let falla: Awaited<ReturnType<typeof fallaDelPedido>>
+    try { falla = await fallaDelPedido(al, pedido.id) } catch (e) { return err(409, 'E-LIBRETA-ILEGIBLE', `no se pudo leer si el pedido se dio por fallido: ${e instanceof Error ? e.message : String(e)}`) }
+    if (falla) return err(409, 'E-PEDIDO-FALLIDO', `este pedido ya se dio por fallido (${falla.codigo}): no nace; se pide de nuevo desde el tablero`)
+  }
 
   // r74 · F4 · antes de armar el contexto, las sedes y su horario se llenan SOLAS con lo que el sistema ya guardó del cliente (con su fuente); si el negocio no tiene sede, no pasa nada y su calendario no se frena
   // 🔴 r75 (nota A.4-1 de CC#3): la recolección ESCRIBE en `client_sedes` y `client_sede_datos` → en SECO no se recolecta (un ensayo no cambia datos reales del cliente); se usa lo que ya haya guardado
@@ -113,7 +121,8 @@ export async function abrirCampana(al: Almacen, cuerpo: Record<string, unknown>,
   // 10-nov · el tope de gasto nace del valor por omisión de la cadena; sin él, la campaña nace SIN tope y no produce piezas reales hasta que una persona lo decida
   // 20-nov · con pedido, el tope es el que puso el dueño (obligatorio y nunca debajo del mínimo al crear)
   const topeInicial = pedido ? Number(pedido.tope_usd) : topeDeLaCampana(await al.leerConfig('tope_gasto_campana_por_omision'))
-  const nombreFinal = nombrePedido ?? (pedido ? pedido.nombre : null)
+  // 21-nov · Emilio 10:30Z (por Lenovo 10:31Z): toda campaña nace con nombre; sin uno pedido, el genérico del Plan de Marketing (sin fecha de inicio)
+  const nombreFinal = nombrePedido ?? (pedido ? pedido.nombre : null) ?? nombreGenericoDelPlan(ctx.planTexto)
   let nueva: Campana
   try { nueva = await al.insertarCampana({
     client_id: clientId, plan_id: plan.plan_id, fecha_inicio: ventana.fecha_inicio, fecha_inicio_origen: ventana.origen, fecha_fin: ventana.fecha_fin, ...(semanasDeTanda === SEMANAS_DE_TANDA ? {} : { semanas_de_tanda: semanasDeTanda as number }),
@@ -151,6 +160,18 @@ export function leerLlaveDeCampana(v: unknown): string | null | false {
 
 /** 19-nov · el nombre de una campaña: sin valor = null · válido = el texto sin espacios a los lados, de una línea, sin caracteres de control · inválido = false */
 export const LARGO_DE_NOMBRE = 120
+/** 21-nov · el nombre genérico de una campaña sin nombre (Emilio 10:30Z: «así sea algo genérico tomado del plan de marketing», sin fecha de inicio).
+ *  El primer título «# …» del plan, sin las partes de versión ni de fecha (separadas por «·»); sin título legible, o si no cabe en un nombre, el genérico fijo. */
+export const NOMBRE_GENERICO_SIN_PLAN = 'Campaña del plan de marketing'
+const PARTE_CON_FECHA = /\d{4}-\d{2}-\d{2}|\b\d{1,2}\s+de\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\b|\b(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\s+(de\s+)?\d{4}\b/i
+export function nombreGenericoDelPlan(planTexto: string | null | undefined): string {
+  const titulo = String(planTexto ?? '').split('\n').map((l) => l.trim()).find((l) => /^#\s+\S/.test(l))
+  if (!titulo) return NOMBRE_GENERICO_SIN_PLAN
+  const partes = titulo.replace(/^#\s+/, '').replace(/[*_`]/g, '').split('·').map((p) => p.trim()).filter((p) => p !== '' && !/^versi[oó]n\b/i.test(p) && !PARTE_CON_FECHA.test(p))
+  const n = leerNombreDeCampana(partes.join(' · '))
+  return n || NOMBRE_GENERICO_SIN_PLAN
+}
+
 export function leerNombreDeCampana(v: unknown): string | null | false {
   if (v === undefined || v === null || v === '') return null
   if (typeof v !== 'string') return false

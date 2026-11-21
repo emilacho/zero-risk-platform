@@ -425,6 +425,11 @@ export function almacenDeSupabase(): Almacen {
       if (error) { const x = new Error(`${(error as { code?: string }).code ?? ''} ${error.message ?? 'no se guardó el pedido'}`.trim()) as Error & { code?: string }; x.code = (error as { code?: string }).code; throw x }
       return pedidoDeFila(data as Record<string, unknown>)
     },
+    async pedidosSinNacer(desde) {
+      const { data, error } = await db.from('cadena_pedidos_de_campana').select('*').is('campana_id', null).gte('creado_en', desde).order('creado_en', { ascending: true }).limit(200)
+      if (error) fallo(error)
+      return ((data as Record<string, unknown>[] | null) ?? []).map(pedidoDeFila)
+    },
     async ligarPedidoDeCampana(pedidoId, campanaId) {
       const { data, error } = await db.from('cadena_pedidos_de_campana').update({ campana_id: campanaId }).eq('id', pedidoId).is('campana_id', null).select('id')
       if (error) fallo(error)
