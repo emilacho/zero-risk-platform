@@ -112,6 +112,17 @@ describe('lanza: el sobre de reintento del permiso', () => {
     expect(sobreDe(await fichas())).toMatchObject({ resultado: 'no_hace_falta', detalle: expect.stringContaining('pausada') })
     expect(sobres(al)).toHaveLength(1)
   })
+  it('🔴 m4 de CC6 · una campaña `abierta` (p. ej. reabierta) con la estrategia agotada SÍ lanza: el reloj también la cuenta como armado', async () => {
+    const { al, id } = await conCaidas(3)
+    al.campanas[0].estado = 'abierta'
+    expect(sobreDe(await pedir(al, id))).toMatchObject({ resultado: 'aceptado', llave_del_sobre: `${id}:reintento:manual-20261013t035600` })
+  })
+  it('🔴 m7 de CC6 · el nuevo orden frena SOLO al calendario: una campaña en `estrategia` con la palanca encendida SÍ lanza', async () => {
+    const { al, id } = await conCaidas(3)
+    expect(al.campanas[0].estado).toBe('estrategia')
+    al.config.set('nuevo_orden', { clientes: [A.clientId] })
+    expect(sobreDe(await pedir(al, id))).toMatchObject({ resultado: 'aceptado' })
+  })
   it('🔴 los rechazos de siempre no emiten nada (necesita_humano, no agotado, bolsa, 36e66179, flujo desconocido)', async () => {
     const casos: Array<[number, (al: AlmacenMemoria) => void, string | undefined]> = [
       [3, (al) => { al.campanas[0].estado = 'necesita_humano' }, undefined],
