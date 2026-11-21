@@ -13,9 +13,14 @@
  *   · Agnóstico: cualquier paso que cuenta intentos (estrategia, calendario, fechas, fichas). El brief no: su vuelta no pasa por `prepararCorrida`.
  *   · Varias llaves a la vez (fechas, tandas del calendario): `clave` opcional elige cuál; sin ella, la única agotada.
  *   · Idempotente: si ya hay un permiso con intentos libres para esa llave, devuelve el mismo (`ya_estaba`) y no anota otro.
+ *   · 21-nov 05:18Z (GO Lenovo, opción b de CC7) · LANZA de verdad: además del permiso emite el sobre de reintento del reloj (`sobreDeReintento`, por `emitirSobre`) con su
+ *     propia llave `<campaña>:reintento:manual-<UTC del permiso>`. La llave sale del PERMISO: un permiso = un sobre (la sala descarta el repetido), y un permiso ya concedido
+ *     que nunca lanzó (el de las 04:49Z) lanza la primera vez que se pide otra vez, sin abrir llave nueva. Solo en armado (como el reloj); una campaña activa la recorre el vigía.
  */
-import type { Almacen, Corrida, EstadoCampana } from './almacen'
+import type { Almacen, Campana, Corrida, EstadoCampana } from './almacen'
 import { autorizarLlamada, cadena, compuerta, err, type Respuesta } from './autorizar'
+import { sobreDeReintento } from './campanas'
+import { nuevoOrdenEncendido } from './mesas'
 import { MAXIMO_DE_INTENTOS, topeDelPaso, type Paso } from './constantes'
 import {
   baseDeLaLlave, bolsaAgrandada, bolsaDelPaso, CLAVE_DE_LA_LIBRETA_DE_REINTENTOS, esDeLaLlave, estadoDeLaLlave, llaveDeReintentoManual, permisosDeLaLibreta, permisoVigente,
@@ -61,7 +66,7 @@ export async function reintentarAhora(al: Almacen, cuerpo: Record<string, unknow
 
   const usadas = (k: string) => delPaso.filter((x) => x.clave_idempotencia === k).length
   const vigente = await permisoVigente(al, c.id, paso, base)
-  if (vigente && usadas(vigente.llave) < MAXIMO_DE_INTENTOS) return { status: 200, cuerpo: { ok: true, ya_estaba: true, permiso: vigente, intentos_libres: MAXIMO_DE_INTENTOS - usadas(vigente.llave) } }
+  if (vigente && usadas(vigente.llave) < MAXIMO_DE_INTENTOS) return { status: 200, cuerpo: { ok: true, ya_estaba: true, permiso: vigente, intentos_libres: MAXIMO_DE_INTENTOS - usadas(vigente.llave), sobre: await lanzar(al, c, vigente) } }
   const e = estadoDeLaLlave(delPaso, base, ahora)
   if (!e.agotada) return err(409, 'E-REINTENTO-NO-AGOTADO', `el paso ${paso} no está agotado: el flujo sigue solo con ${e.llave} (intento ${e.intento})`, { llave: e.llave, intento: e.intento })
 
@@ -75,7 +80,30 @@ export async function reintentarAhora(al: Almacen, cuerpo: Record<string, unknow
 
   const permiso: PermisoDeReintento = { campana_id: c.id, paso, clave_agotada: base, llave: llaveDeReintentoManual(base, ahora), quien, por_que: porQue, cuando: ahora }
   if (!(await anotarEnLaLibreta(al, permiso))) return err(409, 'E-LIBRETA-OCUPADA', 'otro operador escribió la libreta a la vez: vuelve a pedirlo')
-  return { status: 200, cuerpo: { ok: true, permiso, intentos_libres: MAXIMO_DE_INTENTOS } }
+  return { status: 200, cuerpo: { ok: true, permiso, intentos_libres: MAXIMO_DE_INTENTOS, sobre: await lanzar(al, c, permiso) } }
+}
+
+/** el tramo del sobre de un permiso: `manual-<UTC del permiso>` (la misma hora de su llave) → la llave del sobre es `<campaña>:reintento:manual-<UTC>`, una por permiso */
+export function tramoDelSobreManual(p: PermisoDeReintento): string {
+  const m = /:r(manual-[0-9a-z]+)$/.exec(p.llave)
+  return m ? m[1] : `manual-${p.cuando.replace(/[^0-9a-z]/gi, '').toLowerCase()}`
+}
+
+export interface LanzamientoDelSobre { resultado: 'aceptado' | 'duplicado' | 'rechazado' | 'no_hace_falta'; detalle?: string; event_id?: string | null; llave_del_sobre?: string }
+
+/** emite el sobre de reintento del reloj para el permiso (el mismo `sobreDeReintento`, la misma `emitirSobre`); un sobre que no entra NO deshace el permiso: lo usa el sobre del tramo siguiente */
+async function lanzar(al: Almacen, c: Campana, p: PermisoDeReintento): Promise<LanzamientoDelSobre> {
+  if (c.estado !== 'abierta' && c.estado !== 'estrategia' && c.estado !== 'calendario') {
+    return { resultado: 'no_hace_falta', detalle: c.estado === 'activa' ? 'la campaña está activa: la recorre el vigía en su vuelta y el preparar usa el permiso' : `la campaña está ${c.estado}: el permiso se usa cuando vuelva a correr` }
+  }
+  if (c.estado === 'calendario' && (await nuevoOrdenEncendido(al, c.client_id))) return { resultado: 'no_hace_falta', detalle: 'con el nuevo orden, la tanda del calendario la reemite «calendario · siguiente» en la vuelta del vigía' }
+  const sobre = sobreDeReintento(c, tramoDelSobreManual(p))
+  try {
+    const r = await al.emitirSobre(sobre)
+    return { ...r, llave_del_sobre: sobre.idempotency_key }
+  } catch (e) {
+    return { resultado: 'rechazado', detalle: e instanceof Error ? e.message : String(e), llave_del_sobre: sobre.idempotency_key }
+  }
 }
 
 /** agrega el permiso a la libreta con escritura condicional (2 intentos); sin escritura condicional en el almacén, escribe directo */
