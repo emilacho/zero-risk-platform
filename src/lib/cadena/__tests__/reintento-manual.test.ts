@@ -289,6 +289,69 @@ describe('🟡 CC6 04:09Z · varias llaves a la vez en el mismo paso (fechas, ta
   })
 })
 
+describe('lo que sobrevivía a los sabotajes de CC6 (s3, s17, s18, n2)', () => {
+  it('🔴 s3 · cerrada y reemplazada: 409 y nada anotado', async () => {
+    for (const estado of ['cerrada', 'reemplazada'] as const) {
+      const { al, id } = await conCaidas(3)
+      al.campanas[0].estado = estado
+      expect((await pedir(al, { campana_id: id })).cuerpo).toMatchObject({ code: 'E-REINTENTO-ESTADO' })
+      expect(libreta(al)).toEqual([])
+    }
+  })
+  it('🔴 s17 · la compuerta de la cadena: campaña de verdad (no seco) con la cadena apagada → 409 y nada anotado', async () => {
+    const { al, id } = await conCaidas(3)
+    al.campanas[0].seco = false
+    al.config.set('estado_cadena', 'apagada')
+    expect((await pedir(al, { campana_id: id })).cuerpo).toMatchObject({ code: 'E-CADENA-APAGADA' })
+    expect(libreta(al)).toEqual([])
+  })
+  it('🔴 s18 · la libreta se escribe con sello: si otro escribe a la vez dos veces seguidas, 409 E-LIBRETA-OCUPADA y no pisa lo ajeno', async () => {
+    const { al, id } = await conCaidas(3)
+    const ajeno = { campana_id: 'otra', paso: 'estrategia', clave_agotada: 'v1:c0', llave: 'v1:c0:rmanual-x', quien: 'otro', por_que: 'p', cuando: AHORA }
+    al.config.set(CLAVE_DE_LA_LIBRETA_DE_REINTENTOS, [ajeno])
+    const original = al.escribirConfigSiSello.bind(al)
+    let llamadas = 0
+    al.escribirConfigSiSello = async () => { llamadas++; return false }
+    expect((await pedir(al, { campana_id: id })).cuerpo).toMatchObject({ code: 'E-LIBRETA-OCUPADA' })
+    expect(llamadas).toBe(2)
+    expect(libreta(al)).toEqual([ajeno])
+    al.escribirConfigSiSello = original
+    expect((await pedir(al, { campana_id: id })).status).toBe(200)
+    expect(libreta(al)).toHaveLength(2)
+    expect(libreta(al)[0]).toEqual(ajeno)
+  })
+  it('🔴 n2 · un permiso de OTRA campaña con la misma llave base (`v1:c0`, la de todas) no sirve', async () => {
+    const { al, id } = await conCaidas(3)
+    al.config.set(CLAVE_DE_LA_LIBRETA_DE_REINTENTOS, [{ campana_id: 'otra-campana', paso: 'estrategia', clave_agotada: 'v1:c0', llave: 'v1:c0:rmanual-20261013t030000', quien: 'CC7', por_que: 'p', cuando: AHORA }])
+    expect(await estrategiaPreparar(al, { ...wf('ex-9'), campana_id: id }, AHORA)).toMatchObject({ status: 409, cuerpo: { error: 'intentos_agotados' } })
+    expect((await pedir(al, { campana_id: id })).cuerpo).toMatchObject({ ok: true, permiso: { campana_id: id } })
+    expect((await pedir(al, { campana_id: id })).cuerpo.ya_estaba).toBe(true)
+  })
+})
+
+describe('n6 (CC6 04:18Z) · una libreta mezclada', () => {
+  it('🔴 los permisos con campos que no son texto (o que no son objetos) se descartan: el preparar usa el válido, aunque los malos vengan después', async () => {
+    const { al, id } = await conCaidas(3)
+    const valido = { campana_id: id, paso: 'estrategia', clave_agotada: 'v1:c0', llave: 'v1:c0:rmanual-20261013t035000', quien: 'CC7', por_que: 'p', cuando: AHORA }
+    al.config.set(CLAVE_DE_LA_LIBRETA_DE_REINTENTOS, [
+      valido,
+      { ...valido, llave: 5 },
+      { ...valido, quien: null },
+      { ...valido, por_que: undefined },
+      null, 'texto suelto', 7,
+    ])
+    const p = await estrategiaPreparar(al, { ...wf('ex-9'), campana_id: id }, AHORA)
+    expect(p.status).toBe(200)
+    expect(al.corridas.find((x) => x.id === p.cuerpo.corrida_id)).toMatchObject({ clave_idempotencia: 'v1:c0:rmanual-20261013t035000', intento: 1 })
+  })
+  it('🔴 y la ruta, con esa libreta, devuelve el válido como `ya_estaba`', async () => {
+    const { al, id } = await conCaidas(3)
+    const valido = { campana_id: id, paso: 'estrategia', clave_agotada: 'v1:c0', llave: 'v1:c0:rmanual-20261013t035000', quien: 'CC7', por_que: 'p', cuando: AHORA }
+    al.config.set(CLAVE_DE_LA_LIBRETA_DE_REINTENTOS, [valido, { ...valido, llave: 5 }, null])
+    expect((await pedir(al, { campana_id: id })).cuerpo).toMatchObject({ ok: true, ya_estaba: true, permiso: { llave: 'v1:c0:rmanual-20261013t035000' } })
+  })
+})
+
 describe('las piezas puras', () => {
   it('la llave manual: la base + «:rmanual-» + la hora UTC sin separadores; la base sale quitando el reintento', () => {
     expect(llaveDeReintentoManual('v1:c0', '2026-11-21T04:05:09.123Z')).toBe('v1:c0:rmanual-20261121t040509')
