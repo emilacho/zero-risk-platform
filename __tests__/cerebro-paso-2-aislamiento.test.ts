@@ -118,6 +118,11 @@ export const PUEDEN_NOMBRARLAS = [
   /^scripts\/worker-staging\/ogfq56oIEoHufFPM\//,
   // el puente: `ingest-source` acepta `cerebro_fichas` como origen de trozos (única puerta de escritura de evidencia al índice)
   /^src\/app\/api\/brain\/ingest-source\/route\.ts$/,
+  // 21-nov · encargo 7 (etiqueta `red`): la migración agrega la columna anulable en fichas/fotos/videos y su reversa la quita;
+  // el relleno escribe SOLO la columna `red` de lo ya guardado, con respaldo y reversa, usando los deducidores del cerebro
+  /^supabase\/migrations\/202611212000_cerebro_red_de_la_pieza\.sql$/,
+  /^supabase\/reversas\/202611212000_cerebro_red_de_la_pieza_REVERSA\.sql$/,
+  /^scripts\/cerebro\/rellenar-red-de-la-pieza\.ts$/,
   // plan v3 · V14 (15-oct): el LECTOR del plan lee `cerebro_fichas` (y el crudo por la misma compuerta del portero) para armar el brazo primario. Solo SELECT: no escribe nada.
   /^src\/lib\/planeacion\/dato-v1\/lector-cerebro\.ts$/,
   // plan v3 · V11: el kit del seco solo CUENTA filas (contadores antes/después); no las lee ni las escribe
