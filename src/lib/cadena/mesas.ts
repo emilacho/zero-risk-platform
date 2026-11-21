@@ -152,7 +152,8 @@ async function quedaLaMejorVersionDelBrief(al: Almacen, campana: Campana, briefs
   })
   return { version, de: mejor.version, bloqueos }
 }
-export const PLAZO_DE_MESA_MIN = { brief: 30, concepto: 90 } as const
+// 21-nov · GO Lenovo 10:19Z · la gran idea: 90 → 340 (el mismo plazo que la plantilla de su mesa: lo de siempre + un turno de la dirección al techo)
+export const PLAZO_DE_MESA_MIN = { brief: 30, concepto: 340 } as const
 export const HOLGURA_DE_MESA_MIN = 30
 export const TIPO_DE_ESPERA_DE_CONCEPTO = 'aprobacion_concepto'
 export const objetoDeEsperaDeConcepto = (version: number): string => `concepto:v${version}`

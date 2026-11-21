@@ -63,6 +63,26 @@ export const COTAS_DE_LA_GRAN_IDEA = { MAX_PEDIDOS_POR_AGENTE: 12, MAX_PROFUNDID
 export const profundidadMaximaDe = (tipo: TipoDePieza | undefined): number => (tipo === 'concepto' ? COTAS_DE_LA_GRAN_IDEA.MAX_PROFUNDIDAD : COTAS.MAX_PROFUNDIDAD)
 export const turnosMaximosDe = (tipo: TipoDePieza | undefined): number => (tipo === 'concepto' ? COTAS_DE_LA_GRAN_IDEA.MAX_TURNOS : COTAS.MAX_TURNOS)
 
+/**
+ * 21-nov · GO Lenovo 10:19Z (firma de Emilio 10:18Z) · LA RESERVA PROPIA DE LA GRAN IDEA. La dirección de la mesa de concepto (`director-gran-idea`) se cortó dos veces por
+ * el tope de corrida de 0,60 (gastó 0,81 y 0,63: un turno suyo cuesta ≈ 1 dólar). Su turno reserva US$ 10, dentro del techo de la mesa (tope 17,79 × 1,2) y del tope de la campaña.
+ * Las demás mesas, y los demás asientos de la mesa de concepto, siguen con `COTAS.RESERVA_POR_TURNO_USD`.
+ */
+export const RESERVA_POR_TURNO_DE_LA_GRAN_IDEA_USD = 10
+/** lo que reserva el turno de `agente` en una mesa de `tipo` cuya dirección es `direccion` (pura) */
+export const reservaPorTurnoDe = (tipo: TipoDePieza | undefined, agente: string, direccion: string | null | undefined): number =>
+  tipo === 'concepto' && !!direccion && agente === direccion ? RESERVA_POR_TURNO_DE_LA_GRAN_IDEA_USD : COTAS.RESERVA_POR_TURNO_USD
+
+/**
+ * 21-nov · mismo GO · EL PLAZO DEL TURNO coherente con esa reserva: un turno que gasta su reserva entera tiene que caber sin vencer.
+ * Lo medido el 21-nov (`agent_invocations` de `director-gran-idea`, 6 corridas): el ritmo MÁS LENTO fue US$ 1,02 en 1 009 s ≈ 0,06 dólares por minuto.
+ * US$ 10 a ese ritmo ≈ 167 min; con el margen de siempre (×1,5, `MARGEN_DEL_TECHO`) → 250 min. Ese es el piso del vigía para este turno, y la espera del flujo
+ * `oficina · turno` (Wait por webhook) tiene que ser al menos eso.
+ */
+export const RITMO_MEDIDO_DE_LA_GRAN_IDEA_USD_POR_MIN = 0.06
+// (redondeado a 6 decimales antes de subir a la decena: 10 / 0,06 × 1,5 da 250,0000000003 en coma flotante)
+export const PLAZO_DEL_TURNO_DE_LA_GRAN_IDEA_MIN = Math.ceil(+((RESERVA_POR_TURNO_DE_LA_GRAN_IDEA_USD / RITMO_MEDIDO_DE_LA_GRAN_IDEA_USD_POR_MIN) * 1.5).toFixed(6) / 10) * 10
+
 /** los 6 equipos del departamento de marketing (MAPA 01-nov · firma 01-nov 00:11Z) · claves estables de `oficina_equipos` (las mismas que usa el tablero) */
 export const CLAVES_DE_EQUIPO = ['direccion', 'estrategia', 'creativo', 'web', 'medios', 'relaciones'] as const
 export type ClaveDeEquipo = (typeof CLAVES_DE_EQUIPO)[number]
@@ -181,3 +201,6 @@ export type Accion =
   | { accion: 'traducir' }
   | { accion: 'cierre_por_tope'; razon: 'techo_de_gasto' }
   | { accion: 'seguir_a_dibujar'; motivo: string }
+/** el piso del vigía (min) para el turno de `agente` en una mesa de `tipo`: el plazo propio de la gran idea si es su dirección; si no, el piso de hoy (pura) */
+export const pisoDelTurnoMin = (tipo: TipoDePieza | undefined, agente: string | null | undefined, direccion: string | null | undefined, pisoDeHoyMin: number): number =>
+  !!agente && reservaPorTurnoDe(tipo, agente, direccion) === RESERVA_POR_TURNO_DE_LA_GRAN_IDEA_USD ? Math.max(pisoDeHoyMin, PLAZO_DEL_TURNO_DE_LA_GRAN_IDEA_MIN) : pisoDeHoyMin
