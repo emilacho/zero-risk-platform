@@ -4,6 +4,7 @@
  */
 import { abrirCampana, avanzarCampana, reabrirCampana, campanasActivas, cierreDeCampana, estadoDeLaCadena, verificarViaje } from './campanas'
 import { flujoCampana } from './flujo-de-campana'
+import { reintentarAhora } from './reintento-manual'
 import { filasProducir } from './elegidas'
 import { fechasCobertura, fechasGuardar, fechasPreparar, filasListar, filasLotes, filasMarcar } from './datos'
 import { calendarioGuardar, calendarioPreparar, calendarioSiguiente, estrategiaGuardar, estrategiaPreparar, fichasGuardar, fichasPreparar, validarSinEscribir } from './pasos'
@@ -37,6 +38,8 @@ export const ACCIONES: Record<'campanas' | 'estrategia' | 'calendario' | 'valida
     activas: (al, c) => campanasActivas(al, c),
     // 18-nov · el botón «Flujo de la campaña» del tablero: parar · reanudar (acción humana; solo aquí se acepta `workflow_id: 'tablero'`)
     flujo: flujoCampana,
+    // 21-nov · opción c (GO Lenovo 03:55Z): «reintentar ahora» un paso agotado · acción de operador (CC7), sin botón · deja registro en la libreta
+    reintentar: reintentarAhora,
   },
   // 17-nov · Sprint 4 · A entrega 2: el lector de las fichas de hechos por oferta (una vez por campaña, antes del calendario · no es reja)
   fichas: { preparar: fichasPreparar, guardar: (al, c) => fichasGuardar(al, c) },
