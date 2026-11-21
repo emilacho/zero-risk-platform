@@ -121,6 +121,7 @@ describe('POST /api/3d/generate · happy path', () => {
       .mockReturnValueOnce(modelDownloadOk())
     const { POST } = await loadRoute()
     const res = await POST(jsonRequest({
+      art_style: 'cartoon',
       prompt: 'ceviche bowl realistic 3D rotating',
       client_id: 'd69100b5-8ad7-4bb0-908c-68b5544065dc',
       format: 'glb',
@@ -149,7 +150,7 @@ describe('POST /api/3d/generate · validation + config', () => {
   it('500 when MESHY_API_KEY not configured', async () => {
     delete process.env.MESHY_API_KEY
     const { POST } = await loadRoute()
-    const res = await POST(jsonRequest({ prompt: 'cube' }))
+    const res = await POST(jsonRequest({ art_style: 'cartoon', prompt: 'cube' }))
     expect(res.status).toBe(500)
     const body = (await res.json()) as { code?: string }
     expect(body.code).toBe('E-MESHY-CONFIG')
@@ -164,7 +165,7 @@ describe('POST /api/3d/generate · upstream failures', () => {
       json: async () => ({ error: { message: 'invalid_prompt' } }),
     } as unknown as Response))
     const { POST } = await loadRoute()
-    const res = await POST(jsonRequest({ prompt: 'x' }))
+    const res = await POST(jsonRequest({ art_style: 'cartoon', prompt: 'x' }))
     expect(res.status).toBe(502)
     const body = (await res.json()) as { error?: string; detail?: string }
     expect(body.error).toBe('meshy_create_failed')
@@ -184,7 +185,7 @@ describe('POST /api/3d/generate · upstream failures', () => {
         }),
       } as unknown as Response))
     const { POST } = await loadRoute()
-    const res = await POST(jsonRequest({ prompt: 'banned content' }))
+    const res = await POST(jsonRequest({ art_style: 'cartoon', prompt: 'banned content' }))
     expect(res.status).toBe(502)
     const body = (await res.json()) as { error?: string; detail?: string }
     expect(body.error).toBe('meshy_task_failed')
@@ -198,7 +199,7 @@ describe('POST /api/3d/generate · upstream failures', () => {
       .mockReturnValueOnce(modelDownloadOk())
     supabaseMock.storage.upload.mockResolvedValueOnce({ data: null, error: { message: 'bucket_full' } })
     const { POST } = await loadRoute()
-    const res = await POST(jsonRequest({ prompt: 'cube' }))
+    const res = await POST(jsonRequest({ art_style: 'cartoon', prompt: 'cube' }))
     expect(res.status).toBe(500)
     const body = (await res.json()) as { error?: string; detail?: string }
     expect(body.error).toBe('storage_upload_failed')
@@ -214,11 +215,47 @@ describe('POST /api/3d/generate · multi-path client_id resolver (Fix 8b)', () =
       .mockReturnValueOnce(modelDownloadOk())
     const { POST } = await loadRoute()
     const res = await POST(jsonRequest({
+      art_style: 'cartoon',
       prompt: 'cube',
       metadata: { client_id: 'meta-client' },
     }))
     expect(res.status).toBe(200)
     const body = (await res.json()) as { client_id?: string }
     expect(body.client_id).toBe('meta-client')
+  })
+})
+
+// 21-nov · #6 del barrido (GO Lenovo 05:01Z) · el estilo del 3D sale del manual del cliente: sin «realistic» por omisión
+describe('POST /api/3d/generate · el estilo lo trae quien pide (sale del manual)', () => {
+  it('🔴 sin art_style: 400 E-3D-ESTILO y no llama a Meshy', async () => {
+    const { POST } = await loadRoute()
+    const res = await POST(jsonRequest({ prompt: 'cube', client_id: 'c1' }))
+    expect(res.status).toBe(400)
+    expect(((await res.json()) as { code?: string }).code).toBe('E-3D-ESTILO')
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+  it('🔴 con un art_style que Meshy no acepta: 400, sin caer en «realistic»', async () => {
+    const { POST } = await loadRoute()
+    const res = await POST(jsonRequest({ prompt: 'cube', art_style: 'acuarela' }))
+    expect(res.status).toBe(400)
+    expect(((await res.json()) as { code?: string }).code).toBe('E-3D-ESTILO')
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+  it('🔴 el estilo pedido llega tal cual a Meshy (normalizado: espacios y mayúsculas)', async () => {
+    fetchMock
+      .mockReturnValueOnce(meshyCreateOk())
+      .mockReturnValueOnce(meshyPollSucceeded())
+      .mockReturnValueOnce(modelDownloadOk())
+    const { POST } = await loadRoute()
+    const res = await POST(jsonRequest({ prompt: 'cube', art_style: ' Low-Poly ' }))
+    expect(res.status).toBe(200)
+    const enviado = JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body)) as { art_style?: string }
+    expect(enviado.art_style).toBe('low-poly')
+  })
+  it('🔴 el GET ya no anuncia un estilo por omisión', async () => {
+    const { GET } = await loadRoute()
+    const txt = JSON.stringify(await (await GET()).json())
+    expect(txt).not.toContain('default realistic')
+    expect(txt).toContain('obligatorio')
   })
 })
