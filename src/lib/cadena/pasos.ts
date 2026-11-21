@@ -79,12 +79,17 @@ export function cuerpoDeRunSdk(paso: Paso, modelo: string, tarea: string, esquem
 
 type Resultado = { success?: boolean; structured_output?: unknown; cost_usd?: number; error?: string; cerrada_por_tope?: boolean }
 const leerResultado = (x: unknown): Resultado => (x && typeof x === 'object' ? (x as Resultado) : {})
+/** el subtipo con que el SDK corta por presupuesto; el mensaje del corte empieza por él (`mensajeDeCorte`, agent-runner `tope-por-corrida.ts`) */
+export const ERROR_DE_CORTE_POR_TOPE = 'error_max_budget_usd'
 
 /** Cierra la corrida según lo que volvió. Devuelve el objeto estructurado si la llamada sirvió. */
 async function cerrarSegunResultado(al: Almacen, corrida: Corrida, r: Resultado): Promise<{ objeto: unknown | null; reintentar: boolean }> {
   const costo = typeof r.cost_usd === 'number' ? r.cost_usd : null
   const sirvio = r.success === true && r.structured_output !== undefined && r.structured_output !== null
   if (!sirvio) {
+    // 21-nov · #22 (Lenovo 05:01Z): un corte por tope NO queda «fallida». Llega con la marca (`cerrada_por_tope`, de Vercel o del corredor) o como fallo
+    // con el error del SDK que empieza por `error_max_budget_usd` (el corte en medio de un turno, con texto parcial). En la bolsa cuenta lo mismo (`nucleo.ts`).
+    if (String(r.error ?? '').startsWith(ERROR_DE_CORTE_POR_TOPE)) r = { ...r, cerrada_por_tope: true }
     await al.cerrarCorrida(corrida.id, { estado: r.cerrada_por_tope ? 'cerrada_por_tope' : 'fallida', costo_usd: costo, error: String(r.error ?? 'la llamada no entregó el objeto estructurado').slice(0, 400), plazo_en: null })
     return { objeto: null, reintentar: corrida.intento < MAXIMO_DE_INTENTOS }
   }

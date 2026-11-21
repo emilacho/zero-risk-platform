@@ -1,0 +1,1062 @@
+{
+  "id": "k1IZ5eGfGbUeMQR8",
+  "name": "Zero Risk — Cadena · fichas (sub-flujo · CC#1)",
+  "description": null,
+  "active": true,
+  "activeVersionId": "6e2e62a2-bc0b-46ea-99d8-1052b5b39d57",
+  "createdAt": "2026-11-17T19:31:30.237Z",
+  "updatedAt": "2026-11-21T03:19:11.360Z",
+  "isArchived": false,
+  "versionId": "6e2e62a2-bc0b-46ea-99d8-1052b5b39d57",
+  "versionCounter": 2,
+  "sourceWorkflowId": null,
+  "triggerCount": 0,
+  "nodes": [
+    {
+      "id": "f58a2985-24bc-e699-94cb-4a7aebf36136",
+      "name": "Entrada · sub-flujo",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "inputSource": "passthrough"
+      }
+    },
+    {
+      "id": "d85ec450-b52f-fc0c-1939-4d88d080a549",
+      "name": "⓪ Entrada",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        280,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// ⓪ ENTRADA DEL SUB-FLUJO · cadena · fichas · CC#1 · 2026-10-09 · diseño v2 §3.7\n// Este flujo PAGA un agente. El pedido trae `seco` EXPLÍCITO (true|false): no se asume nunca (lección 28-sep: un `dry_run` que moría en el primer nodo cobró US$ 0,37) · se DETIENE antes de gastar.\nconst e = $input.first().json || {}\nif (typeof e.campana_id !== 'string' || e.campana_id.trim() === '') throw new Error('CADENA_SIN_CAMPANA · falta campana_id · se DETIENE y no escribe nada')\nif (typeof e.seco !== 'boolean') throw new Error('CADENA_SECO_AUSENTE · el pedido debe traer seco explícito (true o false) · se DETIENE antes de gastar')\nconst tanda = false ? (Number.isInteger(e.tanda) && e.tanda >= 1 ? e.tanda : 1) : null\n// el simulacro (respuestas enlatadas del agente, UNA por vuelta) SOLO existe en seco: en real se ignora por completo y el agente se llama de verdad\nconst simulacro = e.seco === true && Array.isArray(e.simulacro) ? e.simulacro : null\nreturn [{ json: { paso: 'fichas', campana_id: e.campana_id, seco: e.seco, tanda, simulacro, vuelta: 0, correccion: null, workflow_id: String($workflow.id), workflow_execution_id: String($execution.id) } }]\n"
+      }
+    },
+    {
+      "id": "9cee349d-18b6-2c5d-a4a2-a937e2ad7265",
+      "name": "① Armar el pedido",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        560,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// ① ARMAR EL PEDIDO A LA CADENA · la entrada de cada vuelta (la primera, o la que sigue a una corrección / un reintento)\nconst s = $input.first().json\nconst pedido = { accion: 'preparar', campana_id: s.campana_id, seco: s.seco, workflow_id: s.workflow_id, workflow_execution_id: s.workflow_execution_id }\nif (s.tanda !== null && s.tanda !== undefined) pedido.tanda = s.tanda\nif (s.correccion) pedido.correccion = s.correccion\nreturn [{ json: { ...s, pedido } }]\n"
+      }
+    },
+    {
+      "id": "9cb52b08-c692-1401-a52e-169faab67d24",
+      "name": "① Preparar",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        840,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app') + '/api/cadena/fichas' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.pedido) }}",
+        "options": {
+          "timeout": 60000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "782ae0d7-1522-c6dc-c2ce-5f4ba84bdb16",
+      "name": "① ¿Qué dijo?",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// ① ¿QUÉ DIJO `preparar`? · tres cosas buenas (lista para llamar · ya hecha · la campaña ya quedó en necesita_humano) y todo lo demás FALLA RUIDOSO antes de gastar\nconst s = $('① Armar el pedido').last().json\nconst r = $input.first().json || {}\nconst status = Number(r.statusCode)\nconst b = r.body && typeof r.body === 'object' ? r.body : {}\nconst base = { ...s }\ndelete base.pedido\nif (status === 200 && b.ya_hecha === true) return [{ json: { ...base, fin: true, resultado: 'ya_hecha', detalle: b } }]\nif (status === 200 && b.run_sdk) return [{ json: { ...base, fin: false, corrida_id: b.corrida_id, headers: b.headers || {}, run_sdk: b.run_sdk, intento: b.intento || 1 } }]\n// el tope (de presupuesto o de intentos) ya dejó la campaña en necesita_humano con su reloj: no es un error del flujo, es un fin declarado\nif (status === 409 && (b.error === 'presupuesto_agotado' || b.error === 'intentos_agotados')) return [{ json: { ...base, fin: true, resultado: 'necesita_humano', alerta: b.alerta || null, detalle: b } }]\nthrow new Error('CADENA_PREPARAR_' + String(b.code || b.error || status) + ' · ' + String(b.detalle || b.detail || 'sin detalle') + ' · no se llamó a ningún agente')\n"
+      }
+    },
+    {
+      "id": "7eecb51c-c07a-52e5-b1dd-a36b6d238256",
+      "name": "① ¿Termina?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1400,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.fin === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "45f6424b-6f63-24ab-e492-de6a44537191",
+      "name": "② ¿Simulacro?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.simulacro !== null && $json.seco === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "6b0de594-93d1-525f-c041-e696994f78d6",
+      "name": "② Simulacro",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1960,
+        -200
+      ],
+      "parameters": {
+        "jsCode": "// ② SIMULACRO · SOLO en seco: la respuesta enlatada del agente para esta vuelta (cero llamadas al modelo, US$ 0). En real este nodo NO existe en el camino.\n// Cada elemento del simulacro es el objeto estructurado que el agente devolvería, o `{ \"__fallo\": \"texto\" }` para simular una llamada que falla.\nconst s = $input.first().json\nconst lista = Array.isArray(s.simulacro) ? s.simulacro : []\nconst sim = lista[s.vuelta]\nif (sim === undefined) throw new Error('CADENA_SIMULACRO_AGOTADO · el ensayo no trae respuesta simulada para la vuelta ' + s.vuelta)\nconst body = sim && sim.__fallo ? { success: false, error: String(sim.__fallo), cost_usd: 0 } : { success: true, structured_output: sim, cost_usd: 0 }\nreturn [{ json: { ...s, agente: { statusCode: 200, body } } }]\n"
+      }
+    },
+    {
+      "id": "9ae9c7cf-d864-ea7e-c237-f88161b7ffc9",
+      "name": "② Armar la llamada",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1960,
+        200
+      ],
+      "parameters": {
+        "jsCode": "// ② ARMAR LA LLAMADA AL AGENTE · el cuerpo COMPLETO lo armó la ruta (tarea, esquema, tope, razonamiento, modelo): aquí solo se le pone el contexto del flujo\n// 🔴 `workflow_id` + `workflow_execution_id` SIEMPRE (canon: agentes solo vía workflows) · `dry_run` EXPLÍCITO y booleano · `force_restart` para que no devuelva una respuesta vieja del checkpoint\nconst s = $input.first().json\nconst llamada = { ...s.run_sdk, workflow_id: s.workflow_id, workflow_execution_id: s.workflow_execution_id, force_restart: true, dry_run: s.seco === true }\nreturn [{ json: { ...s, llamada } }]\n"
+      }
+    },
+    {
+      "id": "2972b4af-968e-d471-38ee-a93f334a296f",
+      "name": "② Agente (run-sdk)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        2240,
+        200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app') + '/api/agents/run-sdk' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            },
+            {
+              "name": "x-skip-editor-middleware",
+              "value": "={{ $json.headers['x-skip-editor-middleware'] }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.llamada) }}",
+        "options": {
+          "timeout": 800000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "fcdeef20-82b0-5f00-cb80-88def3a009cb",
+      "name": "③ Armar guardar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2520,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// ③ ARMAR `guardar` · lo que volvió del agente (o del simulacro) tal cual, sin interpretarlo: el código de la ruta decide si sirve\nconst entrada = $input.first().json || {}\nconst simulado = !!(entrada.agente && entrada.paso)\nconst s = simulado ? entrada : $('② Armar la llamada').last().json\nconst resp = simulado ? entrada.agente : entrada\nconst b = resp.body && typeof resp.body === 'object' ? resp.body : {}\n// un corte de la llamada (red, 290 s) llega como `{ error: { message } }` sin statusCode: se cuenta como llamada FALLIDA con sus palabras\nconst corte = resp.error && typeof resp.error === 'object' ? String(resp.error.message || resp.error.name || 'la llamada se cortó') : (typeof resp.error === 'string' ? resp.error : null)\nconst ok = Number(resp.statusCode) === 200 && b.success === true\nconst resultado = ok\n  ? { success: true, structured_output: b.structured_output, cost_usd: typeof b.cost_usd === 'number' ? b.cost_usd : null, cerrada_por_tope: b.cerrada_por_tope === true }\n  : { success: false, error: String(b.error || b.detail || (corte ? 'LLAMADA_CORTADA · ' + corte : 'HTTP ' + resp.statusCode)).slice(0, 400), cost_usd: typeof b.cost_usd === 'number' ? b.cost_usd : null, cerrada_por_tope: b.cerrada_por_tope === true }\nconst guardar = { accion: 'guardar', campana_id: s.campana_id, seco: s.seco, corrida_id: s.corrida_id, resultado, correccion: !!s.correccion, workflow_id: s.workflow_id, workflow_execution_id: s.workflow_execution_id }\nif (s.tanda !== null && s.tanda !== undefined) { guardar.tanda = s.tanda; guardar.modo = s.correccion && s.correccion.modo ? s.correccion.modo : 'tanda' }\nreturn [{ json: { ...s, guardar } }]\n"
+      }
+    },
+    {
+      "id": "1ab9026a-d3d8-16d6-d573-2c69d41de082",
+      "name": "③ Guardar",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2800,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app') + '/api/cadena/fichas' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.guardar) }}",
+        "options": {
+          "timeout": 60000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "595a7239-972d-092d-08b9-1e040612d97f",
+      "name": "④ ¿Y ahora?",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3080,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// ④ ¿Y AHORA? · lo que dijo `guardar`: terminó bien · la campaña necesita a Emilio · UNA corrección · un reintento. Nada de reintentos sin tope: la ruta ya cuenta (máx. 3) y aquí hay un tope propio de vueltas.\nconst s = $('③ Armar guardar').last().json\nconst r = $input.first().json || {}\nconst status = Number(r.statusCode)\nconst b = r.body && typeof r.body === 'object' ? r.body : {}\nconst base = { ...s }\ndelete base.guardar; delete base.run_sdk; delete base.llamada; delete base.agente; delete base.headers\nif (status >= 400) throw new Error('CADENA_GUARDAR_' + String(b.code || b.error || status) + ' · ' + String(b.detalle || b.detail || 'sin detalle'))\nif (b.necesita_humano) return [{ json: { ...base, fin: true, resultado: 'necesita_humano', alerta: b.alerta || null, fichas: b.fichas || [], detalle: b } }]\nif (b.ok === true || b.ya_guardada === true) return [{ json: { ...base, fin: true, resultado: 'ok', detalle: b } }]\nif (s.vuelta >= 6) throw new Error('CADENA_DEMASIADAS_VUELTAS · más de 6 vueltas en un paso: algo está mal · se DETIENE')\nif (b.correccion === true) return [{ json: { ...base, fin: false, vuelta: s.vuelta + 1, correccion: { fichas: b.fichas || [], fila_ids: b.fila_ids || [], modo: b.modo || 'tanda' } } }]\nif (b.reintentar === true) return [{ json: { ...base, fin: false, vuelta: s.vuelta + 1, correccion: s.correccion || null } }]\nthrow new Error('CADENA_RESPUESTA_NO_ENTENDIDA · ' + JSON.stringify(b).slice(0, 300))\n"
+      }
+    },
+    {
+      "id": "058dca4d-b48e-60ff-8a85-99b1338224ce",
+      "name": "④ ¿Termina?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        3360,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.fin === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "5b962cea-0265-9368-2e35-6f838f5fbb4b",
+      "name": "⑤ Salida",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3640,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// ⑤ SALIDA · lo que el sub-flujo le devuelve a la puerta (los sub-flujos NO llaman a la sala: el cable de vuelta lo manda la puerta)\nconst s = $input.first().json\nconst d = s.detalle && typeof s.detalle === 'object' ? s.detalle : {}\nreturn [{ json: { paso: s.paso, campana_id: s.campana_id, tanda: s.tanda ?? null, resultado: s.resultado, alerta: s.alerta || null, fichas: s.fichas || [], fechas_pedidas: d.fechas_pedidas || [], detalle: d } }]\n"
+      }
+    }
+  ],
+  "connections": {
+    "Entrada · sub-flujo": {
+      "main": [
+        [
+          {
+            "node": "⓪ Entrada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⓪ Entrada": {
+      "main": [
+        [
+          {
+            "node": "① Armar el pedido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "① Armar el pedido": {
+      "main": [
+        [
+          {
+            "node": "① Preparar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "① Preparar": {
+      "main": [
+        [
+          {
+            "node": "① ¿Qué dijo?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "① ¿Qué dijo?": {
+      "main": [
+        [
+          {
+            "node": "① ¿Termina?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "① ¿Termina?": {
+      "main": [
+        [
+          {
+            "node": "⑤ Salida",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "② ¿Simulacro?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "② ¿Simulacro?": {
+      "main": [
+        [
+          {
+            "node": "② Simulacro",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "② Armar la llamada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "② Armar la llamada": {
+      "main": [
+        [
+          {
+            "node": "② Agente (run-sdk)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "② Simulacro": {
+      "main": [
+        [
+          {
+            "node": "③ Armar guardar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "② Agente (run-sdk)": {
+      "main": [
+        [
+          {
+            "node": "③ Armar guardar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "③ Armar guardar": {
+      "main": [
+        [
+          {
+            "node": "③ Guardar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "③ Guardar": {
+      "main": [
+        [
+          {
+            "node": "④ ¿Y ahora?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "④ ¿Y ahora?": {
+      "main": [
+        [
+          {
+            "node": "④ ¿Termina?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "④ ¿Termina?": {
+      "main": [
+        [
+          {
+            "node": "⑤ Salida",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "① Armar el pedido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "pinData": null,
+  "meta": null,
+  "tags": [],
+  "shared": [
+    {
+      "role": "workflow:owner",
+      "workflowId": "k1IZ5eGfGbUeMQR8",
+      "projectId": "xKBOyp07nrGbu4ob",
+      "project": {
+        "id": "xKBOyp07nrGbu4ob",
+        "name": "Emilio  Perez  <emilacho@hotmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "1a2877ea-d537-4ccd-9acb-0d9187da6327",
+        "createdAt": "2026-04-18T13:41:21.856Z",
+        "updatedAt": "2026-04-18T13:51:26.012Z"
+      },
+      "createdAt": "2026-11-17T19:31:30.237Z",
+      "updatedAt": "2026-11-17T19:31:30.237Z"
+    }
+  ],
+  "activeVersion": {
+    "versionId": "6e2e62a2-bc0b-46ea-99d8-1052b5b39d57",
+    "workflowId": "k1IZ5eGfGbUeMQR8",
+    "nodes": [
+      {
+        "id": "f58a2985-24bc-e699-94cb-4a7aebf36136",
+        "name": "Entrada · sub-flujo",
+        "type": "n8n-nodes-base.executeWorkflowTrigger",
+        "typeVersion": 1.1,
+        "position": [
+          0,
+          0
+        ],
+        "parameters": {
+          "inputSource": "passthrough"
+        }
+      },
+      {
+        "id": "d85ec450-b52f-fc0c-1939-4d88d080a549",
+        "name": "⓪ Entrada",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          280,
+          0
+        ],
+        "parameters": {
+          "jsCode": "// ⓪ ENTRADA DEL SUB-FLUJO · cadena · fichas · CC#1 · 2026-10-09 · diseño v2 §3.7\n// Este flujo PAGA un agente. El pedido trae `seco` EXPLÍCITO (true|false): no se asume nunca (lección 28-sep: un `dry_run` que moría en el primer nodo cobró US$ 0,37) · se DETIENE antes de gastar.\nconst e = $input.first().json || {}\nif (typeof e.campana_id !== 'string' || e.campana_id.trim() === '') throw new Error('CADENA_SIN_CAMPANA · falta campana_id · se DETIENE y no escribe nada')\nif (typeof e.seco !== 'boolean') throw new Error('CADENA_SECO_AUSENTE · el pedido debe traer seco explícito (true o false) · se DETIENE antes de gastar')\nconst tanda = false ? (Number.isInteger(e.tanda) && e.tanda >= 1 ? e.tanda : 1) : null\n// el simulacro (respuestas enlatadas del agente, UNA por vuelta) SOLO existe en seco: en real se ignora por completo y el agente se llama de verdad\nconst simulacro = e.seco === true && Array.isArray(e.simulacro) ? e.simulacro : null\nreturn [{ json: { paso: 'fichas', campana_id: e.campana_id, seco: e.seco, tanda, simulacro, vuelta: 0, correccion: null, workflow_id: String($workflow.id), workflow_execution_id: String($execution.id) } }]\n"
+        }
+      },
+      {
+        "id": "9cee349d-18b6-2c5d-a4a2-a937e2ad7265",
+        "name": "① Armar el pedido",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          560,
+          0
+        ],
+        "parameters": {
+          "jsCode": "// ① ARMAR EL PEDIDO A LA CADENA · la entrada de cada vuelta (la primera, o la que sigue a una corrección / un reintento)\nconst s = $input.first().json\nconst pedido = { accion: 'preparar', campana_id: s.campana_id, seco: s.seco, workflow_id: s.workflow_id, workflow_execution_id: s.workflow_execution_id }\nif (s.tanda !== null && s.tanda !== undefined) pedido.tanda = s.tanda\nif (s.correccion) pedido.correccion = s.correccion\nreturn [{ json: { ...s, pedido } }]\n"
+        }
+      },
+      {
+        "id": "9cb52b08-c692-1401-a52e-169faab67d24",
+        "name": "① Preparar",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          840,
+          0
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "={{ ($env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app') + '/api/cadena/fichas' }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "x-api-key",
+                "value": "={{ $env.INTERNAL_API_KEY }}"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify($json.pedido) }}",
+          "options": {
+            "timeout": 60000,
+            "response": {
+              "response": {
+                "fullResponse": true,
+                "neverError": true
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "782ae0d7-1522-c6dc-c2ce-5f4ba84bdb16",
+        "name": "① ¿Qué dijo?",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1120,
+          0
+        ],
+        "parameters": {
+          "jsCode": "// ① ¿QUÉ DIJO `preparar`? · tres cosas buenas (lista para llamar · ya hecha · la campaña ya quedó en necesita_humano) y todo lo demás FALLA RUIDOSO antes de gastar\nconst s = $('① Armar el pedido').last().json\nconst r = $input.first().json || {}\nconst status = Number(r.statusCode)\nconst b = r.body && typeof r.body === 'object' ? r.body : {}\nconst base = { ...s }\ndelete base.pedido\nif (status === 200 && b.ya_hecha === true) return [{ json: { ...base, fin: true, resultado: 'ya_hecha', detalle: b } }]\nif (status === 200 && b.run_sdk) return [{ json: { ...base, fin: false, corrida_id: b.corrida_id, headers: b.headers || {}, run_sdk: b.run_sdk, intento: b.intento || 1 } }]\n// el tope (de presupuesto o de intentos) ya dejó la campaña en necesita_humano con su reloj: no es un error del flujo, es un fin declarado\nif (status === 409 && (b.error === 'presupuesto_agotado' || b.error === 'intentos_agotados')) return [{ json: { ...base, fin: true, resultado: 'necesita_humano', alerta: b.alerta || null, detalle: b } }]\nthrow new Error('CADENA_PREPARAR_' + String(b.code || b.error || status) + ' · ' + String(b.detalle || b.detail || 'sin detalle') + ' · no se llamó a ningún agente')\n"
+        }
+      },
+      {
+        "id": "7eecb51c-c07a-52e5-b1dd-a36b6d238256",
+        "name": "① ¿Termina?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          1400,
+          0
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "loose"
+            },
+            "combinator": "and",
+            "conditions": [
+              {
+                "leftValue": "={{ $json.fin === true }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "45f6424b-6f63-24ab-e492-de6a44537191",
+        "name": "② ¿Simulacro?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          1680,
+          0
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "loose"
+            },
+            "combinator": "and",
+            "conditions": [
+              {
+                "leftValue": "={{ $json.simulacro !== null && $json.seco === true }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "6b0de594-93d1-525f-c041-e696994f78d6",
+        "name": "② Simulacro",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1960,
+          -200
+        ],
+        "parameters": {
+          "jsCode": "// ② SIMULACRO · SOLO en seco: la respuesta enlatada del agente para esta vuelta (cero llamadas al modelo, US$ 0). En real este nodo NO existe en el camino.\n// Cada elemento del simulacro es el objeto estructurado que el agente devolvería, o `{ \"__fallo\": \"texto\" }` para simular una llamada que falla.\nconst s = $input.first().json\nconst lista = Array.isArray(s.simulacro) ? s.simulacro : []\nconst sim = lista[s.vuelta]\nif (sim === undefined) throw new Error('CADENA_SIMULACRO_AGOTADO · el ensayo no trae respuesta simulada para la vuelta ' + s.vuelta)\nconst body = sim && sim.__fallo ? { success: false, error: String(sim.__fallo), cost_usd: 0 } : { success: true, structured_output: sim, cost_usd: 0 }\nreturn [{ json: { ...s, agente: { statusCode: 200, body } } }]\n"
+        }
+      },
+      {
+        "id": "9ae9c7cf-d864-ea7e-c237-f88161b7ffc9",
+        "name": "② Armar la llamada",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1960,
+          200
+        ],
+        "parameters": {
+          "jsCode": "// ② ARMAR LA LLAMADA AL AGENTE · el cuerpo COMPLETO lo armó la ruta (tarea, esquema, tope, razonamiento, modelo): aquí solo se le pone el contexto del flujo\n// 🔴 `workflow_id` + `workflow_execution_id` SIEMPRE (canon: agentes solo vía workflows) · `dry_run` EXPLÍCITO y booleano · `force_restart` para que no devuelva una respuesta vieja del checkpoint\nconst s = $input.first().json\nconst llamada = { ...s.run_sdk, workflow_id: s.workflow_id, workflow_execution_id: s.workflow_execution_id, force_restart: true, dry_run: s.seco === true }\nreturn [{ json: { ...s, llamada } }]\n"
+        }
+      },
+      {
+        "id": "2972b4af-968e-d471-38ee-a93f334a296f",
+        "name": "② Agente (run-sdk)",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "onError": "continueRegularOutput",
+        "position": [
+          2240,
+          200
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "={{ ($env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app') + '/api/agents/run-sdk' }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "x-api-key",
+                "value": "={{ $env.INTERNAL_API_KEY }}"
+              },
+              {
+                "name": "x-skip-editor-middleware",
+                "value": "={{ $json.headers['x-skip-editor-middleware'] }}"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify($json.llamada) }}",
+          "options": {
+            "timeout": 800000,
+            "response": {
+              "response": {
+                "fullResponse": true,
+                "neverError": true
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "fcdeef20-82b0-5f00-cb80-88def3a009cb",
+        "name": "③ Armar guardar",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2520,
+          0
+        ],
+        "parameters": {
+          "jsCode": "// ③ ARMAR `guardar` · lo que volvió del agente (o del simulacro) tal cual, sin interpretarlo: el código de la ruta decide si sirve\nconst entrada = $input.first().json || {}\nconst simulado = !!(entrada.agente && entrada.paso)\nconst s = simulado ? entrada : $('② Armar la llamada').last().json\nconst resp = simulado ? entrada.agente : entrada\nconst b = resp.body && typeof resp.body === 'object' ? resp.body : {}\n// un corte de la llamada (red, 290 s) llega como `{ error: { message } }` sin statusCode: se cuenta como llamada FALLIDA con sus palabras\nconst corte = resp.error && typeof resp.error === 'object' ? String(resp.error.message || resp.error.name || 'la llamada se cortó') : (typeof resp.error === 'string' ? resp.error : null)\nconst ok = Number(resp.statusCode) === 200 && b.success === true\nconst resultado = ok\n  ? { success: true, structured_output: b.structured_output, cost_usd: typeof b.cost_usd === 'number' ? b.cost_usd : null, cerrada_por_tope: b.cerrada_por_tope === true }\n  : { success: false, error: String(b.error || b.detail || (corte ? 'LLAMADA_CORTADA · ' + corte : 'HTTP ' + resp.statusCode)).slice(0, 400), cost_usd: typeof b.cost_usd === 'number' ? b.cost_usd : null, cerrada_por_tope: b.cerrada_por_tope === true }\nconst guardar = { accion: 'guardar', campana_id: s.campana_id, seco: s.seco, corrida_id: s.corrida_id, resultado, correccion: !!s.correccion, workflow_id: s.workflow_id, workflow_execution_id: s.workflow_execution_id }\nif (s.tanda !== null && s.tanda !== undefined) { guardar.tanda = s.tanda; guardar.modo = s.correccion && s.correccion.modo ? s.correccion.modo : 'tanda' }\nreturn [{ json: { ...s, guardar } }]\n"
+        }
+      },
+      {
+        "id": "1ab9026a-d3d8-16d6-d573-2c69d41de082",
+        "name": "③ Guardar",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          2800,
+          0
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "={{ ($env.ZERO_RISK_API_URL || 'https://zero-risk-platform.vercel.app') + '/api/cadena/fichas' }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "x-api-key",
+                "value": "={{ $env.INTERNAL_API_KEY }}"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify($json.guardar) }}",
+          "options": {
+            "timeout": 60000,
+            "response": {
+              "response": {
+                "fullResponse": true,
+                "neverError": true
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "595a7239-972d-092d-08b9-1e040612d97f",
+        "name": "④ ¿Y ahora?",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          3080,
+          0
+        ],
+        "parameters": {
+          "jsCode": "// ④ ¿Y AHORA? · lo que dijo `guardar`: terminó bien · la campaña necesita a Emilio · UNA corrección · un reintento. Nada de reintentos sin tope: la ruta ya cuenta (máx. 3) y aquí hay un tope propio de vueltas.\nconst s = $('③ Armar guardar').last().json\nconst r = $input.first().json || {}\nconst status = Number(r.statusCode)\nconst b = r.body && typeof r.body === 'object' ? r.body : {}\nconst base = { ...s }\ndelete base.guardar; delete base.run_sdk; delete base.llamada; delete base.agente; delete base.headers\nif (status >= 400) throw new Error('CADENA_GUARDAR_' + String(b.code || b.error || status) + ' · ' + String(b.detalle || b.detail || 'sin detalle'))\nif (b.necesita_humano) return [{ json: { ...base, fin: true, resultado: 'necesita_humano', alerta: b.alerta || null, fichas: b.fichas || [], detalle: b } }]\nif (b.ok === true || b.ya_guardada === true) return [{ json: { ...base, fin: true, resultado: 'ok', detalle: b } }]\nif (s.vuelta >= 6) throw new Error('CADENA_DEMASIADAS_VUELTAS · más de 6 vueltas en un paso: algo está mal · se DETIENE')\nif (b.correccion === true) return [{ json: { ...base, fin: false, vuelta: s.vuelta + 1, correccion: { fichas: b.fichas || [], fila_ids: b.fila_ids || [], modo: b.modo || 'tanda' } } }]\nif (b.reintentar === true) return [{ json: { ...base, fin: false, vuelta: s.vuelta + 1, correccion: s.correccion || null } }]\nthrow new Error('CADENA_RESPUESTA_NO_ENTENDIDA · ' + JSON.stringify(b).slice(0, 300))\n"
+        }
+      },
+      {
+        "id": "058dca4d-b48e-60ff-8a85-99b1338224ce",
+        "name": "④ ¿Termina?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          3360,
+          0
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "loose"
+            },
+            "combinator": "and",
+            "conditions": [
+              {
+                "leftValue": "={{ $json.fin === true }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "5b962cea-0265-9368-2e35-6f838f5fbb4b",
+        "name": "⑤ Salida",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          3640,
+          0
+        ],
+        "parameters": {
+          "jsCode": "// ⑤ SALIDA · lo que el sub-flujo le devuelve a la puerta (los sub-flujos NO llaman a la sala: el cable de vuelta lo manda la puerta)\nconst s = $input.first().json\nconst d = s.detalle && typeof s.detalle === 'object' ? s.detalle : {}\nreturn [{ json: { paso: s.paso, campana_id: s.campana_id, tanda: s.tanda ?? null, resultado: s.resultado, alerta: s.alerta || null, fichas: s.fichas || [], fechas_pedidas: d.fechas_pedidas || [], detalle: d } }]\n"
+        }
+      }
+    ],
+    "connections": {
+      "Entrada · sub-flujo": {
+        "main": [
+          [
+            {
+              "node": "⓪ Entrada",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "⓪ Entrada": {
+        "main": [
+          [
+            {
+              "node": "① Armar el pedido",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "① Armar el pedido": {
+        "main": [
+          [
+            {
+              "node": "① Preparar",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "① Preparar": {
+        "main": [
+          [
+            {
+              "node": "① ¿Qué dijo?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "① ¿Qué dijo?": {
+        "main": [
+          [
+            {
+              "node": "① ¿Termina?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "① ¿Termina?": {
+        "main": [
+          [
+            {
+              "node": "⑤ Salida",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "② ¿Simulacro?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "② ¿Simulacro?": {
+        "main": [
+          [
+            {
+              "node": "② Simulacro",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "② Armar la llamada",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "② Armar la llamada": {
+        "main": [
+          [
+            {
+              "node": "② Agente (run-sdk)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "② Simulacro": {
+        "main": [
+          [
+            {
+              "node": "③ Armar guardar",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "② Agente (run-sdk)": {
+        "main": [
+          [
+            {
+              "node": "③ Armar guardar",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "③ Armar guardar": {
+        "main": [
+          [
+            {
+              "node": "③ Guardar",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "③ Guardar": {
+        "main": [
+          [
+            {
+              "node": "④ ¿Y ahora?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "④ ¿Y ahora?": {
+        "main": [
+          [
+            {
+              "node": "④ ¿Termina?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "④ ¿Termina?": {
+        "main": [
+          [
+            {
+              "node": "⑤ Salida",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "① Armar el pedido",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "nodeGroups": [],
+    "authors": "Emilio  Perez ",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "createdAt": "2026-11-21T03:19:11.363Z",
+    "updatedAt": "2026-11-21T03:19:11.363Z",
+    "workflowPublishHistory": [
+      {
+        "id": 4013,
+        "workflowId": "k1IZ5eGfGbUeMQR8",
+        "versionId": "6e2e62a2-bc0b-46ea-99d8-1052b5b39d57",
+        "event": "activated",
+        "userId": "1a2877ea-d537-4ccd-9acb-0d9187da6327",
+        "createdAt": "2026-11-21T03:19:11.472Z"
+      }
+    ]
+  },
+  "parentFolder": null
+}

@@ -12,6 +12,7 @@ import path from 'node:path'
 import { createHash } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { repararVigia } from './vigia-llave.mjs'
+import { conEsperaPorElCorredor, CORTE_DE_LA_LLAMADA_MS } from './espera-por-el-corredor.mjs'
 
 const AQUI = path.dirname(fileURLToPath(import.meta.url))
 const NODOS = path.join(AQUI, 'nodos')
@@ -84,8 +85,8 @@ export function flujoDePaso({ paso, ruta, conTanda }) {
   f.add(codigo('② Armar la llamada', 'paso-armar-llamada.js'), 7, 1)
   // 🔴 la cabecera de saltar la revisión del editor la lleva SOLO el nodo del agente de estos tres flujos (estrategia · calendario · fechas) y su valor sale de la ruta
   f.add(http('② Agente (run-sdk)', {
-    url: `={{ ${BASE_API} + '/api/agents/run-sdk' }}`, cuerpo: '={{ JSON.stringify($json.llamada) }}', timeout: 290000,
-    // 🔴 relevo 41 (#464 C4): si la llamada se corta (red, 290 s) el flujo NO muere: el error sigue de largo y `guardar` cierra la corrida como FALLIDA al instante (la siguiente vuelta reintenta, máx. 3)
+    url: `={{ ${BASE_API} + '/api/agents/run-sdk' }}`, cuerpo: '={{ JSON.stringify($json.llamada) }}', timeout: CORTE_DE_LA_LLAMADA_MS,
+    // 🔴 relevo 41 (#464 C4): si la llamada se corta (red, 800 s) el flujo NO muere: el error sigue de largo y `guardar` cierra la corrida como FALLIDA al instante (la siguiente vuelta reintenta, máx. 3)
     onError: 'continueRegularOutput',
     cabeceras: [{ name: 'x-skip-editor-middleware', value: "={{ $json.headers['x-skip-editor-middleware'] }}" }],
   }), 8, 1)
@@ -129,7 +130,7 @@ export function flujoDeFechas() {
   f.add(codigo('④ Simulacro', 'fechas-simulacro.js'), 13, -1)
   f.add(codigo('④ Armar la llamada', 'fechas-armar-llamada.js'), 13, 1)
   f.add(http('④ Agente (run-sdk)', {
-    url: `={{ ${BASE_API} + '/api/agents/run-sdk' }}`, cuerpo: '={{ JSON.stringify($json.llamada) }}', timeout: 290000, onError: 'continueRegularOutput',
+    url: `={{ ${BASE_API} + '/api/agents/run-sdk' }}`, cuerpo: '={{ JSON.stringify($json.llamada) }}', timeout: CORTE_DE_LA_LLAMADA_MS, onError: 'continueRegularOutput',
     cabeceras: [{ name: 'x-skip-editor-middleware', value: "={{ $json.headers['x-skip-editor-middleware'] }}" }],
   }), 14, 1)
   f.add(codigo('⑤ Armar guardar', 'fechas-armar-guardar.js'), 15, 0)
@@ -337,11 +338,12 @@ export function parteDeCopia(vivo, ids = IDS_DE_RELLENO) {
 
 export function construirFlujos({ ids = IDS_DE_RELLENO, parteViva = null, planViva = null } = {}) {
   const out = {
-    'cadena-estrategia': flujoDePaso({ paso: 'estrategia', ruta: 'estrategia', conTanda: false }),
-    'cadena-calendario': flujoDePaso({ paso: 'calendario', ruta: 'calendario', conTanda: true }),
-    'cadena-fechas': flujoDeFechas(),
+    // 21-nov · opción A (CC1): los 4 pasos con agente esperan la vuelta del corredor en un Wait (`espera-por-el-corredor.mjs`), no en la misma llamada
+    'cadena-estrategia': conEsperaPorElCorredor(flujoDePaso({ paso: 'estrategia', ruta: 'estrategia', conTanda: false }), 'paso'),
+    'cadena-calendario': conEsperaPorElCorredor(flujoDePaso({ paso: 'calendario', ruta: 'calendario', conTanda: true }), 'paso'),
+    'cadena-fechas': conEsperaPorElCorredor(flujoDeFechas(), 'fechas'),
     // 17-nov · Sprint 4 · A entrega 2: el lector de las fichas de hechos por oferta (el mismo sub-flujo de un paso con agente)
-    'cadena-fichas': flujoDePaso({ paso: 'fichas', ruta: 'fichas', conTanda: false }),
+    'cadena-fichas': conEsperaPorElCorredor(flujoDePaso({ paso: 'fichas', ruta: 'fichas', conTanda: false }), 'paso'),
     'cadena-vigia': flujoDelVigia(),
     'cadena-puerta': flujoDeLaPuerta(ids),
   }
