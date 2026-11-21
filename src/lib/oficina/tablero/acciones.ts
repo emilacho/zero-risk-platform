@@ -17,6 +17,7 @@ import { rutaDecidirPalabra, rutaValidarCampo, rutaValidarManual } from '../../m
 import { soltarEsperaYPedirPlan } from '../../manual/pedir-plan'
 import { confirmarGasto, esObjeto, rechazo, textoEntre, UUID, type Fila, type Manejador } from './comun'
 import { propuestasAprobar, propuestasCambios } from './propuestas'
+import { crearCampanaDelTablero } from './crear-campana'
 import { TOPE_DEL_TEXTO_DEL_DUENO } from '../../limites-de-tamano'
 
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null)
@@ -261,4 +262,6 @@ export const ACCIONES: Record<string, Manejador> = {
   'plan-aprobar': planAprobar,
   'propuestas-aprobar': propuestasAprobar,
   'propuestas-cambios': propuestasCambios,
+  // 20-nov · «Crear Campaña» (entrega 2): guarda el pedido y deja el sobre (US$ 0 aquí)
+  'crear-campana': crearCampanaDelTablero(() => almacenDeSupabase()),
 }

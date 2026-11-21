@@ -5,6 +5,7 @@
  * `almacen-supabase.ts` (el único archivo, con las rutas, que nombra las tablas `cadena_*`). Nada de esto se usa hasta que alguien aplique la migración y encienda.
  */
 import type { PedidoDeLaCampana } from './brief-de-la-campana'
+import type { PedidoGuardado } from './crear-campana'
 import type { FormatosPorRed, Estrategia, Ficha, Fila, Hallazgo, Referencia, SedeInfo } from './tipos'
 import type { PlazoCfg } from './esperas'
 import type { FechaEspecialVerificada } from './validador-calendario'
@@ -331,6 +332,16 @@ export interface Almacen {
   campanaViva(clientId: string, seco: boolean): Promise<Campana | null>
   /** 20-nov · «Crear Campaña» (entrega 3): lo que el dueño pidió para ESA campaña (`cadena_pedidos_de_campana`, una fila por campaña) · null = la campaña no nació del botón (o la tabla aún no existe) */
   pedidoDeLaCampana?(campanaId: string): Promise<PedidoDeLaCampana | null>
+  /** 20-nov · «Crear Campaña» (entrega 2): el pedido guardado con ESA llave (cliente, seco, llave) · null = no hay */
+  pedidoPorLlave?(clientId: string, llave: string, seco: boolean): Promise<PedidoGuardado | null>
+  /** guarda el pedido; si la llave ya existe (otra pestaña ganó la carrera) LANZA con 23505 */
+  insertarPedidoDeCampana?(p: Omit<PedidoGuardado, 'id' | 'creado_en' | 'campana_id'>): Promise<PedidoGuardado>
+  /** liga el pedido a la campaña que nació de él (una sola vez; el candado de la base exige mismo cliente, seco y llave) */
+  ligarPedidoDeCampana?(pedidoId: string, campanaId: string): Promise<void>
+  /** el plan está aprobado por el dueño (`client_historical_outputs.status = approved`) */
+  planAprobado?(planId: string): Promise<boolean>
+  /** lo que el mínimo de una campaña necesita saber: el tope y lo esperado por pieza de cada familia activa, y el tope de una revisión de registro · LANZA si no se puede leer */
+  costosDelMinimo?(): Promise<import('./crear-campana').CostosDelMinimo>
   insertarCampana(c: Omit<Campana, 'id'>): Promise<Campana>
   actualizarCampana(id: string, patch: Partial<Campana>): Promise<Campana>
   /** escritura CONDICIONAL (09-nov · revalidar, caso 2 de CC7): solo si la campaña SIGUE en `estado`; si otro la movió antes, null y no escribe */

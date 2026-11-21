@@ -189,7 +189,33 @@ export class AlmacenMemoria implements Almacen {
   async campanaPorLlave(clientId: string, llave: string, seco: boolean) { return this.copia(this.campanas.find((c) => c.client_id === clientId && c.llave_de_campana === llave && c.seco === seco)) }
   /** 20-nov · entrega 3: los pedidos del dueño, por campana_id */
   pedidosDeLaCampana: Record<string, PedidoDeLaCampana> = {}
-  async pedidoDeLaCampana(campanaId: string) { const p = this.pedidosDeLaCampana[campanaId]; return p ? { ...p } : null }
+  async pedidoDeLaCampana(campanaId: string) {
+    const p = this.pedidosDeLaCampana[campanaId] ?? this.pedidos.find((x) => x.campana_id === campanaId)
+    return p ? { nombre: p.nombre, cambio: p.cambio, fecha_inicio: p.fecha_inicio, fecha_fin: p.fecha_fin, fechas_clave: structuredClone(p.fechas_clave), brief_libre: p.brief_libre } : null
+  }
+  /** 20-nov · entrega 2: los pedidos guardados, con los mismos únicos y el mismo candado que la base (202611201900) */
+  pedidos: import('../crear-campana').PedidoGuardado[] = []
+  planesSinAprobar = new Set<string>()
+  costos: import('../crear-campana').CostosDelMinimo | Error = { topes: { post_img: 2.5, carrusel_mesa: 5 }, reservas: { carrusel_mesa: 3.1 }, tope_registro_usd: 0.8 }
+  falloAlLigar: string | null = null
+  async pedidoPorLlave(clientId: string, llave: string, seco: boolean) { return this.copia(this.pedidos.find((p) => p.client_id === clientId && p.llave === llave && p.seco === seco)) }
+  async insertarPedidoDeCampana(p: Omit<import('../crear-campana').PedidoGuardado, 'id' | 'creado_en' | 'campana_id'>) {
+    if (this.pedidos.some((x) => x.client_id === p.client_id && x.seco === p.seco && x.llave === p.llave)) throw Object.assign(new Error('23505 una por llave'), { code: '23505' })
+    if (!(p.tope_usd > 0)) throw new Error('23514 tope')
+    const n = { ...structuredClone(p), id: `ped-${this.pedidos.length + 1}`, creado_en: new Date().toISOString(), campana_id: null }
+    this.pedidos.push(n)
+    return structuredClone(n)
+  }
+  async ligarPedidoDeCampana(pedidoId: string, campanaId: string) {
+    if (this.falloAlLigar) throw new Error(this.falloAlLigar)
+    const p = this.pedidos.find((x) => x.id === pedidoId)
+    if (!p || p.campana_id) throw new Error('el pedido ya estaba ligado o no existe')
+    const c = this.campanas.find((x) => x.id === campanaId)
+    if (c && (c.client_id !== p.client_id || c.seco !== p.seco || c.llave_de_campana !== p.llave)) throw new Error('esa campaña no es la de este pedido')
+    p.campana_id = campanaId
+  }
+  async planAprobado(planId: string) { return !this.planesSinAprobar.has(planId) }
+  async costosDelMinimo() { if (this.costos instanceof Error) throw this.costos; return structuredClone(this.costos) }
   async campanaViva(clientId: string, seco: boolean) { return this.copia(this.campanas.find((c) => c.client_id === clientId && c.seco === seco && !c.llave_de_campana && c.estado !== 'cerrada' && c.estado !== 'reemplazada')) }
   async insertarCampana(c: Omit<Campana, 'id'>) {
     // 19-nov · los mismos únicos que la base: los dos de siempre valen SOLO para las campañas sin llave; las que tienen llave, una por (cliente, seco, llave)
