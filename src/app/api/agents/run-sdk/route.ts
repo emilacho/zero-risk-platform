@@ -192,7 +192,7 @@ export function validarLimitesDeMirarAfuera(body: unknown): { ok: true; valor: {
 // 21-nov · GO de Lenovo (opción A del mapa de CC4) · + `social-media-strategist`, el agente de los 4 pasos largos de la cadena (estrategia, calendario,
 // fechas especiales, fichas): al máximo pasa de los 800 s de Vercel. Está en la lista de revisión editorial, así que SOLO entra cuando el pedido trae
 // `x-skip-editor-middleware: 1` (la cadena siempre la manda · `pasos.ts`): con la cabecera el editor nunca corre, ni por Vercel ni por el corredor.
-export const AGENTES_CON_VUELTA_POR_EL_CORREDOR: readonly string[] =['campaign-brief-agent', 'carousel-designer', 'design-visual-storyteller', 'jefe-marketing', 'social-media-strategist']
+export const AGENTES_CON_VUELTA_POR_EL_CORREDOR: readonly string[] = ['campaign-brief-agent', 'carousel-designer', 'design-visual-storyteller', 'director-gran-idea', 'jefe-marketing', 'social-media-strategist']
 
 export function resolveCallbackMode(body: RunSdkInput): string | null {
   const ctx = (body.context ?? {}) as Record<string, unknown>
