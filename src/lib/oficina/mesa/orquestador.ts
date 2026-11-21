@@ -36,7 +36,7 @@ import { ARTEFACTO_PROPUESTAS_IMAGEN, avisoDeLaParadaUnicaDeImagen, esDeImagen, 
 import { avisosDeRitmo, bibliotecaDelCliente, seccionDeLaBiblioteca, type RitmoDeVideo } from '../video/biblioteca'
 import { desarmarReferencias, seccionDeReferencias } from '../video/referencias'
 import { aporteDePrompts, promptsParaElBrazo, type ConceptoDeLaImagen, type ImagenARedactar } from './prompts'
-import { COTAS, FAMILIAS_MESA, esDeLaCadena, reservaPorTurnoDe, type Aporte, type EstadoMesa, type LecturaDeNotas, type Tarjeta, type TipoDeAporte } from './tipos'
+import { COTAS, FAMILIAS_MESA, esDeLaCadena, esperaDelTurnoS, reservaPorTurnoDe, type Aporte, type EstadoMesa, type LecturaDeNotas, type Tarjeta, type TipoDeAporte } from './tipos'
 import { bloqueDelPerfil } from '../../perfil-del-publico/lectores'
 import { modoDeLaPlantilla } from './un-autor'
 import type { FuentesCompletas } from '../puertos'
@@ -200,7 +200,8 @@ export async function pedidoDelTurno(P: Puertos, enc: Encargo, est: EstadoMesa, 
   const paso = `${PREFIJO}${t.tipo}:${t.agente}`
   // 21-nov · GO Lenovo 10:19Z · la dirección de la gran idea reserva US$ 10 por turno (las demás, 0,60); siempre dentro del techo de la mesa
   const reserva = Math.max(0.1, Math.min(reservaPorTurnoDe(est.tipo, t.agente, est.direccion), techoDe(tope) - enc.estado_del_motor.gasto_usd))
-  return { agente: t.agente, paso, pedido: pedidoDeAgente({ agente: t.agente, task, encargo_id: enc.id, client_id: enc.client_id, dry_run: enc.dry_run, paso, reserva_usd: +reserva.toFixed(4), es_pieza: !esDeLaCadena(est.tipo), images: imagenesDelTurno(tipo, c.fotos), sin_empuje: !!c.cerebro }) }
+  const espera = esperaDelTurnoS(est.tipo, t.agente, est.direccion)
+  return { agente: t.agente, paso, pedido: pedidoDeAgente({ agente: t.agente, task, encargo_id: enc.id, client_id: enc.client_id, dry_run: enc.dry_run, paso, reserva_usd: +reserva.toFixed(4), ...(espera ? { espera_s: espera } : {}), es_pieza: !esDeLaCadena(est.tipo), images: imagenesDelTurno(tipo, c.fotos), sin_empuje: !!c.cerebro }) }
 }
 
 /** Sprint 1 · mejora 4 · las imágenes que la pieza integrada pide generar (ref + lo que pidió la dirección), leídas con el mismo traductor que usa el cierre · puro respecto del estado */

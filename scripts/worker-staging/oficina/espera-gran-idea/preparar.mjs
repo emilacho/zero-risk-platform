@@ -1,6 +1,7 @@
-// 21-nov · GO Lenovo 10:19Z (firma de Emilio 10:18Z) · el flujo `Oficina · un turno` (`bTbWL9lUvQCfStAz`) espera la vuelta del agente 1 800 s → 15 300 s.
+// 21-nov · GO Lenovo 10:19Z (firma de Emilio 10:18Z) · el flujo `Oficina · un turno` (`bTbWL9lUvQCfStAz`) espera la vuelta del agente lo que diga EL TURNO (`pedido.espera_s`), o 1 800 s.
 // Por qué: la dirección de la gran idea reserva US$ 10 por turno y su plazo es 250 min (`PLAZO_DEL_TURNO_DE_LA_GRAN_IDEA_MIN`); la espera del flujo tiene que dejarlo caber
-// (250 min + 5 de margen = 255 min). Con 1 800 s el Wait se agota a los 30 min y el turno vuelve «vacío» aunque el agente siga trabajando.
+// (250 min + 5 de margen = 255 min = 15 300 s, `esperaDelTurnoS`). Con 1 800 s fijos el Wait se agota a los 30 min y el turno vuelve «vacío» aunque el agente siga trabajando.
+// La espera es POR TURNO (CC7 10:30Z): los demás turnos siguen en 1 800 s, así una vuelta perdida de otra mesa no deja una ejecución esperando 4 h (y frenando el 0/0).
 // SOLO LECTURA de n8n: baja el flujo vivo, guarda el ANTES y escribe el DESPUÉS con UN cambio (`resumeAmount` del nodo «② Esperar al agente»).
 // Aplicarlo es otro paso (`aplicar.mjs`), después del FIRME, con n8n 0/0 y el ANTES igual al vivo.
 // Uso:  doppler run -p zero-risk -c prd -- node scripts/worker-staging/oficina/espera-gran-idea/preparar.mjs
@@ -11,7 +12,8 @@ import { fileURLToPath } from 'node:url'
 export const ID = 'bTbWL9lUvQCfStAz'
 export const NODO = '② Esperar al agente'
 export const ANTES_S = 1800
-export const DESPUES_S = 15300
+/** la espera del turno, o la de siempre (el pedido la trae solo en el turno de la dirección de la gran idea) */
+export const DESPUES_S = "={{ Number($('② Armar el pedido').first().json.turno.pedido.espera_s) || 1800 }}"
 export const FECHA = '2026-11-21'
 const aqui = dirname(fileURLToPath(import.meta.url))
 

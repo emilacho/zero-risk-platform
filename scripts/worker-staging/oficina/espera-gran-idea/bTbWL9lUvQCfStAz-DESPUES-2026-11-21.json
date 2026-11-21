@@ -312,7 +312,7 @@
         "resume": "webhook",
         "httpMethod": "POST",
         "limitWaitTime": true,
-        "resumeAmount": 15300,
+        "resumeAmount": "={{ Number($('② Armar el pedido').first().json.turno.pedido.espera_s) || 1800 }}",
         "resumeUnit": "seconds",
         "options": {}
       }

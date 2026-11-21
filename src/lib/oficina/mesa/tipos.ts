@@ -204,3 +204,10 @@ export type Accion =
 /** el piso del vigía (min) para el turno de `agente` en una mesa de `tipo`: el plazo propio de la gran idea si es su dirección; si no, el piso de hoy (pura) */
 export const pisoDelTurnoMin = (tipo: TipoDePieza | undefined, agente: string | null | undefined, direccion: string | null | undefined, pisoDeHoyMin: number): number =>
   !!agente && reservaPorTurnoDe(tipo, agente, direccion) === RESERVA_POR_TURNO_DE_LA_GRAN_IDEA_USD ? Math.max(pisoDeHoyMin, PLAZO_DEL_TURNO_DE_LA_GRAN_IDEA_MIN) : pisoDeHoyMin
+/**
+ * 21-nov · la ESPERA del flujo `oficina · turno` (Wait por webhook, en s) para el turno de `agente`: la del turno de la dirección de la gran idea es su plazo más 5 min
+ * (el vigía decide antes que el Wait); null = la espera de siempre del flujo (1 800 s). Así una vuelta perdida de cualquier otra mesa no deja una ejecución esperando 4 h (pura).
+ */
+export const ESPERA_DEL_FLUJO_POR_OMISION_S = 1800
+export const esperaDelTurnoS = (tipo: TipoDePieza | undefined, agente: string, direccion: string | null | undefined): number | null =>
+  reservaPorTurnoDe(tipo, agente, direccion) === RESERVA_POR_TURNO_DE_LA_GRAN_IDEA_USD ? (PLAZO_DEL_TURNO_DE_LA_GRAN_IDEA_MIN + 5) * 60 : null

@@ -15,7 +15,7 @@ import { avanzar, recibirResultado, type Respuesta } from '../orquestador'
 import { abrirMesaDeLaCadena, type SobreDeLaCadena } from '../mesa/de-la-cadena'
 import { techoDe } from '../mesa/planificador'
 import { BRIEF_MESA, CONCEPTO_MESA, PLAZO_DE_LA_MESA_DE_CONCEPTO_MIN, TOPE_DE_LA_MESA_DE_CONCEPTO_USD } from '../plantillas/mesa'
-import { COTAS, PLAZO_DEL_TURNO_DE_LA_GRAN_IDEA_MIN, RESERVA_POR_TURNO_DE_LA_GRAN_IDEA_USD, pisoDelTurnoMin, reservaPorTurnoDe, type Tarjeta } from '../mesa/tipos'
+import { COTAS, ESPERA_DEL_FLUJO_POR_OMISION_S, PLAZO_DEL_TURNO_DE_LA_GRAN_IDEA_MIN, RESERVA_POR_TURNO_DE_LA_GRAN_IDEA_USD, esperaDelTurnoS, pisoDelTurnoMin, reservaPorTurnoDe, type Tarjeta } from '../mesa/tipos'
 import { costoDelTurno } from '../costo-del-turno'
 import { MINUTOS_PARA_DAR_POR_MUERTO, revisarPasosMuertos } from '../vigia'
 import { DbFalsa } from './dbfalsa'
@@ -183,14 +183,53 @@ describe('(2) el plazo del turno coherente con la reserva', () => {
     expect(rev).toContain("jsonb_build_object('plazo_mesa_min', 90)")
     expect(rev).toContain("(g.limites->>'plazo_mesa_min')::numeric = 340")
   })
-  it('la espera del flujo `oficina · turno`: el DESPUÉS deja caber el turno entero (≥ 250 min) y es el único cambio contra el ANTES', async () => {
+  it('la espera es POR TURNO: el pedido de la dirección de la gran idea trae espera_s (su plazo + 5 min); los demás no traen nada', async () => {
+    expect(esperaDelTurnoS('concepto', DIRECCION, DIRECCION)).toBe((PLAZO_DEL_TURNO_DE_LA_GRAN_IDEA_MIN + 5) * 60)
+    expect(esperaDelTurnoS('concepto', 'content-creator', DIRECCION)).toBeNull()
+    expect(esperaDelTurnoS('brief', 'campaign-brief-agent', 'campaign-brief-agent')).toBeNull()
+    expect(ESPERA_DEL_FLUJO_POR_OMISION_S).toBe(1800)
+    const m = await montar('concepto')
+    let ultima: Respuesta = m.a
+    const vistos: Array<{ agente: string; pedido: Record<string, unknown> }> = []
+    for (let i = 0; i < 30 && ultima.cuerpo.accion === 'esperar'; i++) {
+      const t = ultima.cuerpo.turno as { n: number; paso: string; agente: string; pedido: Record<string, unknown> }
+      vistos.push({ agente: t.agente, pedido: t.pedido })
+      const libro = m.MS.filas.filter((x) => x.encargo_id === m.id)
+      const integra = `## Gran idea\nLa isla\n## Citas\n${libro.filter((a) => a.tipo === 'aporta').map((a) => `A${a.n} usé: algo`).join('\n')}`
+      ultima = await recibirResultado(m.M.P, m.id, t.n, { texto: t.paso.includes(':integrar') ? integra : 'aporte', workflow_execution_id: `ex-${t.n}`, costo_usd: 0.08 })
+    }
+    const dir = vistos.filter((v) => v.agente === DIRECCION), otros = vistos.filter((v) => v.agente !== DIRECCION)
+    expect(dir.length).toBeGreaterThan(1); expect(otros.length).toBeGreaterThan(0)
+    for (const v of dir) expect(v.pedido.espera_s).toBe(15300)
+    for (const v of otros) expect('espera_s' in v.pedido).toBe(false)
+    // la mesa del brief tampoco
+    const b = await montar('brief')
+    expect('espera_s' in ((b.a.cuerpo.turno as { pedido: Record<string, unknown> }).pedido)).toBe(false)
+  })
+  it('la espera del flujo `oficina · turno`: el DESPUÉS lee la espera del turno (o 1800) y es el único cambio contra el ANTES', async () => {
     const dir = path.join(RAIZ, 'scripts', 'worker-staging', 'oficina', 'espera-gran-idea')
     const leer = (n: string) => JSON.parse(fs.readFileSync(path.join(dir, `bTbWL9lUvQCfStAz-${n}-2026-11-21.json`), 'utf8'))
     const antes = leer('ANTES'), despues = leer('DESPUES')
     const espera = (f: { nodes: Array<{ name: string; parameters: Record<string, unknown> }> }) => f.nodes.find((n) => n.name === '② Esperar al agente')!.parameters
     expect(espera(antes)).toMatchObject({ resume: 'webhook', limitWaitTime: true, resumeUnit: 'seconds', resumeAmount: 1800 })
-    expect(espera(despues)).toMatchObject({ resume: 'webhook', limitWaitTime: true, resumeUnit: 'seconds', resumeAmount: 15300 })
-    expect(Number(espera(despues).resumeAmount)).toBeGreaterThanOrEqual(PLAZO_DEL_TURNO_DE_LA_GRAN_IDEA_MIN * 60)
+    expect(espera(despues)).toMatchObject({ resume: 'webhook', limitWaitTime: true, resumeUnit: 'seconds' })
+    // la expresión de n8n, evaluada como la evalúa n8n: `$('② Armar el pedido').first().json` es la salida de ese nodo (lleva `turno.pedido` tal como lo mandó la sala)
+    const expr = String(espera(despues).resumeAmount)
+    expect(expr.startsWith('={{') && expr.endsWith('}}')).toBe(true)
+    const evaluar = (pedido: Record<string, unknown>): unknown => new Function('$', `return (${expr.slice(3, -2)})`)((nodo: string) => {
+      expect(nodo).toBe('② Armar el pedido')
+      return { first: () => ({ json: { turno: { n: 2, pedido } } }) }
+    })
+    expect(evaluar({ agent_name: DIRECCION, espera_s: 15300 })).toBe(15300)
+    expect(evaluar({ agent_name: 'content-creator' })).toBe(1800)
+    expect(evaluar({ espera_s: 'basura' })).toBe(1800)
+    // el nodo de verdad que nombra la expresión existe y devuelve `turno` en su salida (`{ ...e, … }` con e = la entrada, que trae turno)
+    const armar = antes.nodes.find((n: { name: string }) => n.name === '② Armar el pedido')
+    expect(armar).toBeTruthy()
+    expect(String(armar.parameters.jsCode)).toContain('const t = e.turno')
+    expect(String(armar.parameters.jsCode)).toContain('return [{ json: { ...e, simulado: false, cuerpo } }]')
+    // espera_s NO viaja a run-sdk: el cuerpo se arma campo por campo
+    expect(String(armar.parameters.jsCode)).not.toMatch(/\.\.\.p\b|espera_s/)
     const sinEspera = (f: { nodes: Array<{ name: string; parameters: Record<string, unknown> }>; connections: unknown }) => JSON.stringify({ n: f.nodes.map((n) => (n.name === '② Esperar al agente' ? { ...n, parameters: { ...n.parameters, resumeAmount: 0 } } : n)), c: f.connections })
     expect(sinEspera(despues)).toBe(sinEspera(antes))
     const { conEsperaDeLaGranIdea } = await import('../../../../scripts/worker-staging/oficina/espera-gran-idea/preparar.mjs')
