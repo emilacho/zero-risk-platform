@@ -7,7 +7,7 @@ import { briefPedidoDeLaCampana } from './brief-de-la-campana'
 import type { Almacen, Campana, ContextoDelCliente, Corrida, EsperaFila, RondaDeEstrategia } from './almacen'
 import { activarYArrancar, type ResultadoDelArranque } from './arranque'
 import { autorizarLlamada, cadena, compuerta, err, type Respuesta } from './autorizar'
-import { AGENTE_POR_PASO, CABECERA_SALTAR_EDITOR, MAXIMO_DE_INTENTOS, RONDAS_DE_CORRECCION, modeloDeLaCadena, RAZONAMIENTO_POR_DEFECTO, medidaDeCampana, SEMANAS_DE_PANORAMA, TOTAL_DE_TANDAS, topeDelPaso, type MedidaDeCampana, type Paso } from './constantes'
+import { AGENTE_POR_PASO, CABECERA_SALTAR_EDITOR, MAXIMO_DE_INTENTOS, RONDAS_DE_CORRECCION, modeloDeLaCadena, razonamientoDelPaso, medidaDeCampana, SEMANAS_DE_PANORAMA, TOTAL_DE_TANDAS, topeDelPaso, type MedidaDeCampana, type Paso } from './constantes'
 import { bajarFaltantesDeCantidad, leerV08, sinFaltantesSiCorrige } from './cantidad'
 import { bajarBloqueosDeConjuntoAAvisos, MOTIVO_DE_SALIDA, planDeCorreccion, resolverTrasCorreccion, resolverTrasLaUltimaRonda, slotDe } from './ciclo'
 import { ESQUEMA_CALENDARIO_TANDA, ESQUEMA_CALENDARIO_TANDA_V5, ESQUEMA_ESTRATEGIA, ESQUEMA_FICHAS_DE_OFERTA } from './esquemas'
@@ -71,7 +71,7 @@ export function cuerpoDeRunSdk(paso: Paso, modelo: string, tarea: string, esquem
     client_id: clientId,
     output_schema: esquema,
     max_budget_usd: topeDelPaso(paso),
-    thinking_mode: RAZONAMIENTO_POR_DEFECTO,
+    thinking_mode: razonamientoDelPaso(paso),
     model_override: modelo,
     extra,
   }

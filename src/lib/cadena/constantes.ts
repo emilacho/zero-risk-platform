@@ -26,6 +26,16 @@ export const MODELO_POR_DEFECTO = 'claude-opus-5-5'
 /** 18-nov · firma de Emilio «nada se recorta» + respuesta 5 de Lenovo (G1 del barrido de topes · CC5): el razonamiento de la cadena va al MÁXIMO del modelo
  *  (`maximo` ⇒ el corredor manda `max` en Opus 5.5). Antes era `low` (experimento del 30-sep por el techo de 32.000 tokens, que G1 sube a 128.000). */
 export const RAZONAMIENTO_POR_DEFECTO = 'maximo'
+/**
+ * 21-nov · ⚠️ MEDIDA TEMPORAL (decisión de Lenovo 01:58Z, modo jefe mientras Emilio duerme · frente a su firma «nada se recorta»):
+ * los pasos de la cadena que con `maximo` NO caben en la ventana de la llamada bajan al nivel más alto que sí cabe.
+ * Por qué: la estrategia al máximo pasó de 13:20 (504 en el tope de Vercel, campaña `2fd5f619`, 21-nov 01:32Z) y n8n corta a los ~5:46 sin bytes.
+ * Se mide paso por paso con una llamada real; el que no figura aquí sigue en `maximo`.
+ * Se QUITA cuando exista el arreglo de fondo (los pasos largos sin el techo de 800 s · mapa de CC4, GO aparte): entonces todo vuelve a `maximo`.
+ */
+export const RAZONAMIENTO_TEMPORAL_POR_PASO: Readonly<Partial<Record<Paso, 'high' | 'medium' | 'low'>>> = { estrategia: 'high' }
+/** el razonamiento que pide cada paso: el temporal si lo tiene; si no, el de siempre (`maximo`) */
+export const razonamientoDelPaso = (paso: Paso): string => RAZONAMIENTO_TEMPORAL_POR_PASO[paso] ?? RAZONAMIENTO_POR_DEFECTO
 export const DIAS_DE_CAMPANA = 90
 /** techo de cordura de la duración que se pida: un año. No es un límite creativo: ataja un entero enorme */
 export const DIAS_MAXIMOS_DE_CAMPANA = 366
