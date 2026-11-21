@@ -56,7 +56,9 @@ describe('el tope de una llamada cubre un turno al techo de salida (punto 5)', (
     expect(sql).toContain(`ALTER TABLE public.cadena_campanas ALTER COLUMN presupuesto_lector_usd SET DEFAULT ${PRESUPUESTO_LECTOR_POR_OMISION};`)
     // las campañas con la bolsa del valor viejo (exactamente 2) suben, con candado: la bolsa de planificación + la del lector caben en el tope de la campaña
     const codigo = sql.split('\n').filter((l) => !l.trim().startsWith('--')).join('\n').replace(/\s+/g, ' ')
-    expect(codigo).toContain(`UPDATE public.cadena_campanas SET presupuesto_lector_usd = ${PRESUPUESTO_LECTOR_POR_OMISION} WHERE presupuesto_lector_usd = 2 AND (tope_gasto_usd IS NULL OR presupuesto_planificacion_usd + ${PRESUPUESTO_LECTOR_POR_OMISION} <= tope_gasto_usd);`)
+    // 🔴 y 36e66179 (intocable, regla de Emilio · CC7 03:40Z) queda FUERA por id
+    expect(codigo).toContain(`UPDATE public.cadena_campanas SET presupuesto_lector_usd = ${PRESUPUESTO_LECTOR_POR_OMISION} WHERE presupuesto_lector_usd = 2 AND (tope_gasto_usd IS NULL OR presupuesto_planificacion_usd + ${PRESUPUESTO_LECTOR_POR_OMISION} <= tope_gasto_usd) AND id <> '36e66179-3061-4a7d-94db-932a900d9515';`)
+    expect(codigo.match(/36e66179-3061-4a7d-94db-932a900d9515/g)).toHaveLength(1) // aparece una sola vez: en la exclusión
     // nada más que el DEFAULT (ALTER TABLE … ALTER COLUMN), el UPDATE con candado y el comentario: la reversa va comentada
     expect(codigo.match(/\b(UPDATE|ALTER|DELETE|INSERT|DROP)\b/g)).toEqual(['ALTER', 'ALTER', 'UPDATE'])
   })

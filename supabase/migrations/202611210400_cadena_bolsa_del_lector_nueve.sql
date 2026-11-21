@@ -9,11 +9,13 @@ ALTER TABLE public.cadena_campanas ALTER COLUMN presupuesto_lector_usd SET DEFAU
 -- (`prepararCorrida` exige gastado + tope ≤ bolsa). Límite conocido: un 2 puesto a mano no se distingue de uno que vino del DEFAULT.
 -- Lectura viva del 21-nov 03:4xZ: 3 campañas, las 3 en 2,00, ninguna con la bolsa del lector escrita a mano (nacieron con el DEFAULT).
 -- Candado: solo si la bolsa de planificación + la del lector nueva caben en el tope de gasto de la campaña (o no tiene tope).
--- Hoy: 36e66179 → 6 + 9 = 15 ≤ 150 · 2fd5f619 → 17,97 + 9 ≤ 300 (y su piso de planificación de 36 + 9 = 45 ≤ 300) · 31dc6aaf sin tope.
+-- Hoy: 2fd5f619 → 17,97 + 9 ≤ 300 (y su piso de planificación de 36 + 9 = 45 ≤ 300) · 31dc6aaf sin tope.
+-- 🔴 36e66179 NO se toca (regla de Emilio: campaña intocable, quieta en necesita_humano · pedido de CC7 03:40Z): se excluye por id y su fila queda igual.
 UPDATE public.cadena_campanas
    SET presupuesto_lector_usd = 9
  WHERE presupuesto_lector_usd = 2
-   AND (tope_gasto_usd IS NULL OR presupuesto_planificacion_usd + 9 <= tope_gasto_usd);
+   AND (tope_gasto_usd IS NULL OR presupuesto_planificacion_usd + 9 <= tope_gasto_usd)
+   AND id <> '36e66179-3061-4a7d-94db-932a900d9515';
 
 COMMENT ON COLUMN public.cadena_campanas.presupuesto_lector_usd IS 'CADENA · la bolsa PROPIA del lector de fichas (US$). No sale del presupuesto de planificación. 3 intentos × el tope de un turno al techo (US$ 3) = 9 (21-nov).';
 
