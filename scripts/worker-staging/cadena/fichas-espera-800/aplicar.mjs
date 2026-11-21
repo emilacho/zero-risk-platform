@@ -42,7 +42,7 @@ const vivo = await (await fetch(`${base}/api/v1/workflows/${ID}`, { headers: h }
 if (!igual(vivo, desde)) throw new Error('ALTO · el vivo no es igual al de partida: alguien lo cambió; no escribo')
 
 const put = await fetch(`${base}/api/v1/workflows/${ID}`, { method: 'PUT', headers: h, body: JSON.stringify(cuerpoDelPut(hacia)) })
-if (!put.ok) throw new Error(`PUT ${put.status}: ${(await put.text()).slice(0, 300)}`)
+if (!put.ok) throw new Error(`PUT ${put.status}: ${await put.text()}`)
 const despues = await (await fetch(`${base}/api/v1/workflows/${ID}`, { headers: h })).json()
 if (!igual(despues, hacia)) throw new Error('ALTO · después del PUT el vivo no quedó igual al esperado (revisar a mano)')
 const t = despues.nodes.find((n) => n.name === NODO).parameters.options.timeout
