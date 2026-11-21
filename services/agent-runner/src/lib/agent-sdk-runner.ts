@@ -52,6 +52,7 @@ import {
   type ShouldSkipResult,
 } from './workflow-checkpoint.js'
 import { buildDryRunFakeResponse } from './dry-run-mode.js'
+import { avisarEsperaAlCerebro, esperaDelCerebro } from './esperando-al-cerebro.js'
 import { metadataDelTrabajo, type TrabajoDeLaLlamada } from './trabajo-de-la-llamada.js'
 import { costoDeBusquedasWeb, costoEfectivoDeCorrida } from './libro-de-costos.js'
 
@@ -234,6 +235,12 @@ export interface BrainEnrichmentResultMeta {
   /** 02-oct · lo raspado sin sello que se descartó de la inyección · y el motivo si la consulta de confianza falló. */
   brain_chunks_untrusted_dropped?: number
   brain_trust_lookup_error?: string
+  /** encargo 15 · ADENDA 1 · la consulta FALLÓ (no 0 resultados) y el paso quedó detenido esperando al cerebro. */
+  brain_fallo?: true
+  /** encargo 15 · el motivo real del fallo (status y cuerpo del proveedor, sin la llave). */
+  brain_error_detalle?: string
+  /** encargo 15 · si el aviso a `#alertas` por la puerta interna se entregó (la detención no depende de esto). */
+  alarma_entregada?: boolean
 }
 
 /**
@@ -1318,6 +1325,30 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
     )
   }
 
+  // ─── encargo 15 · ADENDA 1 (firma de Emilio 21-nov: «no se puede crear nada sin el portero del cerebro») ───
+  // La consulta al cerebro FALLÓ (llave, saldo, red, status ≠ 200, base; NO 0 resultados): el agente no crea.
+  // El paso se detiene AQUÍ, antes de llamar al modelo (US$ 0), con el motivo real en el rastro, y suena
+  // `#alertas` UNA vez por incidente (puerta interna; el aviso nunca tumba nada). Se retoma reintentando el
+  // mismo paso: lo ya hecho vuelve de lo ya guardado. El seco (dryRun) no se detiene: no crea nada.
+  const espera = esperaDelCerebro(enrichment, input.dryRun === true)
+  if (espera) {
+    console.error(`[brain-enrich] ${canonicalSlug} · ESPERANDO AL CEREBRO · el paso se detiene · ${espera.motivo} · client=${input.clientId}`)
+    const aviso = await avisarEsperaAlCerebro({ agente: canonicalSlug, cliente: input.clientId, motivo: espera.motivo })
+    console.error(`[brain-enrich] alarma #alertas ${aviso.entregada ? 'entregada' : 'NO entregada'} · ${aviso.detalle}`)
+    const detenido = fail(espera.error, startedAt)
+    detenido.brainEnrichment = {
+      brain_hit: false,
+      brain_chunks_count: 0,
+      brain_query_ms: enrichment.brain_query_ms,
+      brain_cost_usd: enrichment.cost_usd,
+      ...(enrichment.error ? { brain_error: enrichment.error } : {}),
+      brain_fallo: true,
+      ...(enrichment.brain_error_detalle ? { brain_error_detalle: enrichment.brain_error_detalle } : {}),
+      alarma_entregada: aviso.entregada,
+    }
+    return detenido
+  }
+
   // 3. Build SDK options.
   const modelKey = agentCfg.model || 'claude-sonnet'
   const modelId = input.modelOverride ?? MODEL_MAP[modelKey] ?? MODEL_MAP['claude-sonnet']
@@ -1713,6 +1744,8 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
     brain_evidence_refs: enrichment.evidence_refs, // ADR-020 M1
     brain_grounding: enrichment.grounding, // ADR-020 M1 · prose_only until claim→chunk real
     ...(enrichment.error ? { brain_error: enrichment.error } : {}),
+    ...(enrichment.brain_fallo ? { brain_fallo: true as const } : {}),
+    ...(enrichment.brain_error_detalle ? { brain_error_detalle: enrichment.brain_error_detalle } : {}),
     ...(enrichment.brain_push ? { brain_push: enrichment.brain_push } : {}),
     // E114 · la consulta al cerebro se recorta a la cabeza del pedido · se declara.
     ...(typeof enrichment.brain_query_chars === 'number' ? { brain_query_chars: enrichment.brain_query_chars } : {}),
