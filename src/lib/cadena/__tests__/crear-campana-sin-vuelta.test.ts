@@ -59,6 +59,13 @@ describe('el nombre genérico del Plan de Marketing (Emilio 10:30Z: sin fecha de
     expect(nombreGenericoDelPlan('# Plan · noviembre de 2026')).toBe('Plan')
     expect(nombreGenericoDelPlan('# 2026-11-06 · Versión 2')).toBe(NOMBRE_GENERICO_SIN_PLAN)
   })
+  it('🔴 (s14 y s12 de CC5 en #369) un plan con saltos de Windows da el mismo nombre; un título con un carácter de control (tabulador) da el genérico fijo', () => {
+    expect(nombreGenericoDelPlan('# Plan de campaña · 90 días · Náufrago · Versión 3\r\n**6 de noviembre de 2026**\r\n')).toBe('Plan de campaña · 90 días · Náufrago')
+    expect(nombreGenericoDelPlan('# Campaña de verano · Quito\r\nresto')).toBe('Campaña de verano · Quito')
+    expect(nombreGenericoDelPlan('# Plan\tuno · Quito')).toBe(NOMBRE_GENERICO_SIN_PLAN)
+    // el título con sangría (lo que de verdad protege el trim de la línea; el \r ya lo quita el trim de cada parte)
+    expect(nombreGenericoDelPlan('Intro\r\n   # Campaña de verano · Quito · Versión 2\r\n')).toBe('Campaña de verano · Quito')
+  })
   it('🔴 un título que no cabe en un nombre (más de 120) da el genérico fijo, nunca un nombre cortado', () => {
     expect(nombreGenericoDelPlan(`# ${'x'.repeat(121)}`)).toBe(NOMBRE_GENERICO_SIN_PLAN)
     expect(nombreGenericoDelPlan(`# ${'x'.repeat(120)}`)).toBe('x'.repeat(120))
