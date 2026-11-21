@@ -45,6 +45,10 @@ export interface TokenRates {
 export const TOKEN_RATES_BY_MODEL: Record<string, TokenRates> = {
   'gpt-image-2.5-flare': { text_in: 5, image_in: 8, out: 30 },
   'gpt-image-2.5-sunburst': { text_in: 5, image_in: 8, out: 30 },
+  // 16-nov · GO-LENOVO 21:53 · tarifa estándar publicada por OpenAI (developers.openai.com/api/docs/pricing,
+  // leída el 16-nov): texto 5 · imagen de entrada 8 · salida 30 US$/1M tokens. Sin estimación medida: sin
+  // `usage` cae al precio de reserva (sobrestima, nunca 0). OpenAI lo marca como modelo «Deprecated».
+  'gpt-image-2': { text_in: 5, image_in: 8, out: 30 },
 }
 
 /** Estimación por imagen MEDIA 1:1 cuando la respuesta no trae `usage`. */

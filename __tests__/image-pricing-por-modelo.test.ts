@@ -48,6 +48,19 @@ describe('costForImage', () => {
     expect(costForImage({ model: 'gpt-image-2.5-flare', size: '1024x1024', usage: { output_tokens: 0 } }).basis).toBe('estimate')
   })
 
+  it('gpt-image-2 con usage: costo REAL por tokens con la tarifa publicada (5 · 8 · 30)', () => {
+    const r = costForImage({
+      model: 'gpt-image-2',
+      size: '1024x1024',
+      usage: { input_tokens: 1562, output_tokens: 439, input_tokens_details: { text_tokens: 100, image_tokens: 1462 } },
+    })
+    expect(r).toEqual({ cost_usd: Math.round(((100 * 5 + 1462 * 8 + 439 * 30) / 1e6) * 1e6) / 1e6, basis: 'usage' })
+  })
+
+  it('gpt-image-2 sin usage: precio de reserva (no hay estimación medida), jamás 0', () => {
+    expect(costForImage({ model: 'gpt-image-2', size: '1024x1536' })).toEqual({ cost_usd: 0.06, basis: 'fallback' })
+  })
+
   it('modelo desconocido: precio de reserva, jamás 0', () => {
     const r = costForImage({ model: 'modelo-que-no-existe', size: '999x999', usage: { output_tokens: 500 } })
     expect(r.cost_usd).toBeGreaterThan(0)
