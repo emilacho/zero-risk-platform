@@ -19,6 +19,7 @@ import { aplicarTopesPorDuracion, coberturaDelTope, costoDeVolver, loQueSigueDes
 import { validarPlantilla } from '../plantilla'
 import type { Estado, Plantilla } from '../tipos'
 
+import { TOPE_MAXIMO_DEL_SOBRE_USD } from '../sobre'
 const art = (datos: unknown, version = 1) => ({ version, version_consumida: 0, datos })
 const FOTOS = [{ id: 'f-real', url: 'https://fotos.test/real.jpg' }, { id: 'f-2', url: 'https://fotos.test/2.jpg' }, { id: 'f-3', url: 'https://fotos.test/3.jpg' }]
 const PLANOS = [
@@ -462,6 +463,8 @@ describe('tanda 2 · la migración 202611201600 y su reversa dicen lo mismo que 
   it('🔴 el techo de la base sube a 1000 en las dos reglas y la reversa lo baja a 650, frenando si hay filas por encima de 650', () => {
     expect(MIG).toContain('CHECK (tope_usd > 0 AND tope_usd <= 1000)')
     expect(MIG).toContain('CHECK (tope_encargo_usd > 0 AND tope_encargo_usd <= 1000)')
+    // 21-nov · CC4 · tabla de topes A2: el sobre acepta lo mismo que la base (antes se había quedado en 650)
+    expect(MIG).toContain(`CHECK (tope_usd > 0 AND tope_usd <= ${TOPE_MAXIMO_DEL_SOBRE_USD})`)
     expect(REV).toContain('CHECK (tope_usd > 0 AND tope_usd <= 650)')
     expect(REV).toContain('CHECK (tope_encargo_usd > 0 AND tope_encargo_usd <= 650)')
     expect(REV).toContain('IF EXISTS (SELECT 1 FROM public.oficina_encargos WHERE tope_usd > 650) THEN')
