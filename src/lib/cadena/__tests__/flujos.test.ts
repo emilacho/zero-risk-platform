@@ -440,6 +440,22 @@ describe('COMPORTAMIENTO · la cadena en seco con agente simulado (ensayo por la
       expect(primera).toMatchObject({ estado: 'fallida', costo_usd: 2.5 })
       expect(primera.error).toBe('tope de US$ 3 alcanzado')
     })
+    it('🔴 21-nov · #22 · un corte por tope NO queda «fallida»: el error del SDK (`error_max_budget_usd …`) o la marca `cerrada_por_tope` la cierran como `cerrada_por_tope`, y reintenta igual', async () => {
+      const corte = 'error_max_budget_usd · el empleado alcanzó el tope de gasto de la corrida (US$ 3) y se DETUVO · gastado ≈ US$ 3.0100 · lo escrito hasta ahí es PARCIAL y no se da por respuesta'
+      const m = mundo({ corredor: 'entrega', agente: () => ({ statusCode: 200, body: { success: false, error: corte, error_kind: 'runner_run_failed', cost_usd: 3.01 } }) })
+      await correr(m, sobreAbrir())
+      const estrategias = m.al.corridas.filter((c) => c.paso === 'estrategia')
+      expect(estrategias.length).toBeGreaterThan(1) // reintenta como una fallida
+      for (const c of estrategias) expect(c).toMatchObject({ estado: 'cerrada_por_tope', costo_usd: 3.01, error: corte })
+      // la marca sola (texto completo pero sin el objeto) también
+      const m2 = mundo({ corredor: 'entrega', agente: () => ({ statusCode: 200, body: { success: true, response: 'texto', cerrada_por_tope: true, cost_usd: 2.9 } }) })
+      await correr(m2, sobreAbrir())
+      expect(m2.al.corridas.find((c) => c.paso === 'estrategia')).toMatchObject({ estado: 'cerrada_por_tope', costo_usd: 2.9 })
+      // un error que solo MENCIONA el tope en medio no es un corte
+      const m3 = mundo({ corredor: 'entrega', agente: () => ({ statusCode: 200, body: { success: false, error: 'falló antes del error_max_budget_usd', cost_usd: 0.1 } }) })
+      await correr(m3, sobreAbrir())
+      expect(m3.al.corridas.find((c) => c.paso === 'estrategia')!.estado).toBe('fallida')
+    })
   })
   it('🔴 17-nov · el lector de fichas NO es reja: si sus 3 llamadas fallan, la cadena abre igual, sin fichas y sin necesita_humano', async () => {
     const m = mundo()
