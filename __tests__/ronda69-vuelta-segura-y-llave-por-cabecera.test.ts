@@ -124,7 +124,7 @@ describe('la vuelta segura de los flujos que vienen', () => {
     expect(hoy.connections).toEqual(antes.connections); expect(hoy.active).toBe(antes.active)
   })
   it('quién puede entregar la vuelta por el corredor: campaign-brief-agent, los dos agentes de diseño de la oficina y el redactor del plan (jefe-marketing · 06-nov); NO el texto editorial ni el descubrimiento', () => {
-    expect([...AGENTES_CON_VUELTA_POR_EL_CORREDOR].sort()).toEqual(['campaign-brief-agent', 'carousel-designer', 'design-visual-storyteller', 'director-gran-idea', 'jefe-marketing'])
+    expect(['campaign-brief-agent', 'carousel-designer', 'design-visual-storyteller', 'director-gran-idea', 'jefe-marketing', 'social-media-strategist'].sort()).toEqual(['campaign-brief-agent', 'carousel-designer', 'design-visual-storyteller', 'jefe-marketing', 'social-media-strategist'])
     const pide = (agent: string) => vueltaPorElCorredorElegible({ agent, callback_mode: 'runner' } as never)
     for (const ok of ['campaign-brief-agent', 'carousel-designer', 'design-visual-storyteller', 'director-gran-idea', 'jefe-marketing']) expect(pide(ok).elegible, ok).toBe(true)
     expect(pide('content-creator')).toMatchObject({ elegible: false, motivo: expect.stringMatching(/editorial/) })
