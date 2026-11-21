@@ -395,8 +395,8 @@ describe('COMPORTAMIENTO · la cadena en seco con agente simulado (ensayo por la
     const m = mundo()
     const r = await correr(m, sobreAbrir({ _simulacros: simulacros(m.cliente, { fichas: [{ __fallo: 'x' }, { __fallo: 'x' }, { __fallo: 'x' }] }) }))
     expect(r[0].json.resultado).toBe('cadena_abierta')
-    // fallas SIN costo registrado cuentan su tope (US$ 1, cota pesimista): la bolsa propia del lector (US$ 2) alcanza para 2; el 3.º ya no abre (RESPUESTA-LENOVO, opción b)
-    expect(m.al.corridas.filter((c) => c.paso === 'fichas').map((c) => c.estado)).toEqual(['fallida', 'fallida'])
+    // fallas SIN costo registrado cuentan su tope (US$ 3, un turno al techo): la bolsa propia del lector (US$ 9 · Lenovo 21-nov 03:37Z) alcanza para los 3 intentos
+    expect(m.al.corridas.filter((c) => c.paso === 'fichas').map((c) => c.estado)).toEqual(['fallida', 'fallida', 'fallida'])
     expect(m.al.corridas.some((c) => c.paso === 'calendario' && c.estado === 'ok')).toBe(true)
     expect(m.al.fichasDeOferta).toEqual([])
     expect(m.al.campanas.every((c) => c.estado !== 'necesita_humano')).toBe(true)

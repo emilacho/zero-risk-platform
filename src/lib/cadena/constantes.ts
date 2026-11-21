@@ -19,7 +19,7 @@ const ESPERADO_USD: Record<Paso, number> = { estrategia: 0.45, calendario: 0.4, 
  * (Si `cadena_config.modelo_cadena` pone un modelo más caro, este tope se revisa: lo ata la prueba `topes-por-el-corredor.test.ts`.)
  * Nació temporal en #1260 (Lenovo 02:16Z) para estrategia, calendario y fechas; con la opción A deja de ser temporal: es el tope de un turno al techo.
  * Sube el piso de la bolsa de planificación (12 × 3 = US$ 36): aceptado por Lenovo.
- * 🟡 Las fichas siguen con US$ 1 hasta la decisión de Lenovo (CC1 03:2xZ): cubrir el turno al techo (US$ 3) obliga a subir su bolsa propia y el DEFAULT de la columna.
+ * Las fichas también (decisión de Lenovo 03:37Z, opción a): US$ 3, y su bolsa propia sube a 3 intentos × 3 = US$ 9 (constante + DEFAULT, migración 202611210400).
  */
 export const PRECIO_DEL_MODELO_DE_LA_CADENA_USD_POR_MILLON = { entrada: 4, salida: 20 } as const
 export const TECHO_DE_SALIDA_TOKENS = 128_000
@@ -27,7 +27,7 @@ export const ENTRADA_DEL_PEOR_CASO_TOKENS = 100_000
 export const COSTO_DE_UN_TURNO_AL_TECHO_USD =
   (TECHO_DE_SALIDA_TOKENS * PRECIO_DEL_MODELO_DE_LA_CADENA_USD_POR_MILLON.salida + ENTRADA_DEL_PEOR_CASO_TOKENS * PRECIO_DEL_MODELO_DE_LA_CADENA_USD_POR_MILLON.entrada) / 1_000_000
 export const TOPE_DE_UN_TURNO_AL_TECHO_USD = 3
-export const TOPE_POR_PASO_USD: Readonly<Partial<Record<Paso, number>>> = { estrategia: TOPE_DE_UN_TURNO_AL_TECHO_USD, calendario: TOPE_DE_UN_TURNO_AL_TECHO_USD, fechas: TOPE_DE_UN_TURNO_AL_TECHO_USD }
+export const TOPE_POR_PASO_USD: Readonly<Partial<Record<Paso, number>>> = { estrategia: TOPE_DE_UN_TURNO_AL_TECHO_USD, calendario: TOPE_DE_UN_TURNO_AL_TECHO_USD, fechas: TOPE_DE_UN_TURNO_AL_TECHO_USD, fichas: TOPE_DE_UN_TURNO_AL_TECHO_USD }
 export const topeDelPaso = (p: Paso): number => TOPE_POR_PASO_USD[p] ?? Math.max(1, Math.round(2 * ESPERADO_USD[p] * 100) / 100)
 
 export const AGENTE_POR_PASO: Record<Paso, string> = {
@@ -113,8 +113,8 @@ export const CABECERA_SALTAR_EDITOR = 'x-skip-editor-middleware'
 export const PASOS_SIN_REVISION: readonly Paso[] = ['estrategia', 'calendario', 'fechas', 'fichas']
 /** RESPUESTA-LENOVO a CC3 (17-nov, opción b) · los pasos que gastan de su PROPIA bolsa (no de la de planificación) */
 export const PASOS_CON_PRESUPUESTO_PROPIO: ReadonlySet<Paso> = new Set<Paso>(['fichas'])
-/** el presupuesto del lector cuando la campaña no trae el suyo (US$ 2: hasta 3 intentos de ~0,5, o 2 si fallan sin costo registrado) */
-export const PRESUPUESTO_LECTOR_POR_OMISION = 2
+/** el presupuesto del lector cuando la campaña no trae el suyo: los 3 intentos × el tope de un turno al techo = US$ 9 (21-nov · Lenovo 03:37Z; antes 2) · igual al DEFAULT de la columna */
+export const PRESUPUESTO_LECTOR_POR_OMISION = 9
 /** el presupuesto de planificación con el que nace una campaña (`campanas.ts` · abrir, y el DEFAULT de la columna) */
 export const PRESUPUESTO_PLANIFICACION_POR_OMISION = 6
 /** 18-nov · firma de Emilio (DECISION-EMILIO-topes-con-margen-triple): todo tope de gasto = el triple de lo medido */
