@@ -188,6 +188,18 @@ describe('el recorrido completo (Vercel → corredor)', () => {
     for (const c of alCorredor) { expect(c.cuerpo.callback_mode).toBeUndefined(); expect(c.cuerpo.callback_url).toBeUndefined() }
     expect(terminal).toHaveBeenCalled() // el libro lo cierra Vercel, como siempre
   })
+  // 21-nov · 🟡 de CC6 (r2): solo el valor EXACTO '1' salta el editor (como en `route.ts`, que corre el editor con cualquier otro valor). Con '0', 'true' o vacío, el camino de siempre.
+  it.each(['0', 'true', ''])('🔴 21-nov · el mismo agente con la cabecera en %j: NO es elegible, el camino de siempre (el editor sigue protegido)', async (valor) => {
+    registrar.mockResolvedValue({ dispatch_key: 'dispatch:ZnoFdGfACA36c3qE:social-media-strategist:502', idempotent: false })
+    corredorResponde(RESPUESTA_LARGA_OK)
+    const cuerpo = pedido({ agent: 'social-media-strategist', workflow_id: 'ZnoFdGfACA36c3qE', workflow_execution_id: '502', step_name: 'estrategia', callback_mode: 'runner' })
+    promesas.length = 0
+    await POST(new Request('https://prod.test/api/agents/run-sdk', { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': 'k', 'x-skip-editor-middleware': valor }, body: JSON.stringify(cuerpo) }))
+    await Promise.all(promesas)
+    expect(alCorredor.length).toBeGreaterThanOrEqual(1)
+    for (const c of alCorredor) { expect(c.cuerpo.callback_mode).toBeUndefined(); expect(c.cuerpo.callback_url).toBeUndefined() }
+    expect(terminal).toHaveBeenCalled()
+  })
   it('el gancho de la prueba (test_delay_ms) viaja al corredor', async () => {
     corredorResponde(ACUSE_202)
     await correrElPedido(pedido({ callback_mode: 'runner', dry_run: true, test_delay_ms: 900000 }))
