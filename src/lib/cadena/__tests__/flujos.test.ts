@@ -455,6 +455,28 @@ describe('COMPORTAMIENTO · la cadena en seco con agente simulado (ensayo por la
       const m3 = mundo({ corredor: 'entrega', agente: () => ({ statusCode: 200, body: { success: false, error: 'falló antes del error_max_budget_usd', cost_usd: 0.1 } }) })
       await correr(m3, sobreAbrir())
       expect(m3.al.corridas.find((c) => c.paso === 'estrategia')!.estado).toBe('fallida')
+      // ni un subtipo PARECIDO (t6 de CC6): solo el subtipo exacto del SDK
+      const m4 = mundo({ corredor: 'entrega', agente: () => ({ statusCode: 200, body: { success: false, error: 'error_max_budget · otra cosa', cost_usd: 0.1 } }) })
+      await correr(m4, sobreAbrir())
+      expect(m4.al.corridas.find((c) => c.paso === 'estrategia')!.estado).toBe('fallida')
+    })
+    it('🔴 21-nov · #22 (t4 de CC6) · en FICHAS, un corte por tope en el intento 1 cierra `cerrada_por_tope` y REINTENTA: la ficha sale en el intento 2', async () => {
+      const corte = 'error_max_budget_usd · el empleado alcanzó el tope de gasto de la corrida (US$ 3) y se DETUVO · gastado ≈ US$ 3.0100 · lo escrito hasta ahí es PARCIAL y no se da por respuesta'
+      const cl = clienteUuid()
+      const sede = cl.sedes[0].clave
+      const vacia = { nombre: '', que_es: [], para_quien_y_donde: [], se_puede_afirmar: [], no_se_puede_afirmar: [], oferta_y_precio: [], como_se_compra: [], que_mostrar: [], que_nunca_mostrar: [], obligatorios_legales: [], objetivo_por_fecha: [] }
+      const ficha = { ...vacia, clave: sede, que_es: [{ valor: 'qué es', fuente: 'manual:1', vigente_desde: '', vigente_hasta: '', red: '' }] }
+      const normal = agenteQueDevuelve({ estrategia: cl.estrategia, calendario: tandaBuena(cl), fichas: { fichas: [ficha], pendientes: [] } })
+      let fichasLlamadas = 0
+      const agente = (b: any): RespuestaHttp => {
+        if (b.extra?.contrato === 'fichas_de_oferta.v1' && ++fichasLlamadas === 1) return { statusCode: 200, body: { success: false, error: corte, error_kind: 'runner_run_failed', cost_usd: 3.01 } }
+        return normal(b)
+      }
+      const m = mundo({ corredor: 'entrega', cliente: cl, agente })
+      const r = await correr(m, sobreAbrir())
+      expect(r[0].json.resultado).toBe('cadena_abierta')
+      expect(m.al.corridas.filter((c) => c.paso === 'fichas').map((c) => [c.estado, c.costo_usd])).toEqual([['cerrada_por_tope', 3.01], ['ok', 0.31]])
+      expect(m.al.fichasDeOferta.map((f) => f.contenido.map((x) => x.clave))).toEqual([[sede]])
     })
   })
   it('🔴 17-nov · el lector de fichas NO es reja: si sus 3 llamadas fallan, la cadena abre igual, sin fichas y sin necesita_humano', async () => {
