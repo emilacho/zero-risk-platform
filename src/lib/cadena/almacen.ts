@@ -336,6 +336,8 @@ export interface Almacen {
   pedidoPorLlave?(clientId: string, llave: string, seco: boolean): Promise<PedidoGuardado | null>
   /** guarda el pedido; si la llave ya existe (otra pestaña ganó la carrera) LANZA con 23505 */
   insertarPedidoDeCampana?(p: Omit<PedidoGuardado, 'id' | 'creado_en' | 'campana_id'>): Promise<PedidoGuardado>
+  /** 21-nov · el arreglo propio de «Crear Campaña» (`reparar-pedidos.ts`): los pedidos SIN campaña guardados desde `desde` (ISO), del más viejo al más nuevo · LANZA si no se puede leer */
+  pedidosSinNacer?(desde: string): Promise<PedidoGuardado[]>
   /** liga el pedido a la campaña que nació de él (una sola vez; el candado de la base exige mismo cliente, seco y llave) */
   ligarPedidoDeCampana?(pedidoId: string, campanaId: string): Promise<void>
   /** el plan está aprobado por el dueño (`client_historical_outputs.status = approved`) */
