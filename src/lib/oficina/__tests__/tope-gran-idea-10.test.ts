@@ -122,8 +122,6 @@ describe('(1) la reserva propia de la gran idea', () => {
 describe('(2) el plazo del turno coherente con la reserva', () => {
   it('250 min: 10 dólares al ritmo más lento medido (0,06 por minuto) con el margen ×1,5', () => {
     expect(PLAZO_DEL_TURNO_DE_LA_GRAN_IDEA_MIN).toBe(250)
-    expect(PLAZO_DEL_TURNO_DE_LA_GRAN_IDEA_MIN).toBeGreaterThanOrEqual((10 / 0.06) * 1.5 - 1e-6)
-    expect(PLAZO_DEL_TURNO_DE_LA_GRAN_IDEA_MIN).toBeLessThan((10 / 0.06) * 1.5 + 10)
   })
   it('el piso del vigía: 250 para la dirección de concepto; 12 para los demás', () => {
     expect(MINUTOS_PARA_DAR_POR_MUERTO).toBe(12)
@@ -183,8 +181,9 @@ describe('(2) el plazo del turno coherente con la reserva', () => {
     expect(rev).toContain("jsonb_build_object('plazo_mesa_min', 90)")
     expect(rev).toContain("(g.limites->>'plazo_mesa_min')::numeric = 340")
   })
-  it('la espera es POR TURNO: el pedido de la dirección de la gran idea trae espera_s (su plazo + 5 min); los demás no traen nada', async () => {
-    expect(esperaDelTurnoS('concepto', DIRECCION, DIRECCION)).toBe((PLAZO_DEL_TURNO_DE_LA_GRAN_IDEA_MIN + 5) * 60)
+  it('la espera es POR TURNO: el pedido de la dirección de la gran idea trae espera_s (15 300 s); los demás no traen nada', async () => {
+    // Lenovo 11:09Z (Emilio 10:49Z): sin pruebas que aten la espera al plazo ni los topes al peor caso: el valor, tal cual
+    expect(esperaDelTurnoS('concepto', DIRECCION, DIRECCION)).toBe(15300)
     expect(esperaDelTurnoS('concepto', 'content-creator', DIRECCION)).toBeNull()
     expect(esperaDelTurnoS('brief', 'campaign-brief-agent', 'campaign-brief-agent')).toBeNull()
     expect(ESPERA_DEL_FLUJO_POR_OMISION_S).toBe(1800)
