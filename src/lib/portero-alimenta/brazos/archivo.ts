@@ -12,6 +12,7 @@ import type { FichaDeBrazo } from './tipos'
 import { claveDeAlcance, sedesDeFicha } from '../sedes-fuentes'
 import { leerTodas } from '../paginar'
 import { cargarPruebasDelCliente, columnasDeLaMarca, marcaDeOtroNegocio, type PruebasDelCliente } from '../otro-negocio'
+import { redDeLaFicha } from '../../cerebro/portero/red-de-la-pieza'
 
 type Fila = Record<string, unknown>
 export interface ResultadoDeArchivo {
@@ -84,6 +85,8 @@ export async function archivarFichasDeBrazos(o: { db: Db; fichas: FichaDeBrazo[]
         provenance_tag: { type: 'evidence', source: `brazo_${f.brazo}`, trust_level: 'untrusted', alcance: f.alcance, ingress_route: '/api/brain/alimentar/procesar', ...(f.datos ? { datos: f.datos } : {}), ...(f.metrica ? { metrica: f.metrica } : {}) },
         fuente_url: f.fuente_url, observado_en: f.observado_en, atributo: f.atributo, decision: f.decision, razon_de_decision: reemplaza ? 'la lectura nueva reemplaza a la vigente del mismo atributo' : 'dato nuevo',
         alcance: f.alcance, descartada: false,
+        // encargo 7 (21-nov) · la red se deduce del enlace de la fuente o de la clase; sin señal → null («no consta»)
+        red: redDeLaFicha({ clase: f.clase, fuente_url: f.fuente_url }),
         ...columnasDeLaMarca(pruebas && pruebas.ok ? marcaDeOtroNegocio({ propiedad: f.alcance === 'cliente' ? 'propia' : 'ajena', fuente_url: f.fuente_url, sede: claveDeAlcance(sedesDeFicha({ datos: f.datos })) || null }, pruebas.pruebas) : null, o.ahora),
       })
       if (w.error) { r.errores.push(`ficha ${f.ref}: ${w.error.message}`); continue }
