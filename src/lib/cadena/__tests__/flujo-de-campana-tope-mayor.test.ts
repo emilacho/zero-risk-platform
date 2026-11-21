@@ -7,7 +7,8 @@ import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('../constantes', async (importOriginal) => {
   const real = await importOriginal<typeof import('../constantes')>()
-  return { ...real, topeDelPaso: (p: Parameters<typeof real.topeDelPaso>[0]) => (p === 'estrategia' ? 1.6 : real.topeDelPaso(p)) }
+  // 21-nov #1260 · los topes temporales (estrategia, calendario y fechas a US$ 3) son iguales entre sí: la prueba fija los demás en 1 para seguir midiendo el MAYOR
+  return { ...real, topeDelPaso: (p: Parameters<typeof real.topeDelPaso>[0]) => (p === 'estrategia' ? 1.6 : 1) }
 })
 
 import { causaQueSigue, topeDeLaPlanificacion } from '../flujo-de-campana'

@@ -50,28 +50,28 @@ describe('la bolsa de planificación · 3 × (estrategia + tandas), con lo medid
     expect(MEDIDO_POR_LLAMADA_USD).toEqual({ estrategia: 0.7712, calendario: 0.7261 })
     expect(RONDAS_DE_CORRECCION).toBe(3)
     expect(MULTIPLO_DE_LA_BOLSA).toBe(3)
-    expect(bolsaDePlanificacion(3)).toBe(35.4)
+    expect(bolsaDePlanificacion(3)).toBe(36) // 3 × medida = 35,4, pero el piso es 12 × 3 = 36 (tope temporal de #1260, 21-nov)
     expect(bolsaDePlanificacion(4)).toBe(44.11)
-    expect(bolsaDePlanificacion(1)).toBe(17.97)
+    expect(bolsaDePlanificacion(1)).toBe(36) // 17,97 por la cuenta; el piso de 36 manda
     expect(medidaDeCampana(DOCE).totalTandas).toBe(3)
     expect(medidaDeCampana(NAUFRAGO).totalTandas).toBe(4)
   })
-  it('nunca menos que los US$ 6 de siempre (ni que las 12 vueltas caídas de un paso: US$ 12)', () => {
+  it('nunca menos que los US$ 6 de siempre (ni que las 12 vueltas caídas de un paso: 12 × 3 = US$ 36 desde el tope temporal de #1260)', () => {
     expect(PRESUPUESTO_PLANIFICACION_POR_OMISION).toBe(6)
-    expect(bolsaDePlanificacion(0)).toBe(12)
-    expect(bolsaDePlanificacion(Number.NaN)).toBe(12)
-    expect(bolsaDePlanificacion(-2)).toBe(12)
+    expect(bolsaDePlanificacion(0)).toBe(36)
+    expect(bolsaDePlanificacion(Number.NaN)).toBe(36)
+    expect(bolsaDePlanificacion(-2)).toBe(36)
   })
   it('la bolsa vieja de 6 crece hasta la de su regla; ya en ella (o más) no se toca', () => {
     expect(bolsaAgrandada({ ...NAUFRAGO, presupuesto_planificacion_usd: 6, tope_gasto_usd: 150 }, 'calendario')).toBe(44.11)
-    expect(bolsaAgrandada({ ...DOCE, presupuesto_planificacion_usd: 6, tope_gasto_usd: null }, 'estrategia')).toBe(35.4)
-    expect(bolsaAgrandada({ ...DOCE, presupuesto_planificacion_usd: 35.4, tope_gasto_usd: 150 }, 'calendario')).toBeNull()
+    expect(bolsaAgrandada({ ...DOCE, presupuesto_planificacion_usd: 6, tope_gasto_usd: null }, 'estrategia')).toBe(36)
+    expect(bolsaAgrandada({ ...DOCE, presupuesto_planificacion_usd: 36, tope_gasto_usd: 150 }, 'calendario')).toBeNull()
     expect(bolsaAgrandada({ ...DOCE, presupuesto_planificacion_usd: 50, tope_gasto_usd: 150 }, 'calendario')).toBeNull()
   })
   it('nunca pasa el tope de gasto de la campaña', () => {
     expect(bolsaAgrandada({ ...DOCE, presupuesto_planificacion_usd: 6, tope_gasto_usd: 10 }, 'calendario')).toBe(10)
     expect(bolsaAgrandada({ ...DOCE, presupuesto_planificacion_usd: 6, tope_gasto_usd: 6 }, 'calendario')).toBeNull()
-    expect(bolsaAgrandada({ ...DOCE, presupuesto_planificacion_usd: 6, tope_gasto_usd: 0 }, 'calendario')).toBe(35.4) // 0 = sin tope (como `topeDeLaCampana`)
+    expect(bolsaAgrandada({ ...DOCE, presupuesto_planificacion_usd: 6, tope_gasto_usd: 0 }, 'calendario')).toBe(36) // 0 = sin tope (como `topeDeLaCampana`)
   })
   it('la bolsa del lector no es de planificación: no crece', () => {
     expect(bolsaAgrandada({ ...DOCE, presupuesto_planificacion_usd: 6, tope_gasto_usd: 150 }, 'fichas')).toBeNull()
@@ -139,7 +139,7 @@ describe('🔴 una campaña de 12 semanas planifica ENTERA sin pararse (la prueb
     const al = almacen()
     await abrirCampana(al, { ...wf(), client_id: A.clientId, seco: true, dias_de_campana: 84 }, LUNES)
     expect(medidaDeCampana(al.campanas[0])).toMatchObject({ totalSemanas: 12, totalTandas: 3 })
-    expect(al.campanas[0].presupuesto_planificacion_usd).toBe(35.4)
+    expect(al.campanas[0].presupuesto_planificacion_usd).toBe(36)
     expect(await planificar(al)).toEqual(Array(8).fill('lista'))
   })
   it('con la bolsa vieja de US$ 6 fijos (y sin dejarla crecer) se paraba a media planificación: la regla es la que la deja terminar', async () => {
@@ -281,7 +281,7 @@ describe('el reloj retoma la estrategia atascada', () => {
     await relojDeLaCadena(al, { workflow_id: 'wf-vigia', workflow_execution_id: 'v1', seco: true }, TARDE)
     expect(al.sobresEmitidos).toHaveLength(0)
   })
-  it('el tope del paso no cambió: sigue siendo el de siempre', () => {
-    expect(topeDelPaso('estrategia')).toBe(1)
+  it('el tope del paso no cambió: sigue siendo el suyo (US$ 3, el temporal de #1260)', () => {
+    expect(topeDelPaso('estrategia')).toBe(3)
   })
 })

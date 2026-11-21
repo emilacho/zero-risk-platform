@@ -5,7 +5,7 @@
 import { createHash } from 'node:crypto'
 import type { Almacen, Campana, Corrida, EsperaFila } from './almacen'
 import { calcularReloj, type ContextoPlazo } from './esperas'
-import { bolsaDePlanificacion, MAXIMO_DE_INTENTOS, medidaDeCampana, PASOS_CON_PRESUPUESTO_PROPIO, PRESUPUESTO_LECTOR_POR_OMISION, plazoDeLlamadaMinutos, topeDelPaso, type Paso } from './constantes'
+import { bolsaDePlanificacion, MAXIMO_DE_INTENTOS, medidaDeCampana, PASOS_CON_PRESUPUESTO_PROPIO, PRESUPUESTO_LECTOR_POR_OMISION, plazoDeLlamadaMinutos, plazoMinimoDelPaso, topeDelPaso, type Paso } from './constantes'
 
 export const sello = (s: string): string => createHash('sha256').update(s).digest('hex').slice(0, 12)
 export const semanaDeId = (id: string): number => Number(/^s(\d+)-/.exec(id)?.[1] ?? 0)
@@ -153,7 +153,7 @@ export async function prepararCorrida(
     presupuesto = nueva
     if (gastado + topeDelPaso(paso) > presupuesto) return { tipo: 'presupuesto_agotado', gastado, presupuesto }
   }
-  const plazoMin = await plazoDeLlamadaMinutos(al)
+  const plazoMin = Math.max(await plazoDeLlamadaMinutos(al), plazoMinimoDelPaso(paso)) // 21-nov #1260: nunca menos que la espera de la misma llamada
   const { corrida, creada } = await al.abrirCorrida({
     campana_id: campana.id, paso, clave_idempotencia: llave, intento, workflow_id: workflowId, workflow_execution_id: workflowExecutionId,
     modelo, costo_usd: null, estado: 'en_curso', plazo_en: new Date(Date.parse(ahora) + plazoMin * 60_000).toISOString(), error: null,

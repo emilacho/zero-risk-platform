@@ -61,7 +61,7 @@ describe('la bolsa de planificación (DECISIÓN Lenovo 19-nov 05:00Z): 3 × lo m
   })
   it('nunca menos que el peor caso de 12 caídas a su tope (ni con 0 tandas)', () => {
     expect(bolsaDePlanificacion(0)).toBeGreaterThanOrEqual(TOPE_DE_VUELTAS_DEL_SUBFLUJO * topeDelPaso('estrategia'))
-    expect(bolsaDePlanificacion(0)).toBe(12)
+    expect(bolsaDePlanificacion(0)).toBe(36) // 12 × 3 (tope temporal de #1260)
   })
   it('crece con las tandas (más tandas, más rondas posibles)', () => {
     expect(bolsaDePlanificacion(14)).toBeGreaterThan(bolsaDePlanificacion(4))

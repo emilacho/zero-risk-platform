@@ -267,13 +267,13 @@ describe('la estrategia: preparar y guardar', () => {
     expect(run.output_schema.type).toBe('object')
     expect(run.output_schema.additionalProperties).toBe(false)
     expect(run.max_budget_usd).toBeGreaterThanOrEqual(1)
-    expect(run.thinking_mode).toBe('maximo')
+    expect(run.thinking_mode).toBe('high') // 21-nov · temporal (Lenovo 01:58Z): la estrategia al máximo no cabe en la ventana
     expect(run.model_override).toBe('claude-opus-5-5')
     expect(run.task).toContain(A.planTexto)
     expect(r.cuerpo.headers).toEqual({ 'x-skip-editor-middleware': '1' })
     const corrida = al.corridas[0]
     expect(corrida).toMatchObject({ estado: 'en_curso', paso: 'estrategia', salida_estructurada: true, revision_editor: 'saltada_por_diseno' })
-    expect(corrida.plazo_en).toBe('2026-10-09T12:06:00.000Z')
+    expect(corrida.plazo_en).toBe('2026-10-09T12:14:00.000Z') // 21-nov #1260: el piso de 14 min de la misma llamada (la config de prueba dice 6)
     expect(al.campanas[0].estado).toBe('estrategia')
   })
   it('🔴 la indicación no filtra datos de un cliente ni una forma de contactar al dueño', async () => {
@@ -403,8 +403,8 @@ describe('la estrategia: preparar y guardar', () => {
   it('🔴 el presupuesto de planificación se respeta: sin presupuesto no se llama (18-nov grupo A: sin necesita_humano) y un corte con costo 0 en el libro cuenta el tope', async () => {
     const al = almacen()
     const id = idCampana(await abrir(al))
-    al.campanas[0].presupuesto_planificacion_usd = 1.5
-    al.campanas[0].tope_gasto_usd = 1.5 // la bolsa se agrandaría sola al triple; el tope de la campaña la deja donde está
+    al.campanas[0].presupuesto_planificacion_usd = 4.5 // 21-nov #1260: 1,5 × el tope temporal de la estrategia (US$ 3): alcanza para UNA llamada, no para dos
+    al.campanas[0].tope_gasto_usd = 4.5 // la bolsa se agrandaría sola al triple; el tope de la campaña la deja donde está
     const p = await estrategiaPreparar(al, { ...wf(), campana_id: id }, AHORA)
     await estrategiaGuardar(al, { ...wf(), campana_id: id, corrida_id: p.cuerpo.corrida_id, resultado: { success: false, cost_usd: 0, cerrada_por_tope: true, error: 'cortada' } }, AHORA)
     expect(al.corridas[0].estado).toBe('cerrada_por_tope')
@@ -414,7 +414,7 @@ describe('la estrategia: preparar y guardar', () => {
     expect(otra.status).toBe(409)
     expect(otra.cuerpo.error).toBe('presupuesto_agotado')
     expect(al.campanas[0].estado).not.toBe('necesita_humano')
-    expect(al.campanas[0].presupuesto_planificacion_usd).toBe(1.5)
+    expect(al.campanas[0].presupuesto_planificacion_usd).toBe(4.5)
   })
   it('la corrida de otra campaña o inexistente es 404; guardar dos veces la misma no la duplica', async () => {
     const al = almacen()
