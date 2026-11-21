@@ -12,16 +12,23 @@ export const PASOS: readonly Paso[] = ['estrategia', 'calendario', 'fechas', 'br
 /** costo esperado por llamada (US$, estimación del diseño §12, no medida) · el tope de la corrida = 2 × esperado, mínimo 1,00 */
 const ESPERADO_USD: Record<Paso, number> = { estrategia: 0.45, calendario: 0.4, fechas: 0.3, brief: 0.25, fichas: 0.5 }
 /**
- * 21-nov · ⚠️ MEDIDA TEMPORAL (decisión de Lenovo 02:16Z, modo jefe · regla firmada: el tope cubre el peor caso; un tope no es gasto) · el tope por llamada de los
- * 4 pasos que esperan en la misma llamada y bajan a `high` (ver RAZONAMIENTO_TEMPORAL_POR_PASO). Con el techo de salida de 128K (`9463abb`), el peor caso de una
- * llamada es ~US$ 2,7 (cota de CC3, 21-nov 01:5xZ): US$ 3 lo cubre. Estrategia US$ 3 lo fijó Lenovo; calendario y fechas, el mismo peor caso.
- * Las fichas NO entran aquí (siguen con US$ 1, 1,5 × lo medido 0,664 en `maximo`; en `high` gastan menos): gastan de su bolsa PROPIA (`presupuesto_lector_usd`, US$ 2 por
- * omisión) y un intento caído cuenta el tope entero (`costoEfectivo`). Con US$ 1 caben 2 intentos; con US$ 2 cabría UNO solo y un fallo las dejaría sin fichas.
- * Subirlo a 2-3 × lo medido pide subir antes esa bolsa (escritura certificada + el valor por omisión): avisado a Lenovo.
- * Sube el piso de la bolsa de planificación (12 × 3 = US$ 36): aceptado por Lenovo. Se QUITA con el arreglo de fondo, igual que el razonamiento temporal.
+ * 21-nov · opción A (GO de Lenovo 02:47Z, punto 5 · hallazgo de CC7 02:05Z): EL TOPE DE UNA LLAMADA CUBRE UN TURNO AL TECHO DE SALIDA.
+ * El SDK solo corta por dinero ENTRE turnos: un turno solo de hasta 128K de salida (`9463abb`) se cobra entero aunque pase el tope. Con un tope menor,
+ * la cuenta del intento caído (`costoEfectivo` = el tope) se queda corta. Regla firmada: el tope cubre el peor caso; un tope no es gasto.
+ * Peor caso de un turno en el modelo de la cadena (Opus 5.5, US$ 4 / US$ 20 por millón): 128K de salida + 100K de entrada = US$ 2,96 → tope US$ 3.
+ * (Si `cadena_config.modelo_cadena` pone un modelo más caro, este tope se revisa: lo ata la prueba `topes-por-el-corredor.test.ts`.)
+ * Nació temporal en #1260 (Lenovo 02:16Z) para estrategia, calendario y fechas; con la opción A deja de ser temporal: es el tope de un turno al techo.
+ * Sube el piso de la bolsa de planificación (12 × 3 = US$ 36): aceptado por Lenovo.
+ * 🟡 Las fichas siguen con US$ 1 hasta la decisión de Lenovo (CC1 03:2xZ): cubrir el turno al techo (US$ 3) obliga a subir su bolsa propia y el DEFAULT de la columna.
  */
-export const TOPE_TEMPORAL_POR_PASO_USD: Readonly<Partial<Record<Paso, number>>> = { estrategia: 3, calendario: 3, fechas: 3 }
-export const topeDelPaso = (p: Paso): number => TOPE_TEMPORAL_POR_PASO_USD[p] ?? Math.max(1, Math.round(2 * ESPERADO_USD[p] * 100) / 100)
+export const PRECIO_DEL_MODELO_DE_LA_CADENA_USD_POR_MILLON = { entrada: 4, salida: 20 } as const
+export const TECHO_DE_SALIDA_TOKENS = 128_000
+export const ENTRADA_DEL_PEOR_CASO_TOKENS = 100_000
+export const COSTO_DE_UN_TURNO_AL_TECHO_USD =
+  (TECHO_DE_SALIDA_TOKENS * PRECIO_DEL_MODELO_DE_LA_CADENA_USD_POR_MILLON.salida + ENTRADA_DEL_PEOR_CASO_TOKENS * PRECIO_DEL_MODELO_DE_LA_CADENA_USD_POR_MILLON.entrada) / 1_000_000
+export const TOPE_DE_UN_TURNO_AL_TECHO_USD = 3
+export const TOPE_POR_PASO_USD: Readonly<Partial<Record<Paso, number>>> = { estrategia: TOPE_DE_UN_TURNO_AL_TECHO_USD, calendario: TOPE_DE_UN_TURNO_AL_TECHO_USD, fechas: TOPE_DE_UN_TURNO_AL_TECHO_USD }
+export const topeDelPaso = (p: Paso): number => TOPE_POR_PASO_USD[p] ?? Math.max(1, Math.round(2 * ESPERADO_USD[p] * 100) / 100)
 
 export const AGENTE_POR_PASO: Record<Paso, string> = {
   estrategia: 'social-media-strategist',
@@ -37,17 +44,13 @@ export const MODELO_POR_DEFECTO = 'claude-opus-5-5'
  *  (`maximo` ⇒ el corredor manda `max` en Opus 5.5). Antes era `low` (experimento del 30-sep por el techo de 32.000 tokens, que G1 sube a 128.000). */
 export const RAZONAMIENTO_POR_DEFECTO = 'maximo'
 /**
- * 21-nov · ⚠️ MEDIDA TEMPORAL (decisión de Lenovo 01:58Z, modo jefe mientras Emilio duerme · frente a su firma «nada se recorta»):
- * los pasos de la cadena que con `maximo` NO caben en la ventana de la llamada bajan al nivel más alto que sí cabe.
- * Por qué: la estrategia al máximo pasó de 13:20 (504 en el tope de Vercel, campaña `2fd5f619`, 21-nov 01:32Z) y n8n corta a los ~5:46 sin bytes.
- * Se mide paso por paso con una llamada real; el que no figura aquí sigue en `maximo`.
- * Se QUITA cuando exista el arreglo de fondo (los pasos largos sin el techo de 800 s · mapa de CC4, GO aparte): entonces todo vuelve a `maximo`.
- * 21-nov 02:16Z · Lenovo: los 4 pasos que esperan al agente en la MISMA llamada (estrategia, calendario, fechas especiales y fichas) van a `high`; el brief no
- * (su vuelta la entrega el corredor, sin techo de 800 s), así que sigue en `maximo`.
+ * 21-nov · opción A (GO de Lenovo 02:47Z): los 4 pasos largos (estrategia, calendario, fechas especiales y fichas) ya NO esperan al agente en la misma llamada:
+ * la vuelta la entrega el corredor (Railway, sin el techo de 800 s de Vercel) a la espera del sub-flujo. Se deshace lo temporal de #1260: todos vuelven a `maximo`.
+ * El brief ya iba por el corredor. Queda la función por paso para que un cambio futuro se decida y se anote en un solo lugar.
  */
-export const RAZONAMIENTO_TEMPORAL_POR_PASO: Readonly<Partial<Record<Paso, 'high' | 'medium' | 'low'>>> = { estrategia: 'high', calendario: 'high', fechas: 'high', fichas: 'high' }
-/** el razonamiento que pide cada paso: el temporal si lo tiene; si no, el de siempre (`maximo`) */
-export const razonamientoDelPaso = (paso: Paso): string => RAZONAMIENTO_TEMPORAL_POR_PASO[paso] ?? RAZONAMIENTO_POR_DEFECTO
+export const PASOS_POR_EL_CORREDOR: readonly Paso[] = ['estrategia', 'calendario', 'fechas', 'fichas']
+/** el razonamiento que pide cada paso: hoy todos el de siempre (`maximo`, firma de Emilio «nada se recorta») */
+export const razonamientoDelPaso = (_paso: Paso): string => RAZONAMIENTO_POR_DEFECTO
 export const DIAS_DE_CAMPANA = 90
 /** techo de cordura de la duración que se pida: un año. No es un límite creativo: ataja un entero enorme */
 export const DIAS_MAXIMOS_DE_CAMPANA = 366
@@ -121,14 +124,16 @@ export async function modeloDeLaCadena(al: Almacen): Promise<string> {
   return modeloPorCorridaValido(v) ? v : MODELO_POR_DEFECTO
 }
 /**
- * 21-nov · #1260 (pedido de CC6 02:32Z) · ⚠️ MEDIDA TEMPORAL, va y se quita junto con RAZONAMIENTO_TEMPORAL_POR_PASO · el plazo de la CORRIDA de los pasos que esperan al
- * agente en la misma llamada no puede ser menor que esa espera (800 s en n8n y en Vercel = 13:20): si lo fuera, el vigía daría la corrida por vencida y lanzaría OTRO agente
- * con el primero vivo (lo de `2fd5f619`: 3 corridas de 5:46 con el plazo vivo en 6 min). Piso de 14 min para esos pasos; la config (`plazo_llamada_agente_minutos`) sigue
- * mandando si es mayor, y para los demás pasos.
+ * El plazo de la CORRIDA de los pasos que van por el corredor no puede ser menor que la espera de su vuelta: si lo fuera, el vigía daría la corrida por vencida
+ * y lanzaría OTRO agente con el primero vivo (lo de `2fd5f619`: 3 corridas de 5:46 con el plazo vivo en 6 min · CC6 02:32Z).
+ * 21-nov · opción A: la espera es el Wait por webhook del sub-flujo (3 600 s, la misma del brief y del productor); plazo = espera + 2 min de margen = 62 min.
+ * La config (`plazo_llamada_agente_minutos`) sigue mandando si es mayor, y para los demás pasos. (#1260 tenía 800 s / 14 min: la espera de la misma llamada.)
  */
+export const ESPERA_DE_LA_VUELTA_S = 3600
+/** la espera del nodo HTTP de los 4 sub-flujos (#1260: 800 s, el tope de Vercel). Con la opción A ese nodo solo recibe el acuse; la usa `fichas-espera-800.test.ts` */
 export const ESPERA_DE_LA_MISMA_LLAMADA_S = 800
-export const PLAZO_MINIMO_DE_LA_MISMA_LLAMADA_MIN = 14
-export const plazoMinimoDelPaso = (paso: Paso): number => (paso in RAZONAMIENTO_TEMPORAL_POR_PASO ? PLAZO_MINIMO_DE_LA_MISMA_LLAMADA_MIN : 0)
+export const PLAZO_MINIMO_POR_EL_CORREDOR_MIN = Math.ceil(ESPERA_DE_LA_VUELTA_S / 60) + 2
+export const plazoMinimoDelPaso = (paso: Paso): number => (PASOS_POR_EL_CORREDOR.includes(paso) ? PLAZO_MINIMO_POR_EL_CORREDOR_MIN : 0)
 export async function plazoDeLlamadaMinutos(al: Almacen): Promise<number> {
   const v = await al.leerConfig('plazo_llamada_agente_minutos')
   return typeof v === 'number' && v > 0 ? v : PLAZO_DE_LLAMADA_POR_DEFECTO_MIN
