@@ -18,6 +18,7 @@ export function crearBaseFalsa(tablas: Record<string, Fila[]>, opciones: { /** c
       let ignorar = false
       let tope = Infinity
       let desde = 0
+      let orden: [string, boolean] | null = null
       const q: Record<string, unknown> = {}
       const filas = () => (tablas[tabla] ?? []).filter((f) => filtros.every(([c, t, v]) => {
         const x = f[c]
@@ -31,7 +32,9 @@ export function crearBaseFalsa(tablas: Record<string, Fila[]>, opciones: { /** c
       }))
       const ejecutar = () => {
         if (opciones.fallaEn === tabla && op === 'select' && leidas++ < (opciones.saltar ?? 0)) { /* todavía pasa */ } else if (opciones.fallaEn === tabla && (opciones.saltar === undefined || op === 'select') && (opciones.fallaVeces === undefined || falladas++ < opciones.fallaVeces)) return { data: null, error: { message: `falla simulada en ${tabla}` } }
-        if (op === 'select') { lecturas.push(tabla); return { data: filas().slice(desde, desde + Math.min(tope, opciones.topeDeFilas ?? Infinity)), error: null } }
+        // 21-nov (🟡 2 de CC6 en #1269) · `.order(...)` ORDENA de verdad, como la base real: antes se ignoraba y «la primera fila» de una lectura con orden no estaba atada a nada
+        const ordenadas = () => { const f = filas(); if (!orden) return f; const [c, asc] = orden; return [...f].sort((a, b) => (String(a[c]) < String(b[c]) ? -1 : String(a[c]) > String(b[c]) ? 1 : 0) * (asc ? 1 : -1)) }
+        if (op === 'select') { lecturas.push(tabla); return { data: ordenadas().slice(desde, desde + Math.min(tope, opciones.topeDeFilas ?? Infinity)), error: null } }
         if (op === 'upsert') {
           escrituras.push({ tabla, op, filas: lote })
           const t = (tablas[tabla] ??= [])
@@ -52,7 +55,7 @@ export function crearBaseFalsa(tablas: Record<string, Fila[]>, opciones: { /** c
       const chain = (t: string) => (c: string, v: unknown) => { filtros.push([c, t, v]); return q }
       q.select = () => q
       q.eq = chain('eq'); q.is = chain('is'); q.gte = chain('gte'); q.lte = chain('lte'); q.like = chain('like'); q.in = chain('in')
-      q.order = () => q
+      q.order = (c: string, o?: { ascending?: boolean }) => { orden = [c, o?.ascending !== false]; return q }
       q.limit = (n: number) => { tope = n; return q }
       q.range = (a: number, b: number) => { desde = a; tope = b - a + 1; return q }
       q.insert = (f: Fila) => { op = 'insert'; payload = f; return q }

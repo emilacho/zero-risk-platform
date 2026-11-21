@@ -303,6 +303,46 @@ describe('🔴 clasificarPendientes', () => {
     // una lectura por video distinto a clasificar (v-tend y la foto suelta), nunca la tabla entera
     expect(t.lecturas.filter((x) => x === 'cerebro_tendencias')).toHaveLength(2)
   })
+  // 21-nov · las 2 pruebas del 🟡 de CC6 sobre #1269 (su certificación, sabotajes b2, b3 y b4)
+  it('🟡CC6-1 la lectura de tendencias es DEL CLIENTE: el mismo video en dos clientes, cada uno clasifica con SU búsqueda (y cada lectura lleva eq(client_id))', async () => {
+    const OTRO = 'cliente-ajeno'
+    const t = baseCon(
+      [{ id: 'cap', client_id: C1, owner_role: 'referencia', handle: 'x', post_id: 'p', tipo: 'video_captura', video_id: 'v-compartido', clasificado_en: null }],
+      { cerebro_tendencias: [
+        // la fila del OTRO cliente va PRIMERA: sin el filtro de cliente, sería la que gana
+        { client_id: OTRO, video_id: 'v-compartido', nivel: 'pais', consulta: 'la del otro cliente', observado_en: '2026-11-01T00:00:00Z' },
+        { client_id: C1, video_id: 'v-compartido', nivel: 'global', consulta: 'la mia', observado_en: '2026-11-02T00:00:00Z' },
+      ] },
+    )
+    // cada lectura de tendencias debe llevar el filtro del cliente: se mira el `eq` de verdad, no solo el resultado
+    const filtrosVistos: Array<Array<[string, unknown]>> = []
+    const db = { from: (tabla: string) => {
+      const q = t.db.from(tabla) as Record<string, (...a: unknown[]) => unknown> & { eq: (c: string, v: unknown) => unknown }
+      if (tabla === 'cerebro_tendencias') {
+        const pares: Array<[string, unknown]> = []
+        filtrosVistos.push(pares)
+        const eqOriginal = q.eq.bind(q)
+        q.eq = (c: string, v: unknown) => { pares.push([c, v]); return eqOriginal(c, v) }
+      }
+      return q
+    } }
+    const r = await clasificarPendientes(db, { clientId: C1, tabla: 'client_social_images', dry_run: false, ahora: AHORA })
+    expect(r).toMatchObject({ estado: 'ok', clasificadas: 1 })
+    expect(t.tablas.client_social_images[0]).toMatchObject({ via: 'tendencia', nivel: 'global', via_detalle: 'búsqueda «la mia»' })
+    expect(filtrosVistos.length).toBeGreaterThan(0)
+    for (const pares of filtrosVistos) expect(pares).toContainEqual(['client_id', C1])
+  })
+  it('🟡CC6-2 con dos tendencias del mismo video gana LA PRIMERA búsqueda que lo trajo (observado_en más antiguo), venga en el orden que venga', async () => {
+    const dos = [
+      // la más NUEVA va primera en la tabla: solo el `order(observado_en asc)` real hace ganar a la vieja
+      { client_id: C1, video_id: 'v-dos', nivel: 'competencia', consulta: 'la segunda busqueda', observado_en: '2026-11-15T10:00:00Z' },
+      { client_id: C1, video_id: 'v-dos', nivel: 'global', consulta: 'la primera busqueda', observado_en: '2026-11-08T10:00:00Z' },
+    ]
+    const t = baseCon([{ id: 'cap', client_id: C1, owner_role: 'referencia', handle: 'x', post_id: 'p', tipo: 'video_captura', video_id: 'v-dos', clasificado_en: null }], { cerebro_tendencias: dos })
+    const r = await clasificarPendientes(t.db, { clientId: C1, tabla: 'client_social_images', dry_run: false, ahora: AHORA })
+    expect(r).toMatchObject({ estado: 'ok', clasificadas: 1 })
+    expect(t.tablas.client_social_images[0]).toMatchObject({ nivel: 'global', via_detalle: 'búsqueda «la primera busqueda»', relevancia_motivo: 'la trajo la búsqueda «la primera busqueda», hecha con el rubro del cliente (nivel global)' })
+  })
   it('🟡1 los videos se leen por tandas: 25 videos distintos → 25 lecturas de una fila, y todos clasificados', async () => {
     const vids = Array.from({ length: 25 }, (_, i) => ({ id: `vid-${i}`, client_id: C1, owner_role: 'referencia', handle: 'x', post_id: `r${i}`, tipo: 'reel', clasificado_en: null }))
     const tend = vids.flatMap((v) => Array.from({ length: 100 }, () => ({ client_id: C1, video_id: v.id, nivel: 'global', consulta: 'tendencia' })))
