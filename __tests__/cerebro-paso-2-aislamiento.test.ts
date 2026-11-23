@@ -123,6 +123,10 @@ export const PUEDEN_NOMBRARLAS = [
   /^supabase\/migrations\/202611212000_cerebro_red_de_la_pieza\.sql$/,
   /^supabase\/reversas\/202611212000_cerebro_red_de_la_pieza_REVERSA\.sql$/,
   /^scripts\/cerebro\/rellenar-red-de-la-pieza\.ts$/,
+  // 23-nov · encargo 13 (#1273 · firma D1): el juez de fidelidad LEE `cerebro_fichas` (clase/propiedad/retirada_en/titulo)
+  // para filtrar su empuje a fuente cruda; solo SELECT, nunca escribe. Su prueba arma fichas falsas (base molde, no la real).
+  /^services\/agent-runner\/src\/lib\/juez-fuente-cruda\.ts$/,
+  /^services\/agent-runner\/src\/lib\/__tests__\/juez-fuente-cruda\.test\.ts$/,
   // plan v3 · V14 (15-oct): el LECTOR del plan lee `cerebro_fichas` (y el crudo por la misma compuerta del portero) para armar el brazo primario. Solo SELECT: no escribe nada.
   /^src\/lib\/planeacion\/dato-v1\/lector-cerebro\.ts$/,
   // plan v3 · V11: el kit del seco solo CUENTA filas (contadores antes/después); no las lee ni las escribe
