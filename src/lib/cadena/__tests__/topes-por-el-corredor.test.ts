@@ -5,13 +5,15 @@
  *  · punto 5 (hallazgo de CC7): el tope de una llamada cubre UN turno al techo de salida (el SDK solo corta entre turnos), calculado con el precio del modelo;
  *  · el cuerpo del agente lleva el tope de SU paso; el piso de la bolsa de planificación queda en 12 × 3 = US$ 36 (aceptado por Lenovo);
  *  · la bolsa propia de las fichas alcanza para sus 3 intentos caídos (3 × 3 = US$ 9) y el DEFAULT de la columna es el mismo número.
+ * 23-nov · firma de Emilio «subelo a 10» (GO de Lenovo 19:37Z) · CC4: calendario, fechas y fichas a US$ 10 por llamada; la estrategia sigue en 3.
+ *  La bolsa del lector pasa a 3 × 10 = US$ 30 (migración 202611232000). La migración del 21-nov queda fijada tal cual (historia).
  */
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   bolsaDePlanificacion, COSTO_DE_UN_TURNO_AL_TECHO_USD, MAXIMO_DE_INTENTOS, MODELO_POR_DEFECTO, PASOS_POR_EL_CORREDOR, PRECIO_DEL_MODELO_DE_LA_CADENA_USD_POR_MILLON, PRESUPUESTO_LECTOR_POR_OMISION,
-  RAZONAMIENTO_POR_DEFECTO, razonamientoDelPaso, TECHO_DE_SALIDA_TOKENS, TOPE_DE_UN_TURNO_AL_TECHO_USD, TOPE_DE_VUELTAS_DEL_SUBFLUJO, TOPE_POR_PASO_USD, topeDelPaso, type Paso,
+  RAZONAMIENTO_POR_DEFECTO, razonamientoDelPaso, TECHO_DE_SALIDA_TOKENS, TOPE_DE_CALENDARIO_FECHAS_Y_FICHAS_USD, TOPE_DE_UN_TURNO_AL_TECHO_USD, TOPE_DE_VUELTAS_DEL_SUBFLUJO, TOPE_POR_PASO_USD, topeDelPaso, type Paso,
 } from '../constantes'
 import { cuerpoDeRunSdk } from '../pasos'
 
@@ -39,25 +41,32 @@ describe('el tope de una llamada cubre un turno al techo de salida (punto 5)', (
     expect(TOPE_DE_UN_TURNO_AL_TECHO_USD).toBe(3)
     expect(TOPE_DE_UN_TURNO_AL_TECHO_USD).toBeGreaterThanOrEqual(COSTO_DE_UN_TURNO_AL_TECHO_USD)
   })
-  it('🔴 los 4 pasos por el corredor llevan ese tope (fichas: decisión de Lenovo 03:37Z, opción a); el brief, el de siempre (US$ 1)', () => {
-    expect(TOPE_POR_PASO_USD).toEqual({ estrategia: 3, calendario: 3, fechas: 3, fichas: 3 })
-    expect(Object.fromEntries(PASOS.map((p) => [p, topeDelPaso(p)]))).toEqual({ estrategia: 3, calendario: 3, fechas: 3, brief: 1, fichas: 3 })
+  it('🔴 23-nov · la estrategia lleva el tope de un turno (US$ 3); calendario, fechas y fichas, US$ 10 (Emilio «subelo a 10»); el brief, el de siempre (US$ 1)', () => {
+    expect(TOPE_DE_CALENDARIO_FECHAS_Y_FICHAS_USD).toBe(10)
+    expect(TOPE_POR_PASO_USD).toEqual({ estrategia: 3, calendario: 10, fechas: 10, fichas: 10 })
+    expect(Object.fromEntries(PASOS.map((p) => [p, topeDelPaso(p)]))).toEqual({ estrategia: 3, calendario: 10, fechas: 10, brief: 1, fichas: 10 })
     for (const p of PASOS_POR_EL_CORREDOR) expect(topeDelPaso(p), p).toBeGreaterThanOrEqual(COSTO_DE_UN_TURNO_AL_TECHO_USD)
   })
   it('🔴 el cuerpo del agente lleva el tope de SU paso', () => {
     for (const p of PASOS) expect(cuerpoDeRunSdk(p, MODELO_POR_DEFECTO, 't', { type: 'object' }, 'c1').max_budget_usd, p).toBe(topeDelPaso(p))
   })
-  it('🔴 la bolsa propia de las fichas alcanza para TODOS sus intentos caídos (cada uno cuenta su tope entero): 3 × 3 = US$ 9', () => {
-    expect(PRESUPUESTO_LECTOR_POR_OMISION).toBe(9)
+  it('🔴 la bolsa propia de las fichas alcanza para TODOS sus intentos caídos (cada uno cuenta su tope entero): 3 × 10 = US$ 30', () => {
+    expect(PRESUPUESTO_LECTOR_POR_OMISION).toBe(30)
     expect(MAXIMO_DE_INTENTOS * topeDelPaso('fichas')).toBe(PRESUPUESTO_LECTOR_POR_OMISION)
   })
-  it('🔴 el DEFAULT de la columna en la base es el mismo número que la constante (la migración nueva; la vieja decía 2)', () => {
+  it('🔴 historia · la migración del 21-nov sigue diciendo 9 (2 → 9), tal cual se aplicó', () => {
     const sql = readFileSync(join(process.cwd(), 'supabase', 'migrations', '202611210400_cadena_bolsa_del_lector_nueve.sql'), 'utf8')
+    expect(sql).toContain('ALTER TABLE public.cadena_campanas ALTER COLUMN presupuesto_lector_usd SET DEFAULT 9;')
+    const codigo = sql.split('\n').filter((l) => !l.trim().startsWith('--')).join('\n').replace(/\s+/g, ' ')
+    expect(codigo).toContain("UPDATE public.cadena_campanas SET presupuesto_lector_usd = 9 WHERE presupuesto_lector_usd = 2 AND (tope_gasto_usd IS NULL OR presupuesto_planificacion_usd + 9 <= tope_gasto_usd) AND id <> '36e66179-3061-4a7d-94db-932a900d9515';")
+  })
+  it('🔴 el DEFAULT de la columna en la base es el mismo número que la constante (la migración del 23-nov; la anterior decía 9)', () => {
+    const sql = readFileSync(join(process.cwd(), 'supabase', 'migrations', '202611232000_cadena_bolsa_del_lector_treinta.sql'), 'utf8')
     expect(sql).toContain(`ALTER TABLE public.cadena_campanas ALTER COLUMN presupuesto_lector_usd SET DEFAULT ${PRESUPUESTO_LECTOR_POR_OMISION};`)
-    // las campañas con la bolsa del valor viejo (exactamente 2) suben, con candado: la bolsa de planificación + la del lector caben en el tope de la campaña
+    // las campañas con la bolsa del valor anterior (exactamente 9) suben, con candado: la bolsa de planificación + la del lector caben en el tope de la campaña
     const codigo = sql.split('\n').filter((l) => !l.trim().startsWith('--')).join('\n').replace(/\s+/g, ' ')
     // 🔴 y 36e66179 (intocable, regla de Emilio · CC7 03:40Z) queda FUERA por id
-    expect(codigo).toContain(`UPDATE public.cadena_campanas SET presupuesto_lector_usd = ${PRESUPUESTO_LECTOR_POR_OMISION} WHERE presupuesto_lector_usd = 2 AND (tope_gasto_usd IS NULL OR presupuesto_planificacion_usd + ${PRESUPUESTO_LECTOR_POR_OMISION} <= tope_gasto_usd) AND id <> '36e66179-3061-4a7d-94db-932a900d9515';`)
+    expect(codigo).toContain(`UPDATE public.cadena_campanas SET presupuesto_lector_usd = ${PRESUPUESTO_LECTOR_POR_OMISION} WHERE presupuesto_lector_usd = 9 AND (tope_gasto_usd IS NULL OR presupuesto_planificacion_usd + ${PRESUPUESTO_LECTOR_POR_OMISION} <= tope_gasto_usd) AND id <> '36e66179-3061-4a7d-94db-932a900d9515';`)
     expect(codigo.match(/36e66179-3061-4a7d-94db-932a900d9515/g)).toHaveLength(1) // aparece una sola vez: en la exclusión
     // nada más que el DEFAULT (ALTER TABLE … ALTER COLUMN), el UPDATE con candado y el comentario: la reversa va comentada
     expect(codigo.match(/\b(UPDATE|ALTER|DELETE|INSERT|DROP)\b/g)).toEqual(['ALTER', 'ALTER', 'UPDATE'])

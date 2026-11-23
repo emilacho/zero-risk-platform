@@ -27,7 +27,18 @@ export const ENTRADA_DEL_PEOR_CASO_TOKENS = 100_000
 export const COSTO_DE_UN_TURNO_AL_TECHO_USD =
   (TECHO_DE_SALIDA_TOKENS * PRECIO_DEL_MODELO_DE_LA_CADENA_USD_POR_MILLON.salida + ENTRADA_DEL_PEOR_CASO_TOKENS * PRECIO_DEL_MODELO_DE_LA_CADENA_USD_POR_MILLON.entrada) / 1_000_000
 export const TOPE_DE_UN_TURNO_AL_TECHO_USD = 3
-export const TOPE_POR_PASO_USD: Readonly<Partial<Record<Paso, number>>> = { estrategia: TOPE_DE_UN_TURNO_AL_TECHO_USD, calendario: TOPE_DE_UN_TURNO_AL_TECHO_USD, fechas: TOPE_DE_UN_TURNO_AL_TECHO_USD, fichas: TOPE_DE_UN_TURNO_AL_TECHO_USD }
+/**
+ * 23-nov · firma de Emilio 20:35 Zúrich («subelo a 10») · GO de Lenovo 19:37Z: el calendario, las fechas especiales y las fichas pasan a US$ 10 por llamada
+ * (eran los US$ 3 de un turno al techo). La estrategia queda en 3. Lo que este tope arrastra sube con él: la bolsa del lector (3 intentos × 10 = 30, con su
+ * DEFAULT en la migración 202611232000) y el piso de la bolsa de planificación (12 vueltas × 10), que crece sola hasta el tope de gasto de la campaña.
+ */
+export const TOPE_DE_CALENDARIO_FECHAS_Y_FICHAS_USD = 10
+export const TOPE_POR_PASO_USD: Readonly<Partial<Record<Paso, number>>> = {
+  estrategia: TOPE_DE_UN_TURNO_AL_TECHO_USD,
+  calendario: TOPE_DE_CALENDARIO_FECHAS_Y_FICHAS_USD,
+  fechas: TOPE_DE_CALENDARIO_FECHAS_Y_FICHAS_USD,
+  fichas: TOPE_DE_CALENDARIO_FECHAS_Y_FICHAS_USD,
+}
 export const topeDelPaso = (p: Paso): number => TOPE_POR_PASO_USD[p] ?? Math.max(1, Math.round(2 * ESPERADO_USD[p] * 100) / 100)
 
 export const AGENTE_POR_PASO: Record<Paso, string> = {
@@ -99,8 +110,19 @@ export function bolsaDePlanificacion(totalTandas: number): number {
   const tandas = Number.isFinite(totalTandas) && totalTandas > 0 ? totalTandas : 0
   const pasadas = 1 + RONDAS_DE_CORRECCION
   const medida = pasadas * (MEDIDO_POR_LLAMADA_USD.estrategia + tandas * MEDIDO_POR_LLAMADA_USD.calendario)
-  const peorCaida = TOPE_DE_VUELTAS_DEL_SUBFLUJO * Math.max(topeDelPaso('estrategia'), topeDelPaso('calendario'))
+  // 23-nov · opción (c), firma de Emilio (Lenovo 19:50Z): la bolsa con que NACE la campaña (y el mínimo para crearla) cuenta el peor caso de la estrategia
+  // (12 × 3 = 36), no el del calendario a 10. Lo que el calendario necesita para aguantar sus 12 caídas lo da `techoDeLaBolsaDePlanificacion`, al crecer.
+  const peorCaida = TOPE_DE_VUELTAS_DEL_SUBFLUJO * topeDelPaso('estrategia')
   return Math.ceil(Math.max(MULTIPLO_DE_LA_BOLSA * medida, peorCaida, PRESUPUESTO_PLANIFICACION_POR_OMISION) * 100) / 100
+}
+/**
+ * 23-nov · opción (c), firma de Emilio (Lenovo 19:50Z): hasta dónde CRECE la bolsa de planificación durante la campaña (`bolsaAgrandada`, nunca más que el tope
+ * de gasto de la campaña): la del nacimiento, o el peor caso del paso de planificación más caro con todas sus vueltas caídas (12 × 10 = 120), lo que sea mayor.
+ * Así ninguna llamada de calendario o fechas (US$ 10) se queda sin lugar antes de las 12 caídas, y crear una campaña no cuesta más que antes.
+ */
+export function techoDeLaBolsaDePlanificacion(totalTandas: number): number {
+  const masCaro = Math.max(...PASOS.filter((p) => !PASOS_CON_PRESUPUESTO_PROPIO.has(p)).map(topeDelPaso))
+  return Math.max(bolsaDePlanificacion(totalTandas), Math.ceil(TOPE_DE_VUELTAS_DEL_SUBFLUJO * masCaro * 100) / 100)
 }
 /**
  * Plazo de una llamada a un agente. 🔴 #464 C4 (CC#3): el nodo HTTP de los flujos espera 290 s; con un plazo de 15 min una llamada perdida dejaba la corrida «en curso» 15 min
@@ -113,8 +135,9 @@ export const CABECERA_SALTAR_EDITOR = 'x-skip-editor-middleware'
 export const PASOS_SIN_REVISION: readonly Paso[] = ['estrategia', 'calendario', 'fechas', 'fichas']
 /** RESPUESTA-LENOVO a CC3 (17-nov, opción b) · los pasos que gastan de su PROPIA bolsa (no de la de planificación) */
 export const PASOS_CON_PRESUPUESTO_PROPIO: ReadonlySet<Paso> = new Set<Paso>(['fichas'])
-/** el presupuesto del lector cuando la campaña no trae el suyo: los 3 intentos × el tope de un turno al techo = US$ 9 (21-nov · Lenovo 03:37Z; antes 2) · igual al DEFAULT de la columna */
-export const PRESUPUESTO_LECTOR_POR_OMISION = 9
+/** el presupuesto del lector cuando la campaña no trae el suyo: los 3 intentos × el tope de una llamada de fichas (US$ 10) = US$ 30 · igual al DEFAULT de la columna
+ *  (23-nov · firma de Emilio «subelo a 10», migración 202611232000; antes 9 = 3 × 3, y antes 2) */
+export const PRESUPUESTO_LECTOR_POR_OMISION = 30
 /** el presupuesto de planificación con el que nace una campaña (`campanas.ts` · abrir, y el DEFAULT de la columna) */
 export const PRESUPUESTO_PLANIFICACION_POR_OMISION = 6
 /** 18-nov · firma de Emilio (DECISION-EMILIO-topes-con-margen-triple): todo tope de gasto = el triple de lo medido */
