@@ -53,6 +53,7 @@ import {
 } from './workflow-checkpoint.js'
 import { buildDryRunFakeResponse } from './dry-run-mode.js'
 import { avisarEsperaAlCerebro, esperaDelCerebro } from './esperando-al-cerebro.js'
+import { esPedidoDelJuezDeFidelidad, fuenteCrudaParaElJuez } from './juez-fuente-cruda.js'
 import { metadataDelTrabajo, type TrabajoDeLaLlamada } from './trabajo-de-la-llamada.js'
 import { costoDeBusquedasWeb, costoEfectivoDeCorrida } from './libro-de-costos.js'
 
@@ -224,8 +225,10 @@ export interface BrainEnrichmentResultMeta {
   /** ADR-020 M1 · `prose_only` until real claim→chunk matching exists (honest · NO over-sell). */
   brain_grounding: 'chunk_linked' | 'prose_only'
   brain_error?: string
-  /** encargo 9 · el pedido apagó el empuje (`extra.sin_empuje`) */
-  brain_push?: 'apagado_por_el_pedido'
+  /** encargo 9 · el pedido apagó el empuje · encargo 13 · el empuje del juez es solo fuente cruda */
+  brain_push?: 'apagado_por_el_pedido' | 'solo_fuente_cruda_del_juez'
+  /** encargo 13 · lo que el filtro de fuente cruda del juez descartó */
+  brain_chunks_no_crudos_dropped?: number
   /** E114 · caracteres de la consulta embebida y si el pedido se recortó a la cabeza (nunca silencioso). */
   brain_query_chars?: number
   brain_query_truncated?: boolean
@@ -1304,7 +1307,15 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
   const { enrichSystemPromptWithClientBrain } = await import('./brain-enrichment')
   const { empujeApagadoPorElPedido, enriquecimientoApagadoPorElPedido } = await import('./empuje-del-pedido')
   // encargo 9 · la mesa con índice apaga el empuje (`extra.sin_empuje: true`); queda anotado en la llamada
-  const enrichment = empujeApagadoPorElPedido(input.extra) ? enriquecimientoApagadoPorElPedido() : await enrichSystemPromptWithClientBrain({
+  // encargo 13 (21-nov · firma D1): al JUEZ de fidelidad (`extra.fidelity_judge`) el cerebro le entrega SOLO fuente
+  // cruda propia o humana con su procedencia — nunca síntesis ni el manual que juzga. A los demás, el empuje de siempre.
+  const enrichment = empujeApagadoPorElPedido(input.extra) ? enriquecimientoApagadoPorElPedido() : esPedidoDelJuezDeFidelidad(input.extra) ? await fuenteCrudaParaElJuez({
+    supabase,
+    clientId: input.clientId,
+    taskDescription: input.task ?? '',
+    agentSlug: canonicalSlug,
+    topK: 5,
+  }) : await enrichSystemPromptWithClientBrain({
     supabase,
     clientId: input.clientId,
     taskDescription: input.task ?? '',
@@ -1755,6 +1766,7 @@ export async function runAgentViaSDK(input: AgentRunInput): Promise<AgentRunResu
     ...(enrichment.brain_manual_vigente_id !== undefined ? { brain_manual_vigente_id: enrichment.brain_manual_vigente_id } : {}),
     // 02-oct · lo raspado sin sello que NO se inyectó · y si la consulta de confianza falló.
     ...(typeof enrichment.brain_chunks_untrusted_dropped === 'number' ? { brain_chunks_untrusted_dropped: enrichment.brain_chunks_untrusted_dropped } : {}),
+    ...(typeof enrichment.brain_chunks_no_crudos_dropped === 'number' ? { brain_chunks_no_crudos_dropped: enrichment.brain_chunks_no_crudos_dropped } : {}),
     ...(enrichment.brain_trust_lookup_error ? { brain_trust_lookup_error: enrichment.brain_trust_lookup_error } : {}),
   }
 

@@ -123,6 +123,10 @@ export const PUEDEN_NOMBRARLAS = [
   /^supabase\/migrations\/202611212000_cerebro_red_de_la_pieza\.sql$/,
   /^supabase\/reversas\/202611212000_cerebro_red_de_la_pieza_REVERSA\.sql$/,
   /^scripts\/cerebro\/rellenar-red-de-la-pieza\.ts$/,
+  // 23-nov · encargo 13 (#1273 · firma D1): el juez de fidelidad LEE `cerebro_fichas` (clase/propiedad/retirada_en/titulo)
+  // para filtrar su empuje a fuente cruda; solo SELECT, nunca escribe. Su prueba arma fichas falsas (base molde, no la real).
+  /^services\/agent-runner\/src\/lib\/juez-fuente-cruda\.ts$/,
+  /^services\/agent-runner\/src\/lib\/__tests__\/juez-fuente-cruda\.test\.ts$/,
   // plan v3 · V14 (15-oct): el LECTOR del plan lee `cerebro_fichas` (y el crudo por la misma compuerta del portero) para armar el brazo primario. Solo SELECT: no escribe nada.
   /^src\/lib\/planeacion\/dato-v1\/lector-cerebro\.ts$/,
   // plan v3 · V11: el kit del seco solo CUENTA filas (contadores antes/después); no las lee ni las escribe
@@ -203,6 +207,18 @@ describe('A · nadie más toca las tablas ni las 4 columnas nuevas del cerebro',
       for (const m of leer(rel).matchAll(/\bfrom\(\s*['"`](cerebro_[a-z_]+)['"`]\s*\)|rest\/v1\/(cerebro_[a-z_]+)/g)) otras.add(m[1] ?? m[2])
     }
     expect([...otras]).toEqual([])
+  })
+})
+
+// ───────────────────────── A2 · los lectores de la lista corta NO escriben
+// 23-nov · ADENDA 1 de CC6 en #1273: entrar a la lista corta da permiso de NOMBRAR las tablas, no de escribirlas.
+// El juez de fidelidad entró como LECTOR («solo SELECT, nunca escribe»), así que su código no puede contener ningún
+// verbo de escritura de la base. Si un día necesita escribir, se pide y se mide, no se cuela por la lista.
+describe('A2 · los lectores de la lista corta no escriben', () => {
+  const VERBOS_DE_ESCRITURA = ['.insert(', '.update(', '.upsert(', '.delete(', '.rpc(']
+  it('🟡 (CC6 en #1273) `juez-fuente-cruda.ts` no contiene insert, update, upsert, delete ni rpc', () => {
+    const texto = leer('services/agent-runner/src/lib/juez-fuente-cruda.ts')
+    for (const v of VERBOS_DE_ESCRITURA) expect(texto, `el juez usa ${v}`).not.toContain(v)
   })
 })
 

@@ -120,8 +120,10 @@ export interface EnrichmentResult {
    */
   grounding: 'chunk_linked' | 'prose_only'
   error?: string // present only when something soft-failed
-  /** encargo 9 · 18-nov · el pedido apagó el empuje (`extra.sin_empuje: true`, la mesa que ya recibe la base y el índice de su pieza) */
-  brain_push?: 'apagado_por_el_pedido'
+  /** encargo 9 · el pedido apagó el empuje · encargo 13 · el empuje del juez es solo fuente cruda */
+  brain_push?: 'apagado_por_el_pedido' | 'solo_fuente_cruda_del_juez'
+  /** encargo 13 · trozos que la búsqueda trajo y el filtro de fuente cruda del juez descartó (síntesis, manual, terceros) */
+  brain_chunks_no_crudos_dropped?: number
   /** E114 · caracteres de la consulta realmente embebida (tras el tope). */
   brain_query_chars?: number
   /** E114 · true si el pedido superaba MAX_QUERY_CHARS y se embebió sólo la cabeza · nunca silencioso. */
