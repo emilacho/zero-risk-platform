@@ -1516,7 +1516,8 @@ async function atender(request: Request) {
           alarma = `${r.accion}: ${r.detalle}`
         }
         console.error(`[run-sdk] esperando_al_cerebro · agente=${agentName} · cliente=${clientId || 'sin cliente'} · alarma=${alarma}`)
-        return NextResponse.json({ success: false, estado: 'esperando_al_cerebro', error: result.error, alarma }, { status: 503 })
+        // el motivo real viaja también en la respuesta (`brainEnrichment.brain_error_detalle`): es justo lo que esta entrega rescata
+        return NextResponse.json({ success: false, estado: 'esperando_al_cerebro', error: result.error, alarma, ...(brainEnrichment ? { brainEnrichment } : {}) }, { status: 503 })
       }
       return NextResponse.json({ success: false, error: result.error }, { status: 500 })
     }

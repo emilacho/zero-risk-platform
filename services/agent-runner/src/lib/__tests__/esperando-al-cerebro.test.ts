@@ -10,19 +10,28 @@ import { avisarEsperaAlCerebro, CLAVE_DE_INCIDENTE_DEL_CEREBRO, esperaDelCerebro
 const respuesta = (status: number, cuerpo: unknown) => ({ ok: status >= 200 && status < 300, status, text: async () => (typeof cuerpo === 'string' ? cuerpo : JSON.stringify(cuerpo)), json: async () => (typeof cuerpo === 'string' ? JSON.parse(cuerpo) : cuerpo) }) as Response
 
 /** la base falsa mínima que el camino feliz necesita: rpc con trozos, la fila vigente del manual y las marcas de confianza */
-function baseConTrozos(filas: Array<Record<string, unknown>>, opciones: { rpcError?: string } = {}) {
+function baseConTrozos(filas: Array<Record<string, unknown>>, opciones: { rpcError?: string; rpcLanza?: string; confianzaError?: string } = {}) {
   const cadena = (tabla: string): Record<string, unknown> => {
     const q: Record<string, unknown> = {}
     for (const m of ['select', 'eq', 'order', 'limit', 'in']) q[m] = () => q
     q.maybeSingle = async () => ({ data: tabla === 'client_brand_books' ? { id: 'manual-v2' } : null, error: null })
-    q.then = (r: (v: unknown) => unknown) => Promise.resolve({ data: tabla === 'client_brain_chunks' ? filas.map((f) => ({ id: f.chunk_id, provenance_tag: { trust_level: 'canon' }, metadata: {} })) : [], error: null }).then(r)
+    q.then = (r: (v: unknown) => unknown) => Promise.resolve(
+      tabla === 'client_brain_chunks' && opciones.confianzaError
+        ? { data: null, error: { message: opciones.confianzaError } }
+        : { data: tabla === 'client_brain_chunks' ? filas.map((f) => ({ id: f.chunk_id, provenance_tag: { trust_level: 'canon' }, metadata: {} })) : [], error: null },
+    ).then(r)
     return q
   }
   return {
-    rpc: async () => (opciones.rpcError ? { data: null, error: { message: opciones.rpcError } } : { data: filas, error: null }),
+    rpc: async () => {
+      if (opciones.rpcLanza) throw new Error(opciones.rpcLanza)
+      return opciones.rpcError ? { data: null, error: { message: opciones.rpcError } } : { data: filas, error: null }
+    },
     from: (t: string) => cadena(t),
   } as never
 }
+
+const TROZO = { chunk_id: 't1', source_table: 'client_brand_books', source_id: 'manual-v2', section_label: 'voz', chunk_text: 'tuteo siempre', similarity: 0.9 }
 
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs() })
 
@@ -62,9 +71,34 @@ describe('🔴 el fallo del proveedor de huellas vuelve con su motivo (antes se 
   it('la base que falla también es fallo: rpc caída y marcas de confianza caídas traen brain_fallo', async () => {
     vi.stubEnv('OPENAI_API_KEY', 'sk-prueba-123456')
     vi.stubGlobal('fetch', async () => respuesta(200, { data: [{ embedding: [0.1, 0.2] }] }))
-    const rpc = await enrichSystemPromptWithClientBrain({ supabase: baseConTrozos([], { rpcError: 'se cayó la base' }), clientId: 'c1', taskDescription: 'x' })
+    const rpc = await enrichSystemPromptWithClientBrain({ supabase: baseConTrozos([], { rpcError: 'se cayó la base · llave sk-secreta7777777777' }), clientId: 'c1', taskDescription: 'x' })
     expect(rpc).toMatchObject({ brain_fallo: true })
     expect(rpc.error).toContain('rpc_error')
+    // aviso menor de CC6: también `error` (que entra al motivo de la alarma) va redactado
+    expect(rpc.error).toContain('sk-…')
+    expect(rpc.error).not.toContain('secreta7777777777')
+    // 🔴 e9 de CC6 en #1270: RPC bien, trozos que VUELVEN, y la lectura de marcas de confianza con error → fallo (el agente no crea sin poder verificar)
+    const confianza = await enrichSystemPromptWithClientBrain({ supabase: baseConTrozos([TROZO], { confianzaError: 'no pude leer las marcas de confianza' }), clientId: 'c1', taskDescription: 'x' })
+    expect(confianza).toMatchObject({ brain_hit: false, brain_fallo: true, error: 'brain_trust_lookup_failed' })
+    expect(confianza.brain_error_detalle).toContain('marcas de confianza')
+  })
+  it('🔴 (e11 de CC6) la base que LANZA a mitad de la consulta también es fallo, con el detalle y el error redactados', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'sk-prueba-123456')
+    vi.stubGlobal('fetch', async () => respuesta(200, { data: [{ embedding: [0.1, 0.2] }] }))
+    const r = await enrichSystemPromptWithClientBrain({ supabase: baseConTrozos([TROZO], { rpcLanza: 'timeout de la base · header Authorization: Bearer sk-secreta5555555555' }), clientId: 'c1', taskDescription: 'x' })
+    expect(r).toMatchObject({ brain_hit: false, brain_fallo: true })
+    expect(r.brain_error_detalle).toContain('timeout de la base')
+    expect(r.brain_error_detalle).toContain('sk-…')
+    expect(r.brain_error_detalle).not.toContain('secreta5555555555')
+    expect(r.error).toContain('sk-…')
+    expect(r.error).not.toContain('secreta5555555555')
+  })
+  it('🔴 (e12 de CC6) el proveedor responde 200 pero SIN huella en el cuerpo: es FALLO, no consulta vacía (el agente no sigue sin cerebro)', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'sk-prueba-123456')
+    vi.stubGlobal('fetch', async () => respuesta(200, { data: [] }))
+    const r = await enrichSystemPromptWithClientBrain({ supabase: baseConTrozos([TROZO]), clientId: 'c1', taskDescription: 'x' })
+    expect(r).toMatchObject({ brain_hit: false, brain_fallo: true, error: 'embed_query_failed' })
+    expect(r.brain_error_detalle).toContain('200 pero sin huella')
   })
 })
 

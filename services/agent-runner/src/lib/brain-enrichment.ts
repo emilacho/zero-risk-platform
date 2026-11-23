@@ -278,7 +278,8 @@ export async function enrichSystemPromptWithClientBrain(args: {
       p_query_embedding: queryEmbedding,
       p_top_k: topK + OLD_VERSION_MARGIN,
     })
-    if (error) return { ...empty, brain_fallo: true, brain_error_detalle: cabeza(String(error.message ?? 'error de la base')), brain_query_ms: Date.now() - queryStartedAt, error: `rpc_error: ${error.message}`, brain_query_chars, brain_query_truncated }
+    // aviso menor de CC6 en #1270: también `error` va redactado (entra al motivo de la alarma)
+    if (error) return { ...empty, brain_fallo: true, brain_error_detalle: cabeza(String(error.message ?? 'error de la base')), brain_query_ms: Date.now() - queryStartedAt, error: `rpc_error: ${cabeza(String(error.message ?? ''))}`, brain_query_chars, brain_query_truncated }
     const crudos = (data ?? []) as BrainChunkRow[]
     const vigente = await manualVigenteId(args.supabase, args.clientId)
     // 02-oct · la confianza de cada trozo (UNA consulta) · si no se puede saber, NO se inyecta lo que no se puede verificar
@@ -321,6 +322,7 @@ export async function enrichSystemPromptWithClientBrain(args: {
       grounding: 'prose_only',
     }
   } catch (e) {
-    return { ...empty, brain_fallo: true, brain_error_detalle: cabeza(e instanceof Error ? e.message : String(e)), brain_query_ms: Date.now() - queryStartedAt, error: e instanceof Error ? e.message : 'unknown', brain_query_chars, brain_query_truncated }
+    // aviso menor de CC6 en #1270: también `error` va redactado (entra al motivo de la alarma)
+    return { ...empty, brain_fallo: true, brain_error_detalle: cabeza(e instanceof Error ? e.message : String(e)), brain_query_ms: Date.now() - queryStartedAt, error: e instanceof Error ? cabeza(e.message) : 'unknown', brain_query_chars, brain_query_truncated }
   }
 }
