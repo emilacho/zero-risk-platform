@@ -10,7 +10,7 @@ import { abrirCampana, estrategiaPreparar, costoEfectivo } from '../index'
 import { AlmacenMemoria } from '../__fixtures__/almacen-memoria'
 import { clienteA, contextoDe } from '../__fixtures__/clientes'
 import { bolsaAgrandada } from '../nucleo'
-import { ESPERA_DE_LA_MISMA_LLAMADA_S, PLAZO_DE_LLAMADA_POR_DEFECTO_MIN, PLAZO_MINIMO_DE_LA_MISMA_LLAMADA_MIN, plazoMinimoDelPaso, RAZONAMIENTO_TEMPORAL_POR_PASO, topeDelPaso, type Paso } from '../constantes'
+import { ESPERA_DE_LA_VUELTA_S, PASOS_POR_EL_CORREDOR, PLAZO_DE_LLAMADA_POR_DEFECTO_MIN, PLAZO_MINIMO_POR_EL_CORREDOR_MIN, plazoMinimoDelPaso, topeDelPaso, type Paso } from '../constantes'
 import type { Campana } from '../almacen'
 
 const A = clienteA()
@@ -33,21 +33,23 @@ async function plazoDeLaEstrategia(plazoConfig: unknown): Promise<number> {
   return (Date.parse(corrida.plazo_en!) - Date.parse(AHORA)) / 60_000
 }
 
-describe('el plazo de la corrida no vence antes que la espera de la misma llamada', () => {
-  it('🔴 14 min para los 4 pasos de la misma llamada (cubre los 800 s); el brief no tiene piso', () => {
-    expect(ESPERA_DE_LA_MISMA_LLAMADA_S).toBe(800)
-    expect(PLAZO_MINIMO_DE_LA_MISMA_LLAMADA_MIN * 60).toBeGreaterThan(ESPERA_DE_LA_MISMA_LLAMADA_S)
+// 21-nov · opción A (CC1): la espera ya no es la de la misma llamada (800 s) sino la del Wait por webhook del sub-flujo (3 600 s): el piso pasa de 14 a 62 min.
+describe('el plazo de la corrida no vence antes que la espera de la vuelta', () => {
+  it('🔴 62 min para los 4 pasos por el corredor (cubre los 3 600 s del Wait + 2 min); el brief no tiene piso', () => {
+    expect(ESPERA_DE_LA_VUELTA_S).toBe(3600)
+    expect(PLAZO_MINIMO_POR_EL_CORREDOR_MIN).toBe(62)
+    expect(PLAZO_MINIMO_POR_EL_CORREDOR_MIN * 60).toBeGreaterThan(ESPERA_DE_LA_VUELTA_S)
     const pasos: Paso[] = ['estrategia', 'calendario', 'fechas', 'brief', 'fichas']
-    expect(Object.fromEntries(pasos.map((p) => [p, plazoMinimoDelPaso(p)]))).toEqual({ estrategia: 14, calendario: 14, fechas: 14, brief: 0, fichas: 14 })
-    for (const p of Object.keys(RAZONAMIENTO_TEMPORAL_POR_PASO) as Paso[]) expect(plazoMinimoDelPaso(p)).toBe(14)
+    expect(Object.fromEntries(pasos.map((p) => [p, plazoMinimoDelPaso(p)]))).toEqual({ estrategia: 62, calendario: 62, fechas: 62, brief: 0, fichas: 62 })
+    for (const p of PASOS_POR_EL_CORREDOR) expect(plazoMinimoDelPaso(p)).toBe(62)
   })
-  it('🔴 con la config viva (6 min) la corrida de la estrategia nace con plazo de 14 min, no de 6', async () => {
+  it('🔴 con la config viva (6 min) la corrida de la estrategia nace con plazo de 62 min, no de 6', async () => {
     expect(PLAZO_DE_LLAMADA_POR_DEFECTO_MIN).toBe(6)
-    expect(await plazoDeLaEstrategia(6)).toBe(14)
+    expect(await plazoDeLaEstrategia(6)).toBe(62)
   })
-  it('🔴 una config MAYOR que el piso manda (20 min); una config inválida cae al piso, no a 6', async () => {
-    expect(await plazoDeLaEstrategia(20)).toBe(20)
-    expect(await plazoDeLaEstrategia(0)).toBe(14)
+  it('🔴 una config MAYOR que el piso manda (90 min); una config inválida cae al piso, no a 6', async () => {
+    expect(await plazoDeLaEstrategia(90)).toBe(90)
+    expect(await plazoDeLaEstrategia(0)).toBe(62)
   })
 })
 

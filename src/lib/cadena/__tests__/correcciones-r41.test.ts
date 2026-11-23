@@ -219,11 +219,11 @@ describe('#464 C4 · plazo de la llamada alineado con el nodo (290 s)', () => {
     expect(await plazoDeLlamadaMinutos(al)).toBe(9)
     for (const malo of [0, -3, 'x', null]) { al.config.set('plazo_llamada_agente_minutos', malo); expect(await plazoDeLlamadaMinutos(al)).toBe(6) }
   })
-  it('una corrida perdida deja de bloquear al pasar su plazo (la estrategia: 14 min desde el piso temporal de #1260; antes 6): el siguiente preparar abre el intento 2', async () => {
+  it('una corrida perdida deja de bloquear al pasar su plazo (la estrategia: 62 min, la espera de la vuelta por el corredor + 2 · opción A; #1260 tenía 14, antes 6): el siguiente preparar abre el intento 2', async () => {
     const al = almacen(); const id = idDe(await abrir(al))
     await estrategiaPreparar(al, { ...wf(), campana_id: id }, AHORA)
-    expect((await estrategiaPreparar(al, { ...wf({ workflow_execution_id: 'e2' }), campana_id: id }, '2026-10-09T12:13:00Z')).status).toBe(409) // a los 13 min sigue viva (la espera de la misma llamada es 13:20)
-    const r = await estrategiaPreparar(al, { ...wf({ workflow_execution_id: 'e3' }), campana_id: id }, '2026-10-09T12:15:00Z')
+    expect((await estrategiaPreparar(al, { ...wf({ workflow_execution_id: 'e2' }), campana_id: id }, '2026-10-09T13:01:00Z')).status).toBe(409) // a los 61 min sigue viva (la espera del Wait es 60 min)
+    const r = await estrategiaPreparar(al, { ...wf({ workflow_execution_id: 'e3' }), campana_id: id }, '2026-10-09T13:03:00Z')
     expect(r.status).toBe(200)
     expect(r.cuerpo.intento).toBe(2)
   })

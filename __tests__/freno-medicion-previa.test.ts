@@ -51,7 +51,7 @@ describe('freno §150 · medición previa', () => {
     expect(r.blocked).toBe(false); expect(r.reason).toBe('under_cap'); expect(r.spent_usd).toBe(1)
   })
   it('y bloquea igual al llegar al techo por cliente/24 h (no hay hueco de gasto)', async () => {
-    filas = [{ cost_usd: DEFAULT_RUN_SPEND_CAP_USD, workflow_execution_id: 'x' }] // justo en el techo (US$ 24,05)
+    filas = [{ cost_usd: DEFAULT_RUN_SPEND_CAP_USD, workflow_execution_id: 'x' }] // justo en el techo (US$ 60 · 21-nov · A1: 24,05 → 60, firma de Emilio)
     const { r, avisos } = await medir({ medicionPrevia: true })
     expect(r.blocked).toBe(true); expect(r.reason).toBe('over_cap')
     expect(avisos.filter((a) => a.kind === 'run_scoped_unidentified')).toHaveLength(0)

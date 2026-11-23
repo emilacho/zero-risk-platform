@@ -133,14 +133,15 @@ describe('varias campañas · con llave, nace al lado', () => {
 })
 
 describe('varias campañas · el nombre de la campaña (lo lleva el botón «Flujo de la Campaña»)', () => {
-  it('🔴 se guarda al abrir, con llave o sin llave; sin pedirlo, la campaña queda sin nombre', async () => {
+  // 21-nov · Emilio 10:30Z: sin pedirlo, la campaña ya no queda sin nombre: nace con el genérico del plan (este plan de prueba no tiene título «# …» → el genérico fijo)
+  it('🔴 se guarda al abrir, con llave o sin llave; sin pedirlo, la campaña nace con el nombre genérico del plan', async () => {
     const al = almacen()
     const a = idDe(await abrir(al, { nombre_de_campana: '  Impulso del producto estrella  ' }))
     const b = idDe(await abrir(al, { llave_de_campana: 'k1', nombre_de_campana: 'Lanzamiento de temporada' }))
     const c = idDe(await abrir(al, { llave_de_campana: 'k2' }))
     expect(camp(al, a).nombre_de_campana).toBe('Impulso del producto estrella')
     expect(camp(al, b).nombre_de_campana).toBe('Lanzamiento de temporada')
-    expect(camp(al, c).nombre_de_campana ?? null).toBeNull()
+    expect(camp(al, c).nombre_de_campana).toBe('Campaña del plan de marketing')
   })
   it('🔴 «ya abierta» y retomar NO cambian el nombre (solo cuenta al nacer)', async () => {
     const al = almacen()

@@ -73,12 +73,12 @@ describe('T7b · las cifras por segundo y por resolución', () => {
       expect(aplicarTopesPorDuracion(p).errores.length).toBeGreaterThan(0)
     }
   })
-  it('el techo de la base es 650: 2 min a 1080p (633) cabe; 650,01 no', () => {
-    expect(TOPE_MAXIMO_DEL_SOBRE_USD).toBe(650)
+  it('el techo de la base (650 en T7b; 1000 desde 202611201600): 2 min a 1080p (633) cabe; 1000,01 no', () => {
+    expect(TOPE_MAXIMO_DEL_SOBRE_USD).toBe(1000)
     expect(con(120, '1080p').limites.tope_encargo_usd).toBeLessThanOrEqual(TOPE_MAXIMO_DEL_SOBRE_USD)
     const base = { parte_id: '11111111-1111-4111-8111-111111111111', brief_id: 'b1', dry_run: true }
     expect(validarSobre({ ...base, tope_usd: 633 }).ok).toBe(true)
-    expect(validarSobre({ ...base, tope_usd: 650.01 }).ok).toBe(false)
+    expect(validarSobre({ ...base, tope_usd: 1000.01 }).ok).toBe(false)
   })
 })
 
@@ -279,9 +279,9 @@ describe('la migración 202611171900 y su reversa', () => {
     expect(tomar(MIG, 'brazo_antes')).toEqual({ tope_por_video_usd: 15 })
     expect(tomar(MIG, 'brazo')).toEqual({ tope_por_video_usd: 60, tope_por_segundo_usd: 2 })
   })
-  it('🔴 sube las dos reglas al techo del código (650) y se niega con encargos vivos', () => {
-    expect(MIG).toContain(`ADD CONSTRAINT oficina_encargos_tope_valido CHECK (tope_usd > 0 AND tope_usd <= ${TOPE_MAXIMO_DEL_SOBRE_USD});`)
-    expect(MIG).toContain(`ADD CONSTRAINT oficina_tipos_tope_valido CHECK (tope_encargo_usd > 0 AND tope_encargo_usd <= ${TOPE_MAXIMO_DEL_SOBRE_USD});`)
+  it('🔴 sube las dos reglas al techo de entonces (650; el vigente, 1000, es de 202611201600) y se niega con encargos vivos', () => {
+    expect(MIG).toContain('ADD CONSTRAINT oficina_encargos_tope_valido CHECK (tope_usd > 0 AND tope_usd <= 650);')
+    expect(MIG).toContain('ADD CONSTRAINT oficina_tipos_tope_valido CHECK (tope_encargo_usd > 0 AND tope_encargo_usd <= 650);')
     expect(MIG).toMatch(/estado IN \('abierto', 'en_paso'\)/)
     // un encargo parado esperando al dueño no frena (Lenovo + CC6, 17-nov): solo si TODOS sus turnos abiertos son `dueno` y hay al menos uno
     for (const sql of [MIG, REV]) {

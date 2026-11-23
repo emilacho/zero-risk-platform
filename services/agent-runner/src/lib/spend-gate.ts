@@ -21,8 +21,9 @@
  */
 
 // 18-nov · Emilio: topes = 3 × lo medido (PARA-LENOVO-de-CC3-barrido-de-topes-de-gasto-medido-y-su-triple, GO 16:17Z): 24 h de un cliente, máx. medido 8,01 sin el que trae tope propio (el cliente que trae 60 en su ficha) → 24,05; el arranque, 8,01 → 24,05
-const CAP_USD_DEFAULT = 24.05
-const ONBOARDING_CAP_USD_DEFAULT = 24.05
+// 21-nov · tabla de topes A1 · (a) firma de Emilio 13:45 Zúrich (Lenovo 12:46Z): el general y el arranque 24,05 → 60 (va con RUN_SPEND_CAP_USD = 60 al publicar)
+const CAP_USD_DEFAULT = 60
+const ONBOARDING_CAP_USD_DEFAULT = 60
 const ONBOARDING_DIAS_DEFAULT = 7
 const WINDOW_MS = 24 * 60 * 60 * 1000
 

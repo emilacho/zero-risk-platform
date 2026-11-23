@@ -32,6 +32,7 @@ import { leerTodas } from './paginar'
 import { cerrarPausasDeAlta } from './pausa-de-alta'
 import { claveDeAlcance, sedesDeFicha, sedesDeLaFuente, tipoDeFuenteDeUnidad } from './sedes-fuentes'
 import { cargarPruebasDelCliente, columnasDeLaMarca, marcaDeOtroNegocio } from './otro-negocio'
+import { redDeLaFicha } from '../cerebro/portero/red-de-la-pieza'
 
 /** las fichas de zona (`zona:ec`) que le tocan al cliente por su país */
 const zonasDelCliente = (c: Record<string, unknown>): string[] => { const iso = paisIsoDe(c.country ?? c.pais, c.market); return iso ? [idDeZona(iso)] : [] }
@@ -334,6 +335,8 @@ export async function alimentarCliente(e: EntradaDeAlimentar): Promise<Resultado
       id: x.id, client_id: x.client_id, ingreso_id: ingreso, ref: x.ref, clase: x.clase, titulo: x.titulo, que_es: x.que_es, contenido: x.contenido, origen: x.origen, fecha_fuente: x.fecha_fuente,
       reconfirmado_en: x.reconfirmado_en, plazo: x.plazo, vigente_hasta: x.vigente_hasta, version_de: x.version_de, huella: x.huella, propiedad: x.propiedad, porque: x.porque, juzgado_por: x.juzgado_por,
       provenance_tag: x.provenance_tag, fuente_url: x.fuente_url, observado_en: x.observado_en, atributo: x.atributo, sede: x.sede, decision: x.decision, razon_de_decision: x.razon_de_decision,
+      // encargo 7 (21-nov) · la red se deduce del enlace de la fuente o de la clase; sin señal → null («no consta»)
+      red: redDeLaFicha({ clase: x.clase, fuente_url: x.fuente_url }),
       // lo que no se pudo decidir o confirmar se archiva pero NO se entrega
       descartada: !x.entregable, motivo_descarte: x.entregable ? null : x.porque || 'sin confirmar',
       ...columnasDeLaMarca(marca, ahora),

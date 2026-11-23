@@ -18,6 +18,8 @@ export interface OpcionesSim {
   flujos: Record<string, FlujoN8n>
   env?: Record<string, string>
   http: (p: PeticionHttp, ctx: { flujoId: string; nodo: string }) => Promise<RespuestaHttp>
+  /** 21-nov · opción A: lo que sale de un Wait por webhook (la vuelta que llegó a `resumeUrl`). Sin esto, el Wait pasa los ítems tal cual (= la espera se agotó). */
+  alEsperar?: (items: Item[], ctx: { flujoId: string; nodo: string; resumeUrl: string }) => Promise<Item[]> | Item[]
 }
 export interface Traza { flujo: string; nodo: string }
 
@@ -85,7 +87,7 @@ export class SimuladorN8n {
           salidas = [out]
           break
         }
-        case 'wait': salidas = [items]; break
+        case 'wait': salidas = [this.o.alEsperar ? await this.o.alEsperar(items, { flujoId, nodo: nombre, resumeUrl: `https://n8n/resume/${exId}` }) : items]; break
         case 'executeWorkflow': {
           const id = nodo.parameters.workflowId?.value ?? nodo.parameters.workflowId
           if (!this.o.flujos[id]) throw new Error(`«${nombre}» llama al flujo ${String(id)}, que el simulador no tiene`)

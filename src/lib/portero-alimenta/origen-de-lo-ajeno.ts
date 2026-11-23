@@ -17,6 +17,7 @@
  *   8) lo demás → sin registro · sin motivo (una referencia sigue siendo referencia; lo de un tercero, mercado).
  */
 import type { Db } from './alimentar'
+import { redDeLaFotoOVideo, type RedDelVault } from '../cerebro/portero/red-de-la-pieza'
 
 type Fila = Record<string, unknown>
 const txt = (v: unknown): string => (typeof v === 'string' ? v.trim() : '')
@@ -213,30 +214,54 @@ export function armarContexto(a: { esBodega: boolean; cliente: Fila | null; sede
 }
 
 export type LecturaDeContexto = { ok: true; contexto: ContextoDelCliente } | { ok: false; detalle: string }
-/** lee lo que el clasificador necesita de UN cliente (o de la bodega, `clientId` null). Una lectura que falla o llega al tope → no se clasifica (nada a medias) */
-export async function leerContexto(db: Db, clientId: string | null, tabla: TablaDeLoAjeno): Promise<LecturaDeContexto> {
+
+/** el video de una fila, como lo busca `clasificarFila` (la captura apunta a su video; el video es la fila misma) */
+export const videoDeLaFila = (f: Fila): string => txt(f.video_id) || txt(f.id)
+/** cuántos videos se leen a la vez de `cerebro_tendencias` */
+export const VIDEOS_POR_TANDA = 10
+/**
+ * 21-nov · encargo 12 (🟡 1 de CC6 en #1153) · de `cerebro_tendencias` se lee UNA fila por cada video que se va a clasificar (la primera búsqueda que lo trajo),
+ * nunca la tabla entera del cliente: crezca lo que crezca la tabla, la clasificación sigue (antes, a las 2.000 filas daba «lectura recortada» y se apagaba).
+ */
+export async function leerTendenciasDeLosVideos(db: Db, clientId: string, videos: string[]): Promise<{ ok: true; filas: Fila[] } | { ok: false; detalle: string }> {
+  const ids = [...new Set(videos.filter(Boolean))]
+  const filas: Fila[] = []
+  for (let i = 0; i < ids.length; i += VIDEOS_POR_TANDA) {
+    const tanda = ids.filter((_x, j) => j >= i && j < i + VIDEOS_POR_TANDA)
+    const rs = await Promise.all(tanda.map((id) => db.from('cerebro_tendencias').select('video_id, nivel, consulta').eq('client_id', clientId).eq('video_id', id).order('observado_en', { ascending: true }).limit(1)))
+    for (const r of rs as Array<{ data?: unknown; error?: { message?: string } | null }>) {
+      if (r.error) return { ok: false, detalle: `cerebro_tendencias: ${String(r.error.message ?? r.error).match(/^[\s\S]{0,160}/)?.[0] ?? ''}` }
+      filas.push(...((r.data ?? []) as Fila[]))
+    }
+  }
+  return { ok: true, filas }
+}
+
+/** lee lo que el clasificador necesita de UN cliente (o de la bodega, `clientId` null) para las `filas` a clasificar. Una lectura que falla o llega al tope → no se clasifica (nada a medias) */
+export async function leerContexto(db: Db, clientId: string | null, tabla: TablaDeLoAjeno, filas: Fila[] = []): Promise<LecturaDeContexto> {
   if (clientId === null) return { ok: true, contexto: armarContexto({ esBodega: true, cliente: null, sedes: [], tendencias: [], llamadas: [], propias: [], mapas: [] }) }
   const [cl, se, te, ll, pr, ma] = await Promise.all([
     db.from('clients').select('id, config, website_url, country').eq('id', clientId).limit(1),
     db.from('client_sedes').select('ciudad').eq('client_id', clientId).limit(LIMITE),
-    db.from('cerebro_tendencias').select('video_id, nivel, consulta').eq('client_id', clientId).limit(LIMITE),
+    leerTendenciasDeLosVideos(db, clientId, filas.map(videoDeLaFila)),
     db.from('apify_raw').select('params, created_at').eq('client_id', clientId).in('apify_function', ['instagram_scraper', 'google_maps_scraper', 'facebook_ads_library_scraper']).limit(LIMITE),
     db.from(tabla).select('id, post_id').eq('client_id', clientId).eq('owner_role', 'propio').limit(LIMITE),
     db.from('client_social_images').select('handle, caption').eq('client_id', clientId).eq('tipo', 'maps_portada').limit(LIMITE),
   ])
-  const partes: Array<[string, { data?: unknown; error?: { message?: string } | null }]> = [['clients', cl], ['client_sedes', se], ['cerebro_tendencias', te], ['apify_raw', ll], [tabla, pr], ['client_social_images (Mapas)', ma]]
+  if (!te.ok) return { ok: false, detalle: te.detalle }
+  const partes: Array<[string, { data?: unknown; error?: { message?: string } | null }]> = [['clients', cl], ['client_sedes', se], ['apify_raw', ll], [tabla, pr], ['client_social_images (Mapas)', ma]]
   for (const [n, r] of partes) {
     if (r.error) return { ok: false, detalle: `${n}: ${String(r.error.message ?? r.error).slice(0, 160)}` }
     if (n !== 'clients' && ((r.data ?? []) as unknown[]).length >= LIMITE) return { ok: false, detalle: `${n}: lectura recortada a ${LIMITE} filas` }
   }
   const cliente = ((cl.data ?? []) as Fila[])[0] ?? null
   if (!cliente) return { ok: false, detalle: 'clients: no existe el cliente' }
-  return { ok: true, contexto: armarContexto({ esBodega: false, cliente, sedes: (se.data ?? []) as Fila[], tendencias: (te.data ?? []) as Fila[], llamadas: (ll.data ?? []) as Fila[], propias: (pr.data ?? []) as Fila[], mapas: (ma.data ?? []) as Fila[] }) }
+  return { ok: true, contexto: armarContexto({ esBodega: false, cliente, sedes: (se.data ?? []) as Fila[], tendencias: te.filas, llamadas: (ll.data ?? []) as Fila[], propias: (pr.data ?? []) as Fila[], mapas: (ma.data ?? []) as Fila[] }) }
 }
 
 export const COLUMNAS_A_CLASIFICAR: Record<TablaDeLoAjeno, string> = {
-  client_social_images: 'id, client_id, owner_role, handle, post_id, tipo, caption, post_url, video_id, duplicado_de',
-  client_videos: 'id, client_id, owner_role, handle, post_id, tipo, caption, post_url',
+  client_social_images: 'id, client_id, owner_role, handle, post_id, tipo, caption, post_url, url, video_id, duplicado_de',
+  client_videos: 'id, client_id, owner_role, handle, post_id, tipo, caption, post_url, fuente_url',
 }
 /** tope de filas por cliente y tabla en cada corrida: lo que no entra se clasifica en la siguiente */
 export const TOPE_POR_CORRIDA = 500
@@ -255,26 +280,28 @@ export async function clasificarPendientes(db: Db, a: { clientId: string | null;
     const filas = (r.data ?? []) as Fila[]
     base.por_clasificar = filas.length
     if (!filas.length) return base
-    const ctx = await leerContexto(db, a.clientId, a.tabla)
+    const ctx = await leerContexto(db, a.clientId, a.tabla, filas)
     if (!ctx.ok) return { ...base, estado: 'no_se_pudo_leer', detalle: ctx.detalle }
     const cuando = (a.ahora ?? new Date()).toISOString()
     // filas con la MISMA clasificación se escriben juntas (una escritura por grupo)
-    const grupos = new Map<string, { c: Clasificacion; ids: string[] }>()
+    const grupos = new Map<string, { c: Clasificacion; red: RedDelVault | null; ids: string[] }>()
     for (const f of filas) {
       const c = clasificarFila(f, ctx.contexto)
+      // encargo 7 (21-nov) · la red se deduce del tipo o del enlace y se guarda junto con la clasificación; sin señal → null («no consta»)
+      const red = redDeLaFotoOVideo(f)
       base.por_papel[c.papel] = (base.por_papel[c.papel] ?? 0) + 1
       if (c.papel !== 'propio' && !c.relevancia_motivo) base.sin_motivo++
-      const k = JSON.stringify(c)
-      const g = grupos.get(k) ?? { c, ids: [] }
+      const k = `${JSON.stringify(c)}|${red ?? ''}`
+      const g = grupos.get(k) ?? { c, red, ids: [] }
       g.ids.push(txt(f.id)); grupos.set(k, g)
     }
     if (a.dry_run) return base
-    for (const { c, ids } of grupos.values()) {
+    for (const { c, red, ids } of grupos.values()) {
       const { duplicado_de, ...resto } = c
       // de a POR_ESCRITURA ids: la lista viaja en la dirección de la consulta
       for (let i = 0; i < ids.length; i += POR_ESCRITURA) {
         const parte = ids.slice(i, i + POR_ESCRITURA)
-        const w = await db.from(a.tabla).update({ ...resto, ...(duplicado_de && a.tabla === 'client_social_images' ? { duplicado_de } : {}), clasificado_en: cuando }).in('id', parte)
+        const w = await db.from(a.tabla).update({ ...resto, ...(duplicado_de && a.tabla === 'client_social_images' ? { duplicado_de } : {}), red, clasificado_en: cuando }).in('id', parte)
         if (w.error) return { ...base, estado: 'fallo_al_escribir', detalle: `${a.tabla}: ${String(w.error.message ?? w.error).slice(0, 160)}` }
         base.clasificadas += parte.length
       }

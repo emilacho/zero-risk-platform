@@ -206,6 +206,12 @@ export class AlmacenMemoria implements Almacen {
     this.pedidos.push(n)
     return structuredClone(n)
   }
+  /** 21-nov · el arreglo propio · `falloAlLeerPedidos` hace que la lectura LANCE, como la base caída */
+  falloAlLeerPedidos: string | null = null
+  async pedidosSinNacer(desde: string) {
+    if (this.falloAlLeerPedidos) throw new Error(this.falloAlLeerPedidos)
+    return structuredClone(this.pedidos.filter((p) => !p.campana_id && p.creado_en >= desde).sort((a, b) => a.creado_en.localeCompare(b.creado_en)))
+  }
   async ligarPedidoDeCampana(pedidoId: string, campanaId: string) {
     if (this.falloAlLigar) throw new Error(this.falloAlLigar)
     const p = this.pedidos.find((x) => x.id === pedidoId)

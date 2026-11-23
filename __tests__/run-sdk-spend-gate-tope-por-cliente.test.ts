@@ -32,7 +32,7 @@ beforeEach(() => { delete process.env.RUN_SPEND_CAP_ENFORCE; delete process.env.
 afterEach(() => { delete process.env.RUN_SPEND_CAP_ENFORCE; delete process.env.RUN_SPEND_CAP_USD })
 
 describe('tope por cliente · la puerta previa', () => {
-  it('sin tope en la ficha: rige el genérico de US$ 24,05 (nada cambia para los demás clientes)', async () => {
+  it('sin tope en la ficha: rige el genérico de US$ 60 (21-nov · A1: 24,05 → 60, firma de Emilio) (nada cambia para los demás clientes)', async () => {
     const r = await GATE(sb({ config: {}, libro: gasto(3.4) }))
     expect(r.blocked).toBe(false); expect(r.cap_usd).toBe(DEFAULT_RUN_SPEND_CAP_USD); expect(r).not.toHaveProperty('cap_override_usd')
   })
@@ -45,11 +45,11 @@ describe('tope por cliente · la puerta previa', () => {
     const pasado = await GATE(sb({ config, libro: gasto(3.5) }))
     expect(pasado).toMatchObject({ blocked: true, reason: 'over_cap' })
   })
-  it('SUBE (30-oct): un tope mayor que el genérico MANDA — con 50 y 30 gastados (más que el genérico, 24,05) pasa; se corta al llegar a 50', async () => {
-    expect(30).toBeGreaterThan(DEFAULT_RUN_SPEND_CAP_USD)
-    const r = await GATE(sb({ config: { spend_cap_usd: 50 }, libro: gasto(30) }))
-    expect(r).toMatchObject({ blocked: false, cap_usd: 50, cap_override_usd: 50 })
-    expect(await GATE(sb({ config: { spend_cap_usd: 50 }, libro: gasto(50) }))).toMatchObject({ blocked: true, reason: 'over_cap', cap_usd: 50 })
+  it('SUBE (30-oct): un tope mayor que el genérico MANDA — con 80 y 70 gastados (más que el genérico, 60) pasa; se corta al llegar a 80', async () => {
+    expect(70).toBeGreaterThan(DEFAULT_RUN_SPEND_CAP_USD)
+    const r = await GATE(sb({ config: { spend_cap_usd: 80 }, libro: gasto(70) }))
+    expect(r).toMatchObject({ blocked: false, cap_usd: 80, cap_override_usd: 80 })
+    expect(await GATE(sb({ config: { spend_cap_usd: 80 }, libro: gasto(80) }))).toMatchObject({ blocked: true, reason: 'over_cap', cap_usd: 80 })
   })
   it('la ficha manda también sobre el techo del entorno (30-oct): con el entorno en 2 y la ficha en 3,3, gastar 2,5 pasa', async () => {
     process.env.RUN_SPEND_CAP_USD = '2'

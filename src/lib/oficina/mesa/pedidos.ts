@@ -13,7 +13,7 @@ import { BRIEF_GUIA_NO_REGLA } from '../brief'
 import { TITULOS_DEL_BRIEF, TITULOS_OBLIGATORIOS_DEL_BRIEF } from '../../cadena/brief-creativo'
 import { fichaPorOmision } from '../../video/parametros'
 import { tareaDelIngeniero, type ImagenARedactar } from './prompts'
-import { seccionDeLaCriticaParaLaDireccion, tareaDeLaCritica } from './critica'
+import { lineaDeLaCriticaAlDirigir, seccionDeLaCriticaParaLaDireccion, tareaDeLaCritica } from './critica'
 import { fotosALaVista, fotosDeLaLista, REGLA_DE_LOS_ELEMENTOS_REALES, rotuloDeLaFoto } from './fotos-a-la-vista'
 import { seccionDelCerebro, type IndiceDeLaMesa } from './indice-del-cerebro'
 import type { ImagenDelPedido } from '../../imagenes-del-pedido'
@@ -419,6 +419,8 @@ export function armarTarea(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarj
 
   // Sprint 4 · E · lo que la dirección sabe de la crítica de esta ronda (solo si la mesa tiene crítico; sin él, la tarea es la de siempre)
   const laCritica = tipo === 'integrar' || tipo === 'devolver_citas' ? seccionDeLaCriticaParaLaDireccion(est, libro) : null
+  // 21-nov (#36 del barrido) · al abrir, la dirección sabe que la crítica corre sola: no la pide aparte (la doble crítica de T7d)
+  const laCriticaAlDirigir = tipo === 'dirigir' ? lineaDeLaCriticaAlDirigir(est) : null
   const tu: Record<TipoDeTurno, string> = {
     dirigir: [
       '## Tu turno · DIRECCIÓN CREATIVA: abre la pieza',
@@ -430,6 +432,7 @@ export function armarTarea(o: { tipo: TipoDeTurno; agente: string; tarjeta: Tarj
         ? [`Lee el manual, luego el brief y el plan. Escribe tu **idea rectora** del video corto${(c.video?.propuestas ?? 1) > 1 ? ` y los ${c.video!.propuestas} caminos DISTINTOS que vas a proponer al dueño (cada uno con su concepto, duración, red y objetivo)` : ''}: qué vas a contar y en cuántos segundos (los propones tú según el plan, la red y el objetivo: ${duracionDe(c.video)}), con qué estructura de planos y qué rol cumple cada uno, qué fotos propias sirven de referencia y qué necesitas de cada compañero (guion y pedido al generador, storyboard, el gancho final y su puerta de retención (el coach, única voz), texto del pie, coherencia de Instagram o formato nativo de TikTok/Reels si están en la mesa).`, REGLA_DEL_GANCHO + ' Tú no propones el gancho: lo pides y lo integras en la pieza.']
         : ['Lee el manual, luego el brief y el plan. Abre con **`Objetivo de la pieza:`** qué tiene que lograr esta pieza, en una frase, y su llamado (parte del OBJETIVO y del concepto que trae el brief; si el brief no lo dice, decláralo tú y dilo). Luego escribe tu **idea rectora**: qué vas a contar, con qué tono y estructura, qué escena muestra cada lámina o elemento (no copies los planos del brief: el «visual de la campaña» es referencia), qué imágenes imaginas (fotos propias vs. generadas) y qué necesitas de cada compañero.']),
       'El equipo completo participa en cada pieza: la oficina se formó con estos especialistas por razones concretas. Cada uno aportará su especialidad; no escribas tú todo. Si ya sabes que te falta material del cliente, pídelo con `pedir_material`.',
+      ...(laCriticaAlDirigir ? [laCriticaAlDirigir] : []),
     ].join('\n'),
     aportar: [
       `## Tu turno · aporta tu especialidad (${agente})`,
@@ -637,13 +640,15 @@ export function seccionDeMetodo(agente: string, metodos: unknown, fichas: unknow
 }
 
 /** el pedido que consume el flujo de turnos de n8n (mismo molde que la v1: `agent_name`, `task`, `images`, `esquema`…) */
-export function pedidoDeAgente(o: { agente: string; task: string; encargo_id: string; client_id: string; dry_run: boolean; paso: string; reserva_usd: number; es_pieza?: boolean; /** 18-nov · las fotos propias a la vista (`imagenesDelTurno`); sin ellas, el pedido de siempre */ images?: ImagenDelPedido[]; /** 18-nov · la mesa ya lee el índice del cerebro: el corredor no empuja trozos (lo lee en `extra.sin_empuje`) */ sin_empuje?: boolean }): Record<string, unknown> {
+export function pedidoDeAgente(o: { agente: string; task: string; encargo_id: string; client_id: string; dry_run: boolean; paso: string; reserva_usd: number; /** 21-nov · GO Lenovo 10:19Z · cuánto espera el flujo «oficina · turno» la vuelta de ESTE turno (s); sin dato, la espera de siempre del flujo (1800) */ espera_s?: number; es_pieza?: boolean; /** 18-nov · las fotos propias a la vista (`imagenesDelTurno`); sin ellas, el pedido de siempre */ images?: ImagenDelPedido[]; /** 18-nov · la mesa ya lee el índice del cerebro: el corredor no empuja trozos (lo lee en `extra.sin_empuje`) */ sin_empuje?: boolean }): Record<string, unknown> {
   return {
     agent_name: o.agente, task: o.task, images: o.images ?? [], esquema: 'opinion_libre.v1',
     // 04-nov · de qué trabajo es la llamada: el encargo es la pieza · las cadenas (brief, concepto) aún no tienen id firmado: «sin dato»
     ...(o.es_pieza ? { trabajo_tipo: 'pieza', trabajo_id: o.encargo_id } : {}),
     extra: { indicacion_oficina: 'Mesa de trabajo: aportas como profesional de tu especialidad; texto libre.', paso_de_la_oficina: o.paso, encargo_id: o.encargo_id, mesa: true, mesa_agente: o.agente, ...(o.sin_empuje ? { sin_empuje: true } : {}) },
     max_budget_usd: o.reserva_usd, thinking_mode: 'maximo', dry_run: o.dry_run, client_id: o.client_id, workflow_hint: 'oficina · turno',
+    // 21-nov · la espera del Wait del flujo para este turno (el flujo la lee de aquí; NO viaja a run-sdk: el flujo arma ese cuerpo campo por campo)
+    ...(o.espera_s ? { espera_s: o.espera_s } : {}),
     // 31-oct: la mesa NO pasa por el editor de run-sdk (los jueces de la jefatura quedan fuera de la mesa, ADR-020); la cabecera va SIEMPRE
     headers_requeridos: { [CABECERA_SALTAR_EDITOR]: '1' },
   }

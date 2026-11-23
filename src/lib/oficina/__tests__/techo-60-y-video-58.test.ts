@@ -57,8 +57,8 @@ describe('por el motor real, hasta el cierre', () => {
     expect(c52.hechos).not.toContain('entrega')
     expect(hastaElCierre(53, 2).fin.accion).toBe('fin')
   })
-  it('🔴 el techo de la base sube a 60: un sobre pide hasta 60 y el video (58) cabe (desde 202611171900 el techo vigente es 650)', () => {
-    expect(TECHO_VIGENTE).toBe(650)
+  it('🔴 el techo de la base sube a 60: un sobre pide hasta 60 y el video (58) cabe (desde 202611201600 el techo vigente es 1000)', () => {
+    expect(TECHO_VIGENTE).toBe(1000)
     const base = { parte_id: '11111111-1111-4111-8111-111111111111', brief_id: 'b1', dry_run: true }
     expect(validarSobre({ ...base, tope_usd: 58 }).ok).toBe(true)
     expect(validarSobre({ ...base, tope_usd: TECHO_VIGENTE + 0.01 }).ok).toBe(false)

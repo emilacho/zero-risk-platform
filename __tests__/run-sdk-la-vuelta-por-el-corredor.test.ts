@@ -102,8 +102,21 @@ describe('la elegibilidad', () => {
     expect(vueltaPorElCorredorElegible(pedido({ agent: 'chief-financial-officer', callback_mode: 'runner' }) as never)).toMatchObject({ elegible: false })
     // ronda 69 · decisión explícita: + los dos agentes de diseño de la oficina (sin efectos propios de Vercel); el texto editorial y el descubrimiento siguen fuera
     // 06-nov · DALE (a) de Emilio: + el redactor del plan
-    expect(AGENTES_CON_VUELTA_POR_EL_CORREDOR).toEqual(['campaign-brief-agent', 'carousel-designer', 'design-visual-storyteller', 'jefe-marketing'])
+    // 21-nov · GO de Lenovo (opción A): + el agente de los 4 pasos largos de la cadena, solo con la cabecera de saltar el editor
+    expect(AGENTES_CON_VUELTA_POR_EL_CORREDOR).toEqual(['campaign-brief-agent', 'carousel-designer', 'design-visual-storyteller', 'director-gran-idea', 'jefe-marketing', 'social-media-strategist'])
     expect(vueltaPorElCorredorElegible(pedido({ agent: 'content-creator', callback_mode: 'runner' }) as never)).toMatchObject({ elegible: false })
+  })
+  it('🔴 21-nov · la revisión editorial solo deja de impedir la vuelta por el corredor con la cabecera de saltar el editor, y solo para agentes de la lista', () => {
+    const estratega = pedido({ agent: 'social-media-strategist', callback_mode: 'runner' }) as never
+    expect(vueltaPorElCorredorElegible(estratega)).toMatchObject({ elegible: false, motivo: expect.stringMatching(/editorial/) })
+    expect(vueltaPorElCorredorElegible(estratega, { saltaEditor: false })).toMatchObject({ elegible: false, motivo: expect.stringMatching(/editorial/) })
+    expect(vueltaPorElCorredorElegible(estratega, { saltaEditor: true })).toEqual({ elegible: true, motivo: 'ok' })
+    // otro agente con revisión editorial que NO está en la lista: la cabecera no lo vuelve elegible
+    expect(vueltaPorElCorredorElegible(pedido({ agent: 'content-creator', callback_mode: 'runner' }) as never, { saltaEditor: true })).toMatchObject({ elegible: false, motivo: expect.stringMatching(/fuera de la lista/) })
+    // el descubrimiento sigue fuera aunque traiga la cabecera
+    expect(vueltaPorElCorredorElegible(pedido({ agent: 'onboarding-specialist', callback_mode: 'runner' }) as never, { saltaEditor: true })).toMatchObject({ elegible: false, motivo: expect.stringMatching(/descubrimiento/) })
+    // sin la palanca, nada
+    expect(vueltaPorElCorredorElegible(pedido({ agent: 'social-media-strategist' }) as never, { saltaEditor: true }).elegible).toBe(false)
   })
   it('el pedido interno lleva la entrega delegada, y un `_runner_delivery` de afuera se PISA', async () => {
     const cuerpo = pedido({ _runner_delivery: { callback_url: 'https://evil.test/x', dispatch_key: 'x' } })
@@ -151,6 +164,41 @@ describe('el recorrido completo (Vercel → corredor)', () => {
     expect(alCorredor[0].cuerpo).toMatchObject({ callback_mode: 'runner', callback_url: N8N, dispatch_key: 'dispatch:X9F0zp6LQ2xGEYVS:jefe-marketing:220399', agentName: 'jefe-marketing' })
     expect(reenviar).not.toHaveBeenCalled()
     expect(terminal).not.toHaveBeenCalled()
+  })
+  it('🔴 21-nov · opción A: el agente de los pasos largos de la cadena (social-media-strategist) CON la cabecera de saltar el editor → la vuelta la entrega el corredor', async () => {
+    registrar.mockResolvedValue({ dispatch_key: 'dispatch:ZnoFdGfACA36c3qE:social-media-strategist:500', idempotent: false })
+    corredorResponde(ACUSE_202)
+    const cuerpo = pedido({ agent: 'social-media-strategist', workflow_id: 'ZnoFdGfACA36c3qE', workflow_execution_id: '500', step_name: 'estrategia', callback_mode: 'runner' })
+    promesas.length = 0
+    const r = await POST(new Request('https://prod.test/api/agents/run-sdk', { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': 'k', 'x-skip-editor-middleware': '1' }, body: JSON.stringify(cuerpo) }))
+    await Promise.all(promesas)
+    expect(r.status).toBe(202)
+    expect(alCorredor).toHaveLength(1)
+    expect(alCorredor[0].cuerpo).toMatchObject({ callback_mode: 'runner', callback_url: N8N, dispatch_key: 'dispatch:ZnoFdGfACA36c3qE:social-media-strategist:500', agentName: 'social-media-strategist' })
+    expect(reenviar).not.toHaveBeenCalled()
+    expect(terminal).not.toHaveBeenCalled()
+  })
+  it('🔴 21-nov · el mismo agente SIN la cabecera: el camino de siempre (Vercel entrega la vuelta; el editor sigue protegido)', async () => {
+    registrar.mockResolvedValue({ dispatch_key: 'dispatch:ZnoFdGfACA36c3qE:social-media-strategist:501', idempotent: false })
+    corredorResponde(RESPUESTA_LARGA_OK)
+    await correrElPedido(pedido({ agent: 'social-media-strategist', workflow_id: 'ZnoFdGfACA36c3qE', workflow_execution_id: '501', step_name: 'estrategia', callback_mode: 'runner' }))
+    // sin la cabecera corre además el editor (más llamadas): lo que importa es que NINGUNA va al corredor con la vuelta delegada
+    expect(alCorredor.length).toBeGreaterThanOrEqual(1)
+    expect(alCorredor[0].cuerpo).toMatchObject({ agentName: 'social-media-strategist' })
+    for (const c of alCorredor) { expect(c.cuerpo.callback_mode).toBeUndefined(); expect(c.cuerpo.callback_url).toBeUndefined() }
+    expect(terminal).toHaveBeenCalled() // el libro lo cierra Vercel, como siempre
+  })
+  // 21-nov · 🟡 de CC6 (r2): solo el valor EXACTO '1' salta el editor (como en `route.ts`, que corre el editor con cualquier otro valor). Con '0', 'true' o vacío, el camino de siempre.
+  it.each(['0', 'true', ''])('🔴 21-nov · el mismo agente con la cabecera en %j: NO es elegible, el camino de siempre (el editor sigue protegido)', async (valor) => {
+    registrar.mockResolvedValue({ dispatch_key: 'dispatch:ZnoFdGfACA36c3qE:social-media-strategist:502', idempotent: false })
+    corredorResponde(RESPUESTA_LARGA_OK)
+    const cuerpo = pedido({ agent: 'social-media-strategist', workflow_id: 'ZnoFdGfACA36c3qE', workflow_execution_id: '502', step_name: 'estrategia', callback_mode: 'runner' })
+    promesas.length = 0
+    await POST(new Request('https://prod.test/api/agents/run-sdk', { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': 'k', 'x-skip-editor-middleware': valor }, body: JSON.stringify(cuerpo) }))
+    await Promise.all(promesas)
+    expect(alCorredor.length).toBeGreaterThanOrEqual(1)
+    for (const c of alCorredor) { expect(c.cuerpo.callback_mode).toBeUndefined(); expect(c.cuerpo.callback_url).toBeUndefined() }
+    expect(terminal).toHaveBeenCalled()
   })
   it('el gancho de la prueba (test_delay_ms) viaja al corredor', async () => {
     corredorResponde(ACUSE_202)

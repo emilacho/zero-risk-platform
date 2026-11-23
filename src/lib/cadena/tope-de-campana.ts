@@ -84,11 +84,22 @@ export function costoEsperadoDeLaPieza(topes: Record<string, number>, reservas: 
   return typeof r === 'number' && Number.isFinite(r) && r > 0 ? Math.min(r, tope) : tope
 }
 
+/** 21-nov · la fila de la mesa (`cadena_conceptos` / `cadena_brief_creativo`) guarda el costo con 4 decimales; el encargo, con 6 */
+export const REDONDEO_DE_LA_MESA_USD = 0.0001
 /** lo gastado y lo comprometido de la campaña · `parteActual` queda fuera de lo comprometido (sus briefs son lo que se va a soltar) · puro */
 export function medirGastoDeCampana(l: LecturaDeGasto, parteActual: string): { gastado: number; comprometido: number; esperando: BriefEsperando[] } {
   const yaContados = new Set([...l.conceptos, ...l.briefs].filter((x) => x.encargo_id && typeof x.costo_usd === 'number').map((x) => x.encargo_id as string))
   let gastado = l.corridas.reduce((s, c) => s + costoEfectivo(c), 0)
-  gastado += l.conceptos.reduce((s, x) => s + num(x.costo_usd), 0) + l.briefs.reduce((s, x) => s + num(x.costo_usd), 0)
+  // 21-nov · GO Lenovo 10:19Z · el costo de la mesa se fija al entregar, pero una vuelta que llega TARDE (un turno que el vigía dio por muerto) se suma después al encargo:
+  // la campaña cuenta lo mayor entre lo fijado y lo que el encargo lleva gastado hoy (nunca los dos)
+  const gastoDelEncargo = new Map(l.encargos.map((e) => [e.id, num(e.gasto_usd)] as const))
+  // (la fila de la mesa guarda 4 decimales y el encargo 6: una diferencia de redondeo, ≤ 0,0001, no es una vuelta tardía y cuenta lo fijado)
+  const costoDeLaMesa = (x: { costo_usd: number | null; encargo_id: string | null }): number => {
+    const fijado = num(x.costo_usd)
+    const delEncargo = x.encargo_id && typeof x.costo_usd === 'number' ? gastoDelEncargo.get(x.encargo_id) ?? 0 : 0
+    return delEncargo > fijado + REDONDEO_DE_LA_MESA_USD ? delEncargo : fijado
+  }
+  gastado += l.conceptos.reduce((s, x) => s + costoDeLaMesa(x), 0) + l.briefs.reduce((s, x) => s + costoDeLaMesa(x), 0)
   for (const e of l.encargos) {
     if (yaContados.has(e.id)) continue
     gastado += (ESTADOS_ABIERTOS as readonly string[]).includes(e.estado) ? Math.max(num(e.gasto_usd), esperadoDelAbierto(l, e)) : num(e.gasto_usd)

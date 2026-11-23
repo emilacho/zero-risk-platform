@@ -15,6 +15,8 @@ export const COLUMNAS_DE_CEREBRO_FICHAS = new Set([
   'juzgado_por', 'residual', 'creado_en', 'provenance_tag', 'prueba', 'fuente_url', 'observado_en', 'atributo', 'decision', 'razon_de_decision', 'reemplazada_por', 'alcance', 'indice_rechazado_en', 'indice_rechazo',
   // 202611191600 · encargo 10 · la marca «no es de este cliente»
   'otro_negocio_motivo', 'otro_negocio_prueba', 'otro_negocio_como', 'otro_negocio_nivel', 'otro_negocio_por', 'otro_negocio_en',
+  // 202611212000 · encargo 7 · la etiqueta de red del vault
+  'red',
 ])
 
 const RAIZ = path.resolve(__dirname, '..')

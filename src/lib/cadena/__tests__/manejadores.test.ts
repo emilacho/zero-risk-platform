@@ -267,13 +267,13 @@ describe('la estrategia: preparar y guardar', () => {
     expect(run.output_schema.type).toBe('object')
     expect(run.output_schema.additionalProperties).toBe(false)
     expect(run.max_budget_usd).toBeGreaterThanOrEqual(1)
-    expect(run.thinking_mode).toBe('high') // 21-nov · temporal (Lenovo 01:58Z): la estrategia al máximo no cabe en la ventana
+    expect(run.thinking_mode).toBe('maximo') // 21-nov · opción A: la vuelta por el corredor; se deshace el «high» temporal de #1260
     expect(run.model_override).toBe('claude-opus-5-5')
     expect(run.task).toContain(A.planTexto)
     expect(r.cuerpo.headers).toEqual({ 'x-skip-editor-middleware': '1' })
     const corrida = al.corridas[0]
     expect(corrida).toMatchObject({ estado: 'en_curso', paso: 'estrategia', salida_estructurada: true, revision_editor: 'saltada_por_diseno' })
-    expect(corrida.plazo_en).toBe('2026-10-09T12:14:00.000Z') // 21-nov #1260: el piso de 14 min de la misma llamada (la config de prueba dice 6)
+    expect(corrida.plazo_en).toBe('2026-10-09T13:02:00.000Z') // 21-nov · opción A: el piso de 62 min (espera del Wait 3 600 s + 2; la config de prueba dice 6)
     expect(al.campanas[0].estado).toBe('estrategia')
   })
   it('🔴 la indicación no filtra datos de un cliente ni una forma de contactar al dueño', async () => {
@@ -288,7 +288,7 @@ describe('la estrategia: preparar y guardar', () => {
     const id = idCampana(await abrir(al))
     await estrategiaPreparar(al, { ...wf(), campana_id: id }, AHORA)
     expect((await estrategiaPreparar(al, { ...wf(), campana_id: id }, '2026-10-09T12:05:00Z')).status).toBe(409)
-    const tarde = await estrategiaPreparar(al, { ...wf(), campana_id: id }, '2026-10-09T12:30:00Z')
+    const tarde = await estrategiaPreparar(al, { ...wf(), campana_id: id }, '2026-10-09T13:30:00Z')
     expect(tarde.status).toBe(200)
     expect(tarde.cuerpo.intento).toBe(2)
     expect(al.corridas[0].estado).toBe('vencida')
@@ -654,7 +654,7 @@ describe('el reloj del vigía', () => {
     const al = almacen()
     const id = idCampana(await abrir(al))
     await estrategiaPreparar(al, { ...wf(), campana_id: id }, AHORA)
-    const r = await relojDeLaCadena(al, { workflow_id: 'wf-vigia', workflow_execution_id: 'v', seco: true }, '2026-10-09T13:00:00Z')
+    const r = await relojDeLaCadena(al, { workflow_id: 'wf-vigia', workflow_execution_id: 'v', seco: true }, '2026-10-09T13:05:00Z')
     expect(al.corridas[0].estado).toBe('vencida')
     expect(JSON.stringify(r.cuerpo.alertas)).toContain('pasó su plazo')
   })
