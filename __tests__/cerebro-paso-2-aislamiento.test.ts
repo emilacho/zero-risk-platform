@@ -210,6 +210,18 @@ describe('A · nadie más toca las tablas ni las 4 columnas nuevas del cerebro',
   })
 })
 
+// ───────────────────────── A2 · los lectores de la lista corta NO escriben
+// 23-nov · ADENDA 1 de CC6 en #1273: entrar a la lista corta da permiso de NOMBRAR las tablas, no de escribirlas.
+// El juez de fidelidad entró como LECTOR («solo SELECT, nunca escribe»), así que su código no puede contener ningún
+// verbo de escritura de la base. Si un día necesita escribir, se pide y se mide, no se cuela por la lista.
+describe('A2 · los lectores de la lista corta no escriben', () => {
+  const VERBOS_DE_ESCRITURA = ['.insert(', '.update(', '.upsert(', '.delete(', '.rpc(']
+  it('🟡 (CC6 en #1273) `juez-fuente-cruda.ts` no contiene insert, update, upsert, delete ni rpc', () => {
+    const texto = leer('services/agent-runner/src/lib/juez-fuente-cruda.ts')
+    for (const v of VERBOS_DE_ESCRITURA) expect(texto, `el juez usa ${v}`).not.toContain(v)
+  })
+})
+
 // ───────────────────────── B · sin «select *» sobre client_social_images
 /** la ÚNICA excepción: un guion manual de una sola vez (ya corrido el 03-oct) que lee todas las columnas y solo actualiza las que nombra */
 export const EXCEPCIONES_SELECT_ESTRELLA: Record<string, string> = {
