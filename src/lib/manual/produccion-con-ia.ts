@@ -1,13 +1,19 @@
 /**
  * ENCARGO 16 · 21-nov · LA ESCRITURA de «Cómo se produce con IA»: una versión NUEVA del manual que SOLO agrega
- * `brand_book_draft.produccion_con_ia`, sin tocar ninguna otra sección ni lo que Emilio ya aprobó (la firma y el estado
- * de validación del vigente se conservan tal cual). Vive en `src/lib/manual/` porque el cerebro SOLO LEE por
- * construcción (su guarda lo exige); la LECTURA que arma el pedido está en `src/lib/cerebro/manual-produccion-con-ia.ts`.
- * Nada se recorta: un texto fuera de los topes se RECHAZA con su campo, su largo y el tope.
+ * `brand_book_draft.produccion_con_ia`, sin tocar ninguna otra sección ni lo que Emilio ya aprobó.
+ *
+ * 🔴 de CC6 en #1275 (23-nov): esto es una EDICIÓN de una sección, no un manual nuevo. La versión nueva se construye
+ * COPIANDO la fila vigente (`copiaSinIdentidad`, el mismo patrón de la edición del dueño): `provenance_tag` se conserva
+ * ENTERO (quién validó, cómo y cuándo; la edición del dueño; todo lo demás) y solo se le SUMA la marca de esta sección;
+ * `gate_nota`, `brand_values`, `human_validated` y cada columna del vigente viajan tal cual. Solo cambian
+ * `content_text.brand_book_draft.produccion_con_ia`, `version` y `auto_generated_from`.
+ *
+ * Vive en `src/lib/manual/` porque el cerebro SOLO LEE por construcción (su guarda lo exige); la LECTURA que arma el
+ * pedido está en `src/lib/cerebro/manual-produccion-con-ia.ts`. Nada se recorta: un texto fuera de los topes se
+ * RECHAZA con su campo, su largo y el tope.
  */
 import { randomUUID } from 'node:crypto'
-import { buildBrandBookRow } from '../../app/api/brand-book/[clientId]/route'
-import { conservarPalabrasDuras } from './palabras-con-intencion'
+import { copiaSinIdentidad } from './edicion-del-dueno'
 import { borradorDeContentText, type Db } from './revision'
 
 type Fila = Record<string, unknown>
@@ -15,13 +21,14 @@ export const MIN_DEL_TEXTO = 200
 export const TOPE_DEL_TEXTO = 20_000
 const txt = (v: unknown): string => (typeof v === 'string' ? v.trim() : '')
 const lista = (x: unknown): Fila[] => (Array.isArray(x) ? (x as Fila[]) : [])
+const objeto = (v: unknown): Fila => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Fila) : {})
 
 export type ResultadoDeEscribir =
   | { ok: true; dry_run: boolean; version: number | null; id: string | null; solo_cambia: 'produccion_con_ia' }
   | { ok: false; status: number; error: string; detalle: string }
 
 /**
- * Guarda la sección como versión NUEVA del manual: el mismo borrador vigente + `produccion_con_ia`, nada más cambia.
+ * Guarda la sección como versión NUEVA del manual: la fila vigente copiada entera + `produccion_con_ia`, nada más cambia.
  * Como en la promoción: si la versión vigente cambió desde `version_base`, no se pisa nada y se declara.
  */
 export async function escribirProduccionConIa(db: Db, e: { client_id: string; texto: string; version_base: number; dry_run: boolean; workflow_id?: string; workflow_execution_id?: string; ahora?: Date; nuevoId?: () => string }): Promise<ResultadoDeEscribir> {
@@ -41,32 +48,18 @@ export async function escribirProduccionConIa(db: Db, e: { client_id: string; te
   if (e.dry_run) return { ok: true, dry_run: true, version: null, id: null, solo_cambia: 'produccion_con_ia' }
 
   const ahora = (e.ahora ?? new Date()).toISOString()
-  const manualNuevo: Fila = { ...draft, produccion_con_ia: texto }
-  // el JSON previo del manual conserva su firma (approved_by/at del vigente); la nota dice qué cambió
-  let firmaPrevia: Fila = {}
-  try { firmaPrevia = JSON.parse(String(anterior.content_text)) as Fila } catch { /* ya validado por borradorDeContentText */ }
-  const base = buildBrandBookRow(e.client_id, manualNuevo, {
-    approved_by: firmaPrevia.approved_by ?? 'manual_vigente',
-    approved_at: firmaPrevia.approved_at ?? ahora,
-    fidelity_passed: firmaPrevia.fidelity_passed === true,
-    fidelity_scores: firmaPrevia.fidelity_scores ?? null,
-    fidelity_threshold: firmaPrevia.fidelity_threshold ?? null,
-    gate_outcome: firmaPrevia.gate_outcome ?? null,
-    gate_nota: 'solo se agregó la sección «Cómo se produce con IA» (encargo 16); el resto del manual es el vigente, sin cambios',
-  }, vigente + 1)
-  const row: Fila = {
-    ...base,
-    // lo aprobado no cambia de estado por esta sección: se conserva lo del vigente
-    human_validated: anterior.human_validated === true,
-    auto_generated_from: 'manual_produccion_con_ia',
-    provenance_tag: { type: 'evidence', source: 'manual_produccion_con_ia', trust_level: 'tenant_trusted', escrita_por: 'agente por flujo', workflow_id: e.workflow_id ?? null, workflow_execution_id: e.workflow_execution_id ?? null, en: ahora },
-  }
-  if (anterior.tagline != null && row.tagline == null) row.tagline = anterior.tagline
-  for (const c of ['primary_colors', 'typography', 'imagery_style', 'logo_usage_notes']) if (row[c] == null && anterior[c] != null) row[c] = anterior[c]
-  Object.assign(row, conservarPalabrasDuras(anterior, row))
+  // la copia exacta del vigente (firma, validación, gate, columnas: TODO); solo cambia lo de abajo
+  const nueva = copiaSinIdentidad(anterior)
+  let contenido: Fila = {}
+  try { contenido = objeto(JSON.parse(String(anterior.content_text))) } catch { /* ya validado por borradorDeContentText */ }
+  nueva.content_text = JSON.stringify({ ...contenido, brand_book_draft: { ...draft, produccion_con_ia: texto } })
+  nueva.version = vigente + 1
+  nueva.auto_generated_from = 'manual_produccion_con_ia'
+  // `provenance_tag` ENTERO + la marca de la sección: no se quita NADA (validado_por/en/via, editado_por_dueno, manual_cambio_id…)
+  nueva.provenance_tag = { ...objeto(anterior.provenance_tag), seccion_produccion_con_ia: { escrita_por: 'agente por flujo', workflow_id: e.workflow_id ?? null, workflow_execution_id: e.workflow_execution_id ?? null, en: ahora } }
 
   const id = (e.nuevoId ?? randomUUID)()
-  const ins = await db.from('client_brand_books').insert({ id, ...row })
+  const ins = await db.from('client_brand_books').insert({ id, ...nueva })
   if (ins.error) {
     const choque = String((ins.error as Fila).code ?? '') === '23505' || /duplicate|unique/i.test(ins.error.message ?? '')
     if (choque) return { ok: false, status: 409, error: 'version_vigente_cambio', detalle: `otra escritura tomó la versión ${vigente + 1} al mismo tiempo; nada se pisa` }

@@ -4,8 +4,9 @@
 //   node construir.mjs --crear              → crea el flujo REAL en n8n, INACTIVO (no se publica ni se activa)
 //   node construir.mjs --actualizar=<id>    → PUT del JSON (nunca cambia si está activo o no)
 //
-//  · webhook `zero-risk/manual-produccion-con-ia` (POST { client_id, dry_run, reescribir? }) con la llave de despacho
-//    de siempre (x-sala-dispatch-key contra SALA_DISPATCH_KEY del lado de la plataforma; jamás escrita en este JSON).
+//  · webhook `zero-risk/manual-produccion-con-ia` (POST { client_id, dry_run, reescribir? }) con la llave INTERNA en la
+//    cabecera (`x-api-key` comparada contra $env.INTERNAL_API_KEY en ⓪; NUNCA SALA_DISPATCH_KEY; jamás escrita en este JSON).
+//    Llave ausente, errada o entorno sin la variable → ⓪ lanza y NADA corre (🔴 2 de CC6 en #1275).
 //  · ⓪ llave y cuerpo → ① preparar (la puerta lee el cerebro entero y arma el pedido) → con `dry_run` NINGÚN paso de
 //    modelo corre (fin seco con los conteos) → ② el AGENTE por flujo (`run-sdk`, brand-strategist, tope US$ 0,80; si el
 //    cerebro falla, el corredor detiene el paso «esperando al cerebro», encargo 15) → ③ escribir (versión nueva del

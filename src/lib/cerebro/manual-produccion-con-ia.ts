@@ -118,7 +118,8 @@ export async function prepararProduccionConIa(db: Db, clientId: string, o: { ree
   const propias = limpias.filter((f) => rolEfectivo(f) === 'propio').filter((_f, i) => i < FOTOS_EN_EL_PEDIDO)
   const referencias = limpias.filter((f) => rolEfectivo(f) === 'referencia' && (txt(f.que_muestra) || txt(f.caption))).filter((_f, i) => i < REFERENCIAS_EN_EL_PEDIDO)
 
-  const fi = await db.from('cerebro_fichas').select('id, clase, titulo, contenido, vigente_hasta, descartada').eq('client_id', clientId).is('retirada_en', null).in('clase', [...CLASES_DE_HECHOS]).limit(500)
+  // menor de CC6 en #1275: con orden (los más nuevos primero), si algún día hay más de HECHOS_EN_EL_PEDIDO el corte es estable, no al azar
+  const fi = await db.from('cerebro_fichas').select('id, clase, titulo, contenido, vigente_hasta, descartada').eq('client_id', clientId).is('retirada_en', null).in('clase', [...CLASES_DE_HECHOS]).order('observado_en', { ascending: false }).limit(500)
   if (fi.error) return falla('cerebro_fichas', fi.error.message)
   const ahora = Date.now()
   const hechos = lista(fi.data)

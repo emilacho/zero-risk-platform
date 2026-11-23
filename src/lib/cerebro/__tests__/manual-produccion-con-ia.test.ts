@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest'
 import { armarPedidoDeLaSeccion, FOTOS_EN_EL_PEDIDO, prepararProduccionConIa } from '../manual-produccion-con-ia'
 import { escribirProduccionConIa, MIN_DEL_TEXTO, TOPE_DEL_TEXTO } from '../../manual/produccion-con-ia'
 import { CAMPO_POR_CLAVE } from '../../manual/campos-del-manual'
+import { estadoDelManual } from '../../portero-alimenta/estado-del-manual'
 import { crearBaseFalsa } from '../../portero-alimenta/__tests__/base-falsa'
 
 const C1 = 'c0000000-0000-4000-8000-000000000016'
@@ -103,15 +104,47 @@ describe('escribirProduccionConIa', () => {
     expect(r).toMatchObject({ ok: true, dry_run: false, version: 4, id: 'bb-4', solo_cambia: 'produccion_con_ia' })
     const ins = t.escrituras.find((w) => w.tabla === 'client_brand_books' && w.op === 'insert')!
     const fila = ins.fila as Record<string, unknown>
-    const json = JSON.parse(String(fila.content_text)) as { brand_book_draft: Record<string, unknown>; approved_by: string; gate_nota: string }
+    const json = JSON.parse(String(fila.content_text)) as { brand_book_draft: Record<string, unknown>; approved_by: string; fidelity_passed: boolean }
     expect(json.brand_book_draft.produccion_con_ia).toBe(PROSA.trim())
     expect(json.brand_book_draft.voice_description).toBe(DRAFT.voice_description)
     expect(json.brand_book_draft.positioning).toBe(DRAFT.positioning)
     expect(json.approved_by).toBe('emilio') // la firma del vigente no se pisa
-    expect(json.gate_nota).toContain('solo se agregó la sección')
+    expect(json.fidelity_passed).toBe(true)
     expect(fila).toMatchObject({ version: 4, human_validated: true, auto_generated_from: 'manual_produccion_con_ia', tagline: 'Donde el mar te espera' })
-    expect((fila.provenance_tag as Record<string, unknown>).workflow_id).toBe('wf-16')
-    expect(fila.primary_colors).toEqual(['#0a4']) // la herencia de columnas, como en la promoción
+    const marca = (fila.provenance_tag as Record<string, unknown>).seccion_produccion_con_ia as Record<string, unknown>
+    expect(marca).toMatchObject({ workflow_id: 'wf-16', workflow_execution_id: 'ex-1', en: AHORA.toISOString() })
+    expect(fila.primary_colors).toEqual(['#0a4']) // la columna viaja tal cual: la fila nueva es la COPIA del vigente + la sección
+  })
+  it('🔴 (CC6 #1275) la procedencia ENTERA se conserva: la jefatura sigue siendo jefatura, y ni `gate_nota` ni `brand_values` ni las 6 columnas cambian', async () => {
+    // una vigente como las vivas: validada por la JEFATURA, con edición del dueño, nota del gate, brand_values [] y las 6 columnas llenas
+    const PROCEDENCIA_VIVA = {
+      type: 'evidence', source: 'fidelity_gate', trust_level: 'tenant_trusted',
+      validado_por: 'jefatura', validado_en: '2026-11-18T15:32:00Z', validado_via: 'gate_de_fidelidad',
+      editado_por_dueno: { por: 'emilio', en: '2026-11-19T10:00:00Z', campos: ['tagline'] },
+      manual_cambio_id: 'mc-77', relleno_de_columnas: { en: '2026-11-17T00:00:00Z', columnas: ['typography'] },
+    }
+    const vigente = {
+      ...manual(), provenance_tag: PROCEDENCIA_VIVA, gate_nota: 'salió al tope, no alcanzó la vara', brand_values: [],
+      tone_guidelines: { formal: false }, writing_style: 'claro y directo', imagery_style: 'luz natural de tarde',
+      logo_usage_notes: 'sin sombras', competitor_mentions_policy: 'nunca nombrarlos', compliance_notes: 'ninguna',
+    }
+    const antes = estadoDelManual([{ ...vigente }])
+    const t = base({ client_brand_books: [vigente] })
+    const r = await escribirProduccionConIa(t.db, { client_id: C1, texto: PROSA, version_base: 3, dry_run: false, workflow_id: 'wf-16', workflow_execution_id: 'ex-1', ahora: AHORA, nuevoId: () => 'bb-4' })
+    expect(r).toMatchObject({ ok: true, version: 4 })
+    const fila = t.escrituras.find((w) => w.tabla === 'client_brand_books' && w.op === 'insert')!.fila as Record<string, unknown>
+    // campo por campo: TODO lo que no es la sección queda IDÉNTICO al vigente (gate_nota, brand_values, las 6 columnas, human_validated…)
+    const cambian = new Set(['id', 'version', 'auto_generated_from', 'provenance_tag', 'content_text'])
+    for (const k of Object.keys(vigente)) if (!cambian.has(k)) expect(fila[k], `columna ${k}`).toEqual(vigente[k as keyof typeof vigente])
+    // la procedencia: CADA clave del vigente sigue con su valor, y solo se SUMA la marca de la sección
+    const tag = fila.provenance_tag as Record<string, unknown>
+    for (const [k, v] of Object.entries(PROCEDENCIA_VIVA)) expect(tag[k], `provenance_tag.${k}`).toEqual(v)
+    expect(tag.seccion_produccion_con_ia).toMatchObject({ escrita_por: 'agente por flujo', workflow_id: 'wf-16', en: AHORA.toISOString() })
+    // el rótulo del manual dice LO MISMO antes y después: la jefatura NO pasa a «validado por el dueño»
+    const despues = estadoDelManual([fila, { ...vigente }])
+    expect(antes.estado).toBe('validado_por_la_jefatura')
+    expect(despues.estado).toBe('validado_por_la_jefatura')
+    expect(despues.texto).toContain('jefatura')
   })
   it('en seco valida todo y NO escribe nada', async () => {
     const t = base()
