@@ -149,6 +149,8 @@ export function cuerpoDeLaVuelta(
     cacheMetrics?: unknown
     structuredOutput?: unknown
     structuredOutputValid?: boolean
+    /** el tope saltó AL CERRAR y `response` es el texto final completo · la vuelta de Vercel lo marca igual (`camposDeLaVueltaDelCorredor`) */
+    cerradaPorTope?: boolean
     error?: string
   },
   contexto: { agentName: string; dispatchKey: string | null },
@@ -180,6 +182,8 @@ export function cuerpoDeLaVuelta(
     // SALIDA ESTRUCTURADA · solo cuando se pidió esquema · la vuelta lleva el objeto y si es válido (ausente ⇒ la vuelta de siempre)
     ...(result.structuredOutputValid !== undefined ? { structured_output_valid: result.structuredOutputValid } : {}),
     ...(result.structuredOutput !== undefined ? { structured_output: result.structuredOutput } : {}),
+    // 21-nov · #22 (Lenovo 05:01Z): la misma marca que la vuelta de Vercel; sin ella, la cadena no distinguía un cierre por tope
+    ...(result.cerradaPorTope === true ? { cerrada_por_tope: true } : {}),
     ...marca,
   }
 }

@@ -189,7 +189,10 @@ export function validarLimitesDeMirarAfuera(body: unknown): { ok: true; valor: {
 // Si el plan elige otro redactor (`cadena_config.planeacion.redactor`), ese agente se decide aparte.
 // 21-nov · GO Lenovo 10:19Z (tope de la gran idea) · + `director-gran-idea`, la dirección de la mesa de concepto: sus turnos duran 13–17 min (medido 21-nov) y por Vercel la vuelta
 // muere a los 800 s (3 turnos terminados se perdieron así). No persiste descubrimiento, no pasa por revisión editorial (no está en EDITOR_WHITELIST) y no emite brand_section/fidelity.
-export const AGENTES_CON_VUELTA_POR_EL_CORREDOR: readonly string[] = ['campaign-brief-agent', 'carousel-designer', 'design-visual-storyteller', 'director-gran-idea', 'jefe-marketing']
+// 21-nov · GO de Lenovo (opción A del mapa de CC4) · + `social-media-strategist`, el agente de los 4 pasos largos de la cadena (estrategia, calendario,
+// fechas especiales, fichas): al máximo pasa de los 800 s de Vercel. Está en la lista de revisión editorial, así que SOLO entra cuando el pedido trae
+// `x-skip-editor-middleware: 1` (la cadena siempre la manda · `pasos.ts`): con la cabecera el editor nunca corre, ni por Vercel ni por el corredor.
+export const AGENTES_CON_VUELTA_POR_EL_CORREDOR: readonly string[] = ['campaign-brief-agent', 'carousel-designer', 'design-visual-storyteller', 'director-gran-idea', 'jefe-marketing', 'social-media-strategist']
 
 export function resolveCallbackMode(body: RunSdkInput): string | null {
   const ctx = (body.context ?? {}) as Record<string, unknown>
@@ -197,12 +200,15 @@ export function resolveCallbackMode(body: RunSdkInput): string | null {
   return typeof raw === 'string' ? raw : null
 }
 
-/** La entrega por el corredor exige: palanca `runner` + agente en la lista + sin descubrimiento + sin revisión editorial. */
-export function vueltaPorElCorredorElegible(body: RunSdkInput): { elegible: boolean; motivo: string } {
+/**
+ * La entrega por el corredor exige: palanca `runner` + agente en la lista + sin descubrimiento + sin revisión editorial.
+ * 21-nov · la revisión editorial deja de impedirla SOLO si el pedido trae la cabecera de saltar el editor (`saltaEditor`): entonces ese efecto no existe.
+ */
+export function vueltaPorElCorredorElegible(body: RunSdkInput, opciones: { saltaEditor?: boolean } = {}): { elegible: boolean; motivo: string } {
   if (resolveCallbackMode(body) !== 'runner') return { elegible: false, motivo: 'sin palanca callback_mode=runner' }
   const slug = resolveAgentSlug(String(body.agent ?? ''))
   if (isDiscoveryAgentSlug(slug)) return { elegible: false, motivo: 'agente de descubrimiento (efectos que sólo corren en Vercel)' }
-  if (requiresEditorReview(slug)) return { elegible: false, motivo: 'agente con revisión editorial (efecto que sólo corre en Vercel)' }
+  if (requiresEditorReview(slug) && opciones.saltaEditor !== true) return { elegible: false, motivo: 'agente con revisión editorial (efecto que sólo corre en Vercel)' }
   if (!AGENTES_CON_VUELTA_POR_EL_CORREDOR.includes(slug)) return { elegible: false, motivo: `agente ${slug} fuera de la lista de vuelta por el corredor` }
   return { elegible: true, motivo: 'ok' }
 }
@@ -718,7 +724,7 @@ async function atender(request: Request) {
         let innerBody: unknown
         let innerOk = false
         try {
-          const elegibilidad = vueltaPorElCorredorElegible(body)
+          const elegibilidad = vueltaPorElCorredorElegible(body, { saltaEditor: request.headers.get('x-skip-editor-middleware') === '1' })
           if (resolveCallbackMode(body) === 'runner' && !elegibilidad.elegible) {
             console.warn(`[run-sdk] callback_mode=runner IGNORADO · ${elegibilidad.motivo} · la vuelta la entrega Vercel como siempre`)
           }
