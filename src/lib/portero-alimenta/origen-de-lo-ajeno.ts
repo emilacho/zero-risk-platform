@@ -17,6 +17,7 @@
  *   8) lo demás → sin registro · sin motivo (una referencia sigue siendo referencia; lo de un tercero, mercado).
  */
 import type { Db } from './alimentar'
+import { redDeLaFotoOVideo, type RedDelVault } from '../cerebro/portero/red-de-la-pieza'
 
 type Fila = Record<string, unknown>
 const txt = (v: unknown): string => (typeof v === 'string' ? v.trim() : '')
@@ -259,8 +260,8 @@ export async function leerContexto(db: Db, clientId: string | null, tabla: Tabla
 }
 
 export const COLUMNAS_A_CLASIFICAR: Record<TablaDeLoAjeno, string> = {
-  client_social_images: 'id, client_id, owner_role, handle, post_id, tipo, caption, post_url, video_id, duplicado_de',
-  client_videos: 'id, client_id, owner_role, handle, post_id, tipo, caption, post_url',
+  client_social_images: 'id, client_id, owner_role, handle, post_id, tipo, caption, post_url, url, video_id, duplicado_de',
+  client_videos: 'id, client_id, owner_role, handle, post_id, tipo, caption, post_url, fuente_url',
 }
 /** tope de filas por cliente y tabla en cada corrida: lo que no entra se clasifica en la siguiente */
 export const TOPE_POR_CORRIDA = 500
@@ -283,22 +284,24 @@ export async function clasificarPendientes(db: Db, a: { clientId: string | null;
     if (!ctx.ok) return { ...base, estado: 'no_se_pudo_leer', detalle: ctx.detalle }
     const cuando = (a.ahora ?? new Date()).toISOString()
     // filas con la MISMA clasificación se escriben juntas (una escritura por grupo)
-    const grupos = new Map<string, { c: Clasificacion; ids: string[] }>()
+    const grupos = new Map<string, { c: Clasificacion; red: RedDelVault | null; ids: string[] }>()
     for (const f of filas) {
       const c = clasificarFila(f, ctx.contexto)
+      // encargo 7 (21-nov) · la red se deduce del tipo o del enlace y se guarda junto con la clasificación; sin señal → null («no consta»)
+      const red = redDeLaFotoOVideo(f)
       base.por_papel[c.papel] = (base.por_papel[c.papel] ?? 0) + 1
       if (c.papel !== 'propio' && !c.relevancia_motivo) base.sin_motivo++
-      const k = JSON.stringify(c)
-      const g = grupos.get(k) ?? { c, ids: [] }
+      const k = `${JSON.stringify(c)}|${red ?? ''}`
+      const g = grupos.get(k) ?? { c, red, ids: [] }
       g.ids.push(txt(f.id)); grupos.set(k, g)
     }
     if (a.dry_run) return base
-    for (const { c, ids } of grupos.values()) {
+    for (const { c, red, ids } of grupos.values()) {
       const { duplicado_de, ...resto } = c
       // de a POR_ESCRITURA ids: la lista viaja en la dirección de la consulta
       for (let i = 0; i < ids.length; i += POR_ESCRITURA) {
         const parte = ids.slice(i, i + POR_ESCRITURA)
-        const w = await db.from(a.tabla).update({ ...resto, ...(duplicado_de && a.tabla === 'client_social_images' ? { duplicado_de } : {}), clasificado_en: cuando }).in('id', parte)
+        const w = await db.from(a.tabla).update({ ...resto, ...(duplicado_de && a.tabla === 'client_social_images' ? { duplicado_de } : {}), red, clasificado_en: cuando }).in('id', parte)
         if (w.error) return { ...base, estado: 'fallo_al_escribir', detalle: `${a.tabla}: ${String(w.error.message ?? w.error).slice(0, 160)}` }
         base.clasificadas += parte.length
       }
