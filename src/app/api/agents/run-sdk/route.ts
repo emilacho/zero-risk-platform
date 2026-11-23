@@ -38,6 +38,8 @@ import { runDualReviewMiddleware } from '@/lib/editor-middleware'
 import { leerImagenesDelPedido, campoImagenesDelProxy } from '@/lib/imagenes-del-pedido'
 import { resolveAgentSlug } from '@/lib/agent-alias-map'
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { avisarPorIncidente } from '@/lib/portero-alimenta/alertas'
+import type { Db as DbDeAlertas } from '@/lib/portero-alimenta/alimentar'
 import { resolveClientIdFromBody } from '@/lib/client-id-resolver'
 import { validateWorkflowId } from '@/lib/agent-safety'
 import { normalizeFidelityToolInput } from '@/lib/jefatura/fidelity-grader'
@@ -251,6 +253,12 @@ interface BrainEnrichmentProxyMeta {
   brain_query_ms: number
   brain_cost_usd: number
   brain_error?: string
+  /** encargo 15 · ADENDA 1 · la consulta al cerebro FALLÓ (no 0 resultados) y el paso quedó detenido esperándolo. */
+  brain_fallo?: true
+  /** encargo 15 · el motivo real del fallo (status y cuerpo del proveedor, sin la llave). */
+  brain_error_detalle?: string
+  /** encargo 15 · si el corredor logró entregar la alarma a `#alertas`; si no, esta puerta la repite. */
+  alarma_entregada?: boolean
 }
 
 /**
@@ -1393,6 +1401,9 @@ async function atender(request: Request) {
           ...(typeof rawBrain.brain_error === 'string'
             ? { brain_error: rawBrain.brain_error }
             : {}),
+          ...(rawBrain.brain_fallo === true ? { brain_fallo: true as const } : {}),
+          ...(typeof rawBrain.brain_error_detalle === 'string' ? { brain_error_detalle: rawBrain.brain_error_detalle } : {}),
+          ...(typeof rawBrain.alarma_entregada === 'boolean' ? { alarma_entregada: rawBrain.alarma_entregada } : {}),
         }
       : undefined
     const rawCache = (result as { cacheMetrics?: unknown }).cacheMetrics as
@@ -1498,6 +1509,24 @@ async function atender(request: Request) {
     })
 
     if (!result.success) {
+      // ─── encargo 15 · ADENDA 1 (firma de Emilio 21-nov) · «esperando al cerebro» ───
+      // La consulta al cerebro FALLÓ y el corredor detuvo el paso ANTES del modelo. Aquí solo se traduce a un
+      // estado claro (503: reintentable) y, si el corredor no logró entregar la alarma, esta puerta la repite
+      // (misma clave ⇒ `avisarPorIncidente` no duplica el mensaje). 0 resultados nunca llega acá: no es fallo.
+      const esperando = brainEnrichment?.brain_fallo === true || (typeof result.error === 'string' && result.error.startsWith('esperando_al_cerebro'))
+      if (esperando) {
+        let alarma = 'entregada por el corredor'
+        if (brainEnrichment?.alarma_entregada !== true) {
+          const r = await avisarPorIncidente({ db: getSupabaseAdmin() as unknown as DbDeAlertas })(
+            `🔴 El cerebro no responde a los agentes y los pasos quedan detenidos esperándolo. Motivo: ${brainEnrichment?.brain_error ?? 'consulta fallida'}${brainEnrichment?.brain_error_detalle ? ` · ${brainEnrichment.brain_error_detalle}` : ''}. Último paso detenido: ${agentName} (cliente ${clientId || 'sin cliente'}). Se reanudan reintentando el mismo paso cuando el cerebro vuelva.`,
+            'cerebro:consulta-fallo',
+          )
+          alarma = `${r.accion}: ${r.detalle}`
+        }
+        console.error(`[run-sdk] esperando_al_cerebro · agente=${agentName} · cliente=${clientId || 'sin cliente'} · alarma=${alarma}`)
+        // el motivo real viaja también en la respuesta (`brainEnrichment.brain_error_detalle`): es justo lo que esta entrega rescata
+        return NextResponse.json({ success: false, estado: 'esperando_al_cerebro', error: result.error, alarma, ...(brainEnrichment ? { brainEnrichment } : {}) }, { status: 503 })
+      }
       return NextResponse.json({ success: false, error: result.error }, { status: 500 })
     }
 
