@@ -202,6 +202,17 @@ describe('agnóstico: cualquier paso que cuenta intentos', () => {
     c.tope_gasto_usd = 11 // 0,6 + 10 ≤ 11: la bolsa crece hasta el tope y el intento cabe
     expect((await reintentarAhora(al, { ...OPERADOR, campana_id: id, paso: 'calendario', quien: 'CC7', por_que: 'p' }, AHORA)).status).toBe(200)
   })
+  it('🔴 24-nov · el reintento de la estrategia reserva SU tope (US$ 10, Emilio «si» 00:01 Zúrich): con 5 no cabe; con 11 sí (s6 de CC6 en #1278)', async () => {
+    const { al, id } = await conCaidas(3)
+    al.campanas[0].presupuesto_planificacion_usd = 5
+    al.campanas[0].tope_gasto_usd = 5 // gastado (3 caídas a costo medido) + tope 10 > 5, y la bolsa no puede pasar el tope de la campaña
+    const no = await pedir(al, { campana_id: id })
+    expect(no.cuerpo).toMatchObject({ code: 'E-PRESUPUESTO' })
+    expect(String(no.cuerpo.detalle)).toContain('tope US$ 10.00')
+    expect(libreta(al)).toEqual([])
+    al.campanas[0].tope_gasto_usd = 11 // 0,6 + 10 ≤ 11: la bolsa crece hasta el tope y el intento cabe
+    expect((await pedir(al, { campana_id: id })).status).toBe(200)
+  })
   it('🔴 un permiso de OTRA llave base (otra tanda) no sirve', async () => {
     const { al, id } = await conCaidas(0)
     const c = al.campanas[0]
