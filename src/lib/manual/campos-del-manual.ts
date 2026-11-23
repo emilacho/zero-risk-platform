@@ -58,6 +58,9 @@ export const CAMPOS: readonly CampoDelManual[] = [
   { clave: 'uso_del_logo', etiqueta: 'Uso del logo', tipo: 'lista', ruta: 'uso_del_logo', editable: true, obligatorio: false },
   { clave: 'jerarquia_tipografica', etiqueta: 'Jerarquía tipográfica', tipo: 'lista', ruta: 'jerarquia_tipografica', editable: true, obligatorio: false },
   { clave: 'historia_y_origen', etiqueta: 'Historia y origen', tipo: 'texto', ruta: 'historia_y_origen', editable: true, obligatorio: false },
+  // 21-nov · encargo 16 (firma de Emilio 18-nov): «Cómo se produce con IA», en prosa. La escribe un agente por flujo con lo del cerebro
+  // (manual-produccion-con-ia.ts); no cuenta para el cierre y Emilio la corrige en el dashboard como cualquier sección.
+  { clave: 'produccion_con_ia', etiqueta: 'Cómo se produce con IA', tipo: 'texto', ruta: 'produccion_con_ia', editable: true, obligatorio: false },
 ]
 
 export const CAMPO_POR_CLAVE: Readonly<Record<string, CampoDelManual>> = Object.fromEntries(CAMPOS.map((c) => [c.clave, c]))
