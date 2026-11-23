@@ -4,7 +4,7 @@
  * US$ 0 · base falsa.
  */
 import { describe, expect, it } from 'vitest'
-import { armarPedidoDeLaSeccion, FOTOS_EN_EL_PEDIDO, prepararProduccionConIa } from '../manual-produccion-con-ia'
+import { armarPedidoDeLaSeccion, FOTOS_EN_EL_PEDIDO, HECHOS_EN_EL_PEDIDO, prepararProduccionConIa } from '../manual-produccion-con-ia'
 import { escribirProduccionConIa, MIN_DEL_TEXTO, TOPE_DEL_TEXTO } from '../../manual/produccion-con-ia'
 import { CAMPO_POR_CLAVE } from '../../manual/campos-del-manual'
 import { estadoDelManual } from '../../portero-alimenta/estado-del-manual'
@@ -88,6 +88,21 @@ describe('prepararProduccionConIa', () => {
     expect(caida).toMatchObject({ ok: false, error: 'lectura_fallida' })
     expect(!caida.ok && caida.detalle).toContain('client_social_images')
   })
+  it('🟡 (CC6 k10 · k11 en #1275) con un hecho MÁS que el corte, se quedan los más NUEVOS: el más viejo queda fuera (el orden se ejerce de verdad)', async () => {
+    // el más viejo va PRIMERO en la tabla: sin orden (k10) o del más viejo al más nuevo (k11) entraría al pedido
+    const hecho = (i: number, extra: Record<string, unknown> = {}) => ({ id: `hx${i}`, client_id: C1, clase: 'precio', titulo: `hecho-nuevo-${i}`, contenido: `$${i}`, vigente_hasta: null, descartada: false, retirada_en: null, observado_en: new Date(Date.UTC(2026, 10, 20, 0, i)).toISOString(), ...extra })
+    const tabla = [
+      hecho(0, { id: 'hx-viejo', titulo: 'el-hecho-mas-viejo', observado_en: '2026-10-01T00:00:00.000Z' }),
+      ...Array.from({ length: HECHOS_EN_EL_PEDIDO }, (_x, i) => hecho(i + 1)),
+    ]
+    const { db } = base({ cerebro_fichas: tabla })
+    const r = await prepararProduccionConIa(db, C1)
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.insumos.hechos).toBe(HECHOS_EN_EL_PEDIDO)
+    expect(r.insumos.task).toContain('hecho-nuevo-1') // el más viejo DE LOS NUEVOS sí entra: caben exactamente los 40
+    expect(r.insumos.task).not.toContain('el-hecho-mas-viejo') // sin dato de orden, esto se colaría
+  })
   it('el pedido lleva a lo más FOTOS_EN_EL_PEDIDO fotos (lo demás queda para otra versión, nada se corta a medias)', async () => {
     const muchas = Array.from({ length: 80 }, (_x, i) => foto(`m${i}`))
     const { db } = base({ client_social_images: muchas })
@@ -145,6 +160,30 @@ describe('escribirProduccionConIa', () => {
     expect(antes.estado).toBe('validado_por_la_jefatura')
     expect(despues.estado).toBe('validado_por_la_jefatura')
     expect(despues.texto).toContain('jefatura')
+  })
+  it('🟡 (CC6 k8 en #1275) una vigente SIN validar sigue SIN validar: escribir una sección no es una firma — human_validated queda en false y el rótulo dice «propuesta» antes y después', async () => {
+    // como `df7e47cc` en vivo: propuesta del sistema, sin validado_por en la procedencia
+    const vigente = { ...manual(), human_validated: false, provenance_tag: { type: 'evidence', source: 'onboarding' } }
+    const antes = estadoDelManual([{ ...vigente }])
+    const t = base({ client_brand_books: [vigente] })
+    const r = await escribirProduccionConIa(t.db, { client_id: C1, texto: PROSA, version_base: 3, dry_run: false, workflow_id: 'wf-16', workflow_execution_id: 'ex-1', ahora: AHORA, nuevoId: () => 'bb-4' })
+    expect(r).toMatchObject({ ok: true, version: 4 })
+    const fila = t.escrituras.find((w) => w.tabla === 'client_brand_books' && w.op === 'insert')!.fila as Record<string, unknown>
+    expect(fila.human_validated).toBe(false) // la misma clase de firma falsa del 🔴 1, por el otro lado
+    const despues = estadoDelManual([fila, { ...vigente }])
+    expect(antes.estado).toBe('propuesta_sin_validar')
+    expect(despues.estado).toBe('propuesta_sin_validar')
+    expect(despues.texto).toContain('propuesta')
+  })
+  it('🟡 (CC6 k7 en #1275) la versión nueva ESTRENA identidad: el insert lleva el id nuevo y no arrastra created_at ni updated_at del vigente', async () => {
+    const vigente = { ...manual(), created_at: '2026-11-10T00:00:00.000Z', updated_at: '2026-11-12T00:00:00.000Z' }
+    const t = base({ client_brand_books: [vigente] })
+    const r = await escribirProduccionConIa(t.db, { client_id: C1, texto: PROSA, version_base: 3, dry_run: false, workflow_id: 'wf-16', workflow_execution_id: 'ex-1', ahora: AHORA, nuevoId: () => 'bb-nuevo' })
+    expect(r).toMatchObject({ ok: true, version: 4, id: 'bb-nuevo' })
+    const fila = t.escrituras.find((w) => w.tabla === 'client_brand_books' && w.op === 'insert')!.fila as Record<string, unknown>
+    expect(fila.id).toBe('bb-nuevo') // con el id viejo, el insert chocaría con la clave y TODA escritura respondería «version_vigente_cambio»
+    expect('created_at' in fila).toBe(false) // la fecha de nacimiento es de la versión nueva, no la heredada
+    expect('updated_at' in fila).toBe(false)
   })
   it('en seco valida todo y NO escribe nada', async () => {
     const t = base()
