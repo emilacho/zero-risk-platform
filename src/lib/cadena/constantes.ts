@@ -33,8 +33,14 @@ export const TOPE_DE_UN_TURNO_AL_TECHO_USD = 3
  * DEFAULT en la migración 202611232000) y el piso de la bolsa de planificación (12 vueltas × 10), que crece sola hasta el tope de gasto de la campaña.
  */
 export const TOPE_DE_CALENDARIO_FECHAS_Y_FICHAS_USD = 10
+/**
+ * 24-nov · firma de Emilio 00:01 Zúrich («si», opción a) · GO de Lenovo 23:02Z: la estrategia también pasa a US$ 10 por llamada. Con `maximo` y 2 turnos,
+ * la estrategia de `799f6dc3` se cortó en US$ 2,93 contra el tope de 3 (el tope de un turno no alcanzaba para dos). El razonamiento sigue en `maximo`.
+ * El mínimo para crear una campaña NO sube: `bolsaDePlanificacion` sigue contando su peor caso con `TOPE_DE_UN_TURNO_AL_TECHO_USD` (opción c).
+ */
+export const TOPE_DE_LA_ESTRATEGIA_USD = 10
 export const TOPE_POR_PASO_USD: Readonly<Partial<Record<Paso, number>>> = {
-  estrategia: TOPE_DE_UN_TURNO_AL_TECHO_USD,
+  estrategia: TOPE_DE_LA_ESTRATEGIA_USD,
   calendario: TOPE_DE_CALENDARIO_FECHAS_Y_FICHAS_USD,
   fechas: TOPE_DE_CALENDARIO_FECHAS_Y_FICHAS_USD,
   fichas: TOPE_DE_CALENDARIO_FECHAS_Y_FICHAS_USD,
@@ -112,7 +118,8 @@ export function bolsaDePlanificacion(totalTandas: number): number {
   const medida = pasadas * (MEDIDO_POR_LLAMADA_USD.estrategia + tandas * MEDIDO_POR_LLAMADA_USD.calendario)
   // 23-nov · opción (c), firma de Emilio (Lenovo 19:50Z): la bolsa con que NACE la campaña (y el mínimo para crearla) cuenta el peor caso de la estrategia
   // (12 × 3 = 36), no el del calendario a 10. Lo que el calendario necesita para aguantar sus 12 caídas lo da `techoDeLaBolsaDePlanificacion`, al crecer.
-  const peorCaida = TOPE_DE_VUELTAS_DEL_SUBFLUJO * topeDelPaso('estrategia')
+  // 24-nov: la estrategia sube a 10 por llamada, pero el nacimiento sigue en 12 × 3 = 36 (opción c); lo demás lo da el techo, al crecer.
+  const peorCaida = TOPE_DE_VUELTAS_DEL_SUBFLUJO * TOPE_DE_UN_TURNO_AL_TECHO_USD
   return Math.ceil(Math.max(MULTIPLO_DE_LA_BOLSA * medida, peorCaida, PRESUPUESTO_PLANIFICACION_POR_OMISION) * 100) / 100
 }
 /**

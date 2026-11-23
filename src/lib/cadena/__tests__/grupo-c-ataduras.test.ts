@@ -7,7 +7,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { bolsaDePlanificacion, MAXIMO_DE_INTENTOS, MEDIDO_POR_LLAMADA_USD, medidaDeCampana, RONDAS_DE_CORRECCION, techoDeLaBolsaDePlanificacion, TOPE_DE_VUELTAS_DEL_SUBFLUJO, topeDelPaso } from '../constantes'
+import { bolsaDePlanificacion, MAXIMO_DE_INTENTOS, MEDIDO_POR_LLAMADA_USD, medidaDeCampana, RONDAS_DE_CORRECCION, techoDeLaBolsaDePlanificacion, TOPE_DE_UN_TURNO_AL_TECHO_USD, TOPE_DE_VUELTAS_DEL_SUBFLUJO, topeDelPaso } from '../constantes'
 import { SALIERON_EN_LA_CADENA } from '../tipos'
 import { mejorRonda, rondaDeClave } from '../pasos'
 import type { RondaDeEstrategia } from '../almacen'
@@ -56,14 +56,15 @@ describe('la bolsa de planificación (DECISIÓN Lenovo 19-nov 05:00Z): 3 × lo m
     for (const tandas of [1, 2, 4, 7, 14]) {
       const medida = (1 + RONDAS_DE_CORRECCION) * (MEDIDO_POR_LLAMADA_USD.estrategia + tandas * MEDIDO_POR_LLAMADA_USD.calendario)
       // 23-nov · opción (c): la bolsa con que nace cuenta las caídas de la estrategia; las del calendario (a US$ 10) las cubre el techo al que crece
-      const peorCaida = TOPE_DE_VUELTAS_DEL_SUBFLUJO * topeDelPaso('estrategia')
+      // 24-nov: la estrategia sube a US$ 10 por llamada, pero el nacimiento sigue contando 12 × 3 (el tope de un turno), para que crear no cueste más
+      const peorCaida = TOPE_DE_VUELTAS_DEL_SUBFLUJO * TOPE_DE_UN_TURNO_AL_TECHO_USD
       expect(bolsaDePlanificacion(tandas)).toBe(Math.ceil(Math.max(3 * medida, peorCaida) * 100) / 100)
       expect(techoDeLaBolsaDePlanificacion(tandas)).toBe(Math.max(bolsaDePlanificacion(tandas), TOPE_DE_VUELTAS_DEL_SUBFLUJO * topeDelPaso('calendario')))
     }
   })
   it('nunca menos que el peor caso de 12 caídas a su tope (ni con 0 tandas)', () => {
-    expect(bolsaDePlanificacion(0)).toBeGreaterThanOrEqual(TOPE_DE_VUELTAS_DEL_SUBFLUJO * topeDelPaso('estrategia'))
-    expect(bolsaDePlanificacion(0)).toBe(36) // 12 × 3 (tope temporal de #1260)
+    expect(bolsaDePlanificacion(0)).toBeGreaterThanOrEqual(TOPE_DE_VUELTAS_DEL_SUBFLUJO * TOPE_DE_UN_TURNO_AL_TECHO_USD)
+    expect(bolsaDePlanificacion(0)).toBe(36) // 12 × 3 (el tope de un turno) · 24-nov: aunque la estrategia lleve 10, el nacimiento no sube (opción c)
   })
   it('crece con las tandas (más tandas, más rondas posibles)', () => {
     expect(bolsaDePlanificacion(14)).toBeGreaterThan(bolsaDePlanificacion(4))

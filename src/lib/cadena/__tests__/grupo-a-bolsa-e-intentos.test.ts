@@ -284,7 +284,7 @@ describe('el reloj retoma la estrategia atascada', () => {
     await relojDeLaCadena(al, { workflow_id: 'wf-vigia', workflow_execution_id: 'v1', seco: true }, TARDE)
     expect(al.sobresEmitidos).toHaveLength(0)
   })
-  it('el tope del paso no cambió: sigue siendo el suyo (US$ 3, el temporal de #1260)', () => {
-    expect(topeDelPaso('estrategia')).toBe(3)
+  it('el tope del paso es el suyo (24-nov: US$ 10, firma de Emilio «si» a la opción a; antes 3, el temporal de #1260)', () => {
+    expect(topeDelPaso('estrategia')).toBe(10)
   })
 })

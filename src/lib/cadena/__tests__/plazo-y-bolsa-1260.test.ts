@@ -56,11 +56,12 @@ describe('el plazo de la corrida no vence antes que la espera de la vuelta', () 
 describe('la bolsa de 2fd5f619 cubre las reservas nuevas (datos de la base)', () => {
   const campana = { fecha_inicio: '2026-12-06', fecha_fin: '2026-12-19', semanas_de_tanda: null, presupuesto_planificacion_usd: '17.97', tope_gasto_usd: '300' } as unknown as Campana
   const caidas = [1, 2, 3].map(() => ({ paso: 'estrategia', estado: 'fallida' as const, costo_usd: null }))
-  it('🔴 sus 3 estrategias caídas sin costo cuentan 3 × 3 = US$ 9', () => {
-    expect(caidas.reduce((s, c) => s + costoEfectivo(c), 0)).toBe(9)
+  it('🔴 sus 3 estrategias caídas sin costo cuentan su tope entero: 3 × 10 = US$ 30 (24-nov; el 21-nov eran 3 × 3 = 9)', () => {
+    expect(caidas.reduce((s, c) => s + costoEfectivo(c), 0)).toBe(30)
   })
-  it('🔴 la reserva de la estrategia (9 + 3 = 12) cabe en la bolsa de hoy (17,97) sin agrandarla', () => {
-    expect(9 + topeDelPaso('estrategia')).toBeLessThanOrEqual(17.97)
+  it('🔴 24-nov · la reserva de la estrategia (30 + 10 = 40) ya no cabe en su bolsa de 17,97: la bolsa se agranda (prueba siguiente)', () => {
+    expect(30 + topeDelPaso('estrategia')).toBeGreaterThan(17.97)
+    expect(30 + topeDelPaso('estrategia')).toBeLessThanOrEqual(bolsaAgrandada(campana, 'estrategia') as number)
   })
   it('🔴 y si hace falta, la bolsa sube sola a su techo de 120 (12 caídas × US$ 10 del calendario · opción (c) del 23-nov), dentro del tope de 300', () => {
     expect(bolsaAgrandada(campana, 'estrategia')).toBe(120)
