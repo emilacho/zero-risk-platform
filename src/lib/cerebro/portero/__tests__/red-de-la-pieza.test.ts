@@ -18,6 +18,18 @@ describe('redDeUrl', () => {
     expect(redDeUrl('https://www.google.com/maps/place/x')).toBe('maps')
     expect(redDeUrl('https://www.reddit.com/r/quito/')).toBe('foros')
   })
+  // 23-nov · hallazgo de CC6 en #1271 con datos vivos: Google no es solo Maps
+  it('🔴 cada servicio de Google con su red (URLs reales de las fichas vivas); google.com a secas no dice nada', () => {
+    expect(redDeUrl('https://adstransparency.google.com/advertiser/AR123?region=EC')).toBe('anuncios_google')
+    expect(redDeUrl('https://trends.google.com/trending?geo=EC')).toBe('busquedas')
+    expect(redDeUrl('https://maps.google.com/?cid=123')).toBe('maps')
+    expect(redDeUrl('https://maps.app.goo.gl/abc123')).toBe('maps')
+    expect(redDeUrl('https://goo.gl/maps/abc123')).toBe('maps')
+    expect(redDeUrl('https://google.com.ec/maps/place/x')).toBe('maps')
+    expect(redDeUrl('https://www.google.com/search?q=ceviche')).toBeNull()
+    expect(redDeUrl('https://lh5.googleusercontent.com/x.jpg')).toBeNull() // la foto de Maps la decide su tipo, no este host
+    expect(redDeUrl('https://www.google.com/mapsfalso/x')).toBeNull() // «empieza parecido» no es la ruta de Maps
+  })
   it('un host desconocido, un texto que no es enlace o nada → null (no se inventa)', () => {
     expect(redDeUrl('https://extintores.ec/productos')).toBeNull()
     expect(redDeUrl('instagram')).toBeNull()
@@ -59,6 +71,9 @@ describe('redDeLaFicha', () => {
     expect(redDeLaFicha({ clase: 'resenas', fuente_url: null })).toBe('maps')
     expect(redDeLaFicha({ clase: 'competidor_anuncios', fuente_url: null })).toBe('anuncios_meta')
     expect(redDeLaFicha({ clase: 'competidor_anuncios_google', fuente_url: null })).toBe('anuncios_google')
+    // las 9 + 4 fichas vivas que CC6 encontró mal archivadas por la regla ancha de Google
+    expect(redDeLaFicha({ clase: 'competidor_anuncios_google', fuente_url: 'https://adstransparency.google.com/advertiser/AR123' })).toBe('anuncios_google')
+    expect(redDeLaFicha({ clase: 'tendencia_busqueda', fuente_url: 'https://trends.google.com/trending?geo=EC' })).toBe('busquedas')
   })
   it('lo del dueño y lo sintetizado no tienen red: null («no consta»)', () => {
     for (const clase of ['dato_del_dueno', 'aprendizaje_del_dueno', 'resumen_vivo', 'informe_de_analisis', 'competidor_evaluacion', 'precio', 'horario']) {

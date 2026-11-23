@@ -42,14 +42,22 @@ const RED_POR_HOST: Array<[RegExp, RedDelVault]> = [
   [/(^|\.)facebook\.com$|(^|\.)fbcdn\.net$/, 'facebook'],
   [/(^|\.)youtube\.com$|^youtu\.be$/, 'youtube'],
   [/^x\.com$|(^|\.)twitter\.com$|(^|\.)twimg\.com$/, 'x'],
-  [/(^|\.)google\.com$|(^|\.)googleusercontent\.com$|(^|\.)gstatic\.com$/, 'maps'], // lo que el portero trae de google.com son fichas y fotos de Maps
+  // 23-nov · hallazgo de CC6 en #1271 con datos vivos: Google NO es solo Maps. Cada servicio con su red, y Maps
+  // SOLO por sus hosts propios o la ruta /maps (abajo). google.com a secas ya no dice nada («no consta»).
+  [/^adstransparency\.google\.com$/, 'anuncios_google'],
+  [/^trends\.google\.com$/, 'busquedas'],
+  [/^maps\.google\.com$|^maps\.app\.goo\.gl$/, 'maps'],
   [/(^|\.)reddit\.com$|(^|\.)redd\.it$/, 'foros'],
 ]
+/** Maps por la RUTA: google.<tld>/maps y goo.gl/maps (el host solo no alcanza: google.com también es anuncios, trends y búsquedas) */
+const ES_RUTA_DE_MAPS = /^https?:\/\/(?:www\.)?(?:google\.[a-z]{2,3}(?:\.[a-z]{2})?\/maps(?:[/?#]|$)|goo\.gl\/maps\/)/i
 
 /** la red que dice un enlace; null si el host no es de una red conocida */
 export function redDeUrl(url: unknown): RedDelVault | null {
-  const h = hostDe(txt(url))
+  const u = txt(url)
+  const h = hostDe(u)
   if (!h) return null
+  if (ES_RUTA_DE_MAPS.test(u)) return 'maps'
   for (const [re, red] of RED_POR_HOST) if (re.test(h)) return red
   return null
 }
