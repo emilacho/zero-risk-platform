@@ -186,6 +186,22 @@ describe('agnóstico: cualquier paso que cuenta intentos', () => {
     const p = await prepararCorrida(al, c, 'calendario', 't1:v1:c0', 'wf-cadena', 'e', AHORA, 'claude-opus-5-5', null)
     expect(p).toMatchObject({ tipo: 'lista', corrida: { clave_idempotencia: 't1:v1:c0:rmanual-20261013t035600', intento: 1 } })
   })
+  it('🔴 23-nov · el reintento del calendario reserva SU tope (US$ 10, Emilio «subelo a 10»): con 5 no cabe; con 11 sí (m4 de CC6 en #1276)', async () => {
+    const { al, id } = await conCaidas(0)
+    const c = al.campanas[0]
+    for (const t of [T1, T2, T3]) {
+      const r = await prepararCorrida(al, c, 'calendario', 't1:v1:c0', 'wf-cadena', 'e', t, 'claude-opus-5-5', null)
+      if (r.tipo === 'lista') await al.cerrarCorrida(r.corrida.id, { estado: 'fallida', costo_usd: 0.2 })
+    }
+    c.presupuesto_planificacion_usd = 5
+    c.tope_gasto_usd = 5 // gastado 0,6 + tope 10 > 5, y la bolsa no puede pasar el tope de la campaña
+    const no = await reintentarAhora(al, { ...OPERADOR, campana_id: id, paso: 'calendario', quien: 'CC7', por_que: 'p' }, AHORA)
+    expect(no.cuerpo).toMatchObject({ code: 'E-PRESUPUESTO' })
+    expect(String(no.cuerpo.detalle)).toContain('tope US$ 10.00')
+    expect(libreta(al)).toEqual([])
+    c.tope_gasto_usd = 11 // 0,6 + 10 ≤ 11: la bolsa crece hasta el tope y el intento cabe
+    expect((await reintentarAhora(al, { ...OPERADOR, campana_id: id, paso: 'calendario', quien: 'CC7', por_que: 'p' }, AHORA)).status).toBe(200)
+  })
   it('🔴 un permiso de OTRA llave base (otra tanda) no sirve', async () => {
     const { al, id } = await conCaidas(0)
     const c = al.campanas[0]
