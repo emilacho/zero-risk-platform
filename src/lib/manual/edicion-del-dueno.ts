@@ -65,7 +65,8 @@ async function leerVigente(db: Db, client_id: string): Promise<{ fila: Fila | nu
   return { fila: (Array.isArray(q.data) ? (q.data[0] as Fila | undefined) : undefined) ?? null }
 }
 
-function copiaSinIdentidad(f: Fila): Fila {
+/** la copia exacta de la fila vigente, sin su identidad: la base del patrón «versión nueva que cambia SOLO lo editado» (también la usa la sección «Cómo se produce con IA», encargo 16) */
+export function copiaSinIdentidad(f: Fila): Fila {
   const c = { ...f }
   for (const k of ['id', 'created_at', 'updated_at']) delete c[k]
   return c
