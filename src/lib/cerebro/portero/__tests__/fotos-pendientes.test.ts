@@ -93,6 +93,25 @@ describe('etiquetarPendientes', () => {
     expect(r.costo_usd).toBeCloseTo(0.024, 6)
     expect(r.modelos_llamados).toBe(3)
   })
+  // 21-nov · encargo 12 · 🟡 2 de CC6 en #1153: las 35 fotos de la página de Zero Risk se guardaron como «competidor» y el clasificador les puso papel «propio»
+  it('🟡2 una foto guardada como competidor pero con papel propio sale PRIMERA en la fila de etiquetar (aunque sea la última y la base lea solo las columnas pedidas)', async () => {
+    const filas = [foto('c1', 'competidor', { papel: 'competidor' }), foto('r1', 'referencia', { papel: 'mercado' }), foto('c2', 'competidor'), foto('x1', 'competidor', { papel: 'propio' })]
+    const soloColumnas: Consulta = async (p) => ({ filas: (await consultaCon(filas)(p)).filas.map((f) => Object.fromEntries((p.columnas ?? Object.keys(f)).map((k) => [k, f[k]]))), error: null })
+    const vistas: string[] = []
+    await etiquetarPendientes({ consulta: soloColumnas, etiquetarFoto: bien(vistas), ahora: () => HOY }, { clientes: [C], dry_run: false })
+    expect(vistas[0]).toBe('x1')
+    expect(vistas).toHaveLength(4)
+    // con cupo para UNA, se etiqueta la propia
+    const una: string[] = []
+    await etiquetarPendientes({ consulta: soloColumnas, etiquetarFoto: bien(una), ahora: () => HOY }, { clientes: [C], dry_run: false, tope_por_cliente: 1 })
+    expect(una).toEqual(['x1'])
+  })
+  it('🟡2 al revés: guardada como propia pero con papel competidor NO pasa adelante de la propia de verdad', async () => {
+    const filas = [foto('falsa', 'propio', { papel: 'competidor' }), foto('buena', 'competidor', { papel: 'propio' })]
+    const vistas: string[] = []
+    await etiquetarPendientes({ consulta: consultaCon(filas), etiquetarFoto: bien(vistas), ahora: () => HOY }, { clientes: [C], dry_run: false })
+    expect(vistas).toEqual(['buena', 'falsa'])
+  })
   it('el tope es por cliente y DÍA: descuenta lo ya etiquetado hoy y deja el resto para mañana', async () => {
     const vistas: string[] = []
     const r = await etiquetarPendientes({ consulta: consultaCon(base), etiquetarFoto: bien(vistas), ahora: () => HOY }, { clientes: [C], dry_run: false, tope_por_cliente: 2 })
