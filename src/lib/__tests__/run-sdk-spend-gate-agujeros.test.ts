@@ -210,7 +210,7 @@ describe('B1 · el techo suma por la familia · PAR REAL de Peniche', () => {
   // Con el par REAL esto da rojo · con un par sintético que comparta slug daría
   // verde en falso, que es justo el error que el diseño detectó.
   it('las dos fichas de Peniche suman en la MISMA cuenta y superan el techo', async () => {
-    // 18-nov · el techo por omisión subió a 24,05 (3 × lo medido) y la suma real (24,0174) ya no lo pasa: se fija el techo de entonces (8) para seguir midiendo la SUMA de la familia
+    // 18-nov · el techo por omisión subió a 24,05 (3 × lo medido) → 60 (21-nov · A1: 24,05 → 60, firma de Emilio) y la suma real (24,0174) ya no lo pasa: se fija el techo de entonces (8) para seguir midiendo la SUMA de la familia
     process.env.RUN_SPEND_CAP_USD = '8'
     const espia: { idsConsultados?: string[] | 'null' } = {}
     const { notify } = espiaAvisos()

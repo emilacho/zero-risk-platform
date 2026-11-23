@@ -61,7 +61,8 @@ const WINDOW_MS = 24 * 60 * 60 * 1000
 /** Techo run-scoped genérico por default · $8 (encima de ~$2-3 esperado · debajo del
  *  $25 canon). TUNABLE por env `RUN_SPEND_CAP_USD`. */
 // 18-nov · Emilio: topes = 3 × lo medido (PARA-LENOVO-de-CC3-barrido-de-topes-de-gasto-medido-y-su-triple, GO 16:17Z): máx. medido de 24 h de un cliente sin tope propio = 8,01 (el que trae 60 en su ficha queda fuera) → 24,05
-export const DEFAULT_RUN_SPEND_CAP_USD = 24.05
+// 21-nov · tabla de topes A1 · (a) firma de Emilio 13:45 Zúrich (Lenovo 12:46Z): 24,05 → 60, el mismo tope propio que ya tiene el cliente que más gasta (una sola pieza de imagen tiene tope de 45–48). Va con RUN_SPEND_CAP_USD = 60 al publicar
+export const DEFAULT_RUN_SPEND_CAP_USD = 60
 
 /**
  * ── CUPO DE ARRANQUE · opción A firmada por Emilio (20-oct, 15:15) ──
@@ -71,7 +72,8 @@ export const DEFAULT_RUN_SPEND_CAP_USD = 24.05
  * NO cambia: la vara por corrida (US$ 5), el cubo `system`, que (desde el 30-oct) `config.spend_cap_usd` de la ficha MANDA —sube o baja—, ni la política de fallo (sin dato de la ficha ⇒ techo general: falla hacia lo normal, nunca hacia lo alto).
  */
 // 18-nov · Emilio: topes = 3 × lo medido (PARA-LENOVO-de-CC3-barrido-de-topes-de-gasto-medido-y-su-triple, GO 16:17Z): máx. medido en los primeros 7 días = 8,01 → 24,05
-export const DEFAULT_ONBOARDING_SPEND_CAP_USD = 24.05
+// 21-nov · tabla de topes A1 · el arranque sube igual (Lenovo 12:46Z): 24,05 → 60
+export const DEFAULT_ONBOARDING_SPEND_CAP_USD = 60
 export const DEFAULT_ONBOARDING_DAYS = 7
 
 /** Techo del cubo `system` (corridas sin `client_id`) · firmado por Emilio 2026-08-23.

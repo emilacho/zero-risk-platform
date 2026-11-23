@@ -92,12 +92,12 @@ describe('cliente-tope (el tope de 24 h del cliente SUBE y BAJA)', () => {
   const sembrar = (extra: Record<string, unknown> = {}) => new DbFalsa().semilla('clients', [{ id: CID, status: 'active', config: { moneda: 'USD', spend_cap_usd: 6 }, ...extra }])
   it('sube por encima del general y baja, sin perder el resto de la config, y dice de dónde a dónde', async () => {
     const db = sembrar()
-    // 18-nov · el general de respaldo es el del freno (24,05, 3 × lo medido); para subir «por encima» hace falta más
-    const sube = await llamar('cliente-tope', db, { client_id: CID, tope_usd: 30 })
-    expect(sube).toMatchObject({ status: 200, cuerpo: { ok: true, tope_usd: 30, tope_anterior_usd: 6, general_usd: 24.05, sobre_el_general: true }, toca: { client_id: CID, comentario: 'tope de 24 h: 6 → 30' } })
-    expect(db.tablas['clients'][0].config).toEqual({ moneda: 'USD', spend_cap_usd: 30 })
+    // 18-nov · el general de respaldo es el del freno (24,05, 3 × lo medido → 60, 21-nov · A1: 24,05 → 60, firma de Emilio); para subir «por encima» hace falta más
+    const sube = await llamar('cliente-tope', db, { client_id: CID, tope_usd: 80 })
+    expect(sube).toMatchObject({ status: 200, cuerpo: { ok: true, tope_usd: 80, tope_anterior_usd: 6, general_usd: 60, sobre_el_general: true }, toca: { client_id: CID, comentario: 'tope de 24 h: 6 → 80' } })
+    expect(db.tablas['clients'][0].config).toEqual({ moneda: 'USD', spend_cap_usd: 80 })
     const baja = await llamar('cliente-tope', db, { client_id: CID, tope_usd: 3 })
-    expect(baja).toMatchObject({ status: 200, cuerpo: { tope_usd: 3, tope_anterior_usd: 30, sobre_el_general: false } })
+    expect(baja).toMatchObject({ status: 200, cuerpo: { tope_usd: 3, tope_anterior_usd: 80, sobre_el_general: false } })
     expect(db.tablas['clients'][0].config).toMatchObject({ spend_cap_usd: 3 })
   })
   it('sin tope previo: tope_anterior_usd es null', async () => {
