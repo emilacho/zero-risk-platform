@@ -39,27 +39,27 @@ describe('agent-runner §150 spend gate', () => {
     expect((await checkSpendCap(sb, CLIENTE)).reason).toBe('flag_off')
   })
 
-  it('encendido por omisión · aplica a CUALQUIER cliente · sobre el techo general ($24,05) → BLOCK', async () => {
+  it('encendido por omisión · aplica a CUALQUIER cliente · sobre el techo general ($60 · 21-nov · A1: 24,05 → 60, firma de Emilio) → BLOCK', async () => {
     expect(isCapEnforced()).toBe(true)
-    const sb = supabaseWith({ data: [{ cost_usd: 15 }, { cost_usd: 10 }], error: null })
+    const sb = supabaseWith({ data: [{ cost_usd: 35 }, { cost_usd: 30 }], error: null })
     const r = await checkSpendCap(sb, 'otro-uuid')
     expect(r.blocked).toBe(true)
     expect(r.reason).toBe('over_cap')
     expect(r.cap_usd).toBe(resolveCapUsd())
-    expect(r.spent_usd).toBeCloseTo(25)
+    expect(r.spent_usd).toBeCloseTo(65)
   })
 
-  it('el techo de la ficha BAJA el general: ficha 6 bloquea a 7, aunque el general sea 24,05', async () => {
+  it('el techo de la ficha BAJA el general: ficha 6 bloquea a 7, aunque el general sea 60', async () => {
     const sb = supabaseWith({ data: [{ cost_usd: 7 }], error: null }, { data: [{ config: { spend_cap_usd: 6 } }], error: null })
     const r = await checkSpendCap(sb, CLIENTE)
     expect(r).toMatchObject({ blocked: true, reason: 'over_cap', cap_usd: 6, cap_ficha_usd: 6 })
   })
 
-  it('la ficha MANDA (30-oct): ficha 50, gasto 30 (sobre el general, 24,05) → pasa con el 50; con gasto 50 bloquea', async () => {
-    const sb = supabaseWith({ data: [{ cost_usd: 30 }], error: null }, { data: [{ config: { spend_cap_usd: 50 } }], error: null })
+  it('la ficha MANDA (30-oct): ficha 80, gasto 70 (sobre el general, 60) → pasa con el 80; con gasto 80 bloquea', async () => {
+    const sb = supabaseWith({ data: [{ cost_usd: 70 }], error: null }, { data: [{ config: { spend_cap_usd: 80 } }], error: null })
     expect(await checkSpendCap(sb, CLIENTE)).toMatchObject({ blocked: false })
-    const sb2 = supabaseWith({ data: [{ cost_usd: 50 }], error: null }, { data: [{ config: { spend_cap_usd: 50 } }], error: null })
-    expect(await checkSpendCap(sb2, CLIENTE)).toMatchObject({ blocked: true, cap_usd: 50 })
+    const sb2 = supabaseWith({ data: [{ cost_usd: 80 }], error: null }, { data: [{ config: { spend_cap_usd: 80 } }], error: null })
+    expect(await checkSpendCap(sb2, CLIENTE)).toMatchObject({ blocked: true, cap_usd: 80 })
   })
 
   it('bajo el techo → pasa', async () => {
@@ -69,9 +69,9 @@ describe('agent-runner §150 spend gate', () => {
     expect(r.reason).toBe('under_cap')
   })
 
-  it('RUN_SPEND_CAP_USD=40 sube el general → pasa con 30 (sobre el general por omisión, 24,05)', async () => {
-    process.env.RUN_SPEND_CAP_USD = '40'
-    const sb = supabaseWith({ data: [{ cost_usd: 30.05 }], error: null })
+  it('RUN_SPEND_CAP_USD=80 sube el general → pasa con 70 (sobre el general por omisión, 60)', async () => {
+    process.env.RUN_SPEND_CAP_USD = '80'
+    const sb = supabaseWith({ data: [{ cost_usd: 70.05 }], error: null })
     expect((await checkSpendCap(sb, CLIENTE)).reason).toBe('under_cap')
   })
 
@@ -90,11 +90,11 @@ describe('agent-runner §150 spend gate', () => {
     expect((await checkSpendCap(sb, null)).reason).toBe('no_client')
   })
 
-  it('resolveCapUsd · el general es 24,05 ($8 → 3 × lo medido, 18-nov) · variable + basura vuelve al general', () => {
-    expect(resolveCapUsd()).toBe(24.05)
+  it('resolveCapUsd · el general es 60 ($8 → 3 × lo medido, 18-nov → 60, 21-nov) · variable + basura vuelve al general', () => {
+    expect(resolveCapUsd()).toBe(60)
     process.env.RUN_SPEND_CAP_USD = '30'
     expect(resolveCapUsd()).toBe(30)
-    for (const malo of ['nope', '0', '-2']) { process.env.RUN_SPEND_CAP_USD = malo; expect(resolveCapUsd()).toBe(24.05) }
+    for (const malo of ['nope', '0', '-2']) { process.env.RUN_SPEND_CAP_USD = malo; expect(resolveCapUsd()).toBe(60) }
   })
 
   it('capDeLaFicha · número > 0 vale; lo demás es null', () => {

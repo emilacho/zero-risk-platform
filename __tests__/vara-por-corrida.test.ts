@@ -1,5 +1,5 @@
 /**
- * LA VARA POR CORRIDA · $5 · firmada por el Arquitecto 2026-08-25 02:45 UTC → 3 × lo medido, 18-nov: $13,58 (y el freno por cliente, $8 → $24,05)
+ * LA VARA POR CORRIDA · $5 · firmada por el Arquitecto 2026-08-25 02:45 UTC → 3 × lo medido, 18-nov: $13,58 (y el freno por cliente, $8 → $24,05 → $60 · 21-nov · A1: 24,05 → 60, firma de Emilio)
  *
  * FORMA FIRMADA · dos varas · UN solo punto de corte · UNA sola consulta · colgando del
  * freno de $8. NO un módulo nuevo. La vara nueva HEREDA la política de fallo del $8
@@ -61,10 +61,10 @@ afterEach(() => {
 })
 
 describe('vara por corrida · CONDUCTA', () => {
-  it('🔴 EL ROJO DE ACEPTACIÓN · una corrida que el $13,58 bloquea y el $24,05 NO', async () => {
+  it('🔴 EL ROJO DE ACEPTACIÓN · una corrida que el $13,58 bloquea y el $60 NO', async () => {
     const { checkRunSdkSpendCap } = await import('../src/lib/run-sdk-spend-gate')
     // el caso medido · cliente con $2,90 acumulado + una corrida que se desboca a la vara ($13,58)
-    //   por cliente/24h → 16,48 < 24,05  ⇒ el freno por cliente NO bloquea
+    //   por cliente/24h → 16,48 < 60  ⇒ el freno por cliente NO bloquea
     //   por corrida     → 13,58 ≥ 13,58  ⇒ la vara SÍ
     filas = [
       { cost_usd: 2.9, workflow_execution_id: OTRA_CORRIDA },
@@ -81,7 +81,7 @@ describe('vara por corrida · CONDUCTA', () => {
     expect(r.reason).toBe('run_over_cap')
     expect(r.run_spent_usd).toBe(13.58)
     expect(r.run_cap_usd).toBe(DEFAULT_RUN_SCOPED_CAP_USD)
-    // Y la comprobación que separa freno de decoración: el $24,05 NO habría bloqueado
+    // Y la comprobación que separa freno de decoración: el $60 NO habría bloqueado
     expect(r.spent_usd).toBeCloseTo(16.48, 5)
     expect(r.spent_usd!).toBeLessThan(DEFAULT_RUN_SPEND_CAP_USD)
   })
@@ -97,13 +97,15 @@ describe('vara por corrida · CONDUCTA', () => {
     expect(r.blocked).toBe(false)
   })
 
-  it('la acumulación la sigue atrapando el $24,05 · 3 corridas de $8,02 pasan una a una', async () => {
+  it('la acumulación la sigue atrapando el $60 · 5 corridas de $12,01 pasan una a una', async () => {
     const { checkRunSdkSpendCap } = await import('../src/lib/run-sdk-spend-gate')
-    // 3 × 8,02 = 24,06 ≥ 24,05 · cada una bajo la vara (13,58)
+    // 5 × 12,01 = 60,05 ≥ 60 · cada una bajo la vara (13,58)
     filas = [
-      { cost_usd: 8.02, workflow_execution_id: 'a' },
-      { cost_usd: 8.02, workflow_execution_id: 'b' },
-      { cost_usd: 8.02, workflow_execution_id: CORRIDA },
+      { cost_usd: 12.01, workflow_execution_id: 'a' },
+      { cost_usd: 12.01, workflow_execution_id: 'b' },
+      { cost_usd: 12.01, workflow_execution_id: 'c' },
+      { cost_usd: 12.01, workflow_execution_id: 'd' },
+      { cost_usd: 12.01, workflow_execution_id: CORRIDA },
     ]
 
     const r = await checkRunSdkSpendCap(supabaseFalso(), CLIENTE, {
@@ -111,7 +113,7 @@ describe('vara por corrida · CONDUCTA', () => {
       notify: (() => {}) as never,
     })
     expect(r.blocked, 'el freno por cliente no atrapó la acumulación').toBe(true)
-    expect(r.reason).toBe('over_cap')   // el $24,05, no el $13,58 · cada corrida iba bajo $13,58
+    expect(r.reason).toBe('over_cap')   // el $60, no el $13,58 · cada corrida iba bajo $13,58
   })
 
   it('sólo suma la corrida propia · el gasto de otra corrida NO cuenta contra la vara', async () => {
