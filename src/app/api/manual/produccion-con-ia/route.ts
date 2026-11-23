@@ -18,7 +18,8 @@ import { escribirProduccionConIa } from '@/lib/manual/produccion-con-ia'
 export const dynamic = 'force-dynamic'
 export const fetchCache = 'force-no-store'
 export const runtime = 'nodejs'
-export const maxDuration = 60
+// firma de Emilio 02-nov: los límites técnicos van al máximo (la guarda `limites-al-maximo` lo exige)
+export const maxDuration = 800
 
 export async function POST(request: Request) {
   const auth = checkInternalKey(request)
