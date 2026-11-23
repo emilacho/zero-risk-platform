@@ -69,7 +69,7 @@ describe('topes al triple · las cifras del video', () => {
     expect(p.limites.tope_encargo_usd).toBe(117.9)
     expect(json(con(15, '720p'))).toEqual(json(VIDEO_MESA_ENCENDIDA))
   })
-  it('a 120 s: 720p video 235,2 y encargo 628,2; 1080p sigue en 240 y 633; todo bajo el techo de la base (650)', () => {
+  it('a 120 s: 720p video 235,2 y encargo 628,2; 1080p sigue en 240 y 633; todo bajo el techo de la base (1000 desde 202611201600)', () => {
     const a = con(120, '720p'), b = con(120, '1080p')
     expect([tope(a, 'video'), a.limites.tope_encargo_usd]).toEqual([235.2, 628.2])
     expect([tope(b, 'video'), b.limites.tope_encargo_usd]).toEqual([240, 633])

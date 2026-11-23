@@ -26,11 +26,12 @@ describe('el sobre `brief/parte-listo · producir` + familia', () => {
     expect(r.ok && r.ignorados.sort()).toEqual(['client_id', 'tenant_id'])
     if (r.ok) expect(r.sobre).not.toHaveProperty('client_id')
   })
-  it('valida parte_id (uuid), brief_id, tope (0–650] (el techo de la base: 60 desde 202611170930, 650 desde 202611171900 · T7b; se abre con el menor entre lo pedido y el tope de la familia) y familia', () => {
+  it('valida parte_id (uuid), brief_id, tope (0–1000] (el techo de la base: 60 desde 202611170930, 650 desde 202611171900 · T7b, 1000 desde 202611201600; se abre con el menor entre lo pedido y el tope de la familia) y familia', () => {
     expect(validarSobre({ ...base, parte_id: 'x' }).ok).toBe(false)
     expect(validarSobre({ ...base, brief_id: '' }).ok).toBe(false)
-    expect(validarSobre({ ...base, tope_usd: 650.01 }).ok).toBe(false)
-    expect(validarSobre({ ...base, tope_usd: 650 }).ok).toBe(true)
+    expect(validarSobre({ ...base, tope_usd: 1000.01 }).ok).toBe(false)
+    expect(validarSobre({ ...base, tope_usd: 1000 }).ok).toBe(true)
+    expect(validarSobre({ ...base, tope_usd: 650.01 }).ok).toBe(true)
     expect(validarSobre({ ...base, tope_usd: 0 }).ok).toBe(false)
     expect(validarSobre({ ...base, familia: 'Post Img' }).ok).toBe(false)
     expect(validarSobre({ ...base, tope_usd: 10, familia: 'post_img' }).ok).toBe(true)

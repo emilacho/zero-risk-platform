@@ -38,6 +38,8 @@ import { runDualReviewMiddleware } from '@/lib/editor-middleware'
 import { leerImagenesDelPedido, campoImagenesDelProxy } from '@/lib/imagenes-del-pedido'
 import { resolveAgentSlug } from '@/lib/agent-alias-map'
 import { getSupabaseAdmin } from '@/lib/supabase'
+import { avisarPorIncidente } from '@/lib/portero-alimenta/alertas'
+import type { Db as DbDeAlertas } from '@/lib/portero-alimenta/alimentar'
 import { resolveClientIdFromBody } from '@/lib/client-id-resolver'
 import { validateWorkflowId } from '@/lib/agent-safety'
 import { normalizeFidelityToolInput } from '@/lib/jefatura/fidelity-grader'
@@ -189,7 +191,10 @@ export function validarLimitesDeMirarAfuera(body: unknown): { ok: true; valor: {
 // Si el plan elige otro redactor (`cadena_config.planeacion.redactor`), ese agente se decide aparte.
 // 21-nov · GO Lenovo 10:19Z (tope de la gran idea) · + `director-gran-idea`, la dirección de la mesa de concepto: sus turnos duran 13–17 min (medido 21-nov) y por Vercel la vuelta
 // muere a los 800 s (3 turnos terminados se perdieron así). No persiste descubrimiento, no pasa por revisión editorial (no está en EDITOR_WHITELIST) y no emite brand_section/fidelity.
-export const AGENTES_CON_VUELTA_POR_EL_CORREDOR: readonly string[] = ['campaign-brief-agent', 'carousel-designer', 'design-visual-storyteller', 'director-gran-idea', 'jefe-marketing']
+// 21-nov · GO de Lenovo (opción A del mapa de CC4) · + `social-media-strategist`, el agente de los 4 pasos largos de la cadena (estrategia, calendario,
+// fechas especiales, fichas): al máximo pasa de los 800 s de Vercel. Está en la lista de revisión editorial, así que SOLO entra cuando el pedido trae
+// `x-skip-editor-middleware: 1` (la cadena siempre la manda · `pasos.ts`): con la cabecera el editor nunca corre, ni por Vercel ni por el corredor.
+export const AGENTES_CON_VUELTA_POR_EL_CORREDOR: readonly string[] = ['campaign-brief-agent', 'carousel-designer', 'design-visual-storyteller', 'director-gran-idea', 'jefe-marketing', 'social-media-strategist']
 
 export function resolveCallbackMode(body: RunSdkInput): string | null {
   const ctx = (body.context ?? {}) as Record<string, unknown>
@@ -197,12 +202,15 @@ export function resolveCallbackMode(body: RunSdkInput): string | null {
   return typeof raw === 'string' ? raw : null
 }
 
-/** La entrega por el corredor exige: palanca `runner` + agente en la lista + sin descubrimiento + sin revisión editorial. */
-export function vueltaPorElCorredorElegible(body: RunSdkInput): { elegible: boolean; motivo: string } {
+/**
+ * La entrega por el corredor exige: palanca `runner` + agente en la lista + sin descubrimiento + sin revisión editorial.
+ * 21-nov · la revisión editorial deja de impedirla SOLO si el pedido trae la cabecera de saltar el editor (`saltaEditor`): entonces ese efecto no existe.
+ */
+export function vueltaPorElCorredorElegible(body: RunSdkInput, opciones: { saltaEditor?: boolean } = {}): { elegible: boolean; motivo: string } {
   if (resolveCallbackMode(body) !== 'runner') return { elegible: false, motivo: 'sin palanca callback_mode=runner' }
   const slug = resolveAgentSlug(String(body.agent ?? ''))
   if (isDiscoveryAgentSlug(slug)) return { elegible: false, motivo: 'agente de descubrimiento (efectos que sólo corren en Vercel)' }
-  if (requiresEditorReview(slug)) return { elegible: false, motivo: 'agente con revisión editorial (efecto que sólo corre en Vercel)' }
+  if (requiresEditorReview(slug) && opciones.saltaEditor !== true) return { elegible: false, motivo: 'agente con revisión editorial (efecto que sólo corre en Vercel)' }
   if (!AGENTES_CON_VUELTA_POR_EL_CORREDOR.includes(slug)) return { elegible: false, motivo: `agente ${slug} fuera de la lista de vuelta por el corredor` }
   return { elegible: true, motivo: 'ok' }
 }
@@ -245,6 +253,12 @@ interface BrainEnrichmentProxyMeta {
   brain_query_ms: number
   brain_cost_usd: number
   brain_error?: string
+  /** encargo 15 · ADENDA 1 · la consulta al cerebro FALLÓ (no 0 resultados) y el paso quedó detenido esperándolo. */
+  brain_fallo?: true
+  /** encargo 15 · el motivo real del fallo (status y cuerpo del proveedor, sin la llave). */
+  brain_error_detalle?: string
+  /** encargo 15 · si el corredor logró entregar la alarma a `#alertas`; si no, esta puerta la repite. */
+  alarma_entregada?: boolean
 }
 
 /**
@@ -718,7 +732,7 @@ async function atender(request: Request) {
         let innerBody: unknown
         let innerOk = false
         try {
-          const elegibilidad = vueltaPorElCorredorElegible(body)
+          const elegibilidad = vueltaPorElCorredorElegible(body, { saltaEditor: request.headers.get('x-skip-editor-middleware') === '1' })
           if (resolveCallbackMode(body) === 'runner' && !elegibilidad.elegible) {
             console.warn(`[run-sdk] callback_mode=runner IGNORADO · ${elegibilidad.motivo} · la vuelta la entrega Vercel como siempre`)
           }
@@ -1387,6 +1401,9 @@ async function atender(request: Request) {
           ...(typeof rawBrain.brain_error === 'string'
             ? { brain_error: rawBrain.brain_error }
             : {}),
+          ...(rawBrain.brain_fallo === true ? { brain_fallo: true as const } : {}),
+          ...(typeof rawBrain.brain_error_detalle === 'string' ? { brain_error_detalle: rawBrain.brain_error_detalle } : {}),
+          ...(typeof rawBrain.alarma_entregada === 'boolean' ? { alarma_entregada: rawBrain.alarma_entregada } : {}),
         }
       : undefined
     const rawCache = (result as { cacheMetrics?: unknown }).cacheMetrics as
@@ -1492,6 +1509,24 @@ async function atender(request: Request) {
     })
 
     if (!result.success) {
+      // ─── encargo 15 · ADENDA 1 (firma de Emilio 21-nov) · «esperando al cerebro» ───
+      // La consulta al cerebro FALLÓ y el corredor detuvo el paso ANTES del modelo. Aquí solo se traduce a un
+      // estado claro (503: reintentable) y, si el corredor no logró entregar la alarma, esta puerta la repite
+      // (misma clave ⇒ `avisarPorIncidente` no duplica el mensaje). 0 resultados nunca llega acá: no es fallo.
+      const esperando = brainEnrichment?.brain_fallo === true || (typeof result.error === 'string' && result.error.startsWith('esperando_al_cerebro'))
+      if (esperando) {
+        let alarma = 'entregada por el corredor'
+        if (brainEnrichment?.alarma_entregada !== true) {
+          const r = await avisarPorIncidente({ db: getSupabaseAdmin() as unknown as DbDeAlertas })(
+            `🔴 El cerebro no responde a los agentes y los pasos quedan detenidos esperándolo. Motivo: ${brainEnrichment?.brain_error ?? 'consulta fallida'}${brainEnrichment?.brain_error_detalle ? ` · ${brainEnrichment.brain_error_detalle}` : ''}. Último paso detenido: ${agentName} (cliente ${clientId || 'sin cliente'}). Se reanudan reintentando el mismo paso cuando el cerebro vuelva.`,
+            'cerebro:consulta-fallo',
+          )
+          alarma = `${r.accion}: ${r.detalle}`
+        }
+        console.error(`[run-sdk] esperando_al_cerebro · agente=${agentName} · cliente=${clientId || 'sin cliente'} · alarma=${alarma}`)
+        // el motivo real viaja también en la respuesta (`brainEnrichment.brain_error_detalle`): es justo lo que esta entrega rescata
+        return NextResponse.json({ success: false, estado: 'esperando_al_cerebro', error: result.error, alarma, ...(brainEnrichment ? { brainEnrichment } : {}) }, { status: 503 })
+      }
       return NextResponse.json({ success: false, error: result.error }, { status: 500 })
     }
 

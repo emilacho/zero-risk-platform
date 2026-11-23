@@ -134,6 +134,11 @@ describe('el cuerpo de la vuelta', () => {
       brain_enrichment: { brain_hit: true }, delivered_by: 'runner', dispatch_key: 'dispatch:W:a:1',
     })
   })
+  it('🔴 21-nov · #22 · un cierre por tope viaja con `cerrada_por_tope: true`, como en la vuelta de Vercel; sin cierre por tope la llave no está', () => {
+    expect(cuerpoDeLaVuelta({ ...ok, cerradaPorTope: true }, { agentName: 'social-media-strategist', dispatchKey: null })).toMatchObject({ success: true, cerrada_por_tope: true })
+    expect(cuerpoDeLaVuelta(ok, { agentName: 'social-media-strategist', dispatchKey: null })).not.toHaveProperty('cerrada_por_tope')
+    expect(cuerpoDeLaVuelta({ ...ok, cerradaPorTope: false }, { agentName: 'social-media-strategist', dispatchKey: null })).not.toHaveProperty('cerrada_por_tope')
+  })
   it('🔴 un fallo viaja MARCADO success:false con su error (nunca un cuerpo que se parezca a un dato · E87)', () => {
     expect(cuerpoDeLaVuelta({ success: false, error: 'saldo agotado' }, { agentName: 'a', dispatchKey: null })).toEqual({
       success: false, agent: 'a', error: 'saldo agotado', error_kind: 'runner_run_failed', delivered_by: 'runner', dispatch_key: null,

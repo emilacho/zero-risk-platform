@@ -12,7 +12,7 @@ import { siguienteDeLaMesa } from '../mesa/planificador'
 import { armarTarea, type ContextoDeTurno } from '../mesa/pedidos'
 import { ideasDeLosAportes, textoParaLaCadena } from '../mesa/de-la-cadena'
 import { estadoDeLaMesa } from '../mesa/orquestador'
-import { MARCA_DE_LA_CRITICA, PREFIJO_DE_LA_CRITICA, conMarcaDeLaCritica, criticaPendiente, estadoDeLaCritica, seccionDeLaCriticaParaLaDireccion, tareaDeLaCritica } from '../mesa/critica'
+import { MARCA_DE_LA_CRITICA, PREFIJO_DE_LA_CRITICA, conMarcaDeLaCritica, lineaDeLaCriticaAlDirigir, criticaPendiente, estadoDeLaCritica, seccionDeLaCriticaParaLaDireccion, tareaDeLaCritica } from '../mesa/critica'
 import { traducirPieza } from '../mesa/traductor'
 import { leerCitas, verificarCitas } from '../mesa/libro'
 import { traducirPropuestas } from '../video/propuestas'
@@ -158,6 +158,28 @@ describe('E · lo que lee la crítica y lo que sabe la dirección', () => {
     const t = armarTarea({ tipo: 'integrar', agente: DIRECCION, tarjeta: DIR[0], est: est(), libro: l, c: C('carrusel') })
     expect(t).toMatch(/La crítica no llegó: el turno de social-media-strategist falló 3 veces/)
     expect(t).toContain(`${PREFIJO_DE_LA_CRITICA} no llegó`)
+  })
+  // 21-nov (#36 del barrido · RESPUESTA Lenovo 18-nov 09:11Z) · la doble crítica de T7d: al abrir, la dirección le pidió la crítica al crítico como un pedido más
+  it('al abrir la pieza, la dirección sabe que la crítica corre sola y que no la pide aparte (carrusel, gran idea y video)', () => {
+    for (const tipo of ['carrusel', 'concepto', 'video'] as const) {
+      const e = est({ tipo })
+      const t = armarTarea({ tipo: 'dirigir', agente: DIRECCION, tarjeta: DIR[0], est: e, libro: [], c: C(tipo) })
+      const linea = lineaDeLaCriticaAlDirigir(e)!
+      expect(linea).toBe(`La crítica ya corre sola: ${CRITICO} la escribe en su turno, después de los aportes del equipo y antes de que integres, y te llega completa al integrar. No se la pidas como pedido ni le asignes la crítica en tu reparto.`)
+      expect(t.slice(t.indexOf('## Tu turno · DIRECCIÓN CREATIVA: abre la pieza'))).toContain(linea)
+      expect(linea).not.toMatch(ATADO)
+    }
+    // solo al abrir: aportar, criticar e integrar no la llevan
+    const l = [...ronda1(), critica()]
+    for (const tipo of ['aportar', 'criticar', 'integrar'] as const) {
+      const ag = tipo === 'aportar' ? 'content-creator' : tipo === 'criticar' ? CRITICO : DIRECCION
+      expect(armarTarea({ tipo, agente: ag, tarjeta: DIR[0], est: est(), libro: l, c: C('carrusel') })).not.toContain('La crítica ya corre sola')
+    }
+  })
+  it('sin crítico en la mesa, abrir la pieza es lo de siempre: no se menciona la crítica', () => {
+    const e = est({ directorio_congelado: SIN_CRITICO })
+    expect(lineaDeLaCriticaAlDirigir(e)).toBeNull()
+    expect(armarTarea({ tipo: 'dirigir', agente: DIRECCION, tarjeta: DIR[0], est: e, libro: [], c: C('carrusel') })).not.toContain('La crítica ya corre sola')
   })
   it('sin crítico en la mesa, la tarea de la dirección es la de siempre', () => {
     const l = ronda1()

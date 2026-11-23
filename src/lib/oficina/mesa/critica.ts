@@ -83,6 +83,16 @@ export function seccionDeLaCriticaParaLaDireccion(est: EstadoMesa, libro: Aporte
   return ['## La crítica de esta ronda', `La crítica no llegó: ${e.motivo}. Integra igual y dilo en una línea dentro de \`## Citas\` que empiece por «${PREFIJO_DE_LA_CRITICA} no llegó».`].join('\n')
 }
 
+/**
+ * 21-nov (#36 del barrido · RESPUESTA Lenovo 18-nov 09:11Z) · LA DOBLE CRÍTICA: en la gran idea (T7d) la dirección, al abrir, le pidió la crítica al crítico como
+ * un pedido más, y la crítica ya corre sola en su turno. Una línea en la tarea de `dirigir` se lo dice. Sin crítico en la mesa: null (la tarea no cambia).
+ */
+export function lineaDeLaCriticaAlDirigir(est: EstadoMesa): string | null {
+  const critico = criticoDeLaMesa(est)
+  if (!critico) return null
+  return `La crítica ya corre sola: ${critico} la escribe en su turno, después de los aportes del equipo y antes de que integres, y te llega completa al integrar. No se la pidas como pedido ni le asignes la crítica en tu reparto.`
+}
+
 /** la tarea del turno de crítica (va debajo de la cabecera común: manual, brief, plan, fotos y tablero) */
 export function tareaDeLaCritica(agente: string): string {
   return [

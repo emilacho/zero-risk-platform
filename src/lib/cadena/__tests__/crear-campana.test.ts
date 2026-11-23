@@ -144,7 +144,8 @@ describe('crear · lo que frena antes de guardar', () => {
   })
   it('🔴 lo mismo después de un 400: la llave sigue libre', async () => {
     const al = almacen()
-    expect((await crear(al, { nombre: '' })).status).toBe(400)
+    // 21-nov · sin nombre ya no es un 400 (lleva el genérico del plan): el 400 es un nombre escrito y malo
+    expect((await crear(al, { nombre: 'dos\nlíneas' })).status).toBe(400)
     expect((await crear(al)).cuerpo.estado).toBe('pedida')
   })
   it('🔴 ensayo: dice lo que haría y no escribe nada', async () => {
@@ -189,7 +190,7 @@ describe('crear · guarda el pedido y deja el sobre', () => {
     const v = validarEntrada(BUENO)
     if (!v.ok) throw new Error('la entrada buena no valida')
     const { ensayo: _e, ...fila } = v.e
-    al.pedidoPorLlave = async (...a: Parameters<typeof original>) => { if (primera) { primera = false; await al.insertarPedidoDeCampana({ ...fila, pedido_por: 'otra pestaña' }); return null } return original(...a) }
+    al.pedidoPorLlave = async (...a: Parameters<typeof original>) => { if (primera) { primera = false; await al.insertarPedidoDeCampana({ ...fila, nombre: fila.nombre ?? BUENO.nombre, pedido_por: 'otra pestaña' }); return null } return original(...a) }
     const r = await crear(al)
     expect(r.cuerpo).toMatchObject({ ok: true, estado: 'ya_pedida', pedido_id: 'ped-1' })
     expect(al.pedidos).toHaveLength(1)
