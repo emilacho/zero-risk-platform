@@ -13,6 +13,7 @@ describe('redDeUrl', () => {
     expect(redDeUrl('https://www.tiktok.com/@x/video/1')).toBe('tiktok')
     expect(redDeUrl('https://youtu.be/abc')).toBe('youtube')
     expect(redDeUrl('https://x.com/a/status/1')).toBe('x')
+    expect(redDeUrl('https://www.x.com/a/status/1')).toBe('x') // pedido r5 de CC6: sin quitar `www.`, x.com dejaría de ser X
     expect(redDeUrl('https://twitter.com/a')).toBe('x')
     expect(redDeUrl('https://www.facebook.com/p/1')).toBe('facebook')
     expect(redDeUrl('https://www.google.com/maps/place/x')).toBe('maps')

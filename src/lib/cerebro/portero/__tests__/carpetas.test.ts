@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import type { Consulta, Fila } from '../../consulta'
-import { DIAS_DE_RECIEN_LLEGADO, FUERA_DE_LA_LECTURA, leerCarpetas, TENDENCIAS_A_LEER } from '../carpetas'
+import { DIAS_DE_RECIEN_LLEGADO, FUERA_DE_LA_LECTURA, leerCarpetas, POR_PAGINA_MAXIMO, TENDENCIAS_A_LEER } from '../carpetas'
 
 const C = 'cli-1'
 // fechas relativas al reloj real: «recién llegado» son los últimos 7 días medidos al correr la prueba
@@ -99,6 +99,34 @@ describe('🔴 el árbol: capa → red → tipo, con los conteos y sin inventar 
     expect(carpeta(r, 'pais', 'tiktok', 'tendencia')?.total).toBe(1)
     expect(TENDENCIAS_A_LEER).toBeLessThanOrEqual(500)
   })
+  it('de dos días observados gana el MÁS NUEVO, aunque la tabla llegue con el viejo primero (pedido c3 de CC6 en #1271)', async () => {
+    const tendencia = (id: string, dia: string, obs: string): Fila => ({ id, client_id: C, nivel: 'pais', red: 'tiktok', consulta: '#ceviche', tipo: 'video', autor: null, texto: id, url: null, publicado_en: obs, observado_en: obs, observado_dia: dia })
+    const t = TABLAS()
+    t.cerebro_tendencias = [tendencia('t-de-ayer', DIA_AYER, AYER), tendencia('t-hoy-1', DIA_HOY, HOY), tendencia('t-hoy-2', DIA_HOY, HOY)]
+    const r = await arbolDe(t)
+    expect(carpeta(r, 'pais', 'tiktok', 'tendencia')?.total).toBe(2)
+    const abierta = await leerCarpetas(consultaCon(t), { cliente: C, capa: 'pais', red: 'tiktok', tipo: 'tendencia' })
+    if (!abierta.ok || !('piezas' in abierta)) throw new Error('no vinieron piezas')
+    expect(abierta.piezas.map((x) => x.id).sort()).toEqual(['t-hoy-1', 't-hoy-2'])
+  })
+  it('dos filas con el MISMO archivo (`hash_archivo`, sin `duplicado_de`) son UNA foto: la copia va a RAW «Duplicado» (pedido c9)', async () => {
+    const t = TABLAS()
+    t.client_social_images = [foto('ha', { hash_archivo: 'sha-igual' }), foto('hb', { hash_archivo: 'sha-igual' })]
+    t.client_videos = []; t.cerebro_tendencias = []; t.cerebro_comentarios_competencia = []; t.cerebro_fichas = []
+    const r = await arbolDe(t)
+    expect(carpeta(r, 'propio', 'instagram', 'publicacion')?.total).toBe(1)
+    expect(r.raw.raw_duplicado).toBe(1)
+    const copia = await leerCarpetas(consultaCon(t), { cliente: C, raw: 'raw_duplicado' })
+    if (!copia.ok || !('piezas' in copia)) throw new Error('no vinieron piezas')
+    expect(copia.piezas.map((x) => x.id)).toEqual(['hb']) // a igual origen gana la primera por id: «ha» queda en el árbol
+  })
+  it('una foto sin `estado: ok` (fallida o pendiente) no entra ni al árbol ni a RAW (pedido c15)', async () => {
+    const t = TABLAS()
+    t.client_social_images = [foto('f1'), foto('f-fallida', { estado: 'fallida' }), foto('f-pendiente', { estado: 'pendiente' })]
+    const r = await arbolDe(t)
+    expect(carpeta(r, 'propio', 'instagram', 'publicacion')?.total).toBe(1)
+    expect(r.raw).toEqual({ raw_duplicado: 0, raw_sin_clasificar: 0 })
+  })
   it('la portada es la pieza más nueva CON enlace, y `recien_llegado` cuenta los últimos 7 días', async () => {
     const r = await arbolDe()
     expect(carpeta(r, 'propio', 'instagram', 'reel')?.portada).toMatchObject({ url: 'https://www.instagram.com/reel/v1/' })
@@ -107,17 +135,20 @@ describe('🔴 el árbol: capa → red → tipo, con los conteos y sin inventar 
     expect(DIAS_DE_RECIEN_LLEGADO).toBe(7)
     expect(r.fuera).toEqual([...FUERA_DE_LA_LECTURA])
   })
-  it('la bodega del mundo (bodega=1): sin cliente, sin fichas, y lo viral cae en «mundo»', async () => {
+  it('la bodega del mundo (bodega=1): sin cliente, SIN FICHAS aunque existan fichas sin cliente (pedido c14), y lo viral cae en «mundo»', async () => {
     const t = TABLAS()
     t.client_social_images = [foto('b1', { client_id: null, owner_role: 'referencia', papel: 'referencia', nivel: 'mundo', tipo: 'video_captura', post_url: 'https://www.tiktok.com/@v/video/3' })]
     t.client_videos = []
     t.cerebro_tendencias = [{ id: 'tb', client_id: null, nivel: 'mundo', red: 'x', consulta: '#viral', tipo: 'video', autor: null, texto: 'viral', url: null, publicado_en: AYER, observado_en: HOY, observado_dia: DIA_HOY }]
     t.cerebro_comentarios_competencia = []
+    // en lo vivo HAY fichas con client_id nulo (la bodega y las generales): la bodega del vault no debe mostrarlas
+    t.cerebro_fichas = [{ id: 'fi-general', client_id: null, clase: 'metrica', alcance: 'general', red: null, titulo: 'ficha sin cliente', fuente_url: null, fecha_fuente: AYER, observado_en: AYER, creado_en: AYER, vigente_hasta: null, descartada: false, retirada_en: null }]
     const r = await leerCarpetas(consultaCon(t), { cliente: null, bodega: true })
     expect(r.ok && 'arbol' in r && r.alcance).toBe('bodega')
     if (!r.ok || !('arbol' in r)) return
     expect(r.arbol.map((x) => x.capa)).toEqual(['mundo'])
     expect(r.arbol[0].total).toBe(2)
+    expect(r.piezas_contadas).toBe(2) // la ficha general NO cuenta: la bodega no lee `cerebro_fichas`
   })
 })
 
@@ -132,6 +163,18 @@ describe('abrir una carpeta: las piezas paginadas, lo más nuevo primero', () =>
     expect(p1.piezas.map((x) => x.id)).toEqual(['c', 'b'])
     expect(p2.piezas.map((x) => x.id)).toEqual(['a'])
     expect(p1.piezas[0]).toMatchObject({ fuente: 'foto', capa: 'propio', red: 'instagram', tipo: 'publicacion', etiquetas: { papel: 'propio', via: 'cuenta_propia' } })
+  })
+  it('abrir una carpeta NO mezcla piezas de RAW: la copia de su misma capa·red·tipo no sale (pedido c19)', async () => {
+    // f3 (duplicado de f1) comparte carpeta propio·instagram·publicacion con f1, pero vive en RAW «Duplicado»
+    const r = await leerCarpetas(consultaCon(TABLAS()), { cliente: C, capa: 'propio', red: 'instagram', tipo: 'publicacion' })
+    if (!r.ok || !('piezas' in r)) throw new Error('no vinieron piezas')
+    expect(r.total).toBe(1)
+    expect(r.piezas.map((x) => x.id)).toEqual(['f1'])
+  })
+  it('`por_pagina` tiene techo (pedido c20): 1000 se recorta al máximo', async () => {
+    const r = await leerCarpetas(consultaCon(TABLAS()), { cliente: C, capa: 'propio', por_pagina: 1000 })
+    expect(r.ok && 'por_pagina' in r && r.por_pagina).toBe(POR_PAGINA_MAXIMO)
+    expect(POR_PAGINA_MAXIMO).toBe(100)
   })
   it('la carpeta RAW también se abre (lo duplicado y lo sin clasificar se pueden mirar y devolver)', async () => {
     const r = await leerCarpetas(consultaCon(TABLAS()), { cliente: C, raw: 'raw_duplicado' })

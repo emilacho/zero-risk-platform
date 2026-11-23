@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { alimentarCliente } from '../alimentar'
-import { clasificarPendientes } from '../origen-de-lo-ajeno'
+import { clasificarPendientes, COLUMNAS_A_CLASIFICAR } from '../origen-de-lo-ajeno'
 import { archivarFichasDeBrazos } from '../brazos/archivo'
 import type { FichaDeBrazo } from '../brazos/tipos'
 import { redDeLaFicha } from '../../cerebro/portero/red-de-la-pieza'
@@ -44,6 +44,21 @@ describe('🔴 la clasificación diaria escribe la red junto con el papel', () =
     const seco = base([], [{ ...vids[0], red: undefined, clasificado_en: null }])
     await clasificarPendientes(seco.db, { clientId: C1, tabla: 'client_videos', dry_run: true, ahora: AHORA })
     expect(seco.escrituras).toEqual([])
+  })
+})
+
+describe('la clasificación lee también `url` y `fuente_url` (pedido g5 de CC6 en #1271)', () => {
+  // la base falsa ignora las columnas del select, así que aquí se PROYECTA la fila a las columnas EXACTAS que declara
+  // la consulta: si `url` o `fuente_url` salieran de COLUMNAS_A_CLASIFICAR, la red no podría deducirse y la prueba cae
+  const proyectar = (f: Record<string, unknown>, cols: string) => Object.fromEntries(cols.split(',').map((s) => s.trim()).filter(Boolean).map((c) => [c, f[c]]))
+  it('una foto cuya red SOLO está en `url` y un video cuya red SOLO está en `fuente_url`', async () => {
+    const img = proyectar({ id: 'solo-url', client_id: C1, owner_role: 'competidor', handle: 'x', post_id: 'p9', tipo: 'post_image', post_url: null, url: 'https://scontent.cdninstagram.com/x.jpg', clasificado_en: null }, COLUMNAS_A_CLASIFICAR.client_social_images)
+    const vid = proyectar({ id: 'solo-fuente', client_id: C1, owner_role: 'competidor', handle: 'x', post_id: 'r9', tipo: 'video', post_url: null, fuente_url: 'https://www.youtube.com/watch?v=abc', clasificado_en: null }, COLUMNAS_A_CLASIFICAR.client_videos)
+    const t = base([img], [vid])
+    await clasificarPendientes(t.db, { clientId: C1, tabla: 'client_social_images', dry_run: false, ahora: AHORA })
+    await clasificarPendientes(t.db, { clientId: C1, tabla: 'client_videos', dry_run: false, ahora: AHORA })
+    expect(img).toMatchObject({ red: 'instagram' })
+    expect(vid).toMatchObject({ red: 'youtube' })
   })
 })
 
