@@ -12,8 +12,16 @@ const tablas: Record<string, Fila[]> = {}
 const llamadas: Array<{ tabla: string; op: string; args: unknown[] }> = []
 function consulta(tabla: string) {
   const filtros: Array<(f: Fila) => boolean> = []
-  const correr = () => ({ data: (tablas[tabla] ?? []).filter((f) => filtros.every((p) => p(f))), error: null })
+  let orden: { c: string; asc: boolean } | null = null, tope = Infinity
+  const correr = () => {
+    const d = (tablas[tabla] ?? []).filter((f) => filtros.every((p) => p(f)))
+    if (orden) { const o = orden; d.sort((a, b) => (String(a[o.c]) < String(b[o.c]) ? -1 : String(a[o.c]) > String(b[o.c]) ? 1 : 0) * (o.asc ? 1 : -1)) }
+    return { data: d.filter((_f, i) => i < tope), error: null }
+  }
   const q: any = {
+    gte: (c: string, v: string) => { llamadas.push({ tabla, op: 'gte', args: [c, v] }); filtros.push((f) => String(f[c]) >= v); return q },
+    order: (c: string, o: { ascending: boolean }) => { llamadas.push({ tabla, op: 'order', args: [c, o] }); orden = { c, asc: o.ascending }; return q },
+    limit: (n: number) => { llamadas.push({ tabla, op: 'limit', args: [n] }); tope = n; return q },
     select: (...a: unknown[]) => { llamadas.push({ tabla, op: 'select', args: a }); return q },
     update: (...a: unknown[]) => { llamadas.push({ tabla, op: 'update', args: a }); return q },
     eq: (c: string, v: unknown) => { llamadas.push({ tabla, op: 'eq', args: [c, v] }); filtros.push((f) => f[c] === v); return q },
@@ -81,5 +89,18 @@ describe('el adaptador real de «Crear Campaña»', () => {
     expect(llamadas.find((l) => l.tabla === T && l.op === 'update')?.args[0]).toEqual({ campana_id: 'camp-1' })
     expect(llamadas.some((l) => l.tabla === T && l.op === 'is' && l.args[0] === 'campana_id' && l.args[1] === null)).toBe(true)
     await expect(al.ligarPedidoDeCampana!('p2', 'camp-1')).rejects.toThrow(/ya estaba ligado/)
+  })
+  it('🔴 a3/a2 de CC6 en #1268 · pedidosSinNacer: solo los SIN campaña y desde la ventana, del más viejo al más nuevo (un pedido viejo no se vuelve a pedir al publicar)', async () => {
+    tablas[T] = [
+      pedido({ id: 'nuevo', creado_en: '2026-11-21T11:00:00Z' }),
+      pedido({ id: 'viejo', creado_en: '2026-11-20T01:00:00Z' }),
+      pedido({ id: 'nacido', creado_en: '2026-11-21T10:00:00Z', campana_id: 'camp-9' }),
+      pedido({ id: 'justo', creado_en: '2026-11-21T06:00:00Z' }),
+    ]
+    const r = await almacenDeSupabase().pedidosSinNacer!('2026-11-21T06:00:00Z')
+    expect(r.map((p) => p.id)).toEqual(['justo', 'nuevo'])
+    expect(r[0]).toMatchObject({ tope_usd: 30, campana_id: null })
+    const mias = llamadas.filter((l) => l.tabla === T).map((l) => [l.op, ...l.args])
+    expect(mias).toEqual([['select', '*'], ['is', 'campana_id', null], ['gte', 'creado_en', '2026-11-21T06:00:00Z'], ['order', 'creado_en', { ascending: true }], ['limit', 200]])
   })
 })
