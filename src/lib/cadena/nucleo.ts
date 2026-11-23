@@ -5,7 +5,7 @@
 import { createHash } from 'node:crypto'
 import type { Almacen, Campana, Corrida, EsperaFila } from './almacen'
 import { calcularReloj, type ContextoPlazo } from './esperas'
-import { bolsaDePlanificacion, MAXIMO_DE_INTENTOS, medidaDeCampana, PASOS_CON_PRESUPUESTO_PROPIO, PRESUPUESTO_LECTOR_POR_OMISION, plazoDeLlamadaMinutos, plazoMinimoDelPaso, topeDelPaso, type Paso } from './constantes'
+import { MAXIMO_DE_INTENTOS, medidaDeCampana, PASOS_CON_PRESUPUESTO_PROPIO, PRESUPUESTO_LECTOR_POR_OMISION, plazoDeLlamadaMinutos, plazoMinimoDelPaso, techoDeLaBolsaDePlanificacion, topeDelPaso, type Paso } from './constantes'
 
 export const sello = (s: string): string => createHash('sha256').update(s).digest('hex').slice(0, 12)
 export const semanaDeId = (id: string): number => Number(/^s(\d+)-/.exec(id)?.[1] ?? 0)
@@ -136,7 +136,8 @@ export async function permisoVigente(al: Almacen, campanaId: string, paso: strin
 export function bolsaAgrandada(campana: Pick<Campana, 'presupuesto_planificacion_usd' | 'tope_gasto_usd' | 'fecha_inicio' | 'fecha_fin' | 'semanas_de_tanda'>, paso: Paso): number | null {
   if (PASOS_CON_PRESUPUESTO_PROPIO.has(paso)) return null
   const tope = Number(campana.tope_gasto_usd)
-  const techo = Math.min(bolsaDePlanificacion(medidaDeCampana(campana).totalTandas), campana.tope_gasto_usd !== null && campana.tope_gasto_usd !== undefined && Number.isFinite(tope) && tope > 0 ? tope : Infinity)
+  // 23-nov · opción (c): crece hasta el techo de la bolsa (cubre las 12 caídas del paso más caro), no solo hasta la del nacimiento
+  const techo = Math.min(techoDeLaBolsaDePlanificacion(medidaDeCampana(campana).totalTandas), campana.tope_gasto_usd !== null && campana.tope_gasto_usd !== undefined && Number.isFinite(tope) && tope > 0 ? tope : Infinity)
   const actual = Number(campana.presupuesto_planificacion_usd)
   return Number.isFinite(actual) && actual < techo ? techo : null
 }

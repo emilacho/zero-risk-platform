@@ -62,8 +62,8 @@ describe('la bolsa de 2fd5f619 cubre las reservas nuevas (datos de la base)', ()
   it('🔴 la reserva de la estrategia (9 + 3 = 12) cabe en la bolsa de hoy (17,97) sin agrandarla', () => {
     expect(9 + topeDelPaso('estrategia')).toBeLessThanOrEqual(17.97)
   })
-  it('🔴 y si hace falta, la bolsa sube sola a su piso de 36, dentro del tope de 300', () => {
-    expect(bolsaAgrandada(campana, 'estrategia')).toBe(36)
+  it('🔴 y si hace falta, la bolsa sube sola a su techo de 120 (12 caídas × US$ 10 del calendario · opción (c) del 23-nov), dentro del tope de 300', () => {
+    expect(bolsaAgrandada(campana, 'estrategia')).toBe(120)
     expect(bolsaAgrandada({ ...campana, tope_gasto_usd: 20 } as unknown as Campana, 'estrategia')).toBe(20) // el candado: nunca pasa el tope de la campaña
     expect(bolsaAgrandada(campana, 'fichas')).toBeNull() // el lector tiene su bolsa: no crece
   })

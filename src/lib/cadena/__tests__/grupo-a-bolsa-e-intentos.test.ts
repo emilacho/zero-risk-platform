@@ -10,7 +10,7 @@ import { describe, it, expect } from 'vitest'
 import { abrirCampana, calendarioGuardar, calendarioPreparar, estrategiaPreparar, estrategiaGuardar, relojDeLaCadena, topeDelPaso } from '../index'
 import { bolsaAgrandada, esDeLaLlave, llaveDeReintentoDelPaso, prepararCorrida, tramoDeReintento } from '../nucleo'
 import { tramoDeReemision } from '../mesas'
-import { bolsaDePlanificacion, medidaDeCampana, MEDIDO_POR_LLAMADA_USD, MULTIPLO_DE_LA_BOLSA, PRESUPUESTO_PLANIFICACION_POR_OMISION, RONDAS_DE_CORRECCION } from '../constantes'
+import { bolsaDePlanificacion, medidaDeCampana, MEDIDO_POR_LLAMADA_USD, MULTIPLO_DE_LA_BOLSA, PRESUPUESTO_PLANIFICACION_POR_OMISION, RONDAS_DE_CORRECCION, techoDeLaBolsaDePlanificacion } from '../constantes'
 import { AlmacenMemoria } from '../__fixtures__/almacen-memoria'
 import { clienteA, contextoDe, piezaBuena, tandaBuena } from '../__fixtures__/clientes'
 
@@ -62,16 +62,19 @@ describe('la bolsa de planificación · 3 × (estrategia + tandas), con lo medid
     expect(bolsaDePlanificacion(Number.NaN)).toBe(36)
     expect(bolsaDePlanificacion(-2)).toBe(36)
   })
-  it('la bolsa vieja de 6 crece hasta la de su regla; ya en ella (o más) no se toca', () => {
-    expect(bolsaAgrandada({ ...NAUFRAGO, presupuesto_planificacion_usd: 6, tope_gasto_usd: 150 }, 'calendario')).toBe(44.11)
-    expect(bolsaAgrandada({ ...DOCE, presupuesto_planificacion_usd: 6, tope_gasto_usd: null }, 'estrategia')).toBe(36)
-    expect(bolsaAgrandada({ ...DOCE, presupuesto_planificacion_usd: 36, tope_gasto_usd: 150 }, 'calendario')).toBeNull()
-    expect(bolsaAgrandada({ ...DOCE, presupuesto_planificacion_usd: 50, tope_gasto_usd: 150 }, 'calendario')).toBeNull()
+  // 23-nov · opción (c), firma de Emilio (Lenovo 19:50Z): la bolsa CRECE hasta su techo (12 caídas × US$ 10 del calendario = 120), aunque nazca con la de su regla
+  it('la bolsa vieja de 6 crece hasta su techo (120); ya en él (o más) no se toca', () => {
+    expect(techoDeLaBolsaDePlanificacion(4)).toBe(120)
+    expect(bolsaAgrandada({ ...NAUFRAGO, presupuesto_planificacion_usd: 6, tope_gasto_usd: 150 }, 'calendario')).toBe(120)
+    expect(bolsaAgrandada({ ...DOCE, presupuesto_planificacion_usd: 6, tope_gasto_usd: null }, 'estrategia')).toBe(120)
+    expect(bolsaAgrandada({ ...DOCE, presupuesto_planificacion_usd: 36, tope_gasto_usd: 150 }, 'calendario')).toBe(120) // nació con su regla (36) y crece
+    expect(bolsaAgrandada({ ...DOCE, presupuesto_planificacion_usd: 120, tope_gasto_usd: 150 }, 'calendario')).toBeNull()
+    expect(bolsaAgrandada({ ...DOCE, presupuesto_planificacion_usd: 130, tope_gasto_usd: 150 }, 'calendario')).toBeNull()
   })
   it('nunca pasa el tope de gasto de la campaña', () => {
     expect(bolsaAgrandada({ ...DOCE, presupuesto_planificacion_usd: 6, tope_gasto_usd: 10 }, 'calendario')).toBe(10)
     expect(bolsaAgrandada({ ...DOCE, presupuesto_planificacion_usd: 6, tope_gasto_usd: 6 }, 'calendario')).toBeNull()
-    expect(bolsaAgrandada({ ...DOCE, presupuesto_planificacion_usd: 6, tope_gasto_usd: 0 }, 'calendario')).toBe(36) // 0 = sin tope (como `topeDeLaCampana`)
+    expect(bolsaAgrandada({ ...DOCE, presupuesto_planificacion_usd: 6, tope_gasto_usd: 0 }, 'calendario')).toBe(120) // 0 = sin tope (como `topeDeLaCampana`)
   })
   it('la bolsa del lector no es de planificación: no crece', () => {
     expect(bolsaAgrandada({ ...DOCE, presupuesto_planificacion_usd: 6, tope_gasto_usd: 150 }, 'fichas')).toBeNull()
@@ -79,7 +82,7 @@ describe('la bolsa de planificación · 3 × (estrategia + tandas), con lo medid
 })
 
 describe('la bolsa al triple · por el camino real', () => {
-  it('Náufrago: US$ 5,14 de la bolsa vieja de 6 → pasa sola a la de su regla (4 tandas = 44,11) y el paso corre (sin necesita_humano)', async () => {
+  it('Náufrago: US$ 5,14 de la bolsa vieja de 6 → pasa sola a su techo (120, opción (c) del 23-nov; antes 44,11) y el paso corre (sin necesita_humano)', async () => {
     const al = almacen(); const id = await abierta(al)
     const c = al.campanas[0]
     Object.assign(c, { tope_gasto_usd: 150, presupuesto_planificacion_usd: 6, fecha_inicio: '2026-11-06', fecha_fin: '2027-01-28' })
@@ -87,8 +90,8 @@ describe('la bolsa al triple · por el camino real', () => {
     const p = await prepararCorrida(al, c, 'calendario', 't1:v1:c0', 'wf', 'e', AHORA, 'm', 'h')
     expect(p.tipo).toBe('lista')
     if (p.tipo !== 'lista') return
-    expect(p.bolsa_agrandada).toEqual({ de: 6, a: 44.11 })
-    expect(al.campanas[0].presupuesto_planificacion_usd).toBe(44.11)
+    expect(p.bolsa_agrandada).toEqual({ de: 6, a: 120 })
+    expect(al.campanas[0].presupuesto_planificacion_usd).toBe(120)
     expect(al.campanas[0].estado).not.toBe('necesita_humano')
   })
   it('una campaña nueva nace con la bolsa de su regla, y con la bolsa que alcanza no se toca nada', async () => {
@@ -103,10 +106,10 @@ describe('la bolsa al triple · por el camino real', () => {
   })
   it('🔴 el triple que tampoco alcanza: 409 sin cambiar el estado, UNA alerta (la segunda vez, ninguna)', async () => {
     const al = almacen(); const id = await abierta(al)
-    al.corridas.push({ id: 900, campana_id: id, paso: 'calendario', clave_idempotencia: 'antes', intento: 1, workflow_id: 'wf', workflow_execution_id: 'x', modelo: 'm', costo_usd: 50, estado: 'ok', plazo_en: null, error: null, revision_editor: 'saltada_por_diseno', salida_estructurada: true, esquema_hash: 'h', seco: true })
+    al.corridas.push({ id: 900, campana_id: id, paso: 'calendario', clave_idempotencia: 'antes', intento: 1, workflow_id: 'wf', workflow_execution_id: 'x', modelo: 'm', costo_usd: 118, estado: 'ok', plazo_en: null, error: null, revision_editor: 'saltada_por_diseno', salida_estructurada: true, esquema_hash: 'h', seco: true })
     const antes = al.campanas[0].estado
-    al.campanas[0].presupuesto_planificacion_usd = 6 // nació con la bolsa vieja: crece a la suya, y aun así no alcanza
-    const suya = bolsaDePlanificacion(medidaDeCampana(al.campanas[0]).totalTandas)
+    al.campanas[0].presupuesto_planificacion_usd = 6 // nació con la bolsa vieja: crece a su techo (120), y aun así no alcanza (118 + 3 > 120)
+    const suya = techoDeLaBolsaDePlanificacion(medidaDeCampana(al.campanas[0]).totalTandas)
     const r1 = await estrategiaPreparar(al, { ...wf(), campana_id: id }, AHORA)
     expect(r1.status).toBe(409)
     expect(r1.cuerpo).toMatchObject({ error: 'presupuesto_agotado', necesita_humano: false, reintenta: true })
