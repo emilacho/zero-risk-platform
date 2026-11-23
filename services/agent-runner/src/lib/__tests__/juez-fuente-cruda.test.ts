@@ -20,6 +20,15 @@ describe('el canon es UNO: las listas de síntesis son las de `src/lib/manual/pr
     expect(TABLAS_DE_SINTESIS).toHaveLength(5)
     expect(ORIGENES_DE_SINTESIS).toHaveLength(4)
   })
+  it('🟡 (CC6 j18 en #1273) el canon está atado en AMBOS sentidos: igualdad EXACTA con los arreglos literales del canon (una tabla nueva allá rompe aquí)', () => {
+    const lista = (nombre: string): string[] => {
+      const m = procedencia.match(new RegExp(`${nombre}\\s*=\\s*\\[([^\\]]*)\\]`))
+      expect(m, `el canon declara ${nombre}`).not.toBeNull()
+      return [...m![1].matchAll(/'([^']+)'/g)].map((x) => x[1])
+    }
+    expect([...TABLAS_DE_SINTESIS].sort()).toEqual(lista('TABLAS_DE_SINTESIS').sort())
+    expect([...ORIGENES_DE_SINTESIS].sort()).toEqual(lista('ORIGENES_DE_SINTESIS').sort())
+  })
 })
 
 describe('esPedidoDelJuezDeFidelidad', () => {
@@ -48,6 +57,11 @@ describe('tipoCrudoDelTrozo · qué es fuente para el juez (ante la duda, se exc
     expect(tipoCrudoDelTrozo({ source_table: 'cerebro_fichas' }, ficha({ retirada_en: '2026-11-01' }))).toBeNull()
     for (const clase of CLASES_DE_SINTESIS_DE_FICHA) expect(tipoCrudoDelTrozo({ source_table: 'cerebro_fichas' }, ficha({ clase })), clase).toBeNull()
     expect(tipoCrudoDelTrozo({ source_table: 'cerebro_fichas' }, null)).toBeNull()
+  })
+  it('🟡 (CC6 j20 en #1273) la SEGUNDA clase humana, literal: lo que el dueño aprendió también es fuente humana', () => {
+    // literal a propósito (no el bucle sobre CLASES_HUMANAS): si la clase sale de la lista, esta línea lo nota
+    expect(tipoCrudoDelTrozo({ source_table: 'cerebro_fichas' }, ficha({ clase: 'aprendizaje_del_dueno' }))).toBe('humana')
+    expect(tipoCrudoDelTrozo({ source_table: 'cerebro_fichas' }, ficha({ clase: 'dato_del_dueno' }))).toBe('humana')
   })
 })
 
@@ -126,6 +140,41 @@ describe('🔴 fuenteCrudaParaElJuez · el empuje del juez', () => {
     vi.stubGlobal('fetch', async () => respuesta(429, { error: { type: 'insufficient_quota', code: 'credit_balance_exhausted', message: 'quota' } }))
     const f = await fuenteCrudaParaElJuez({ supabase: baseFalsa(), clientId: 'c1', taskDescription: 'x' })
     expect(f).toMatchObject({ brain_fallo: true, error: 'embed_query_failed', brain_push: 'solo_fuente_cruda_del_juez' })
+  })
+  // envoltorio: toca SOLO la lectura del juez sobre los trozos (la que selecciona source_table), no la de confianza
+  const conLecturaDelJuez = (mapa: (r: { data: Array<Record<string, unknown>> | null; error: unknown }) => { data: Array<Record<string, unknown>> | null; error: unknown } | never) => {
+    const b = baseFalsa() as { from: (t: string) => Record<string, unknown>; rpc: unknown }
+    const fromOrig = b.from.bind(b)
+    const from = (tabla: string) => {
+      const q = fromOrig(tabla)
+      if (tabla === 'client_brain_chunks') {
+        const inOrig = q.in as (c: string, ids: string[]) => Promise<{ data: Array<Record<string, unknown>> | null; error: unknown }>
+        q.in = async (c: string, ids: string[]) => {
+          const r = await inOrig(c, ids)
+          return String((q as { _cols: unknown })._cols).includes('source_table') ? mapa(r) : r
+        }
+      }
+      return q
+    }
+    return { from, rpc: b.rpc } as never
+  }
+  it('🟡 (CC6 j15 en #1273) una ficha PROPIA y viva cuyo TROZO delata síntesis (`provenance_tag.source`) queda FUERA y contada', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'sk-prueba-123456')
+    vi.stubGlobal('fetch', async () => respuesta(200, { data: [{ embedding: [0.1, 0.2] }] }))
+    // r1 es la ficha propia, viva y de clase cruda («sitio»): con el origen de modelo en el trozo NO es fuente
+    const base = conLecturaDelJuez((r) => ({ ...r, data: (r.data ?? []).map((f) => (f.id === 'r1' ? { ...f, provenance_tag: { source: 'agent_synthesis' } } : f)) }))
+    const r = await fuenteCrudaParaElJuez({ supabase: base, clientId: 'c1', taskDescription: 'x', topK: 2 })
+    expect(r.evidence_refs).toEqual(['r2', 'r7']) // r1 fuera; entran los dos crudos siguientes
+    expect(r.enrichment).not.toContain('CEVICHES DESDE 2009')
+    expect(r).toMatchObject({ brain_hit: true, brain_chunks_count: 2, brain_chunks_no_crudos_dropped: 6 })
+  })
+  it('🟡 (CC6 j12 en #1273) una excepción A MITAD del filtro es FALLO: brain_fallo y `juez_cruda_failed` (el paso se detiene, encargo 15)', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'sk-prueba-123456')
+    vi.stubGlobal('fetch', async () => respuesta(200, { data: [{ embedding: [0.1, 0.2] }] }))
+    const base = conLecturaDelJuez(() => { throw new Error('la base reventó a mitad de la lectura del juez') })
+    const r = await fuenteCrudaParaElJuez({ supabase: base, clientId: 'c1', taskDescription: 'x' })
+    expect(r).toMatchObject({ brain_fallo: true, error: 'juez_cruda_failed', brain_hit: false })
+    expect(r.brain_error_detalle).toContain('la base reventó')
   })
   it('0 trozos crudos NO es fallo: el juez sigue con la evidencia de su pedido y queda anotado `sin_fuente_cruda`', async () => {
     vi.stubEnv('OPENAI_API_KEY', 'sk-prueba-123456')

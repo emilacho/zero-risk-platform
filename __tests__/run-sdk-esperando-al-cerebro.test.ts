@@ -100,6 +100,15 @@ describe('la puerta run-sdk ante «esperando al cerebro»', () => {
     expect(status).toBe(503)
     expect(cuerpo.estado).toBe('esperando_al_cerebro')
   })
+  it('🟡 (CC6 j17 en #1273) el proxy NO pierde `brain_push`: el rastro de que el juez recibió solo fuente cruda viaja en la respuesta', async () => {
+    const { status, cuerpo } = await correr(new Response(JSON.stringify({
+      success: true, response: 'veredicto del juez', sessionId: 's1', model: 'm', inputTokens: 10, outputTokens: 5, costUsd: 0.001, durationMs: 9,
+      brainEnrichment: { brain_hit: true, brain_chunks_count: 2, brain_query_ms: 5, brain_cost_usd: 0, brain_push: 'solo_fuente_cruda_del_juez' },
+    }), { status: 200, headers: { 'content-type': 'application/json' } }))
+    expect(status).toBe(200)
+    expect((cuerpo.brain_enrichment as Record<string, unknown>).brain_push).toBe('solo_fuente_cruda_del_juez')
+    expect((cuerpo.brain_enrichment as Record<string, unknown>).brain_hit).toBe(true)
+  })
   it('la frontera: un fallo normal del corredor (sin brain_fallo y sin «esperando») sigue siendo 500, sin alarma del cerebro', async () => {
     const { status, cuerpo } = await correr(vueltaDelCorredor({ error: 'agente sin identidad' }, null))
     expect(status).toBe(500)
