@@ -283,7 +283,7 @@ export async function avanzarMesa(P: Puertos, enc0: Encargo, pl: Plantilla, indi
     // 24-nov · retomar donde se cayó: `siguiente` sobre una mesa en pausa por causa externa la reanuda. Se quita la pausa y el planificador, con el MISMO libro,
     // vuelve a pedir el paso que se cayó (lo pagado no se repite: los aportes hechos siguen en el libro)
     if (est.pausa_externa) {
-      est = { ...est, pausa_externa: null, marcas: { ...est.marcas, reanudaciones: Number(est.marcas.reanudaciones ?? 0) + 1 } }
+      est = { ...est, pausa_externa: null, reanudada_en: P.ahora().toISOString(), marcas: { ...est.marcas, reanudaciones: Number(est.marcas.reanudaciones ?? 0) + 1 } }
       enc = await guardarMesa(P, enc, est)
     }
     const e = enc.estado_del_motor
@@ -676,7 +676,7 @@ export async function reanudarMesa(P: Puertos, encargoId: string): Promise<Respu
   if (!P.cadena?.reabrirConcepto) return r(409, { error: 'sin_cadena', detalle: 'la cadena no reabre la gran idea en este entorno' })
   const c = await P.cadena.reabrirConcepto({ campana_id: ref.campana_id, version: ref.version, encargo_id: enc.id })
   if (!c.ok) return r(409, { error: 'la_cadena_no_reabre', detalle: c.error ?? 'la cadena no reabrió la gran idea' })
-  const est2: EstadoMesa = { ...est, pausa_externa: null, cierre_forzado: null, turno_abierto: null, marcas: { ...est.marcas, reanudada_tras_cierre: Number(est.marcas.reanudada_tras_cierre ?? 0) + 1 } }
+  const est2: EstadoMesa = { ...est, pausa_externa: null, cierre_forzado: null, turno_abierto: null, reanudada_en: P.ahora().toISOString(), marcas: { ...est.marcas, reanudada_tras_cierre: Number(est.marcas.reanudada_tras_cierre ?? 0) + 1 } }
   await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: conMesa(enc.estado_del_motor, est2), gasto_usd: enc.estado_del_motor.gasto_usd, estado: 'en_paso' })
   return avanzar(P, enc.id)
 }

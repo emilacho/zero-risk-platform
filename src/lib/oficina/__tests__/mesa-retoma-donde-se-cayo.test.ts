@@ -16,6 +16,8 @@ import { siguienteDeLaMesa } from '../mesa/planificador'
 import type { Aporte, EstadoMesa, Tarjeta } from '../mesa/tipos'
 import { DIRECTORIO } from './mesa-memoria'
 import { montar } from './mesa-arnes'
+import { vencerMesasPorPlazo } from '../vigia'
+import { DbFalsa } from './dbfalsa'
 
 // los textos reales (encargo 9aac063b-7a8f-4507-86bd-1d41ae276051)
 const SIN_SALDO = 'el agente FALLÓ · el empleado FALLÓ · Credit balance is too low · gastado ≈ US$ 0.0000 · lo escrito hasta ahí es PARCIAL y no se da por respuesta'
@@ -341,5 +343,45 @@ describe('reanudar · la gran idea que YA cerró por la caída (la forma de 9aac
     expect(r.cuerpo.accion).toBe('esperar')
     expect(tt(r).paso).toBe(tt(ri).paso)
     expect(m.llamadas).toHaveLength(0)
+  })
+
+  // el vigía de la oficina (cada 10 min) vence la mesa de la cadena por su plazo (concepto 340 min). El reloj de la memoria marca 2026-10-10T12:00Z.
+  describe('el plazo del vigía · no vence una mesa en pausa y cuenta desde la reanudación', () => {
+    const AHORA = Date.parse('2026-10-10T12:00:00Z')
+    const en = (min: number) => new Date(AHORA + min * 60_000)
+    const conFila = (m: Montada, creado_en: string) => new DbFalsa().semilla('oficina_encargos', [{ id: m.id, familia: 'concepto_mesa', estado: 'en_paso', creado_en }])
+
+    it('una mesa EN PAUSA no se vence aunque pase su plazo; la MISMA mesa sin pausa sí (control)', async () => {
+      const m = await montarConcepto()
+      const ri = await hastaIntegrar(m)
+      const db = conFila(m, new Date(AHORA).toISOString())
+      expect((await recibirResultado(m.M.P, m.id, tt(ri).n, { error: SIN_SALDO, costo_usd: 0 })).cuerpo.accion).toBe('en_pausa_por_causa_externa')
+      expect((await vencerMesasPorPlazo(m.M.P, db, en(400))).vencidas).toEqual([])
+      expect(m.M.encargos.get(m.id)!.estado).toBe('en_paso')
+      const c = await montarConcepto()
+      await hastaIntegrar(c)
+      expect((await vencerMesasPorPlazo(c.M.P, conFila(c, new Date(AHORA).toISOString()), en(400))).vencidas).toEqual([c.id])
+    })
+    it('`reanudar` de una gran idea abierta hace 6 h (la forma de 9aac063b): el plazo cuenta desde la reanudación, no desde que se abrió', async () => {
+      const m = await montarConcepto()
+      const t = tt(await hastaIntegrar(m))
+      await cerrarComoAntes(m, t)
+      const db = conFila(m, new Date(AHORA - 6 * 60 * 60_000).toISOString())
+      expect((await reanudarMesa(m.M.P, m.id)).cuerpo.accion).toBe('esperar')
+      expect(estadoDeLaMesa(m.M.encargos.get(m.id)!.estado_del_motor)!.reanudada_en).toBe(new Date(AHORA).toISOString())
+      expect((await vencerMesasPorPlazo(m.M.P, db, en(10))).vencidas).toEqual([])
+      expect((await vencerMesasPorPlazo(m.M.P, db, en(339))).vencidas).toEqual([])
+      expect((await vencerMesasPorPlazo(m.M.P, db, en(341))).vencidas).toEqual([m.id])
+    })
+    it('`siguiente` sobre una pausa también anota la reanudación (el tiempo en pausa no se come el plazo)', async () => {
+      const m = await montarConcepto()
+      const ri = await hastaIntegrar(m)
+      const db = conFila(m, new Date(AHORA - 300 * 60_000).toISOString())
+      await recibirResultado(m.M.P, m.id, tt(ri).n, { error: SIN_SALDO, costo_usd: 0 })
+      expect((await avanzar(m.M.P, m.id)).cuerpo.accion).toBe('esperar')
+      expect(estadoDeLaMesa(m.M.encargos.get(m.id)!.estado_del_motor)!.reanudada_en).toBe(new Date(AHORA).toISOString())
+      expect((await vencerMesasPorPlazo(m.M.P, db, en(60))).vencidas).toEqual([])
+      expect((await vencerMesasPorPlazo(m.M.P, db, en(341))).vencidas).toEqual([m.id])
+    })
   })
 })

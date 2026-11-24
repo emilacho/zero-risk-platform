@@ -99,7 +99,12 @@ export async function vencerMesasPorPlazo(P: Puertos, db: Db, ahora: Date): Prom
     const pl = await plantillaDe(P, enc)
     const plazo = Number(pl.limites?.plazo_mesa_min ?? 0)
     if (!(plazo > 0) || !f.creado_en) continue
-    if (new Date(String(f.creado_en)).getTime() > ahora.getTime() - plazo * 60_000) continue
+    // 24-nov · retomar donde se cayó: una mesa EN PAUSA por causa externa (saldo, proveedor, red) no se vence: espera a que se reanude; y el plazo de una mesa
+    // reanudada cuenta desde la reanudación (si no, `reanudar` de una mesa abierta hace horas la cerraría a medias en la siguiente vuelta del vigía)
+    const mesa = estadoDeLaMesa(enc.estado_del_motor)
+    if (mesa?.pausa_externa) continue
+    const desde = Math.max(new Date(String(f.creado_en)).getTime(), mesa?.reanudada_en ? Date.parse(mesa.reanudada_en) || 0 : 0)
+    if (desde > ahora.getTime() - plazo * 60_000) continue
     const motivo = `plazo de la mesa agotado (${plazo} min)`
     const entregado = await entregarPorTopeDeLaMesa(P, enc, motivo)
     if (!entregado) await entregarALaCadena(P, enc, { texto: null, motivo, estado: 'cerrado_por_tope' })
