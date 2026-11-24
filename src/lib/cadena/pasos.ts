@@ -31,7 +31,7 @@ import { SALIERON_EN_LA_CADENA, type Ajuste, type Estrategia, type Ficha, type F
 import { type LexicoAfirmaciones } from './afirmaciones'
 import { lexicoDelCliente } from './lexico-por-rubro'
 import { problemasDeEsquema, normalizarPilares, validarEstrategia } from './validador-estrategia'
-import { validarTodo, type FechaEspecialVerificada, type InsumosCalendario } from './validador-calendario'
+import { alcanceDelChequeo, validarTodo, type FechaEspecialVerificada, type InsumosCalendario } from './validador-calendario'
 import { fechasPedidasDe, retencionDe, retenerParaRevision, TIPO_DE_ESPERA as TIPO_DE_ESPERA_DE_JEFATURA } from './revision-jefatura'
 import { guardarTemporadas, llaveCrudaDe } from './fechas-del-cliente'
 
@@ -341,6 +341,18 @@ function insumosDe(c: Campana, ctx: ContextoDelCliente, e: Estrategia, formatos:
   }
 }
 
+/**
+ * 24-nov · «retomar donde se cayó» · el calendario (GO Lenovo 11:51Z · decisión de Emilio): la corrección PENDIENTE de una tanda, leída de la BASE
+ * (los bloqueos del último guardado), con el MISMO modo que habría planeado `guardar` (`planDeCorreccion`): solo las filas que fallaron si TODOS los
+ * bloqueos son de fila; la tanda entera si alguno es de conjunto, no trae fila o no trae chequeo. Antes el reenvío sin `correccion` (el subflujo de n8n
+ * se cayó y se relanzó, sin su memoria) pedía SIEMPRE la tanda entera: se volvía a pagar lo que ya había pasado y las filas buenas podían cambiar.
+ */
+export async function correccionPendienteDelCalendario(al: Almacen, campanaId: string, tanda: number): Promise<{ fichas: Ficha[]; fila_ids: string[]; modo: 'filas' | 'tanda' }> {
+  const abiertos = await al.hallazgosQueBloquean(campanaId, tanda)
+  const deFilas = abiertos.length > 0 && abiertos.every((h) => !!h.fila_id && !!h.chequeo && alcanceDelChequeo(h.chequeo) === 'fila')
+  return { fichas: abiertos.map((h) => h.ficha), fila_ids: [...new Set(abiertos.map((h) => h.fila_id).filter((x): x is string => !!x))], modo: deFilas ? 'filas' : 'tanda' }
+}
+
 export async function calendarioPreparar(al: Almacen, cuerpo: Record<string, unknown>, ahora: string): Promise<Respuesta> {
   const c = await cargar(al, cuerpo)
   if (!c.ok) return c.r
@@ -359,9 +371,11 @@ export async function calendarioPreparar(al: Almacen, cuerpo: Record<string, unk
   let correccion = cuerpo.correccion && typeof cuerpo.correccion === 'object' ? (cuerpo.correccion as { fichas?: never[]; fila_ids?: string[]; modo?: 'filas' | 'tanda' }) : null
   // r74 · F3 · UNA TANDA GUARDADA PERO SIN VALIDAR (filas `propuesta`) es una corrección pendiente: si la llamada de corrección murió (vencida/fallida) y se reenvía el sobre SIN corrección,
   // antes la primera pasada (c0, ok) contestaba «ya hecha» y la campaña se quedaba en `calendario` con un éxito falso. Ahora se reconstruye la corrección con los hallazgos que bloquearon.
-  if (!correccion && delaTanda.some((f) => f.estado === 'propuesta')) {
-    const abiertos = await al.hallazgosQueBloquean(campana.id, tanda)
-    correccion = { fichas: abiertos.map((h) => h.ficha) as never[], fila_ids: [...new Set(abiertos.map((h) => h.fila_id).filter((x): x is string => !!x))], modo: 'tanda' }
+  // 24-nov · y con el modo que tocaba (de fila o de tanda), no siempre la tanda entera: ver `correccionPendienteDelCalendario`
+  const retomada = !correccion && delaTanda.some((f) => f.estado === 'propuesta')
+  if (retomada) {
+    const p = await correccionPendienteDelCalendario(al, campana.id, tanda)
+    correccion = { fichas: p.fichas as never[], fila_ids: p.fila_ids, modo: p.modo }
   }
   if (!correccion && delaTanda.length > 0 && delaTanda.every((f) => f.estado !== 'propuesta')) return { status: 200, cuerpo: { ya_hecha: true, tanda } }
   // 31-oct (nuevo orden · T3): con la palanca encendida la tanda ESPERA la gran idea aprobada (no es un fallo: el flujo vuelve a pasar); apagada, `mesa` es vacía y nada cambia
@@ -404,6 +418,7 @@ export async function calendarioPreparar(al: Almacen, cuerpo: Record<string, unk
       corrida_id: prep.corrida.id, tanda, semanas, calendario_version: version, intento: prep.corrida.intento, plazo_en: prep.corrida.plazo_en,
       headers: { [CABECERA_SALTAR_EDITOR]: '1' },
       ...(mesa.concepto ? { concepto_version: mesa.version } : {}),
+      ...(retomada && correccion ? { retoma_la_correccion: { ronda, modo: correccion.modo } } : {}),
       run_sdk: cuerpoDeRunSdk('calendario', modelo, tarea, esquema.valor, campana.client_id, { contrato: mesa.concepto ? 'calendario_tanda.v5' : 'calendario_tanda.v1' }),
     },
   }
@@ -423,7 +438,10 @@ export async function calendarioGuardar(al: Almacen, cuerpo: Record<string, unkn
   // 19-nov · grupo C · y la ronda de corrección sale de la clave (`…:c<ronda>`; las claves viejas `:c1` son la ronda 1)
   const ronda = rondaDeClave(corrida.clave_idempotencia)
   const esCorreccion = cuerpo.correccion === true || ronda >= 1
-  const modo = cuerpo.modo === 'filas' ? 'filas' : 'tanda'
+  // 24-nov · retomar donde se cayó: el subflujo relanzado (sin su memoria) manda `correccion: false` y `modo: 'tanda'` por defecto. Si la corrida ES de
+  // corrección y quien guarda no lo dijo, vale el modo que `preparar` reconstruyó de la base (mismo origen, antes de guardar estas validaciones)
+  const reconstruida = cuerpo.correccion !== true && ronda >= 1
+  const modo = reconstruida ? (await correccionPendienteDelCalendario(al, campana.id, tanda)).modo : cuerpo.modo === 'filas' ? 'filas' : 'tanda'
   const { objeto, reintentar } = await cerrarSegunResultado(al, corrida, leerResultado(cuerpo.resultado))
   if (objeto === null || !esTanda(objeto)) {
     if (objeto !== null) await al.cerrarCorrida(corrida.id, { estado: 'fallida', error: 'el objeto no tiene la forma de una tanda' })
