@@ -928,7 +928,7 @@ export async function recibirResultado(P: Puertos, encargoId: string, n: number,
   // 24-nov · entrega 2a · retomar donde se cayó (decisión de Emilio): el paso cayó por causa EXTERNA (saldo, proveedor saturado o caído, red). No es culpa del agente:
   // la pieza NO cierra `fallido` (ni gasta una de sus versiones). Queda en pausa (`en_paso`, sin turno corriendo), con el motivo a la vista, UNA alarma por incidente,
   // y `siguiente` (o `reanudar`) vuelve a pedir este mismo paso. El mismo patrón que la mesa y que el portero roto: esperar sin gastar.
-  const externa = res.error ? causaExterna(res) : null
+  const externa = res.error || res.pedido_no_llego === true ? causaExterna(res) : null
   if (externa) {
     const pausa: PausaExterna = { causa: externa.clave, motivo: externa.motivo, agente: abierto.agente ?? '', tipo: paso.tipo, paso: paso.clave, n, en: new Date().toISOString() }
     const previas = e.vueltas.pausas_externas ?? 0

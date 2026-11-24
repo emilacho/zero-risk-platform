@@ -52,6 +52,12 @@ describe('la pieza queda EN PAUSA por una causa externa (no cierra, no gasta ver
     expect(enc(M, id).estado_del_motor.pausa_externa).toBeUndefined()
     expect(alarmas(M)).toHaveLength(0)
   })
+  it('un turno con `pedido_no_llego` y SIN texto de error también queda en pausa (red), no cierra (observación de CC6 en #1279)', async () => {
+    const { M, id, t } = await enEspera()
+    const r = (await recibirResultado(M.P, id, t.n, { pedido_no_llego: true, costo_usd: 0 })) as R
+    expect(r.cuerpo).toMatchObject({ accion: 'en_pausa_por_causa_externa', causa: 'red' })
+    expect(enc(M, id).estado).toBe('en_paso')
+  })
   it('lo gastado en el turno que cayó se suma (no se pierde la cuenta)', async () => {
     const { M, id, t } = await enEspera()
     const antes = enc(M, id).estado_del_motor.gasto_usd
