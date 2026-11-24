@@ -67,13 +67,15 @@ const ALCANCE: Record<string, Alcance> = {
   V11: 'tanda', V12: 'tanda', V13: 'fila', V14: 'fila', V14n: 'fila', V15: 'fila', V16: 'fila', V17: 'tanda', V18: 'tanda', V20: 'fila', V22: 'fila',
   C01: 'fila', C02: 'fila', C03: 'fila', C04: 'fila',
 }
+/** El alcance de un chequeo del calendario (el de `h`): con él se reconstruye de la base el modo de una corrección pendiente (24-nov · retomar donde se cayó). */
+export const alcanceDelChequeo = (chequeo: string): Alcance => ALCANCE[chequeo] ?? 'fila'
 
 /** Chequeos cuyo fallo significa «falta un dato con fuente»: tras la única corrección, la FILA sale o se cambia (cero contacto con el cliente). */
 export const CHEQUEOS_DE_DATO_FALTANTE = new Set(['V06', 'V07', 'V14', 'V16', 'V22', 'C02'])
 
 function h(chequeo: string, severidad: Severidad, f: Pick<Fila, 'id'> | null, que: string, contra: string, propuesta: string, donde?: string): Hallazgo {
   return {
-    chequeo, severidad, fila_id: f?.id ?? null, alcance: ALCANCE[chequeo] ?? 'fila',
+    chequeo, severidad, fila_id: f?.id ?? null, alcance: alcanceDelChequeo(chequeo),
     ficha: { que, donde: donde ?? (f ? `fila ${f.id}` : 'tanda'), contra_que: contra, gravedad: severidad, propuesta },
   }
 }
