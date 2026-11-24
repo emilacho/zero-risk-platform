@@ -30,8 +30,7 @@ import { medidaDeCampana } from './constantes'
 import { metodoDe } from './metodos'
 import { abrirEsperaDe, PREFIJO_DE_REINTENTO, resolverEsperas, tramoDeReintento } from './nucleo'
 import { reglaDeIdioma, reglaDeRegistro } from './registro'
-import { abrirRegistro, avisoDePistas, avisosDeLaSalida, esperaDeRegistroViva, leerArtifactIdDeRegistro, leerObjetoDeRegistro, objetoDeRegistro, pistasDeRegistro, registroFijado, seRevisaElRegistro, textoDeLaVuelta, type DocDeRegistro } from './registro-en-jefatura'
-import { TIPO_DE_ESPERA as TIPO_DE_ESPERA_DE_JEFATURA } from './revision-jefatura'
+import { abrirRegistro, avisoDePistas, avisosDeLaSalida, esperaDeRegistroViva, leerArtifactIdDeRegistro, leerObjetoDeRegistro, pistasDeRegistro, registroFijado, resolverEsperasDeRegistro, seRevisaElRegistro, textoDeLaVuelta, type DocDeRegistro } from './registro-en-jefatura'
 import { recibirReubicacion, type EntregaDeReubicacion } from './reubicar'
 import { recibirFallidos, type EntregaDeFallidos } from './rehacer-fallidos'
 import { recibirCorreccionDelBanco, type EntregaDelBanco } from './banco-correcciones'
@@ -609,7 +608,7 @@ async function cerrarBriefDeRegistro(al: Almacen, campana: Campana, version: num
   const l = conAvisos(leido, avisos)
   const bloquea = bloqueosDelBrief(l)
   const estado = bloquea.length ? 'devuelta' : 'validada'
-  await resolverEsperas(al, campana.id, TIPO_DE_ESPERA_DE_JEFATURA, objetoDeRegistro('brief', version))
+  await resolverEsperasDeRegistro(al, campana.id, 'brief', version)
   await al.actualizarBriefCreativo(campana.id, version, { estado, texto_md: textoFinal, leido: l as unknown as Record<string, unknown>, devolucion_texto: bloquea.length ? bloquea.map((b) => `- ${b}`).join('\n') : null })
   // 19-nov · grupo D: devuelto por código a la segunda ya no para (la próxima apertura deja vigente la mejor versión)
   await borrarMarcaDeMesa(al, campana, 'brief')
@@ -618,7 +617,7 @@ async function cerrarBriefDeRegistro(al: Almacen, campana: Campana, version: num
 
 async function cerrarConceptoDeRegistro(al: Almacen, campana: Campana, version: number, textoFinal: string, leido: ConceptoLeido, avisos: string[], ahora: string): Promise<EntregaALaCadena> {
   const todos = await al.conceptosDe(campana.id)
-  await resolverEsperas(al, campana.id, TIPO_DE_ESPERA_DE_JEFATURA, objetoDeRegistro('concepto', version))
+  await resolverEsperasDeRegistro(al, campana.id, 'concepto', version)
   if (leido.estado === 'sin_concepto') return conceptoSinMesa(al, campana, version, todos, { motivo: `sin_concepto: ${leido.bloqueos.join(' · ')}`, texto_md: textoFinal }, ahora)
   const l = conAvisos(leido, avisos)
   await al.actualizarConcepto(campana.id, version, { estado: 'lista', aprobacion: 'pendiente', texto_md: textoFinal, leido: l as unknown as Record<string, unknown> })
@@ -665,9 +664,10 @@ export async function aplicarVueltaDeRegistro(al: Almacen, salida: Record<string
   if (!id || id.doc === 'calendario') return { ok: false, error: '`salida.artifact_id` no es de una revisión de registro del brief o de la gran idea (registro:<brief|concepto>:<campaña>:v<n>); la del calendario vuelve por `vuelta-de-registro.ts`' }
   const campana = await al.campana(id.campana_id)
   if (!campana) return { ok: false, error: 'campaña inexistente' }
-  if (!(await esperaDeRegistroViva(al, campana.id, id.doc, id.version))) return { ok: true, ya_cerrada: true }
+  // 24-nov · arreglo A: la vuelta cierra solo la espera de SU ronda (una vuelta vieja de antes de reabrir no cierra la revisión nueva)
+  if (!(await esperaDeRegistroViva(al, campana.id, id.doc, id.version, id.ronda ?? 1))) return { ok: true, ya_cerrada: true }
   const original = await documentoRetenido(al, campana.id, id.doc, id.version)
-  if (original === null) { await resolverEsperas(al, campana.id, TIPO_DE_ESPERA_DE_JEFATURA, objetoDeRegistro(id.doc, id.version)); return { ok: true, ya_cerrada: true } }
+  if (original === null) { await resolverEsperasDeRegistro(al, campana.id, id.doc, id.version); return { ok: true, ya_cerrada: true } }
   const avisos = avisosDeLaSalida(salida)
   const v = textoDeLaVuelta(salida, original)
   let final = v.texto

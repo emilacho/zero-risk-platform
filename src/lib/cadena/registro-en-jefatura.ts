@@ -27,17 +27,27 @@ const PRODUCTOR_DEL_DOCUMENTO: Record<DocDeRegistro, string | null> = { brief: '
 /** el número del documento: `v` de versión (brief, gran idea) · `t` de tanda (calendario) */
 const LETRA: Record<DocDeRegistro, 'v' | 't'> = { brief: 'v', concepto: 'v', calendario: 't' }
 
+/**
+ * 24-nov · LA RONDA DE LA REVISIÓN (arreglo A · GO de Lenovo 18:30Z) · una versión del brief o de la gran idea REABIERTA (retomar donde se cayó, #1279) se entrega otra vez
+ * con texto nuevo, pero su primera revisión de registro ya existe: la espera (`dedup_key`) y la revisión de la jefatura (`artifact_id + version`) chocaban y devolvían
+ * las VIEJAS, ya cerradas; la vuelta no hallaba espera viva y la versión quedaba `abierta` hasta vencer y rehacerse la mesa entera.
+ * Cada revisión nueva de la MISMA versión lleva su ronda en las DOS llaves: la 1.ª, sin marca (byte a byte con hoy); la 2.ª, `:r2`; y así. El calendario no lleva ronda.
+ */
+export const MAXIMO_DE_RONDAS_DE_REGISTRO = 9
+const marcaDeRonda = (doc: DocDeRegistro, ronda: number): string => (doc !== 'calendario' && ronda > 1 ? `:r${ronda}` : '')
 /** el objeto de la espera (`cadena_esperas.objeto_id`): distinto del de J7 (`estrategia:vN` · `calendario:tN`) */
-export const objetoDeRegistro = (doc: DocDeRegistro, version: number): string => `registro:${doc}:${LETRA[doc]}${version}`
-export function leerObjetoDeRegistro(objeto: string): { doc: DocDeRegistro; version: number } | null {
-  const m = /^registro:(?:(brief|concepto):v|(calendario):t)(\d+)$/.exec(objeto)
-  return m ? { doc: (m[1] ?? m[2]) as DocDeRegistro, version: Number(m[3]) } : null
+export const objetoDeRegistro = (doc: DocDeRegistro, version: number, ronda = 1): string => `registro:${doc}:${LETRA[doc]}${version}${marcaDeRonda(doc, ronda)}`
+/** la ronda solo aparece desde la 2.ª: la 1.ª se lee igual que antes (sin el campo) */
+const conRonda = (r: string | undefined): { ronda?: number } => (r ? { ronda: Number(r) } : {})
+export function leerObjetoDeRegistro(objeto: string): { doc: DocDeRegistro; version: number; ronda?: number } | null {
+  const m = /^registro:(?:(brief|concepto):v(\d+)(?::r([2-9]))?|(calendario):t(\d+))$/.exec(objeto)
+  return m ? { doc: (m[1] ?? m[4]) as DocDeRegistro, version: Number(m[2] ?? m[5]), ...conRonda(m[3]) } : null
 }
-/** el `artifact_id` de la revisión: reversible (la vuelta encuentra la campaña, el documento y la versión sin leer nada más) */
-export const artifactIdDeRegistro = (doc: DocDeRegistro, campanaId: string, version: number): string => `registro:${doc}:${campanaId}:${LETRA[doc]}${version}`
-export function leerArtifactIdDeRegistro(id: string): { doc: DocDeRegistro; campana_id: string; version: number } | null {
-  const m = /^registro:(?:(brief|concepto):([0-9a-zA-Z-]+):v|(calendario):([0-9a-zA-Z-]+):t)(\d+)$/.exec(id)
-  return m ? { doc: (m[1] ?? m[3]) as DocDeRegistro, campana_id: (m[2] ?? m[4]) as string, version: Number(m[5]) } : null
+/** el `artifact_id` de la revisión: reversible (la vuelta encuentra la campaña, el documento, la versión y la ronda sin leer nada más) */
+export const artifactIdDeRegistro = (doc: DocDeRegistro, campanaId: string, version: number, ronda = 1): string => `registro:${doc}:${campanaId}:${LETRA[doc]}${version}${marcaDeRonda(doc, ronda)}`
+export function leerArtifactIdDeRegistro(id: string): { doc: DocDeRegistro; campana_id: string; version: number; ronda?: number } | null {
+  const m = /^registro:(?:(brief|concepto):([0-9a-zA-Z-]+):v(\d+)(?::r([2-9]))?|(calendario):([0-9a-zA-Z-]+):t(\d+))$/.exec(id)
+  return m ? { doc: (m[1] ?? m[5]) as DocDeRegistro, campana_id: (m[2] ?? m[6]) as string, version: Number(m[3] ?? m[7]), ...conRonda(m[4]) } : null
 }
 
 // ───────────────────────────────────────────────────────── tramo 3 · el calendario como documento (una línea por fila)
@@ -92,12 +102,14 @@ export interface SobreDeRegistroPedido {
   fuente?: string
   /** los documentos de los que el texto puede citar (plan, manual y, para la gran idea, el brief validado): el revisor comprueba sus citas contra ellos */
   origenes: Array<{ titulo: string; texto: string }>
+  /** 24-nov · la ronda de la revisión de ESTA versión (1 si se omite): la pone `abrirRegistro` */
+  ronda?: number
 }
 
 export function sobreDeRegistro(p: SobreDeRegistroPedido): EntradaDeRegistro {
   const agente = PRODUCTOR_DEL_DOCUMENTO[p.doc]
   return {
-    artifact_type: 'registro', artifact_id: artifactIdDeRegistro(p.doc, p.campana.id, p.version), client_id: p.campana.client_id, journey_id: null,
+    artifact_type: 'registro', artifact_id: artifactIdDeRegistro(p.doc, p.campana.id, p.version, p.ronda ?? 1), client_id: p.campana.client_id, journey_id: null,
     payload: {
       texto: p.texto, dry_run: p.campana.seco, version: p.version, documento: NOMBRE_DEL_DOCUMENTO[p.doc],
       registro: { trato: p.registro, ...(p.fuente ? { fuente: p.fuente } : {}) },
@@ -115,15 +127,36 @@ export async function seRevisaElRegistro(al: Almacen, campana: Pick<Campana, 'cl
   return (await retencionDe(al, 'registro', campana.client_id)).retener
 }
 
-export const esperaDeRegistroViva = async (al: Almacen, campanaId: string, doc: DocDeRegistro, version: number): Promise<EsperaFila | null> =>
-  (await al.esperasVivas()).find((e) => e.campana_id === campanaId && e.objeto_tipo === TIPO_DE_ESPERA && e.objeto_id === objetoDeRegistro(doc, version)) ?? null
+/** la espera viva de la revisión de registro de esta versión: de CUALQUIER ronda, o (con `ronda`) solo de esa · una vuelta vieja nunca cierra la ronda nueva */
+const esDeRegistro = (e: EsperaFila, campanaId: string, doc: DocDeRegistro, version: number, ronda?: number): boolean => {
+  if (e.campana_id !== campanaId || e.objeto_tipo !== TIPO_DE_ESPERA) return false
+  const o = leerObjetoDeRegistro(e.objeto_id)
+  return !!o && o.doc === doc && o.version === version && (ronda === undefined || (o.ronda ?? 1) === ronda)
+}
+export const esperaDeRegistroViva = async (al: Almacen, campanaId: string, doc: DocDeRegistro, version: number, ronda?: number): Promise<EsperaFila | null> =>
+  (await al.esperasVivas()).find((e) => esDeRegistro(e, campanaId, doc, version, ronda)) ?? null
+
+/** el cierre del documento resuelve la espera de su revisión, sea de la ronda que sea (si no, una ronda viva sobreviviría a su documento cerrado) */
+export async function resolverEsperasDeRegistro(al: Almacen, campanaId: string, doc: DocDeRegistro, version: number): Promise<void> {
+  for (const e of (await al.esperasVivas()).filter((x) => esDeRegistro(x, campanaId, doc, version))) await al.actualizarEspera(e.id, { estado: 'resuelta' })
+}
 
 /**
  * Abre la espera y la revisión. Nunca lanza: un puerto que falla vuelve como `error`. La espera la resuelve SIEMPRE el cierre del documento (`no_abre` · `error` · `cerrada` ·
  * la vuelta · el reloj): un solo lugar resuelve, así no queda una espera viva sobre un documento cerrado ni uno cerrado dos veces.
  */
 export async function abrirRegistro(al: Almacen, p: SobreDeRegistroPedido & { campana: Campana }, ahora: string): Promise<{ r: ResultadoDeAbrirRegistro; vence_en: string }> {
-  const espera = await abrirEsperaDe(al, p.campana, TIPO_DE_ESPERA, objetoDeRegistro(p.doc, p.version), `la jefatura revisa el registro de ${NOMBRE_DEL_DOCUMENTO[p.doc]} v${p.version} antes de cerrarlo`, ahora)
+  const motivo = `la jefatura revisa el registro de ${NOMBRE_DEL_DOCUMENTO[p.doc]} v${p.version} antes de cerrarlo`
+  // 24-nov · arreglo A: si la espera de esta ronda ya está CERRADA (la revisión de antes de reabrir la versión), la revisión nueva va en la ronda siguiente, con sus dos llaves.
+  //   Una espera VIVA se reusa (entrega repetida mientras la jefatura revisa). El calendario no lleva ronda (su vuelta lee la tanda).
+  let ronda = 1
+  let espera = await abrirEsperaDe(al, p.campana, TIPO_DE_ESPERA, objetoDeRegistro(p.doc, p.version, ronda), motivo, ahora)
+  while (espera.estado !== 'viva' && p.doc !== 'calendario' && ronda < MAXIMO_DE_RONDAS_DE_REGISTRO) {
+    ronda++
+    espera = await abrirEsperaDe(al, p.campana, TIPO_DE_ESPERA, objetoDeRegistro(p.doc, p.version, ronda), `${motivo} (ronda ${ronda}: la versión se reabrió)`, ahora)
+  }
+  if (espera.estado !== 'viva' && p.doc !== 'calendario') return { r: { estado: 'no_abre', motivo: `la revisión de registro de ${NOMBRE_DEL_DOCUMENTO[p.doc]} v${p.version} ya no tiene ronda libre (${ronda})` }, vence_en: espera.vence_en }
+  p = { ...p, ronda }
   let r: ResultadoDeAbrirRegistro
   try { r = al.abrirRevisionDeRegistro ? await al.abrirRevisionDeRegistro(sobreDeRegistro(p)) : { estado: 'no_abre', motivo: 'el almacén no abre revisiones de registro' } } catch (e) { r = { estado: 'error', motivo: e instanceof Error ? e.message.slice(0, 200) : 'error' } }
   return { r, vence_en: espera.vence_en }
