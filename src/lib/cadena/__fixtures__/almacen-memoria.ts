@@ -334,6 +334,9 @@ export class AlmacenMemoria implements Almacen {
   }
   /** el libro de las mesas de la oficina, por encargo (09-nov · revalidar la gran idea) */
   libros: Record<string, Array<{ n: number; de: string; tipo: string; texto: string }>> = {}
+  /** 24-nov · los encargos cuya mesa está en pausa por causa externa (lo pone la prueba) */
+  mesasEnPausa = new Set<string>()
+  async mesaEnPausa(encargoId: string) { return this.mesasEnPausa.has(encargoId) }
   async libroDeLaMesa(encargoId: string) { return structuredClone(this.libros[encargoId] ?? []) }
   async conceptosVencidos(ahora: string) { return structuredClone(this.conceptos.filter((c) => c.estado === 'abierta' && c.plazo_en && Date.parse(c.plazo_en) <= Date.parse(ahora))) }
   async filas(campanaId: string, version?: number) { return structuredClone(this.filasGuardadas.filter((f) => f.campana_id === campanaId && (version === undefined || f.calendario_version === version))) }

@@ -170,6 +170,12 @@ export interface EstadoMesa {
   preguntas_del_traductor: number
   /** ids de aportes ya contestados por una pregunta del traductor, etc. — marcas libres */
   marcas: Record<string, number | string | boolean>
+  /** 24-nov · retomar donde se cayó (decisión de Emilio): un turno cayó por causa EXTERNA (saldo, proveedor saturado o caído, red). La mesa NO cierra: queda en pausa, con
+   *  esto a la vista del dashboard, y se retoma con `siguiente` desde el mismo paso (el libro no cambió). Ausente o null = la mesa no está en pausa */
+  pausa_externa?: import('./causa-externa').PausaExterna | null
+  /** 24-nov · la hora de la última reanudación (`siguiente` sobre una pausa o `reanudar`): el plazo de la mesa entera (vigía) cuenta desde aquí, no desde que se abrió,
+   *  para que el tiempo en pausa no se coma el plazo y una mesa retomada no se cierre a medias en la siguiente vuelta del vigía. Ausente = nunca se reanudó */
+  reanudada_en?: string | null
   /** fase del cierre: la pieza se traduce, se dibuja, se evidencia, va a la jefatura */
   fase: 'trabajando' | 'traducida' | 'dibujada' | 'jefatura' | 'cerrada'
   /** «cierra con lo que hay»: se agotó un tope; la dirección entrega ya */

@@ -396,6 +396,8 @@ export interface Almacen {
   libroDeLaMesa(encargoId: string): Promise<Array<{ n: number; de: string; tipo: string; texto: string }>>
   /** los conceptos abiertos cuyo plazo propio ya pasó (el vigía los cierra `sin_mesa`) */
   conceptosVencidos(ahora: string): Promise<ConceptoGuardado[]>
+  /** 24-nov · retomar donde se cayó: ¿la mesa de la oficina de este encargo está EN PAUSA por una causa externa (saldo, proveedor, red)? · solo lectura · sin el método = nunca */
+  mesaEnPausa?(encargoId: string): Promise<boolean>
   /** 31-oct (T3): todas las versiones del concepto de una campaña, de la 1 en adelante (para contar vueltas de cambios y reaperturas) */
   conceptosDe(campanaId: string): Promise<ConceptoGuardado[]>
   /** 31-oct (T3): la tarjeta «Gran idea» en la bandeja (`hitl_queue` · `metadata.origen = 'cadena'` · `metadata.tipo = 'concepto'` · sin vencimiento: `vencerBandeja` no la toca); devuelve su id */

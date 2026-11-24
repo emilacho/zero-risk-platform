@@ -522,6 +522,8 @@ export function almacenDeSupabase(): Almacen {
       return { concepto: concepto as ConceptoGuardado, sello: actualizada_en }
     },
     async actualizarConceptoSiSello(campanaId, version, sello, patch) { const { data, error } = await db.from('cadena_conceptos').update({ ...patch, actualizada_en: new Date().toISOString() }).eq('campana_id', campanaId).eq('version', version).eq('actualizada_en', sello).select('version'); if (error) fallo(error); return ((data as unknown[] | null) ?? []).length > 0 },
+    // 24-nov · retomar donde se cayó: la lectura la hace la oficina (solo ella nombra sus tablas)
+    async mesaEnPausa(encargoId) { return (await import('@/lib/oficina/mesa/de-la-cadena')).mesaEnPausaEnLaBase(db as never, encargoId) },
     async libroDeLaMesa(encargoId) { return lista<{ n: number; de: string; tipo: string; texto: string }>(db.from('oficina_mesa_aportes').select('n, de, tipo, texto').eq('encargo_id', encargoId).order('n', { ascending: true }).limit(500)) },
     async conceptosVencidos(ahora) { return lista<ConceptoGuardado>(db.from('cadena_conceptos').select('campana_id, version, estado, aprobacion, texto_md, leido, brief_devuelto, motivo, costo_usd, plazo_en, encargo_id, hitl_id, nota_de_emilio, apunta_a, decidido_en, seco').eq('estado', 'abierta').lte('plazo_en', ahora).limit(500)) },
     // 31-oct (T3) · la gran idea: todas sus versiones, su tarjeta en la bandeja y la decisión de Emilio

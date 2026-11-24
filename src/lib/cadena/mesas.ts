@@ -882,7 +882,11 @@ export async function conceptoParaElCalendario(al: Almacen, campana: Pick<Campan
  */
 export async function cerrarMesasVencidas(al: Almacen, ahora: string): Promise<Array<{ campana_id: string; texto: string }>> {
   const out: Array<{ campana_id: string; texto: string }> = []
+  // 24-nov · retomar donde se cayó: una mesa en PAUSA por causa externa (saldo, proveedor, red) no venció: espera su reanudación con lo hecho guardado.
+  // Vencerla abriría una versión nueva (un encargo con el libro vacío) y se pagaría la mesa entera otra vez. Si no se puede leer, se vence como siempre.
+  const enPausa = async (encargoId: string | null | undefined): Promise<boolean> => { if (!encargoId || !al.mesaEnPausa) return false; try { return await al.mesaEnPausa(encargoId) } catch { return false } }
   for (const b of await al.briefsVencidos(ahora)) {
+    if (await enPausa(b.encargo_id)) continue
     const motivo = `la mesa del brief (versión ${b.version}) no entregó antes de su plazo más la holgura (${b.plazo_en})`
     await al.actualizarBriefCreativo(b.campana_id, b.version, { estado: 'descartada', motivo })
     const agotado = await agotoLaReapertura(al, b.campana_id, b.version)
@@ -890,6 +894,7 @@ export async function cerrarMesasVencidas(al: Almacen, ahora: string): Promise<A
     out.push({ campana_id: b.campana_id, texto: `${motivo}: queda descartada${agotado ? ' · ya son dos: sigue sola con la mejor versión o se reabre en la vuelta siguiente' : ' · se reabre una vez'}` })
   }
   for (const c of await al.conceptosVencidos(ahora)) {
+    if (await enPausa(c.encargo_id)) continue
     const motivo = `la mesa de concepto (versión ${c.version}) no entregó antes de su plazo más la holgura (${c.plazo_en})`
     await al.actualizarConcepto(c.campana_id, c.version, { estado: 'sin_mesa', motivo })
     const sinMesa = (await al.conceptosDe(c.campana_id)).filter((x) => x.estado === 'sin_mesa').length
@@ -989,9 +994,38 @@ export async function conceptoEntregar(al: Almacen, cuerpo: Record<string, unkno
   return { status: r.ok ? 200 : 409, cuerpo: { ...r } }
 }
 
+/**
+ * 24-nov · RETOMAR DONDE SE CAYÓ (GO Lenovo 10:53Z, decisión de Emilio) · la gran idea que la mesa entregó a medias porque el proveedor se cayó (saldo, red…)
+ * vuelve a `abierta` para que la MISMA mesa (el mismo encargo, con su libro) la termine. Lo pide la oficina con `reanudar`, que ya comprobó que la mesa cerró
+ * por una causa externa. Aquí, las guardas de la cadena:
+ *  · la versión existe, es la ÚLTIMA y la entregó ESE encargo;
+ *  · sigue `lista` con la aprobación `pendiente` (Emilio no la decidió: una aprobada o mandada a cambios no se toca);
+ *  · la escritura es CONDICIONAL al estado leído (si otra escritura se adelantó, no reabre).
+ * Al reabrir: la espera de la aprobación se CANCELA y la tarjeta de Emilio se RETIRA (no es una decisión suya; no se registra como tal), y la versión gana un plazo nuevo.
+ */
+export const MOTIVO_REABIERTA_POR_CAUSA_EXTERNA = 'reabierta para retomar la mesa donde se cayó (causa externa: proveedor o red)'
+export async function reabrirConceptoPorCausaExterna(al: Almacen, p: { campana_id: string; version: number; encargo_id: string }, ahora: string): Promise<EntregaALaCadena> {
+  const campana = await al.campana(p.campana_id)
+  if (!campana) return { ok: false, error: `campaña ${p.campana_id} inexistente` }
+  const todos = await al.conceptosDe(campana.id)
+  const fila = todos.find((x) => x.version === p.version)
+  if (!fila) return { ok: false, error: `la versión ${p.version} de la gran idea no existe` }
+  if (fila.encargo_id !== p.encargo_id) return { ok: false, error: `la versión ${p.version} la entregó otro encargo (${fila.encargo_id ?? 'ninguno'})` }
+  if (todos.some((x) => x.version > p.version)) return { ok: false, error: `la versión ${p.version} ya no es la última: la campaña siguió con otra` }
+  if (fila.estado !== 'lista' || fila.aprobacion !== 'pendiente') return { ok: false, error: `la versión ${p.version} no está esperando a Emilio (${fila.estado}/${fila.aprobacion ?? 'sin decisión'}): no se reabre` }
+  const ok = await al.actualizarConceptoSi(campana.id, p.version, 'lista', {
+    estado: 'abierta', aprobacion: null, texto_md: null, leido: null, hitl_id: null, motivo: MOTIVO_REABIERTA_POR_CAUSA_EXTERNA,
+    plazo_en: masMinutos(ahora, PLAZO_DE_MESA_MIN.concepto + HOLGURA_DE_MESA_MIN),
+  })
+  if (!ok) return { ok: false, error: `la versión ${p.version} cambió mientras se reabría: no se reabre` }
+  await resolverEsperas(al, campana.id, TIPO_DE_ESPERA_DE_CONCEPTO, objetoDeEsperaDeConcepto(p.version), 'cancelada')
+  if (fila.hitl_id) await al.cerrarTarjetaDeConcepto(fila.hitl_id, { status: 'rejected', decision: { accion: 'retirada_para_retomar', motivo: MOTIVO_REABIERTA_POR_CAUSA_EXTERNA, version: p.version } })
+  return { ok: true, estado: 'abierta' }
+}
+
 /** el puerto que la OFICINA recibe en su entorno (`Entorno.puertoDeLaCadena`, CC2): en proceso, sin HTTP; nunca lanza.
  *  El almacén puede venir como fábrica DIFERIDA (se crea en la primera entrega): armar el entorno de la oficina no debe abrir la base. */
-export function puertoDeLaCadena(al: Almacen | (() => Almacen), reloj: () => string = () => new Date().toISOString()): { entregarBrief(p: EntregaDeBrief): Promise<EntregaALaCadena>; entregarConcepto(p: EntregaDeConcepto): Promise<EntregaALaCadena>; entregarReubicacion(p: EntregaDeReubicacion): Promise<EntregaALaCadena>; entregarFallidos(p: EntregaDeFallidos): Promise<EntregaALaCadena>; entregarBanco(p: EntregaDelBanco): Promise<EntregaALaCadena>; devolverCorreccion(p: Record<string, unknown>): Promise<Respuesta>; correccionesDelEncargo(encargoId: string): Promise<Respuesta> } {
+export function puertoDeLaCadena(al: Almacen | (() => Almacen), reloj: () => string = () => new Date().toISOString()): { entregarBrief(p: EntregaDeBrief): Promise<EntregaALaCadena>; entregarConcepto(p: EntregaDeConcepto): Promise<EntregaALaCadena>; reabrirConcepto(p: { campana_id: string; version: number; encargo_id: string }): Promise<EntregaALaCadena>; entregarReubicacion(p: EntregaDeReubicacion): Promise<EntregaALaCadena>; entregarFallidos(p: EntregaDeFallidos): Promise<EntregaALaCadena>; entregarBanco(p: EntregaDelBanco): Promise<EntregaALaCadena>; devolverCorreccion(p: Record<string, unknown>): Promise<Respuesta>; correccionesDelEncargo(encargoId: string): Promise<Respuesta> } {
   let instancia: Almacen | null = typeof al === 'function' ? null : al
   const almacen = (): Almacen => (instancia ??= (al as () => Almacen)())
   const seguroRuta = async (f: (a: Almacen) => Promise<Respuesta>): Promise<Respuesta> => { try { return await f(almacen()) } catch (e) { return { status: 500, cuerpo: { ok: false, error: (e instanceof Error ? e.message : String(e)).slice(0, 300) } } } }
@@ -999,6 +1033,8 @@ export function puertoDeLaCadena(al: Almacen | (() => Almacen), reloj: () => str
   return {
     entregarBrief: (p) => seguro((a) => recibirBrief(a, p, reloj())),
     entregarConcepto: (p) => seguro((a) => recibirConcepto(a, p, reloj())),
+    // 24-nov · retomar donde se cayó: la gran idea entregada a medias por una caída externa vuelve a `abierta` (con sus guardas)
+    reabrirConcepto: (p) => seguro((a) => reabrirConceptoPorCausaExterna(a, p, reloj())),
     // 10-nov · la mesa de reubicación (filas que quedaron atrás): la cadena verifica la decisión por código antes de aplicarla
     entregarReubicacion: (p) => seguro((a) => recibirReubicacion(a, p, reloj())),
     // 11-nov · la mesa de revisión de fallidos: la cadena verifica cada veredicto por código antes de reabrir

@@ -40,6 +40,7 @@ import { COTAS, FAMILIAS_MESA, esDeLaCadena, esperaDelTurnoS, reservaPorTurnoDe,
 import { bloqueDelPerfil } from '../../perfil-del-publico/lectores'
 import { modoDeLaPlantilla } from './un-autor'
 import type { FuentesCompletas } from '../puertos'
+import { CAUSA_LEGIBLE, causaExterna, cerroPorCausaExterna, PREFIJO_TURNO_EN_PAUSA, type PausaExterna } from './causa-externa'
 
 /** 19-nov · ADENDA 1 · P2b: el perfil del público de la mesa de piezas: el mismo bloque que leen la jefatura y los pedidos de la oficina (vigente, sin leer o ninguno, DICHO) */
 const perfilDeLaMesa = (F: Pick<FuentesCompletas, 'perfil_del_publico'>): { perfil_texto?: string } => { const b = F.perfil_del_publico ? bloqueDelPerfil(F.perfil_del_publico) : ''; return b ? { perfil_texto: b } : {} }
@@ -277,6 +278,12 @@ export async function avanzarMesa(P: Puertos, enc0: Encargo, pl: Plantilla, indi
       // 19-nov · la tanda B (un solo autor): el modo lo dice la plantilla (dato) y queda congelado al abrir
       const modo = modoDeLaPlantilla(pl.limites)
       est = { ...estadoInicialDeLaMesa(tipo, dir), ...(modo ? { modo } : {}), ...(tipo === 'video' ? {video: parametrosDelVideo(pl) } : {}), ...(esDeImagen(tipo) && propuestasDeLaPlantilla(pl) > 1 ? { imagen: { propuestas: propuestasDeLaPlantilla(pl) } } : {}), ...(esDeLaCadena(tipo) ? { condiciones: marcoDe(enc.estado_del_motor)?.condiciones ?? [] } : (() => { const cx = contextoDe(enc, estadoInicialDeLaMesa(tipo, dir)); const c = [...condicionesDeLaPieza(cx.brief_texto, cx.manual_texto, cx.plan_texto), ...(tipo === 'video' ? condicionesDelVideo(baseDeLaminas(enc.estado_del_motor).brief) : [])]; return c.length ? { condiciones: c } : {} })()) }
+      enc = await guardarMesa(P, enc, est)
+    }
+    // 24-nov · retomar donde se cayó: `siguiente` sobre una mesa en pausa por causa externa la reanuda. Se quita la pausa y el planificador, con el MISMO libro,
+    // vuelve a pedir el paso que se cayó (lo pagado no se repite: los aportes hechos siguen en el libro)
+    if (est.pausa_externa) {
+      est = { ...est, pausa_externa: null, reanudada_en: P.ahora().toISOString(), marcas: { ...est.marcas, reanudaciones: Number(est.marcas.reanudaciones ?? 0) + 1 } }
       enc = await guardarMesa(P, enc, est)
     }
     const e = enc.estado_del_motor
@@ -642,6 +649,38 @@ export async function entregarPorTopeDeLaMesa(P: Puertos, enc: Encargo, motivo: 
   return aTextoParaLaJefatura(P, enc, est, texto, motivo, 'cerrado_por_tope')
 }
 
+/**
+ * 24-nov · REANUDAR (GO Lenovo 10:53Z · decisión de Emilio: «retomar desde el punto exacto donde se cayó») · la acción `reanudar` de la ruta de turnos.
+ *  · una mesa EN PAUSA por causa externa: es lo mismo que `siguiente` (retoma el paso que se cayó);
+ *  · una mesa de la gran idea que YA CERRÓ porque el proveedor se cayó (la de antes de este arreglo): solo si el último aporte de su libro es una caída externa
+ *    y la cadena acepta reabrir la versión (sigue `lista`/`pendiente`, es la última y la entregó este encargo). Entonces el encargo vuelve a `en_paso` con el MISMO
+ *    libro y el planificador sigue desde donde se cayó (las caídas externas ya no cuentan como intentos). Nada de SQL a mano: lo hace la plataforma, con sus guardas.
+ * Cualquier otro caso: 409 con el porqué (nunca reabre un cierre normal, un tope ni una falla del agente). Avanzar puede gastar: lo llama quien tenga el dale.
+ */
+export async function reanudarMesa(P: Puertos, encargoId: string): Promise<Respuesta> {
+  const enc = await P.almacen.leerEncargo(encargoId)
+  if (!enc) return r(404, { error: 'encargo_inexistente' })
+  if (!P.mesa) return r(500, { error: 'mesa_sin_puerto' })
+  const est = estadoDeLaMesa(enc.estado_del_motor)
+  if (!est) return r(409, { error: 'no_es_una_mesa', detalle: 'el encargo no tiene mesa: no hay nada que reanudar' })
+  if (enc.estado === 'en_paso') {
+    if (!est.pausa_externa) return r(409, { error: 'no_esta_en_pausa', detalle: 'la mesa sigue trabajando: no hay nada que reanudar' })
+    return avanzar(P, enc.id)
+  }
+  if (enc.estado !== 'cerrado') return r(409, { error: 'no_se_reanuda', detalle: `el encargo está «${enc.estado}»: solo se reanuda una mesa en pausa o una que cerró por una caída externa` })
+  const ref = (enc.sala_ref ?? {}) as { tipo_de_mesa?: string; campana_id?: string; version?: number }
+  if (ref.tipo_de_mesa !== 'concepto' || !ref.campana_id || !ref.version) return r(409, { error: 'no_se_reanuda', detalle: 'por ahora solo se reabre la mesa de la gran idea ya cerrada (las demás quedan en pausa sin cerrar desde este arreglo)' })
+  if (est.fase !== 'trabajando') return r(409, { error: 'no_se_reanuda', detalle: `la mesa ya pasó a «${est.fase}»` })
+  const causa = cerroPorCausaExterna(await P.mesa.libro(enc.id))
+  if (!causa) return r(409, { error: 'no_cerro_por_causa_externa', detalle: 'el último aporte del libro no es una caída externa: la mesa cerró por su camino normal y no se reabre' })
+  if (!P.cadena?.reabrirConcepto) return r(409, { error: 'sin_cadena', detalle: 'la cadena no reabre la gran idea en este entorno' })
+  const c = await P.cadena.reabrirConcepto({ campana_id: ref.campana_id, version: ref.version, encargo_id: enc.id })
+  if (!c.ok) return r(409, { error: 'la_cadena_no_reabre', detalle: c.error ?? 'la cadena no reabrió la gran idea' })
+  const est2: EstadoMesa = { ...est, pausa_externa: null, cierre_forzado: null, turno_abierto: null, reanudada_en: P.ahora().toISOString(), marcas: { ...est.marcas, reanudada_tras_cierre: Number(est.marcas.reanudada_tras_cierre ?? 0) + 1 } }
+  await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: conMesa(enc.estado_del_motor, est2), gasto_usd: enc.estado_del_motor.gasto_usd, estado: 'en_paso' })
+  return avanzar(P, enc.id)
+}
+
 /** la respuesta de un turno de la mesa (agente) */
 export async function recibirResultadoMesa(P: Puertos, encargoId: string, n: number, res: ResultadoDeTurno): Promise<Respuesta> {
   const enc = await P.almacen.leerEncargo(encargoId)
@@ -660,6 +699,22 @@ export async function recibirResultadoMesa(P: Puertos, encargoId: string, n: num
   const nuevoGasto = +(e.gasto_usd + costo).toFixed(6)
   const turnoBase = { paso: abierto.paso, tipo: 'agente', agente: t.agente, dispatch_key: abierto.dispatch_key, cost_usd: costo, workflow_execution_id: res.workflow_execution_id ?? null, tokens_in: res.tokens_in ?? null, tokens_out: res.tokens_out ?? null }
   const texto = typeof res.texto === 'string' ? res.texto.trim() : ''
+  // 24-nov · retomar donde se cayó (decisión de Emilio): el turno cayó por causa EXTERNA (saldo, proveedor saturado o caído, red). No es culpa del agente: NO cuenta
+  // como intento, la mesa NO cierra ni entrega a medias. Queda en pausa (`en_paso`, sin turno corriendo), con el motivo a la vista, UN aviso a #alertas por pausa,
+  // y se retoma con `siguiente` desde este mismo paso. Mismo patrón que el portero roto: esperar sin gastar.
+  const externa = res.error || res.pedido_no_llego === true ? causaExterna(res) : null
+  if (externa) {
+    await P.mesa.aportar(aporteNuevo(enc, t.agente, null, 'nota', `${PREFIJO_TURNO_EN_PAUSA}: ${externa.motivo}`, { costo_usd: costo, workflow_execution_id: res.workflow_execution_id ?? null }))
+    const pausa: PausaExterna = { causa: externa.clave, motivo: externa.motivo, agente: t.agente, tipo: t.tipo, paso: abierto.paso, n, en: new Date().toISOString() }
+    const e2: Estado = { ...e, pasos_ejecutados: e.pasos_ejecutados + 1, gasto_usd: nuevoGasto }
+    const est2: EstadoMesa = { ...est, turnos: est.turnos + 1, turno_abierto: null, gasto_de_los_turnos_usd: +((est.gasto_de_los_turnos_usd ?? 0) + costo).toFixed(6), pausa_externa: pausa, marcas: { ...est.marcas, pausas_externas: Number(est.marcas.pausas_externas ?? 0) + 1 } }
+    await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: conMesa(e2, est2), gasto_usd: nuevoGasto, estado: 'en_paso', turno: { ...turnoBase, n, estado: 'fallo', error: `${PREFIJO_TURNO_EN_PAUSA}: ${externa.motivo}` }, ...(gasto.length ? { gastos: gasto } : {}) })
+    try {
+      // UNA alarma por incidente: la primera pausa del encargo va a #alertas; las siguientes (otra reanudación que vuelve a caer) a su hilo
+      await P.avisar({ canal: Number(est.marcas.pausas_externas ?? 0) > 0 ? 'hilo' : 'alertas', encargo_id: enc.id, dry_run: enc.dry_run, texto: `⏸️ La mesa ${enc.brief_id} quedó EN PAUSA: ${CAUSA_LEGIBLE[externa.clave]} (${externa.motivo}). Lo hecho sigue guardado; no se cerró ni se entregó a medias. Se retoma desde el turno de ${t.agente} (${t.tipo}) cuando se resuelva.` })
+    } catch { /* el aviso nunca frena la pausa */ }
+    return r(200, { accion: 'en_pausa_por_causa_externa', encargo_id: enc.id, causa: externa.clave, motivo: externa.motivo, agente: t.agente, tipo: t.tipo })
+  }
   if (res.error || !texto) {
     // el turno murió o devolvió nada: queda anotado en el libro (la mesa lo reintenta hasta 3 veces por agente y luego sigue sin él; nunca se inventa un aporte)
     await P.mesa.aportar(aporteNuevo(enc, t.agente, null, 'nota', `turno_fallido: ${res.error ?? 'respuesta vacía'}`.slice(0, 400), { costo_usd: costo, workflow_execution_id: res.workflow_execution_id ?? null }))
