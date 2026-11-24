@@ -343,6 +343,18 @@ export async function entregarALaCadena(P: Puertos, enc: Encargo, o: { texto: st
  * Vive aquí porque solo la oficina nombra sus tablas; la cadena lo importa en el acto. Nunca lanza.
  * 🟡 CC7 punto 4 · «no hay texto» (`ok: true, texto: null`) NO es lo mismo que «la base no respondió» (`ok: false`): un error pasajero no debe dar la relectura por hecha.
  */
+/**
+ * 24-nov · retomar donde se cayó · ¿la mesa de este encargo está EN PAUSA por una causa externa? · sí solo si el encargo sigue `en_paso` y su mesa guarda
+ * `pausa_externa` (un cerrado que arrastre la marca, no). Vive aquí porque solo la oficina nombra sus tablas; el reloj de la cadena la importa en el acto.
+ * Un error de la base LANZA (el reloj lo atrapa y vence como siempre).
+ */
+export async function mesaEnPausaEnLaBase(db: { from: (t: string) => any }, encargoId: string): Promise<boolean> {
+  const { data, error } = await db.from('oficina_encargos').select('estado, estado_del_motor').eq('id', encargoId).maybeSingle()
+  if (error) throw new Error(`leer la pausa de la mesa: ${String((error as { message?: unknown }).message ?? 'error de la base')}`)
+  const f = data as { estado?: string; estado_del_motor?: { artefactos?: { mesa?: { datos?: { pausa_externa?: unknown } } } } | null } | null
+  return !!f && f.estado === 'en_paso' && !!f.estado_del_motor?.artefactos?.mesa?.datos?.pausa_externa
+}
+
 export type TextoGuardado = { ok: true; texto: string | null } | { ok: false; motivo: string }
 export async function textoGuardadoDeLaMesa(db: { from: (t: string) => any }, encargoId: string): Promise<TextoGuardado> {
   try {

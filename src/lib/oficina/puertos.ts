@@ -164,6 +164,8 @@ export type EntregaALaCadena = { ok: true; estado?: string; ya_cerrada?: boolean
 export interface PuertoDeLaCadena {
   entregarBrief(p: { campana_id: string; version: number; encargo_id: string; texto: string | null; costo_usd: number; motivo: string | null }): Promise<EntregaALaCadena>
   entregarConcepto(p: { campana_id: string; version: number; encargo_id: string; texto: string | null; costo_usd: number; motivo: string | null; brief_devuelto?: string | null }): Promise<EntregaALaCadena>
+  /** 24-nov · retomar donde se cayó: la gran idea que ESTE encargo entregó a medias por una caída externa vuelve a `abierta` (la cadena pone sus guardas). Opcional: sin él, no se reanuda y lo dice */
+  reabrirConcepto?(p: { campana_id: string; version: number; encargo_id: string }): Promise<EntregaALaCadena>
   /** 10-nov · la mesa de reubicación (filas que quedaron atrás sin producir) entrega la decisión del agente; la cadena la VERIFICA por código antes de aplicarla. Opcional: sin él, la entrega no llega y lo dice */
   entregarReubicacion?(p: { campana_id: string; version: number; encargo_id: string; texto: string | null; costo_usd: number; motivo: string | null }): Promise<EntregaALaCadena>
   /** 11-nov · la mesa de revisión de fallidos entrega sus veredictos; la cadena los VERIFICA por código antes de reabrir. Opcional: sin él, la entrega no llega y lo dice */
