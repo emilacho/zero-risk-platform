@@ -403,8 +403,8 @@ describe('la estrategia: preparar y guardar', () => {
   it('🔴 el presupuesto de planificación se respeta: sin presupuesto no se llama (18-nov grupo A: sin necesita_humano) y un corte con costo 0 en el libro cuenta el tope', async () => {
     const al = almacen()
     const id = idCampana(await abrir(al))
-    al.campanas[0].presupuesto_planificacion_usd = 4.5 // 21-nov #1260: 1,5 × el tope temporal de la estrategia (US$ 3): alcanza para UNA llamada, no para dos
-    al.campanas[0].tope_gasto_usd = 4.5 // la bolsa se agrandaría sola al triple; el tope de la campaña la deja donde está
+    al.campanas[0].presupuesto_planificacion_usd = 15 // 24-nov: 1,5 × el tope de la estrategia (US$ 10): alcanza para UNA llamada, no para dos
+    al.campanas[0].tope_gasto_usd = 15 // la bolsa se agrandaría sola; el tope de la campaña la deja donde está
     const p = await estrategiaPreparar(al, { ...wf(), campana_id: id }, AHORA)
     await estrategiaGuardar(al, { ...wf(), campana_id: id, corrida_id: p.cuerpo.corrida_id, resultado: { success: false, cost_usd: 0, cerrada_por_tope: true, error: 'cortada' } }, AHORA)
     expect(al.corridas[0].estado).toBe('cerrada_por_tope')
@@ -414,7 +414,7 @@ describe('la estrategia: preparar y guardar', () => {
     expect(otra.status).toBe(409)
     expect(otra.cuerpo.error).toBe('presupuesto_agotado')
     expect(al.campanas[0].estado).not.toBe('necesita_humano')
-    expect(al.campanas[0].presupuesto_planificacion_usd).toBe(4.5)
+    expect(al.campanas[0].presupuesto_planificacion_usd).toBe(15)
   })
   it('la corrida de otra campaña o inexistente es 404; guardar dos veces la misma no la duplica', async () => {
     const al = almacen()

@@ -13,7 +13,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   bolsaDePlanificacion, COSTO_DE_UN_TURNO_AL_TECHO_USD, MAXIMO_DE_INTENTOS, MODELO_POR_DEFECTO, PASOS_POR_EL_CORREDOR, PRECIO_DEL_MODELO_DE_LA_CADENA_USD_POR_MILLON, PRESUPUESTO_LECTOR_POR_OMISION,
-  RAZONAMIENTO_POR_DEFECTO, razonamientoDelPaso, TECHO_DE_SALIDA_TOKENS, TOPE_DE_CALENDARIO_FECHAS_Y_FICHAS_USD, TOPE_DE_UN_TURNO_AL_TECHO_USD, TOPE_DE_VUELTAS_DEL_SUBFLUJO, TOPE_POR_PASO_USD, topeDelPaso, type Paso,
+  RAZONAMIENTO_POR_DEFECTO, razonamientoDelPaso, TECHO_DE_SALIDA_TOKENS, TOPE_DE_CALENDARIO_FECHAS_Y_FICHAS_USD, TOPE_DE_LA_ESTRATEGIA_USD, TOPE_DE_UN_TURNO_AL_TECHO_USD, TOPE_DE_VUELTAS_DEL_SUBFLUJO, TOPE_POR_PASO_USD, topeDelPaso, type Paso,
 } from '../constantes'
 import { cuerpoDeRunSdk } from '../pasos'
 
@@ -41,14 +41,20 @@ describe('el tope de una llamada cubre un turno al techo de salida (punto 5)', (
     expect(TOPE_DE_UN_TURNO_AL_TECHO_USD).toBe(3)
     expect(TOPE_DE_UN_TURNO_AL_TECHO_USD).toBeGreaterThanOrEqual(COSTO_DE_UN_TURNO_AL_TECHO_USD)
   })
-  it('🔴 23-nov · la estrategia lleva el tope de un turno (US$ 3); calendario, fechas y fichas, US$ 10 (Emilio «subelo a 10»); el brief, el de siempre (US$ 1)', () => {
+  it('🔴 24-nov · la estrategia, el calendario, las fechas y las fichas llevan US$ 10 (Emilio «subelo a 10» y «si» a la opción a); el brief, el de siempre (US$ 1)', () => {
     expect(TOPE_DE_CALENDARIO_FECHAS_Y_FICHAS_USD).toBe(10)
-    expect(TOPE_POR_PASO_USD).toEqual({ estrategia: 3, calendario: 10, fechas: 10, fichas: 10 })
-    expect(Object.fromEntries(PASOS.map((p) => [p, topeDelPaso(p)]))).toEqual({ estrategia: 3, calendario: 10, fechas: 10, brief: 1, fichas: 10 })
+    expect(TOPE_DE_LA_ESTRATEGIA_USD).toBe(10)
+    expect(TOPE_POR_PASO_USD).toEqual({ estrategia: 10, calendario: 10, fechas: 10, fichas: 10 })
+    expect(Object.fromEntries(PASOS.map((p) => [p, topeDelPaso(p)]))).toEqual({ estrategia: 10, calendario: 10, fechas: 10, brief: 1, fichas: 10 })
     for (const p of PASOS_POR_EL_CORREDOR) expect(topeDelPaso(p), p).toBeGreaterThanOrEqual(COSTO_DE_UN_TURNO_AL_TECHO_USD)
   })
   it('🔴 el cuerpo del agente lleva el tope de SU paso', () => {
     for (const p of PASOS) expect(cuerpoDeRunSdk(p, MODELO_POR_DEFECTO, 't', { type: 'object' }, 'c1').max_budget_usd, p).toBe(topeDelPaso(p))
+  })
+  it('🔴 24-nov · la llamada de la estrategia sale con US$ 10 y razonamiento `maximo` (799f6dc3 se cortó en 2,93 contra 3)', () => {
+    const cuerpo = cuerpoDeRunSdk('estrategia', MODELO_POR_DEFECTO, 't', { type: 'object' }, 'c1')
+    expect(cuerpo.max_budget_usd).toBe(10)
+    expect(cuerpo.thinking_mode).toBe('maximo')
   })
   it('🔴 la bolsa propia de las fichas alcanza para TODOS sus intentos caídos (cada uno cuenta su tope entero): 3 × 10 = US$ 30', () => {
     expect(PRESUPUESTO_LECTOR_POR_OMISION).toBe(30)
