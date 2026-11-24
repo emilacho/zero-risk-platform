@@ -190,7 +190,11 @@ describe('condición 1 · vigilancia sobre todo src/lib/cerebro/ y src/app/api/b
   const PUEDEN_LEER_EL_PEDIDO = [/^src\/lib\/cerebro\/conversacion\.ts$/, /^src\/lib\/cerebro\/portero\/instruccion\.ts$/]
   it('hay archivos que revisar (la vigilancia no está mirando el vacío)', () => { expect(TODO().length).toBeGreaterThan(15) })
   it('ningún archivo del cerebro ni de la ruta nombra una búsqueda por parecido con el pedido (nombres de las formas que ya se intentaron y otros)', () => {
-    for (const { rel, t } of TODO()) expect(t, rel).not.toMatch(/palabrasDelPedido|\bpuntaje\b|puntuar|recortada_por_coincidencia|MAXIMO_DE_LINEAS_POR_ESTANTE|SIN_VALOR|coincidencia|afinidad|similitud|parecido|relevancia|\bsimilar\b/i)
+    // 24-nov · encargo 17 (única excepción, exacta y mínima): `relevancia_juicio` es la COLUMNA de `client_social_images`
+    // con el juicio «sirve» de una referencia, YA guardado por su propio camino; leerla no es buscar por parecido.
+    // La palabra «relevancia» suelta, o cualquier otra forma, sigue prohibida.
+    const sinLaColumna = (s: string): string => s.split('relevancia_juicio').join('')
+    for (const { rel, t } of TODO()) expect(sinLaColumna(t), rel).not.toMatch(/palabrasDelPedido|\bpuntaje\b|puntuar|recortada_por_coincidencia|MAXIMO_DE_LINEAS_POR_ESTANTE|SIN_VALOR|coincidencia|afinidad|similitud|parecido|relevancia|\bsimilar\b/i)
   })
   it('ningún archivo parte textos en palabras para compararlos (normalizar tildes, partir por no-letras, regex sobre el pedido)', () => {
     for (const { rel, t: texto } of TODO()) {

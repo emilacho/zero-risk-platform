@@ -52,7 +52,7 @@ describe('encargo 17 · la sección nace sin vigencia', () => {
     expect(out).toMatchObject({ output_type: TIPO_DE_BORRADOR_DE_LA_SECCION, status: 'draft', client_id: C })
     const tarjeta = db.tablas['hitl_queue'].find((f) => String(f.id) === hitl_id)!
     expect(tarjeta).toMatchObject({ type: TIPO_DE_BANDEJA_DE_LA_SECCION, status: 'pending', output_id, client_id: C })
-    expect(String(tarjeta.output_preview)).toContain('hiperrealista') // Emilio LEE lo que aprueba
+    expect(String(tarjeta.output_preview)).toBe(PROSA.trim()) // Emilio LEE ENTERO lo que aprueba: nada se recorta
   })
   it('en seco valida todo y no guarda nada', async () => {
     const db = armarDb()

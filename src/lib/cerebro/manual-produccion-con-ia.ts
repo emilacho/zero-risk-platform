@@ -1,6 +1,6 @@
 /**
  * ENCARGO 16 · 21-nov · «CÓMO SE PRODUCE CON IA» SE ESCRIBE (la sección del manual firmada el 18-nov; el lado que la lee ya está en main).
- * ENCARGO 17 · 24-nov · SE REHACE DE FONDO (la v6 de Náufrago no cumplió: era pieza literaria, en voseo, de una sola sede y sin referencias).
+ * ENCARGO 17 · 24-nov · SE REHACE DE FONDO (la primera sección escrita no cumplió: era pieza literaria, en otro trato, de una sola sede y sin referencias).
  *   El pedido ahora exige una GUÍA PARA PRODUCIR: registro visual con su porqué, citas de foto o hecho, TODAS las sedes y ofertas
  *   (una sede solo-delivery se cubre con producto, empaque y apps, no se omite), la versión que vale con fuente y fecha cuando
  *   dos fuentes difieren, y las referencias juzgadas «sirve». Cada hecho y foto viaja con su fecha para que el agente pueda arbitrar.
@@ -174,7 +174,7 @@ export async function prepararProduccionConIa(db: Db, clientId: string, o: { ree
   const sedes = lista(se.data)
   let datosDeSedes: DatoDeSede[] = []
   if (sedes.length) {
-    const sd = await db.from('client_sede_datos').select('sede_id, campo, valor_texto, fuente, observado_en').eq('client_id', clientId).order('observado_en', { ascending: false }).limit(1000)
+    const sd = await db.from('client_sede_datos').select('sede_id, campo, valor_texto, fuente, observado_en').eq('client_id', clientId).is('retirada_en', null).order('observado_en', { ascending: false }).limit(1000)
     if (sd.error) return falla('client_sede_datos', sd.error.message)
     datosDeSedes = lista(sd.data).map((d) => ({ sede_id: String(d.sede_id), campo: txt(d.campo), valor: txt(d.valor_texto), fuente: txt(d.fuente), fecha: fecha10(d.observado_en) }))
   }

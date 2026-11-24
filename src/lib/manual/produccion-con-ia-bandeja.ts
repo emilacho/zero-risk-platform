@@ -47,7 +47,7 @@ export async function guardarBorradorDeLaSeccion(db: Db, e: { client_id: string;
 
   const hitl = await db.from('hitl_queue').insert({
     client_id: e.client_id, agent_name: 'manual · sección produccion_con_ia', risk_type: 'strategic_decision',
-    output_preview: texto.length > 500 ? `${texto.slice(0, 500)}…` : texto, type: TIPO_DE_BANDEJA_DE_LA_SECCION,
+    output_preview: texto, type: TIPO_DE_BANDEJA_DE_LA_SECCION, // nada se recorta: Emilio lee ENTERO lo que aprueba
     title: `«Cómo se produce con IA» · aprobar para que entre al manual (versión base ${e.version_base})`,
     priority: 'medium', status: 'pending', payload: {}, metadata: { version_base: e.version_base, largo: texto.length }, output_id,
     expires_at: new Date(ahora.getTime() + DIAS_DE_VIGENCIA_DE_LA_TARJETA * 86_400_000).toISOString(),
