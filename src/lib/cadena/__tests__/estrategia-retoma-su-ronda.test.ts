@@ -64,6 +64,18 @@ describe('la corrección de la estrategia se retoma de la base, no de la memoria
     expect(tarea(p)).toContain('CORRECCIÓN')
     expect(p.cuerpo.retoma_la_correccion).toBeUndefined()
   })
+  // CC6 · certificación de #1281 · b3: si el subflujo manda sus fichas, GANAN las suyas (no las de la base)
+  it('🔴 con una ronda guardada (fichas A) y un `preparar` que manda OTRAS fichas (B): la tarea lleva B y no A, sin la marca de retomada', async () => {
+    const al = almacen()
+    const { id, g0 } = await conLaPrimeraBloqueada(al)
+    const a = (g0.cuerpo.fichas as Array<{ que: string }>).map((f) => f.que)
+    expect(a.length).toBeGreaterThan(0)
+    const B = [{ que: 'FICHA-B-ÚNICA: la fase 2 no nombra su oferta', donde: 'tanda', contra_que: 'el plan', gravedad: 'bloquea', propuesta: 'nombrar la oferta' }]
+    const p = await estrategiaPreparar(al, { ...wf(), campana_id: id, correccion: { fichas: B } }, AHORA)
+    expect(tarea(p)).toContain('FICHA-B-ÚNICA')
+    for (const q of a) expect(tarea(p)).not.toContain(q)
+    expect(p.cuerpo.retoma_la_correccion).toBeUndefined()
+  })
   it('control: una campaña sin rondas guardadas hace la primera pasada de siempre (`v1:c0`, sin corrección)', async () => {
     const al = almacen()
     const id = await abierta(al)
