@@ -33,8 +33,8 @@ export const FRASES_DE_CAUSA_EXTERNA: Readonly<Record<ClaveDeCausaExterna, reado
 /** un código HTTP del proveedor dicho en el texto («status 529», «HTTP 503», «status=429»): nunca un número suelto (un «US$ 0.0500» no es un 500) */
 const CODIGO_EN_EL_TEXTO = /\b(?:status|http|c[oó]digo)\s*[:=]?\s*(429|5\d\d)\b/i
 
-const MAX_MOTIVO = 300
-const limpio = (t: string): string => t.replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, MAX_MOTIVO)
+// el motivo va ENTERO (sin cortes · G9): solo se aplanan los saltos y los espacios para que se lea en una línea
+const limpio = (t: string): string => t.replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim()
 
 const porCodigo = (c: number): ClaveDeCausaExterna | null => (c === 429 || c === 529 ? 'limite_del_proveedor' : c >= 500 && c <= 599 ? 'proveedor_caido' : null)
 
