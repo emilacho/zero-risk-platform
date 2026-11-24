@@ -97,6 +97,22 @@ describe('se retoma desde el MISMO paso', () => {
     expect((r.cuerpo.turno as T).paso).toBe(t.paso)
     expect(enc(M, id).estado_del_motor.pausa_externa).toBeNull()
   })
+  // CC6 · certificación de #1280 · p6: una pieza cerrada a mano que arrastra la marca de pausa no se vuelve a mover
+  it('`reanudar` de una pieza `cerrado` o `fallido` que ARRASTRA `pausa_externa`: 409 `no_se_reanuda`, sin avanzar ni abrir turno', async () => {
+    for (const estado of ['cerrado', 'fallido'] as const) {
+      const { M, id, t } = await enEspera()
+      await recibirResultado(M.P, id, t.n, { error: SIN_SALDO, costo_usd: 0 })
+      expect(enc(M, id).estado_del_motor.pausa_externa).toBeTruthy()
+      enc(M, id).estado = estado
+      const turnosAntes = M.turnos.get(id)!.size
+      const r = (await reanudarMesa(M.P, id)) as R
+      expect(r.status).toBe(409)
+      expect(r.cuerpo.error).toBe('no_se_reanuda')
+      expect(enc(M, id).estado).toBe(estado)
+      expect(enc(M, id).estado_del_motor.pausa_externa).toBeTruthy()
+      expect(M.turnos.get(id)!.size).toBe(turnosAntes)
+    }
+  })
   it('`reanudar` se niega con el porqué: una pieza trabajando (sin pausa) o una cerrada', async () => {
     const a = await enEspera()
     const ra = (await reanudarMesa(a.M.P, a.id)) as R
