@@ -232,17 +232,27 @@ describe('3 · los puntos de detección marcan en el momento', () => {
     return { M, id, n: t.n }
   }
   it('🔴 la vuelta con `upstream_status` (también el 200 del redespliegue) cierra marcada `corredor_caido`', async () => {
-    for (const s of [200, 0, 502]) {
+    for (const s of [200, 0]) {
       const { M, id, n } = await enEspera()
       const r = await recibirResultado(M.P, id, n, { error: 'el agente FALLÓ · agent-runner upstream failed', upstream_status: s })
       expect(r.cuerpo).toMatchObject({ accion: 'cerrado', estado: 'fallido' })
       expect(corteDe(M, id)).toEqual({ origen: 'corredor_caido' })
     }
   })
-  it('🔴 la vuelta con `pedido_no_llego` cierra marcada; el MISMO texto sin campos cierra sin marca (cuenta)', async () => {
+  // 24-nov · entrega 2a (retomar donde se cayó · GO Lenovo 11:16Z): un 5xx del proveedor ya NO cierra la pieza (ni con marca): queda en pausa, sin gastar versión
+  it('🔴 la vuelta con `upstream_status` 5xx queda EN PAUSA (no cierra, no cuenta versión)', async () => {
+    const { M, id, n } = await enEspera()
+    const r = await recibirResultado(M.P, id, n, { error: 'el agente FALLÓ · agent-runner upstream failed', upstream_status: 502 })
+    expect(r.cuerpo).toMatchObject({ accion: 'en_pausa_por_causa_externa', causa: 'proveedor_caido' })
+    expect(M.encargos.get(id)!.estado).toBe('en_paso')
+    expect(M.encargos.get(id)!.estado_del_motor.pausa_externa).toMatchObject({ causa: 'proveedor_caido' })
+    expect(corteDe(M, id)).toBeNull()
+  })
+  it('🔴 la vuelta con `pedido_no_llego` queda EN PAUSA (red); el MISMO texto sin campos cierra sin marca (cuenta)', async () => {
     const a = await enEspera()
-    await recibirResultado(a.M.P, a.id, a.n, { error: 'OFICINA_PEDIDO_NO_LLEGO · timeout', pedido_no_llego: true })
-    expect(corteDe(a.M, a.id)).toEqual({ origen: 'pedido_no_llego' })
+    const ra = await recibirResultado(a.M.P, a.id, a.n, { error: 'OFICINA_PEDIDO_NO_LLEGO · timeout', pedido_no_llego: true })
+    expect(ra.cuerpo).toMatchObject({ accion: 'en_pausa_por_causa_externa', causa: 'red' })
+    expect(a.M.encargos.get(a.id)!.estado).toBe('en_paso')
     const b = await enEspera()
     await recibirResultado(b.M.P, b.id, b.n, { error: 'el agente FALLÓ · agent-runner upstream failed' })
     expect(b.M.encargos.get(b.id)!.estado).toBe('fallido')

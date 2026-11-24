@@ -39,6 +39,7 @@ import { marcaDeOrigenActiva, origenesDeImagenes } from './marcas-de-origen'
 import { seccionDeCambiosDelDueno } from './cambios-del-dueno'
 import { antesDeLasFotos, despuesDeUnAgente, pedirLoQueElAgenteNecesita, seccionDeMaterialParaElAgente } from './material-orquestador'
 import { duenoDeLaFicha, registrarPaso, siguientePaso, type ResultadoDePaso } from './motor'
+import { CAUSA_LEGIBLE, causaExterna, type PausaExterna } from './mesa/causa-externa'
 import { contextoDeHechos } from './hechos-del-negocio'
 import { construirTarea, contextoDelRevisor, CONTRATOS_EN_TEXTO, resumenParaElJefe, type ContextoDePedido } from './pedidos'
 import type { ContextoDelRevisor } from './ciego'
@@ -222,6 +223,12 @@ export async function avanzar(P: Puertos, encargoId: string): Promise<Respuesta>
       // el turno abierto es el de la JEFATURA: se contesta con la MISMA acción que al abrirlo (el flujo `oficina · turno` la conoce y termina sin error); nunca «esperar» sin pedido
       if (abierto.tipo === 'jefatura') return r(200, { accion: 'esperar_jefatura', reentrega: true, turno: { n: abierto.n, paso: abierto.paso, tipo: 'jefatura', dispatch_key: abierto.dispatch_key } })
       return r(200, { accion: 'esperar', turno: { n: abierto.n, paso: abierto.paso, agente: abierto.agente, dispatch_key: abierto.dispatch_key }, nota: 'ya hay un paso esperando respuesta' })
+    }
+    // 24-nov · entrega 2a · retomar donde se cayó: `siguiente` (o `reanudar`) sobre una pieza en pausa por causa externa la quita; el paso caído no se registró,
+    // así que `siguientePaso` lo vuelve a pedir: lo hecho antes no se repite
+    if (enc.estado_del_motor.pausa_externa) {
+      await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: { ...enc.estado_del_motor, pausa_externa: null, vueltas: { ...enc.estado_del_motor.vueltas, reanudaciones: (enc.estado_del_motor.vueltas.reanudaciones ?? 0) + 1 } }, gasto_usd: enc.estado_del_motor.gasto_usd, estado: 'en_paso' })
+      enc = (await P.almacen.leerEncargo(enc.id))!
     }
     const sig = siguientePaso(enc.estado_del_motor, pl)
     if (sig.accion === 'fin') return cerrar(P, enc, pl, false)
@@ -917,6 +924,21 @@ export async function recibirResultado(P: Puertos, encargoId: string, n: number,
     if (veces < 2) return avanzar(P, enc.id)
     if (veces === 2) await P.avisar({ canal: 'alertas', encargo_id: enc.id, texto: `🚪 El portero no respondió dos veces seguidas (${res.error.slice(0, 160)}). La pieza ${enc.brief_id} queda en espera, sin gasto; se reanuda cuando se arregle la llave de la puerta.`, dry_run: enc.dry_run })
     return r(200, { accion: 'esperando_al_portero', encargo_id: enc.id, veces })
+  }
+  // 24-nov · entrega 2a · retomar donde se cayó (decisión de Emilio): el paso cayó por causa EXTERNA (saldo, proveedor saturado o caído, red). No es culpa del agente:
+  // la pieza NO cierra `fallido` (ni gasta una de sus versiones). Queda en pausa (`en_paso`, sin turno corriendo), con el motivo a la vista, UNA alarma por incidente,
+  // y `siguiente` (o `reanudar`) vuelve a pedir este mismo paso. El mismo patrón que la mesa y que el portero roto: esperar sin gastar.
+  const externa = res.error || res.pedido_no_llego === true ? causaExterna(res) : null
+  if (externa) {
+    const pausa: PausaExterna = { causa: externa.clave, motivo: externa.motivo, agente: abierto.agente ?? '', tipo: paso.tipo, paso: paso.clave, n, en: new Date().toISOString() }
+    const previas = e.vueltas.pausas_externas ?? 0
+    const nuevo: Estado = { ...e, pasos_ejecutados: e.pasos_ejecutados + 1, gasto_usd: +(e.gasto_usd + costo).toFixed(6), pausa_externa: pausa, vueltas: { ...e.vueltas, pausas_externas: previas + 1 } }
+    await P.almacen.guardar({ encargo_id: enc.id, estado_del_motor: nuevo, gasto_usd: nuevo.gasto_usd, estado: 'en_paso', turno: { ...turnoBase, n, estado: 'fallo', error: `en pausa: ${externa.motivo}` }, ...(gastoModelo.length ? { gastos: gastoModelo } : {}) })
+    try {
+      // UNA alarma por incidente: la primera pausa del encargo va a #alertas; las siguientes (otra reanudación que vuelve a caer) a su hilo
+      await P.avisar({ canal: previas > 0 ? 'hilo' : 'alertas', encargo_id: enc.id, dry_run: enc.dry_run, texto: `⏸️ La pieza ${enc.brief_id} quedó EN PAUSA en el paso «${paso.clave}»: ${CAUSA_LEGIBLE[externa.clave]} (${externa.motivo}). Lo hecho sigue guardado; no se cerró como fallida. Se retoma desde ese paso cuando se resuelva.` })
+    } catch { /* el aviso nunca frena la pausa */ }
+    return r(200, { accion: 'en_pausa_por_causa_externa', encargo_id: enc.id, causa: externa.clave, motivo: externa.motivo, paso: paso.clave, agente: abierto.agente })
   }
   if (res.error || typeof res.texto !== 'string') {
     // el turno murió o devolvió error: se registra como fallo y el encargo cierra visible (el vigía reintenta UNA vez antes de llegar aquí)

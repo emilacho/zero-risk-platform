@@ -49,10 +49,14 @@ describe('regla (b) · la ruta de turnos pasa los campos del corte nuestro', () 
     expect(await r.json()).toMatchObject({ accion: 'cerrado', estado: 'fallido' })
     expect(corte(db, id)).toEqual({ origen: 'corredor_caido' })
   })
-  it('🔴 `pedido_no_llego: true` cierra con la marca `pedido_no_llego`', async () => {
+  // 24-nov · entrega 2a (retomar donde se cayó): el pedido que no llegó ya no cierra la pieza: queda en pausa (`en_paso`) para retomar el mismo paso
+  it('🔴 `pedido_no_llego: true` deja la pieza EN PAUSA (no cierra, sin marca de cierre)', async () => {
     const { db, id, n } = await conTurnoEsperando()
-    expect((await turnos(req({ accion: 'resultado', encargo_id: id, n, error: 'OFICINA_PEDIDO_NO_LLEGO · timeout', pedido_no_llego: true }))).status).toBe(200)
-    expect(corte(db, id)).toEqual({ origen: 'pedido_no_llego' })
+    const r = await turnos(req({ accion: 'resultado', encargo_id: id, n, error: 'OFICINA_PEDIDO_NO_LLEGO · timeout', pedido_no_llego: true }))
+    expect(r.status).toBe(200)
+    expect(await r.json()).toMatchObject({ accion: 'en_pausa_por_causa_externa', causa: 'red' })
+    expect(db.tablas['oficina_encargos'].find((x) => x.id === id)!.estado).toBe('en_paso')
+    expect(corte(db, id)).toBeNull()
   })
   it('🔴 el MISMO texto sin los campos cierra fallido SIN marca (cuenta como intento)', async () => {
     const { db, id, n } = await conTurnoEsperando()

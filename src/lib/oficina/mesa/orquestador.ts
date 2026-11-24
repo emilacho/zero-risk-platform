@@ -660,9 +660,13 @@ export async function entregarPorTopeDeLaMesa(P: Puertos, enc: Encargo, motivo: 
 export async function reanudarMesa(P: Puertos, encargoId: string): Promise<Respuesta> {
   const enc = await P.almacen.leerEncargo(encargoId)
   if (!enc) return r(404, { error: 'encargo_inexistente' })
-  if (!P.mesa) return r(500, { error: 'mesa_sin_puerto' })
   const est = estadoDeLaMesa(enc.estado_del_motor)
-  if (!est) return r(409, { error: 'no_es_una_mesa', detalle: 'el encargo no tiene mesa: no hay nada que reanudar' })
+  // 24-nov · entrega 2a · una pieza SIN mesa (no necesita el puerto de la mesa) en pausa por causa externa: lo mismo que `siguiente` (vuelve a pedir el paso caído)
+  if (!est) {
+    if (enc.estado === 'en_paso' && enc.estado_del_motor.pausa_externa) return avanzar(P, enc.id)
+    return r(409, { error: 'no_se_reanuda', detalle: `la pieza está «${enc.estado}» y no está en pausa por una causa externa: no hay nada que reanudar` })
+  }
+  if (!P.mesa) return r(500, { error: 'mesa_sin_puerto' })
   if (enc.estado === 'en_paso') {
     if (!est.pausa_externa) return r(409, { error: 'no_esta_en_pausa', detalle: 'la mesa sigue trabajando: no hay nada que reanudar' })
     return avanzar(P, enc.id)

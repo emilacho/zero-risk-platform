@@ -120,6 +120,9 @@ export interface Estado {
   avisos?: string[]
   /** 11-nov · la causa legible de un cierre `fallido` (la escribe `fallar`; ver `causa-del-fallo.ts`) */
   fallo?: { motivo: string; en: string; pasos_ejecutados: number; gasto_usd: number; corte_nuestro?: { origen: import('./causa-del-fallo').OrigenDeCorteNuestro } }
+  /** 24-nov · entrega 2a · retomar donde se cayó: el paso de una pieza (sin mesa) cayó por causa EXTERNA (saldo, proveedor, red). El encargo NO cierra `fallido`:
+   *  queda `en_paso`, sin turno corriendo, con esto a la vista; `siguiente` lo quita y vuelve a pedir el MISMO paso. Ausente o null = no está en pausa */
+  pausa_externa?: import('./mesa/causa-externa').PausaExterna | null
 }
 
 export const estadoInicial = (): Estado => ({ ultimo: -1, pasos_ejecutados: 0, gasto_usd: 0, vueltas: {}, artefactos: {}, fichas: [] })
