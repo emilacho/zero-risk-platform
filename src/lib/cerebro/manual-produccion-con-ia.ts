@@ -1,9 +1,14 @@
 /**
  * ENCARGO 16 · 21-nov · «CÓMO SE PRODUCE CON IA» SE ESCRIBE (la sección del manual firmada el 18-nov; el lado que la lee ya está en main).
+ * ENCARGO 17 · 24-nov · SE REHACE DE FONDO (la v6 de Náufrago no cumplió: era pieza literaria, en voseo, de una sola sede y sin referencias).
+ *   El pedido ahora exige una GUÍA PARA PRODUCIR: registro visual con su porqué, citas de foto o hecho, TODAS las sedes y ofertas
+ *   (una sede solo-delivery se cubre con producto, empaque y apps, no se omite), la versión que vale con fuente y fecha cuando
+ *   dos fuentes difieren, y las referencias juzgadas «sirve». Cada hecho y foto viaja con su fecha para que el agente pueda arbitrar.
  *
  * El mismo camino del manual, en pequeño: ① `preparar` (AQUÍ: el cerebro SOLO LEE) arma el pedido del agente con lo que entrega el cerebro ENTERO
- * (fotos propias con su etiqueta, oferta y fecha; hechos del negocio; referencias que sirven) y la VOZ del manual vigente;
- * ② un agente POR FLUJO (run-sdk, nunca guion directo) escribe la sección en PROSA; ③ `escribir` (en `src/lib/manual/produccion-con-ia.ts`: el cerebro no escribe por construcción) la guarda como versión nueva del manual que SOLO agrega la sección. La sección queda visible y editable en el dashboard como cualquier otra (está en el catálogo).
+ * (fotos propias con su etiqueta, oferta y fecha; hechos del negocio con su fecha; sedes con sus datos; referencias juzgadas «sirve») y la VOZ del manual vigente;
+ * ② un agente POR FLUJO (run-sdk, nunca guion directo) escribe la sección en PROSA; ③ `escribir` (en `src/lib/manual/produccion-con-ia-bandeja.ts`: el cerebro no escribe
+ * por construcción) la guarda como BORRADOR con tarjeta en la bandeja — SIN vigencia: la versión del manual nace solo cuando Emilio aprueba la tarjeta (encargo 17 punto 3).
  *
  * Reglas firmadas: prosa, sin marcas tipo «siempre de foto real / se crea / libre» y sin lista de prohibidos; en el idioma
  * y trato que define el manual del cliente. Un cliente sin fotos propias la recibe igual, con lo que haya, y lo dice.
@@ -20,6 +25,8 @@ export const REFERENCIAS_EN_EL_PEDIDO = 20
 export const HECHOS_EN_EL_PEDIDO = 40
 /** clases de fichas que son hechos del negocio para esta sección (del dueño y datos duros; nada de síntesis) */
 export const CLASES_DE_HECHOS = ['dato_del_dueno', 'aprendizaje_del_dueno', 'precio', 'horario'] as const
+/** el único juicio de referencia que entra al pedido (encargo 17: las «no_sirve» y «dudoso» se quedan fuera) */
+export const JUICIO_DE_REFERENCIA = 'sirve'
 
 const txt = (v: unknown): string => (typeof v === 'string' ? v.trim() : '')
 const cabeza = (v: unknown, n: number): string => { const s = txt(v); return s.length > n ? `${s.match(new RegExp(`^[\\s\\S]{0,${n}}`))?.[0] ?? s}…` : s }
@@ -35,12 +42,17 @@ export interface InsumosDeLaSeccion {
   con_oferta: number
   hechos: number
   referencias: number
+  sedes: number
   sin_fotos_propias: boolean
   ya_existe: boolean
 }
 export type ResultadoDePreparar = { ok: true; insumos: InsumosDeLaSeccion } | { ok: false; status: number; error: string; detalle: string }
 
+const fecha10 = (v: unknown): string => txt(v).match(/^\d{4}-\d{2}-\d{2}/)?.[0] ?? ''
+
 const lineaDeFoto = (f: Fila): string => {
+  // encargo 17: la fecha va SIEMPRE (o «sin fecha»): sin ella el agente no puede decir qué versión vale
+  const cuando = fecha10(f.fecha_origen) || fecha10(f.posted_at)
   const partes = [
     txt(f.que_muestra) ? `muestra: ${cabeza(f.que_muestra, 160)}` : '',
     lista(f.producto_visto).length ? `producto: ${lista(f.producto_visto).map((x) => txt(x)).filter(Boolean).join(', ')}` : '',
@@ -48,32 +60,69 @@ const lineaDeFoto = (f: Fila): string => {
     txt(f.formato) ? `formato: ${txt(f.formato)}` : '',
     f.con_personas === true ? 'con personas' : f.con_personas === false ? 'sin personas' : '',
     txt(f.oferta) ? `oferta: ${cabeza(f.oferta, 80)}` : '',
-    txt(f.fecha_origen) || txt(f.posted_at) ? `fecha: ${(txt(f.fecha_origen) || txt(f.posted_at)).match(/^\d{4}-\d{2}-\d{2}/)?.[0] ?? ''}` : '',
+    cuando ? `fecha: ${cuando}` : 'sin fecha',
     txt(f.texto_visible) ? `texto visible: ${cabeza(f.texto_visible, 80)}` : '',
   ].filter(Boolean)
   return `- ${partes.join(' · ') || 'foto propia sin etiqueta todavía'}`
 }
 
-/** el pedido del agente, puro: con los mismos insumos sale el mismo texto */
-export function armarPedidoDeLaSeccion(a: { nombre: string; voz: string; reglas: string[]; fotos: Fila[]; hechos: Fila[]; referencias: Fila[] }): string {
+/** encargo 17: cada hecho viaja con su fecha (el título ya trae la fuente: «Manual · …» o «Dueño · …») */
+const lineaDeHecho = (h: Fila): string => `- ${cabeza(h.titulo, 120)} (${fecha10(h.observado_en) || 'sin fecha'}): ${cabeza(h.contenido, 240)}`
+
+export interface DatoDeSede { sede_id: string; campo: string; valor: string; fuente: string; fecha: string }
+/** LA VERSIÓN QUE VALE de cada dato de una sede: la más nueva del DUEÑO si la hay (su palabra manda, nunca una fuente
+ *  raspada por encima de lo que él declaró); si el dueño no habló de ese campo, la más nueva que haya, con su fuente. */
+export function versionQueVale(filas: DatoDeSede[]): DatoDeSede[] {
+  const porCampo = new Map<string, DatoDeSede[]>()
+  for (const f of filas) {
+    const k = `${f.sede_id}|${f.campo}`
+    porCampo.set(k, [...(porCampo.get(k) ?? []), f])
+  }
+  const out: DatoDeSede[] = []
+  for (const grupo of porCampo.values()) {
+    const ordenadas = [...grupo].sort((a, b) => (a.fecha < b.fecha ? 1 : -1))
+    out.push(ordenadas.find((f) => f.fuente === 'dueno') ?? ordenadas[0])
+  }
+  return out
+}
+
+const lineasDeSedes = (sedes: Fila[], datos: DatoDeSede[]): string[] =>
+  sedes.map((s) => {
+    const deEsta = versionQueVale(datos.filter((d) => d.sede_id === String(s.id)))
+      .sort((a, b) => (a.campo < b.campo ? -1 : 1))
+      .map((d) => `${d.campo}: ${cabeza(d.valor, 120)} (${d.fuente}, ${d.fecha || 'sin fecha'})`)
+    return `- sede «${txt(s.clave)}» (${txt(s.ciudad) || 'ciudad sin registrar'})${deEsta.length ? `: ${deEsta.join(' · ')}` : ': sin datos registrados todavía'}`
+  })
+
+/** el pedido del agente, puro: con los mismos insumos sale el mismo texto. Encargo 17: pide una GUÍA PARA PRODUCIR, no una pieza literaria. */
+export function armarPedidoDeLaSeccion(a: { nombre: string; voz: string; reglas: string[]; fotos: Fila[]; hechos: Fila[]; referencias: Fila[]; sedes: Fila[]; datosDeSedes: DatoDeSede[] }): string {
   const sinFotos = a.fotos.length === 0
   const partes: string[] = []
-  partes.push(`Escribe la sección «Cómo se produce con IA» del manual de marca de ${a.nombre}.`)
+  partes.push(`Escribe la sección «Cómo se produce con IA» del manual de marca de ${a.nombre}: una GUÍA PARA PRODUCIR piezas con IA. La leen los empleados creativos y guía al generador de imágenes y video. No es un resumen del manual ni una pieza literaria: cada frase tiene que servirle a alguien que está armando un prompt o decidiendo qué mostrar.`)
   partes.push('')
   partes.push('FORMA (firmada por el dueño de la agencia, no negociable):')
-  partes.push('- PROSA corrida, de 3 a 6 párrafos. Sin encabezados, sin listas, sin tablas.')
+  partes.push('- PROSA corrida, de 4 a 8 párrafos. Sin encabezados, sin listas, sin tablas.')
   partes.push('- Sin marcas tipo «siempre de foto real / se crea / libre» y sin lista de prohibidos.')
-  partes.push('- En el MISMO idioma y trato que muestra la voz del manual (abajo). Si la voz tutea, tutea.')
+  partes.push('- En el MISMO idioma y trato que muestra la voz del manual (abajo). Si la voz tutea, tuteas de principio a fin; no cambies de registro ni una vez.')
   partes.push('- Responde SOLO con la prosa de la sección: nada antes ni después.')
   partes.push('')
-  partes.push('QUÉ CUENTA la sección, para quien produzca piezas con IA para este cliente:')
-  partes.push('- el registro visual del negocio y su PORQUÉ: luz, escenarios, estilo de toma, qué transmite;')
-  partes.push('- qué es REAL y sale de sus fotos (productos, lugares, personas) y por eso no se inventa;')
-  partes.push('- qué SÍ se puede crear o recrear con IA sin traicionar ese registro (fondos, composiciones, escenas), guiando al generador de imágenes con el estilo del cliente.')
+  partes.push('QUÉ CUENTA la guía (todo sale de las fotos, los hechos y las sedes de abajo; nada se inventa):')
+  partes.push('- el REGISTRO VISUAL del negocio y su PORQUÉ, dicho de forma que guíe un prompt (p. ej. «hiperrealista, porque es un negocio real que muestra su producto de verdad»);')
+  partes.push('- la luz, los escenarios y la paleta REALES, diciendo de qué fotos salen;')
+  partes.push('- qué EXISTE y sale de su foto (productos, lugares, personas, personajes) y por eso no se inventa ni se rediseña, citando la foto o el hecho del que sale;')
+  partes.push('- TODAS las sedes y ofertas de abajo, cada una con lo suyo: una sede sin local o solo de entrega NO se omite; se cubre con lo que tenga (producto, empaque, aplicaciones, reparto);')
+  partes.push('- qué SÍ se puede crear o recrear con IA sin traicionar ese registro (fondos, composiciones, escenas) y cómo pedírselo al generador;')
+  partes.push('- si dos fuentes muestran VERSIONES DISTINTAS de un mismo elemento (un personaje, un local, un plato), di CUÁL VALE, nombrando su fuente y su fecha: la palabra más reciente del dueño manda; la otra versión se nombra como vieja para que nadie la use;')
+  partes.push('- las REFERENCIAS QUE SIRVEN: qué mirar de ellas al producir (se miran, no se copian ni se publican; no son del cliente).')
   partes.push('')
   partes.push(`VOZ DEL MANUAL (el trato y el idioma salen de aquí):\n${cabeza(a.voz, 1200) || 'sin voz escrita todavía: usa un español neutro y cercano'}`)
   if (a.reglas.length) partes.push(`\nREGLAS DE ESCRITURA DEL MANUAL:\n${a.reglas.map((r) => `- ${cabeza(r, 200)}`).join('\n')}`)
   partes.push('')
+  if (a.sedes.length) {
+    partes.push('SEDES DEL CLIENTE (todas van en la guía; cada dato con su fuente y su fecha):')
+    partes.push(...lineasDeSedes(a.sedes, a.datosDeSedes))
+    partes.push('')
+  }
   if (sinFotos) {
     partes.push('FOTOS PROPIAS: este cliente AÚN NO tiene fotos propias en el cerebro. Escribe la sección igual con lo que hay, y dilo en la primera frase (sin dramatizar: es un punto de partida).')
   } else {
@@ -82,12 +131,12 @@ export function armarPedidoDeLaSeccion(a: { nombre: string; voz: string; reglas:
   }
   if (a.hechos.length) {
     partes.push('')
-    partes.push(`HECHOS DEL NEGOCIO (lo declarado por el dueño y los datos duros):`)
-    partes.push(...a.hechos.map((h) => `- ${cabeza(h.titulo, 120)}: ${cabeza(h.contenido, 240)}`))
+    partes.push(`HECHOS DEL NEGOCIO (lo declarado por el dueño y los datos duros, cada uno con su fecha):`)
+    partes.push(...a.hechos.map(lineaDeHecho))
   }
   if (a.referencias.length) {
     partes.push('')
-    partes.push(`REFERENCIAS QUE SIRVEN (material ajeno que entró como referencia; inspira, no es del cliente):`)
+    partes.push(`REFERENCIAS QUE SIRVEN (material ajeno juzgado «sirve»; inspira, no es del cliente):`)
     partes.push(...a.referencias.map((r) => `- ${cabeza(r.que_muestra, 140) || cabeza(r.caption, 140) || 'referencia sin etiqueta'}`))
   }
   return partes.join('\n')
@@ -110,13 +159,25 @@ export async function prepararProduccionConIa(db: Db, clientId: string, o: { ree
   const ya_existe = txt(draft.produccion_con_ia) !== ''
   if (ya_existe && o.reescribir !== true) return { ok: false, status: 409, error: 'ya_existe', detalle: 'el manual vigente ya trae «Cómo se produce con IA»; para reescribirla, pide `reescribir: true`' }
 
-  const fo = await db.from('client_social_images').select('id, owner_role, papel, estado, tipo, que_muestra, producto_visto, texto_visible, tipo_de_toma, formato, con_personas, oferta, fecha_origen, posted_at, created_at, caption, duplicado_de, hash_archivo, etiquetada_en').eq('client_id', clientId).eq('estado', 'ok').order('posted_at', { ascending: false }).limit(1000)
+  const fo = await db.from('client_social_images').select('id, owner_role, papel, estado, tipo, que_muestra, producto_visto, texto_visible, tipo_de_toma, formato, con_personas, oferta, fecha_origen, posted_at, created_at, caption, duplicado_de, hash_archivo, etiquetada_en, relevancia_juicio').eq('client_id', clientId).eq('estado', 'ok').order('posted_at', { ascending: false }).limit(1000)
   if (fo.error) return falla('client_social_images', fo.error.message)
   const filas = lista(fo.data)
   const repetidas = idsDeFotosRepetidas(filas)
   const limpias = filas.filter((f) => !txt(f.duplicado_de) && !repetidas.has(String(f.id)))
   const propias = limpias.filter((f) => rolEfectivo(f) === 'propio').filter((_f, i) => i < FOTOS_EN_EL_PEDIDO)
-  const referencias = limpias.filter((f) => rolEfectivo(f) === 'referencia' && (txt(f.que_muestra) || txt(f.caption))).filter((_f, i) => i < REFERENCIAS_EN_EL_PEDIDO)
+  // encargo 17: solo las juzgadas «sirve» (antes entraban las 20 más nuevas con etiqueta, 12 de ellas juzgadas no_sirve)
+  const referencias = limpias.filter((f) => rolEfectivo(f) === 'referencia' && txt(f.relevancia_juicio) === JUICIO_DE_REFERENCIA && (txt(f.que_muestra) || txt(f.caption))).filter((_f, i) => i < REFERENCIAS_EN_EL_PEDIDO)
+
+  // encargo 17: TODAS las sedes con sus datos (la versión que vale por campo la decide `versionQueVale`)
+  const se = await db.from('client_sedes').select('id, clave, ciudad').eq('client_id', clientId).order('clave', { ascending: true })
+  if (se.error) return falla('client_sedes', se.error.message)
+  const sedes = lista(se.data)
+  let datosDeSedes: DatoDeSede[] = []
+  if (sedes.length) {
+    const sd = await db.from('client_sede_datos').select('sede_id, campo, valor_texto, fuente, observado_en').eq('client_id', clientId).order('observado_en', { ascending: false }).limit(1000)
+    if (sd.error) return falla('client_sede_datos', sd.error.message)
+    datosDeSedes = lista(sd.data).map((d) => ({ sede_id: String(d.sede_id), campo: txt(d.campo), valor: txt(d.valor_texto), fuente: txt(d.fuente), fecha: fecha10(d.observado_en) }))
+  }
 
   // menor de CC6 en #1275: con orden (los más nuevos primero), si algún día hay más de HECHOS_EN_EL_PEDIDO el corte es estable, no al azar
   const fi = await db.from('cerebro_fichas').select('id, clase, titulo, contenido, vigente_hasta, descartada').eq('client_id', clientId).is('retirada_en', null).in('clase', [...CLASES_DE_HECHOS]).order('observado_en', { ascending: false }).limit(500)
@@ -127,12 +188,12 @@ export async function prepararProduccionConIa(db: Db, clientId: string, o: { ree
     .filter((_f, i) => i < HECHOS_EN_EL_PEDIDO)
 
   const reglas = Array.isArray(draft.reglas_de_escritura) ? (draft.reglas_de_escritura as unknown[]).map((x) => txt(x)).filter(Boolean) : []
-  const task = armarPedidoDeLaSeccion({ nombre: txt(cliente.name) || 'el cliente', voz: txt(draft.voice_description), reglas, fotos: propias, hechos, referencias })
+  const task = armarPedidoDeLaSeccion({ nombre: txt(cliente.name) || 'el cliente', voz: txt(draft.voice_description), reglas, fotos: propias, hechos, referencias, sedes, datosDeSedes })
   return {
     ok: true,
     insumos: {
       client_id: clientId, client_name: txt(cliente.name) || 'cliente', version_base: Number(vigente.version) || 0, task,
-      fotos_propias: propias.length, con_oferta: propias.filter((f) => txt(f.oferta)).length, hechos: hechos.length, referencias: referencias.length,
+      fotos_propias: propias.length, con_oferta: propias.filter((f) => txt(f.oferta)).length, hechos: hechos.length, referencias: referencias.length, sedes: sedes.length,
       sin_fotos_propias: propias.length === 0, ya_existe,
     },
   }

@@ -4,8 +4,9 @@
  *  · `accion: 'preparar'` → lee el cerebro entero (fotos propias con oferta y fecha, hechos, referencias) y devuelve el
  *    pedido del agente (`task`) con sus conteos. US$ 0, solo lectura. `reescribir: true` deja preparar sobre un manual
  *    que ya trae la sección.
- *  · `accion: 'escribir'` → guarda la prosa como versión NUEVA del manual que SOLO agrega `produccion_con_ia`.
- *    `dry_run` BOOLEANO OBLIGATORIO; con `dry_run: true` valida todo y no escribe nada.
+ *  · `accion: 'escribir'` → encargo 17 (24-nov): guarda la prosa como BORRADOR con tarjeta en la bandeja, SIN vigencia.
+ *    La versión del manual nace solo cuando Emilio aprueba la tarjeta (`PATCH /api/hitl/[id]`, que llama al escritor
+ *    certificado). `dry_run` BOOLEANO OBLIGATORIO; con `dry_run: true` valida todo y no escribe nada.
  * Llave interna (`x-api-key`). El modelo no se llama aquí: lo llama el flujo por `run-sdk` entre las dos puertas.
  */
 import { NextResponse } from 'next/server'
@@ -13,7 +14,7 @@ import { checkInternalKey } from '@/lib/internal-auth'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import type { Db } from '@/lib/manual/revision'
 import { prepararProduccionConIa } from '@/lib/cerebro/manual-produccion-con-ia'
-import { escribirProduccionConIa } from '@/lib/manual/produccion-con-ia'
+import { guardarBorradorDeLaSeccion } from '@/lib/manual/produccion-con-ia-bandeja'
 
 export const dynamic = 'force-dynamic'
 export const fetchCache = 'force-no-store'
@@ -37,7 +38,7 @@ export async function POST(request: Request) {
   }
   if (b.accion === 'escribir') {
     if (typeof b.dry_run !== 'boolean') return NextResponse.json({ error: 'dry_run_obligatorio', detalle: '`dry_run` es obligatorio y debe ser true o false' }, { status: 400 })
-    const r = await escribirProduccionConIa(db, {
+    const r = await guardarBorradorDeLaSeccion(db, {
       client_id: clientId,
       texto: typeof b.texto === 'string' ? b.texto : '',
       version_base: typeof b.version_base === 'number' ? b.version_base : -1,
