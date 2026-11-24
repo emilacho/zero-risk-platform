@@ -27,7 +27,7 @@ import { abrirEsperaDe, ponerNecesitaHumano, prepararCorrida, resolverEsperas, s
 import { validarEsquemaDeSalida } from '@/lib/salida-estructurada'
 import { diasEntre, fechaDeFila } from './fechas'
 import { diaUnoDelPlan } from './fechas-en-texto'
-import { SALIERON_EN_LA_CADENA, type Ajuste, type Estrategia, type Fila, type FormatosPorRed, type Hallazgo, type TandaAgente } from './tipos'
+import { SALIERON_EN_LA_CADENA, type Ajuste, type Estrategia, type Ficha, type Fila, type FormatosPorRed, type Hallazgo, type TandaAgente } from './tipos'
 import { type LexicoAfirmaciones } from './afirmaciones'
 import { lexicoDelCliente } from './lexico-por-rubro'
 import { problemasDeEsquema, normalizarPilares, validarEstrategia } from './validador-estrategia'
@@ -119,6 +119,18 @@ export async function rondaQueToca(al: Almacen, campanaId: string, paso: 'estrat
   )
   return Math.min(hechas.size + 1, RONDAS_DE_CORRECCION)
 }
+/**
+ * 24-nov · entrega 2b de «retomar donde se cayó» (GO Lenovo 11:16Z · decisión de Emilio): las fichas de la corrección EN CURSO de esta versión, leídas de la BASE.
+ * El subflujo de n8n guarda las fichas de la ronda en su memoria: si se cae, se pausa o se relanza, vuelve a llamar sin `correccion` y antes eso era la pasada `v<n>:c0`
+ * otra vez (se pagaba de nuevo la primera pasada y se perdía la ronda; ≈ US$ 5 el 23-nov). Cada pasada bloqueada ya queda guardada con sus fichas
+ * (`guardarRondaDeEstrategia`): si la versión tiene rondas y todavía no hay estrategia validada, la corrección sigue con las fichas de la ÚLTIMA ronda guardada.
+ * Sin rondas (o la última sin fichas) = null: la primera pasada de siempre.
+ */
+export async function fichasDeLaCorreccionEnCurso(al: Almacen, campanaId: string, version: number): Promise<Ficha[] | null> {
+  const rondas = await al.rondasDeEstrategia(campanaId, version)
+  const ultima = [...rondas].sort((a, b) => b.ronda - a.ronda)[0]
+  return ultima && Array.isArray(ultima.fichas) && ultima.fichas.length ? ultima.fichas : null
+}
 /** 19-nov · grupo C · la mejor pasada guardada: la de menos bloqueos; si empatan, la última */
 export function mejorRonda(rondas: RondaDeEstrategia[]): RondaDeEstrategia | null {
   return [...rondas].sort((a, b) => a.bloqueos - b.bloqueos || b.ronda - a.ronda)[0] ?? null
@@ -142,7 +154,10 @@ export async function estrategiaPreparar(al: Almacen, cuerpo: Record<string, unk
   if (ultima?.estado === 'validada') return { status: 200, cuerpo: { ya_hecha: true, version: ultima.version } }
   if (campana.estado !== 'abierta' && campana.estado !== 'estrategia') return err(409, 'E-ESTADO', `la campaña está ${campana.estado}: la estrategia solo se prepara con la campaña abierta o en estrategia`)
   const version = (ultima?.version ?? 0) + 1
-  const fichas = Array.isArray((cuerpo.correccion as { fichas?: unknown } | undefined)?.fichas) ? ((cuerpo.correccion as { fichas: never[] }).fichas) : null
+  const enviadas = Array.isArray((cuerpo.correccion as { fichas?: unknown } | undefined)?.fichas) ? ((cuerpo.correccion as { fichas: never[] }).fichas) : null
+  // 24-nov · entrega 2b · sin fichas en el pedido (el subflujo perdió su memoria: caída, pausa, relanzamiento), la corrección en curso se retoma de la base
+  const retomadas = enviadas ? null : await fichasDeLaCorreccionEnCurso(al, campana.id, version)
+  const fichas = enviadas ?? retomadas
   const esquema = validarEsquemaDeSalida(ESQUEMA_ESTRATEGIA)
   if (!esquema.ok || !esquema.valor || !esquema.hash) return err(500, 'E-ESQUEMA', 'el esquema de la estrategia no es válido')
   const modelo = await modeloDeLaCadena(al)
@@ -164,6 +179,7 @@ export async function estrategiaPreparar(al: Almacen, cuerpo: Record<string, unk
     status: 200,
     cuerpo: {
       corrida_id: prep.corrida.id, version, intento: prep.corrida.intento, plazo_en: prep.corrida.plazo_en,
+      ...(retomadas ? { retoma_la_correccion: { ronda } } : {}),
       headers: { [CABECERA_SALTAR_EDITOR]: '1' },
       run_sdk: cuerpoDeRunSdk('estrategia', modelo, tarea, esquema.valor, campana.client_id, { contrato: 'estrategia.v3' }),
     },

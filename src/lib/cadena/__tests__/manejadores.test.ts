@@ -714,7 +714,9 @@ describe('afinando lo que las mutaciones dejaron vivo (manejadores)', () => {
     expect(otra.cuerpo.ya_hecha).toBe(true)
     expect(al.corridas).toHaveLength(1)
   })
-  it('r79 · una llamada que sirvió pero pidió corrección (sin objeto validado) y se reenvía sin ella abre el siguiente intento, no «ya hecha»', async () => {
+  // 24-nov · entrega 2b (retomar donde se cayó · GO Lenovo 11:16Z): reenviada sin `correccion`, ya no repite la primera pasada (`v1:c0`, intento 2):
+  // sigue con la corrección en curso, leída de la base (ronda 1, intento 1). Lo de r79 se mantiene: nunca «ya hecha» sin objeto validado
+  it('r79 · una llamada que sirvió pero pidió corrección (sin objeto validado) y se reenvía sin ella NO es «ya hecha»: sigue con la ronda de corrección guardada', async () => {
     const al = almacen()
     const id = idCampana(await abrir(al))
     const p = await estrategiaPreparar(al, { ...wf(), campana_id: id }, AHORA)
@@ -722,7 +724,18 @@ describe('afinando lo que las mutaciones dejaron vivo (manejadores)', () => {
     await estrategiaGuardar(al, { ...wf(), campana_id: id, corrida_id: p.cuerpo.corrida_id, resultado: ok(mala) }, AHORA)
     const otra = await estrategiaPreparar(al, { ...wf(), campana_id: id }, AHORA)
     expect(otra.cuerpo.ya_hecha).toBeUndefined()
+    expect(otra.cuerpo.intento).toBe(1)
+    expect(al.corridas.find((c) => c.id === otra.cuerpo.corrida_id)!.clave_idempotencia).toBe('v1:c1')
+  })
+  it('r79 · la llamada cerró `ok` pero se cayó antes de guardar (sin objeto ni ronda): reenviada, abre el siguiente intento de la MISMA pasada, no «ya hecha»', async () => {
+    const al = almacen()
+    const id = idCampana(await abrir(al))
+    const p = await estrategiaPreparar(al, { ...wf(), campana_id: id }, AHORA)
+    al.corridas.find((c) => c.id === p.cuerpo.corrida_id)!.estado = 'ok'
+    const otra = await estrategiaPreparar(al, { ...wf(), campana_id: id }, AHORA)
+    expect(otra.cuerpo.ya_hecha).toBeUndefined()
     expect(otra.cuerpo.intento).toBe(2)
+    expect(al.corridas.find((c) => c.id === otra.cuerpo.corrida_id)!.clave_idempotencia).toBe('v1:c0')
   })
   it('el calendario exige una estrategia VALIDADA aunque la campaña esté en calendario', async () => {
     const al = almacen()
