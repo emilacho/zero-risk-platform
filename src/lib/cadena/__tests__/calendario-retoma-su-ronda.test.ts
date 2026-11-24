@@ -59,6 +59,10 @@ describe('el calendario retoma la corrección de la tanda con el modo que tocaba
     expect(tarea(p)).toContain('Devuelve SOLO las piezas que fallaron')
     expect(tarea(p)).not.toContain('vuelve a entregarla ENTERA')
     expect(tarea(p)).toContain(fila4b(al).id)
+    // CC6 · certificación de #1282 · k7: la tarea lleva LA fila que falló en «Filas que fallaron» (su id también va en las fichas: se mira la lista, no el texto entero)
+    const lista = tarea(p).split('Filas que fallaron:\n')[1] ?? ''
+    const filasDeLaLista = lista.split('\n').filter((l) => l.startsWith('- ')).map((l) => l.slice(2).split(':')[0])
+    expect(filasDeLaLista).toEqual([fila4b(al).id])
   })
   it('🔴 y `guardar` como lo manda el subflujo relanzado (`correccion: false`, `modo: \'tanda\'`) parchea SOLO esa fila: la tanda cierra con las otras 15 intactas', async () => {
     const al = almacen()
