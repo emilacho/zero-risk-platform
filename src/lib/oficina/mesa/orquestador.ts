@@ -702,7 +702,7 @@ export async function recibirResultadoMesa(P: Puertos, encargoId: string, n: num
   // 24-nov · retomar donde se cayó (decisión de Emilio): el turno cayó por causa EXTERNA (saldo, proveedor saturado o caído, red). No es culpa del agente: NO cuenta
   // como intento, la mesa NO cierra ni entrega a medias. Queda en pausa (`en_paso`, sin turno corriendo), con el motivo a la vista, UN aviso a #alertas por pausa,
   // y se retoma con `siguiente` desde este mismo paso. Mismo patrón que el portero roto: esperar sin gastar.
-  const externa = res.error ? causaExterna(res) : null
+  const externa = res.error || res.pedido_no_llego === true ? causaExterna(res) : null
   if (externa) {
     await P.mesa.aportar(aporteNuevo(enc, t.agente, null, 'nota', `${PREFIJO_TURNO_EN_PAUSA}: ${externa.motivo}`, { costo_usd: costo, workflow_execution_id: res.workflow_execution_id ?? null }))
     const pausa: PausaExterna = { causa: externa.clave, motivo: externa.motivo, agente: t.agente, tipo: t.tipo, paso: abierto.paso, n, en: new Date().toISOString() }

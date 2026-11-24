@@ -345,6 +345,31 @@ describe('reanudar · la gran idea que YA cerró por la caída (la forma de 9aac
     expect(m.llamadas).toHaveLength(0)
   })
 
+  // CC6 · certificación de #1279 · a11: la guarda de la fase en `reanudar`
+  it('una gran idea `cerrado` que ya pasó de «trabajando» (jefatura, cerrada) NO se reanuda aunque su último aporte sea una caída: 409, la cadena no reabre, sigue cerrada', async () => {
+    for (const fase of ['jefatura', 'cerrada'] as const) {
+      const m = await montarConcepto()
+      const t = tt(await hastaIntegrar(m))
+      await cerrarComoAntes(m, t)
+      const enc = m.M.encargos.get(m.id)!
+      const mesa = enc.estado_del_motor.artefactos.mesa
+      enc.estado_del_motor = { ...enc.estado_del_motor, artefactos: { ...enc.estado_del_motor.artefactos, mesa: { ...mesa, datos: { ...estadoDeLaMesa(enc.estado_del_motor)!, fase } as never } } }
+      const r = (await reanudarMesa(m.M.P, m.id)) as R
+      expect(r.status).toBe(409)
+      expect(r.cuerpo.error).toBe('no_se_reanuda')
+      expect(m.llamadas).toHaveLength(0)
+      expect(m.M.encargos.get(m.id)!.estado).toBe('cerrado')
+    }
+  })
+  // CC6 · observación menor: `pedido_no_llego` sin texto de error también es una caída externa (red) y deja la mesa en pausa
+  it('un turno con `pedido_no_llego` y SIN texto de error deja la mesa en pausa (red), no la cierra', async () => {
+    const m = await montarConcepto()
+    const t = tt(await hastaIntegrar(m))
+    const r = (await recibirResultado(m.M.P, m.id, t.n, { pedido_no_llego: true, costo_usd: 0 })) as R
+    expect(r.cuerpo).toMatchObject({ accion: 'en_pausa_por_causa_externa', causa: 'red' })
+    expect(m.M.encargos.get(m.id)!.estado).toBe('en_paso')
+  })
+
   // el vigía de la oficina (cada 10 min) vence la mesa de la cadena por su plazo (concepto 340 min). El reloj de la memoria marca 2026-10-10T12:00Z.
   describe('el plazo del vigía · no vence una mesa en pausa y cuenta desde la reanudación', () => {
     const AHORA = Date.parse('2026-10-10T12:00:00Z')
