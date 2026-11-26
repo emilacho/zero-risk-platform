@@ -4,7 +4,7 @@
  * US$ 0 · base falsa.
  */
 import { describe, expect, it } from 'vitest'
-import { armarPedidoDeLaSeccion, FOTOS_EN_EL_PEDIDO, HECHOS_EN_EL_PEDIDO, prepararProduccionConIa } from '../manual-produccion-con-ia'
+import { armarPedidoDeLaSeccion, FOTOS_EN_EL_PEDIDO, HECHOS_EN_EL_PEDIDO, JUICIO_DE_REFERENCIA, prepararProduccionConIa, versionQueVale } from '../manual-produccion-con-ia'
 import { escribirProduccionConIa, MIN_DEL_TEXTO, TOPE_DEL_TEXTO } from '../../manual/produccion-con-ia'
 import { CAMPO_POR_CLAVE } from '../../manual/campos-del-manual'
 import { estadoDelManual } from '../../portero-alimenta/estado-del-manual'
@@ -22,7 +22,9 @@ const base = (t: Record<string, Array<Record<string, unknown>>> = {}, opciones: 
     foto('f1', { oferta: 'encocado de viernes', fecha_origen: '2026-11-07' }),
     foto('f2', { tipo: 'maps_foto', que_muestra: 'fachada con luz de tarde' }),
     foto('dup', { duplicado_de: 'f1' }),
-    foto('ref', { owner_role: 'referencia', papel: 'referencia', que_muestra: 'plato ajeno que inspira' }),
+    foto('ref', { owner_role: 'referencia', papel: 'referencia', que_muestra: 'plato ajeno que inspira', relevancia_juicio: 'sirve' }),
+    foto('ref-no', { owner_role: 'referencia', papel: 'referencia', que_muestra: 'plato ajeno juzgado que-no', relevancia_juicio: 'no_sirve' }),
+    foto('ref-duda', { owner_role: 'referencia', papel: 'referencia', que_muestra: 'plato ajeno dudoso', relevancia_juicio: 'dudoso' }),
     foto('rota', { estado: 'no_bajo' }),
   ],
   cerebro_fichas: [
@@ -35,8 +37,8 @@ const base = (t: Record<string, Array<Record<string, unknown>>> = {}, opciones: 
 }, opciones)
 
 describe('armarPedidoDeLaSeccion (puro)', () => {
-  const insumos = { nombre: 'Náufrago', voz: 'Tuteo cercano', reglas: ['sin dobles'], fotos: [foto('f1', { oferta: 'encocado', fecha_origen: '2026-11-07' })], hechos: [{ titulo: 'Horario', contenido: 'de 12 a 20' }], referencias: [{ que_muestra: 'plato ajeno', caption: null }] }
-  it('🔴 lleva la forma firmada (prosa, sin marcas ni prohibidos, idioma del manual) y el material con su etiqueta', () => {
+  const insumos = { nombre: 'Náufrago', voz: 'Tuteo cercano', reglas: ['sin dobles'], fotos: [foto('f1', { oferta: 'encocado', fecha_origen: '2026-11-07' })], hechos: [{ titulo: 'Horario', contenido: 'de 12 a 20', observado_en: '2026-11-06T00:00:00Z' }], referencias: [{ que_muestra: 'plato ajeno', caption: null }], sedes: [] as Record<string, unknown>[], datosDeSedes: [] }
+  it('🔴 lleva la forma firmada (prosa, sin marcas ni prohibidos, idioma del manual) y el material con su etiqueta y su fecha', () => {
     const t = armarPedidoDeLaSeccion(insumos)
     expect(t).toContain('«Cómo se produce con IA»')
     expect(t).toContain('PROSA corrida')
@@ -45,14 +47,63 @@ describe('armarPedidoDeLaSeccion (puro)', () => {
     expect(t).toContain('Tuteo cercano')
     expect(t).toContain('oferta: encocado')
     expect(t).toContain('fecha: 2026-11-07')
-    expect(t).toContain('Horario: de 12 a 20')
+    expect(t).toContain('Horario (2026-11-06): de 12 a 20') // encargo 17: el hecho viaja con su fecha
     expect(t).toContain('plato ajeno')
     expect(t).not.toContain('AÚN NO tiene fotos propias')
+  })
+  it('🔴 (encargo 17) pide una GUÍA PARA PRODUCIR, no una pieza literaria: porqué del registro, citas, todas las sedes, cuál vale y referencias', () => {
+    const t = armarPedidoDeLaSeccion(insumos)
+    expect(t).toContain('GUÍA PARA PRODUCIR')
+    expect(t).toContain('No es un resumen del manual ni una pieza literaria')
+    expect(t).toContain('REGISTRO VISUAL del negocio y su PORQUÉ')
+    expect(t).toContain('citando la foto o el hecho del que sale')
+    expect(t).toContain('TODAS las sedes y ofertas')
+    expect(t).toContain('una sede sin local o solo de entrega NO se omite')
+    expect(t).toContain('di CUÁL VALE, nombrando su fuente y su fecha')
+    expect(t).toContain('la palabra más reciente del dueño manda')
+    expect(t).toContain('REFERENCIAS QUE SIRVEN')
+    expect(t).toContain('no cambies de registro ni una vez') // el trato del manual, reforzado (falla ① del encargo 17)
+  })
+  it('🔴 (encargo 17) las SEDES van en el pedido con la versión que vale por campo: la del dueño sobre la raspada, con fuente y fecha', () => {
+    const sedes = [{ id: 's-gye', clave: 'guayaquil', ciudad: 'Guayaquil' }, { id: 's-olon', clave: 'olon', ciudad: 'Olon' }]
+    const datosDeSedes = [
+      { sede_id: 's-gye', campo: 'direccion', valor: 'Avenida 8 NO', fuente: 'sitio', fecha: '2026-10-30' },
+      { sede_id: 's-gye', campo: 'direccion', valor: 'Av. del dueño 123', fuente: 'dueno', fecha: '2026-10-20' },
+      { sede_id: 's-gye', campo: 'horario', valor: 'jueves a lunes 07:00–15:00', fuente: 'sitio', fecha: '2026-10-30' },
+    ]
+    const t = armarPedidoDeLaSeccion({ ...insumos, sedes, datosDeSedes })
+    expect(t).toContain('SEDES DEL CLIENTE')
+    expect(t).toContain('sede «guayaquil» (Guayaquil)')
+    expect(t).toContain('sede «olon» (Olon): sin datos registrados todavía') // una sede sin datos TAMBIÉN va: no se omite
+    expect(t).toContain('direccion: Av. del dueño 123 (dueno, 2026-10-20)') // la palabra del dueño manda aunque la raspada sea más nueva
+    expect(t).not.toContain('Avenida 8 NO')
+    expect(t).toContain('horario: jueves a lunes 07:00–15:00 (sitio, 2026-10-30)') // sin palabra del dueño, la más nueva con su fuente
+  })
+  it('una foto sin fecha lo dice («sin fecha»): el agente no puede arbitrar versiones a ciegas', () => {
+    const t = armarPedidoDeLaSeccion({ ...insumos, fotos: [foto('f9', { fecha_origen: null, posted_at: null })] })
+    expect(t).toContain('sin fecha')
   })
   it('sin fotos propias: el pedido lo dice y pide decirlo en la primera frase', () => {
     const t = armarPedidoDeLaSeccion({ ...insumos, fotos: [] })
     expect(t).toContain('AÚN NO tiene fotos propias')
     expect(t).toContain('dilo en la primera frase')
+  })
+})
+
+describe('versionQueVale (puro)', () => {
+  it('por campo y sede: la más nueva del DUEÑO si la hay; si el dueño no habló, la más nueva que haya', () => {
+    const r = versionQueVale([
+      { sede_id: 's1', campo: 'direccion', valor: 'vieja del dueño', fuente: 'dueno', fecha: '2026-10-01' },
+      { sede_id: 's1', campo: 'direccion', valor: 'nueva del dueño', fuente: 'dueno', fecha: '2026-11-01' },
+      { sede_id: 's1', campo: 'direccion', valor: 'raspada más nueva', fuente: 'sitio', fecha: '2026-11-20' },
+      { sede_id: 's1', campo: 'horario', valor: 'raspado viejo', fuente: 'sitio', fecha: '2026-10-01' },
+      { sede_id: 's1', campo: 'horario', valor: 'raspado nuevo', fuente: 'mapas', fecha: '2026-11-10' },
+      { sede_id: 's2', campo: 'direccion', valor: 'de la otra sede', fuente: 'sitio', fecha: '2026-09-01' },
+    ])
+    expect(r).toContainEqual(expect.objectContaining({ sede_id: 's1', campo: 'direccion', valor: 'nueva del dueño' }))
+    expect(r).toContainEqual(expect.objectContaining({ sede_id: 's1', campo: 'horario', valor: 'raspado nuevo' }))
+    expect(r).toContainEqual(expect.objectContaining({ sede_id: 's2', campo: 'direccion', valor: 'de la otra sede' }))
+    expect(r).toHaveLength(3)
   })
 })
 
@@ -62,11 +113,45 @@ describe('prepararProduccionConIa', () => {
     const r = await prepararProduccionConIa(db, C1)
     expect(r.ok).toBe(true)
     if (!r.ok) return
-    expect(r.insumos).toMatchObject({ client_name: 'Náufrago de Prueba', version_base: 3, fotos_propias: 2, con_oferta: 1, hechos: 2, referencias: 1, sin_fotos_propias: false, ya_existe: false })
+    expect(r.insumos).toMatchObject({ client_name: 'Náufrago de Prueba', version_base: 3, fotos_propias: 2, con_oferta: 1, hechos: 2, referencias: 1, sedes: 0, sin_fotos_propias: false, ya_existe: false })
     expect(r.insumos.task).toContain('fachada con luz de tarde')
     expect(r.insumos.task).toContain('Abre jueves a domingo')
     expect(r.insumos.task).not.toContain('viejo') // la ficha retirada no entra
     expect(r.insumos.task).toContain('Tuteo cercano, de cevichería de playa')
+  })
+  it('🔴 (encargo 17) solo entran las referencias juzgadas «sirve»: las no_sirve y las dudosas quedan fuera', async () => {
+    const { db } = base()
+    const r = await prepararProduccionConIa(db, C1)
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.insumos.referencias).toBe(1)
+    expect(r.insumos.task).toContain('plato ajeno que inspira')
+    expect(r.insumos.task).not.toContain('juzgado que-no')
+    expect(r.insumos.task).not.toContain('plato ajeno dudoso')
+    expect(JUICIO_DE_REFERENCIA).toBe('sirve')
+  })
+  it('🔴 (encargo 17) las sedes del cliente entran al pedido con sus datos, y una lectura caída de sedes se declara', async () => {
+    const t = {
+      client_sedes: [{ id: 's-gye', client_id: C1, clave: 'guayaquil', ciudad: 'Guayaquil' }, { id: 's-olon', client_id: C1, clave: 'olon', ciudad: 'Olon' }],
+      client_sede_datos: [
+        { client_id: C1, sede_id: 's-gye', campo: 'direccion', valor_texto: 'Avenida 8 NO', fuente: 'sitio', observado_en: '2026-10-30T12:00:00Z' },
+        { client_id: C1, sede_id: 's-gye', campo: 'estado_de_la_sede', valor_texto: 'abierta', fuente: 'dueno', observado_en: '2026-11-09T05:00:00Z' },
+      ],
+    }
+    const r = await prepararProduccionConIa(base(t).db, C1)
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.insumos.sedes).toBe(2)
+    expect(r.insumos.task).toContain('sede «guayaquil» (Guayaquil)')
+    expect(r.insumos.task).toContain('estado_de_la_sede: abierta (dueno, 2026-11-09)')
+    expect(r.insumos.task).toContain('sede «olon» (Olon): sin datos registrados todavía')
+    const caida = await prepararProduccionConIa(base(t, { fallaEn: 'client_sede_datos' }).db, C1)
+    expect(caida).toMatchObject({ ok: false, error: 'lectura_fallida' })
+    expect(!caida.ok && caida.detalle).toContain('client_sede_datos')
+    // (CC6 p12) también la lista de sedes: si cae en silencio, el pedido saldría sin sedes, que es justo el error de v6
+    const caidaSedes = await prepararProduccionConIa(base(t, { fallaEn: 'client_sedes' }).db, C1)
+    expect(caidaSedes).toMatchObject({ ok: false, error: 'lectura_fallida' })
+    expect(!caidaSedes.ok && caidaSedes.detalle).toContain('client_sedes')
   })
   it('un cliente sin fotos propias prepara igual y lo declara', async () => {
     const { db } = base({ client_social_images: [] })

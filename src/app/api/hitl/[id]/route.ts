@@ -14,6 +14,7 @@ import { checkInternalKey } from '@/lib/internal-auth'
 import { validateObject } from '@/lib/input-validator'
 import { TIPO_DE_BANDEJA } from '@/lib/manual/borrador'
 import { guardarNotaDeRechazo, promoverManualRevisado } from '@/lib/manual/promover'
+import { promoverProduccionConIa, rechazarProduccionConIa, TIPO_DE_BANDEJA_DE_LA_SECCION } from '@/lib/manual/produccion-con-ia-bandeja'
 import { marcarAprobada } from '@/lib/oficina/cambios'
 import { publicarAprobado, TIPO_LOTE_SOCIAL, TIPO_PIEZA_DE_OFICINA } from '@/lib/publicacion/en-ensayo'
 import { puertosDePublicacion } from '@/lib/publicacion/almacen-supabase'
@@ -134,6 +135,17 @@ export async function PATCH(request: Request, ctx: { params: { id: string } }) {
       const col = table === 'seo_engagements' ? 'task_id' : 'id'
       await supabase.from(table).update({ status: newStatus }).eq(col, refId)
     }
+  }
+
+  // «Cómo se produce con IA» (encargo 17): la sección nació SIN vigencia como borrador; aprobar la escribe al manual por el
+  // escritor certificado (copia del vigente + la sección); rechazar deja la nota en el borrador y el manual no se toca.
+  if (data?.type === TIPO_DE_BANDEJA_DE_LA_SECCION && data.output_id && data.client_id && (body.status === 'approved' || body.status === 'rejected')) {
+    if (body.status === 'approved') {
+      const promocion = await promoverProduccionConIa(supabase, { output_id: String(data.output_id), client_id: String(data.client_id), aprobador: String(body.reviewer ?? 'emilio') })
+      return NextResponse.json({ item: data, promocion }, { status: promocion.ok ? 200 : 207 })
+    }
+    const nota = await rechazarProduccionConIa(supabase, { output_id: String(data.output_id), client_id: String(data.client_id), nota: frase ?? '', rechazado_por: String(body.reviewer ?? 'emilio') })
+    return NextResponse.json({ item: data, nota_de_rechazo: nota })
   }
 
   // Manual de marca revisado (M2): aprobar PROMUEVE el borrador a la versión vigente firmada; rechazar guarda la nota en el borrador. Es el único tipo con este efecto.

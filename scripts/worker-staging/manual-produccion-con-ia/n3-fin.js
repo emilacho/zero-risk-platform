@@ -4,4 +4,5 @@ if (e.fin) return [{ json: e.fin }]
 const r = e.escrito && e.escrito.body ? e.escrito.body : e.escrito
 if (e.dry_run) return [{ json: { ok: true, dry_run: true, client_id: e.client_id, insumos: e.insumos, task_chars: e.insumos && e.insumos.task ? e.insumos.task.length : 0 } }]
 if (!r || r.ok !== true) return [{ json: { ok: false, error: (r && r.error) || 'escribir_fallo', detalle: (r && r.detalle) || 'la puerta de escribir no contestó' } }]
-return [{ json: { ok: true, dry_run: false, client_id: e.client_id, version: r.version, id: r.id, solo_cambia: r.solo_cambia, costo_usd: e.costo_usd, fotos_propias: e.insumos.fotos_propias, sin_fotos_propias: e.insumos.sin_fotos_propias } }]
+// encargo 17: la sección nace SIN vigencia (borrador + tarjeta en la bandeja); la versión del manual la crea la aprobación de Emilio
+return [{ json: { ok: true, dry_run: false, client_id: e.client_id, sin_vigencia: true, output_id: r.output_id, hitl_id: r.hitl_id, version_base: r.version_base, costo_usd: e.costo_usd, fotos_propias: e.insumos.fotos_propias, sin_fotos_propias: e.insumos.sin_fotos_propias } }]
