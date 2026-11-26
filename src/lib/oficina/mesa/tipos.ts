@@ -70,7 +70,7 @@ export const turnosMaximosDe = (tipo: TipoDePieza | undefined): number => (tipo 
  */
 export const RESERVA_POR_TURNO_DE_LA_GRAN_IDEA_USD = 10
 /**
- * 26-nov · GO Lenovo 12:18Z (reel de Náufrago, encargo 2a4bf4b5) · LA RESERVA PROPIA DE LA DIRECCIÓN DE LAS MESAS DE PIEZA (carrusel, kit, video, post).
+ * 26-nov · GO Lenovo 12:18Z (un reel del cliente piloto, encargo 2a4bf4b5) · LA RESERVA PROPIA DE LA DIRECCIÓN DE LAS MESAS DE PIEZA (carrusel, kit, video, post).
  * Medido el 26-nov en `agent_invocations` de `creative-director-mesa`: sus `integrar` del video costaron US$ 1,20 y 1,15 (y los `dirigir`, 0,52 y 0,48, se cortaron).
  * Reserva = lo medido (≈ 1,2) × 1,5 = US$ 1,80, siempre dentro del techo de la pieza (`orquestador.ts`). Las mesas de la cadena (brief, reubicación, fallidos, banco)
  * y los demás asientos siguen con `COTAS.RESERVA_POR_TURNO_USD`; la dirección de la gran idea sigue con la suya.

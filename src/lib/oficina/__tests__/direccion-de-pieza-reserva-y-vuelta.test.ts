@@ -1,5 +1,5 @@
 /**
- * 26-nov · GO Lenovo 12:18Z · el reel de Náufrago (encargo 2a4bf4b5) cerró por tope sin llegar a propuestas: los dos `integrar` de `creative-director-mesa`
+ * 26-nov · GO Lenovo 12:18Z · el reel del cliente piloto (encargo 2a4bf4b5) cerró por tope sin llegar a propuestas: los dos `integrar` de `creative-director-mesa`
  * duraron 1 036 s y 842 s, la vuelta por Vercel murió a los 800 s y el vigía relanzó el turno (US$ 1,15 de más). Arreglo:
  *  (A) `creative-director-mesa` entrega su vuelta por el corredor (`AGENTES_CON_VUELTA_POR_EL_CORREDOR`);
  *  (B) la dirección de las mesas de pieza reserva US$ 1,80 por turno, con su plazo (40 min) y la espera del flujo (2 700 s).
