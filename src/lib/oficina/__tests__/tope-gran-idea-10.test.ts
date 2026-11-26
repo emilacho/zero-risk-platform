@@ -79,7 +79,8 @@ describe('(1) la reserva propia de la gran idea', () => {
     expect(reservaPorTurnoDe('concepto', DIRECCION, DIRECCION)).toBe(10)
     expect(reservaPorTurnoDe('concepto', 'content-creator', DIRECCION)).toBe(COTAS.RESERVA_POR_TURNO_USD)
     expect(reservaPorTurnoDe('brief', 'campaign-brief-agent', 'campaign-brief-agent')).toBe(COTAS.RESERVA_POR_TURNO_USD)
-    expect(reservaPorTurnoDe('carrusel', 'creative-director-mesa', 'creative-director-mesa')).toBe(COTAS.RESERVA_POR_TURNO_USD)
+    // 26-nov · GO Lenovo 12:18Z · la dirección de las mesas de pieza tiene su propia reserva (US$ 1,80 · `direccion-de-pieza-reserva-y-vuelta.test.ts`): ya no es 0,60, y tampoco es la de la gran idea
+    expect(reservaPorTurnoDe('carrusel', 'creative-director-mesa', 'creative-director-mesa')).toBe(1.8)
     expect(reservaPorTurnoDe('concepto', DIRECCION, '')).toBe(COTAS.RESERVA_POR_TURNO_USD)
     expect(reservaPorTurnoDe('concepto', DIRECCION, null)).toBe(COTAS.RESERVA_POR_TURNO_USD)
     expect(COTAS.RESERVA_POR_TURNO_USD).toBe(0.6)

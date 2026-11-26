@@ -69,9 +69,22 @@ export const turnosMaximosDe = (tipo: TipoDePieza | undefined): number => (tipo 
  * Las demás mesas, y los demás asientos de la mesa de concepto, siguen con `COTAS.RESERVA_POR_TURNO_USD`.
  */
 export const RESERVA_POR_TURNO_DE_LA_GRAN_IDEA_USD = 10
+/**
+ * 26-nov · GO Lenovo 12:18Z (reel de Náufrago, encargo 2a4bf4b5) · LA RESERVA PROPIA DE LA DIRECCIÓN DE LAS MESAS DE PIEZA (carrusel, kit, video, post).
+ * Medido el 26-nov en `agent_invocations` de `creative-director-mesa`: sus `integrar` del video costaron US$ 1,20 y 1,15 (y los `dirigir`, 0,52 y 0,48, se cortaron).
+ * Reserva = lo medido (≈ 1,2) × 1,5 = US$ 1,80, siempre dentro del techo de la pieza (`orquestador.ts`). Las mesas de la cadena (brief, reubicación, fallidos, banco)
+ * y los demás asientos siguen con `COTAS.RESERVA_POR_TURNO_USD`; la dirección de la gran idea sigue con la suya.
+ * Ojo: la reserva NO frena una llamada a mitad de camino (el SDK revisa el tope entre vueltas del modelo y estos turnos son de una sola vuelta): sirve para que la mesa
+ * reserve lo que el turno de verdad cuesta antes de pedirlo.
+ */
+export const RESERVA_POR_TURNO_DE_LA_DIRECCION_DE_PIEZA_USD = 1.8
 /** lo que reserva el turno de `agente` en una mesa de `tipo` cuya dirección es `direccion` (pura) */
-export const reservaPorTurnoDe = (tipo: TipoDePieza | undefined, agente: string, direccion: string | null | undefined): number =>
-  tipo === 'concepto' && !!direccion && agente === direccion ? RESERVA_POR_TURNO_DE_LA_GRAN_IDEA_USD : COTAS.RESERVA_POR_TURNO_USD
+export const reservaPorTurnoDe = (tipo: TipoDePieza | undefined, agente: string, direccion: string | null | undefined): number => {
+  if (!direccion || agente !== direccion) return COTAS.RESERVA_POR_TURNO_USD
+  if (tipo === 'concepto') return RESERVA_POR_TURNO_DE_LA_GRAN_IDEA_USD
+  if (tipo && !esDeLaCadena(tipo)) return RESERVA_POR_TURNO_DE_LA_DIRECCION_DE_PIEZA_USD
+  return COTAS.RESERVA_POR_TURNO_USD
+}
 
 /**
  * 21-nov · mismo GO · EL PLAZO DEL TURNO coherente con esa reserva: un turno que gasta su reserva entera tiene que caber sin vencer.
@@ -82,6 +95,22 @@ export const reservaPorTurnoDe = (tipo: TipoDePieza | undefined, agente: string,
 export const RITMO_MEDIDO_DE_LA_GRAN_IDEA_USD_POR_MIN = 0.06
 // (redondeado a 6 decimales antes de subir a la decena: 10 / 0,06 × 1,5 da 250,0000000003 en coma flotante)
 export const PLAZO_DEL_TURNO_DE_LA_GRAN_IDEA_MIN = Math.ceil(+((RESERVA_POR_TURNO_DE_LA_GRAN_IDEA_USD / RITMO_MEDIDO_DE_LA_GRAN_IDEA_USD_POR_MIN) * 1.5).toFixed(6) / 10) * 10
+
+/**
+ * 26-nov · mismo GO · EL PLAZO DEL TURNO de la dirección de pieza, con la misma regla: el ritmo MÁS LENTO medido el 26-nov fue US$ 1,2012 en 1 036 s ≈ 0,0696 dólares
+ * por minuto (redondeado hacia abajo a 0,069: más lento = plazo más largo). US$ 1,80 a ese ritmo ≈ 26 min; ×1,5 → 39,1 → 40 min. El `integrar` más largo medido
+ * (17,3 min) cabe con margen, y el vigía ya no lo da por muerto a los 26 min.
+ */
+export const RITMO_MEDIDO_DE_LA_DIRECCION_DE_PIEZA_USD_POR_MIN = 0.069
+export const PLAZO_DEL_TURNO_DE_LA_DIRECCION_DE_PIEZA_MIN =
+  Math.ceil(+((RESERVA_POR_TURNO_DE_LA_DIRECCION_DE_PIEZA_USD / RITMO_MEDIDO_DE_LA_DIRECCION_DE_PIEZA_USD_POR_MIN) * 1.5).toFixed(6) / 10) * 10
+/** el plazo propio del turno según su reserva (min) · null = el turno no tiene plazo propio (pura) */
+export const plazoPropioDelTurnoMin = (tipo: TipoDePieza | undefined, agente: string, direccion: string | null | undefined): number | null => {
+  const reserva = reservaPorTurnoDe(tipo, agente, direccion)
+  if (reserva === RESERVA_POR_TURNO_DE_LA_GRAN_IDEA_USD) return PLAZO_DEL_TURNO_DE_LA_GRAN_IDEA_MIN
+  if (reserva === RESERVA_POR_TURNO_DE_LA_DIRECCION_DE_PIEZA_USD) return PLAZO_DEL_TURNO_DE_LA_DIRECCION_DE_PIEZA_MIN
+  return null
+}
 
 /** los 6 equipos del departamento de marketing (MAPA 01-nov · firma 01-nov 00:11Z) · claves estables de `oficina_equipos` (las mismas que usa el tablero) */
 export const CLAVES_DE_EQUIPO = ['direccion', 'estrategia', 'creativo', 'web', 'medios', 'relaciones'] as const
@@ -207,13 +236,18 @@ export type Accion =
   | { accion: 'traducir' }
   | { accion: 'cierre_por_tope'; razon: 'techo_de_gasto' }
   | { accion: 'seguir_a_dibujar'; motivo: string }
-/** el piso del vigía (min) para el turno de `agente` en una mesa de `tipo`: el plazo propio de la gran idea si es su dirección; si no, el piso de hoy (pura) */
-export const pisoDelTurnoMin = (tipo: TipoDePieza | undefined, agente: string | null | undefined, direccion: string | null | undefined, pisoDeHoyMin: number): number =>
-  !!agente && reservaPorTurnoDe(tipo, agente, direccion) === RESERVA_POR_TURNO_DE_LA_GRAN_IDEA_USD ? Math.max(pisoDeHoyMin, PLAZO_DEL_TURNO_DE_LA_GRAN_IDEA_MIN) : pisoDeHoyMin
+/** el piso del vigía (min) para el turno de `agente` en una mesa de `tipo`: el plazo propio del turno (gran idea o dirección de pieza) si lo tiene; si no, el piso de hoy (pura) */
+export const pisoDelTurnoMin = (tipo: TipoDePieza | undefined, agente: string | null | undefined, direccion: string | null | undefined, pisoDeHoyMin: number): number => {
+  const propio = agente ? plazoPropioDelTurnoMin(tipo, agente, direccion) : null
+  return propio === null ? pisoDeHoyMin : Math.max(pisoDeHoyMin, propio)
+}
 /**
- * 21-nov · la ESPERA del flujo `oficina · turno` (Wait por webhook, en s) para el turno de `agente`: la del turno de la dirección de la gran idea es su plazo más 5 min
+ * 21-nov · la ESPERA del flujo `oficina · turno` (Wait por webhook, en s) para el turno de `agente`: la del turno con plazo propio es ese plazo más 5 min
  * (el vigía decide antes que el Wait); null = la espera de siempre del flujo (1 800 s). Así una vuelta perdida de cualquier otra mesa no deja una ejecución esperando 4 h (pura).
+ * 26-nov · la dirección de pieza: (40 + 5) × 60 = 2 700 s.
  */
 export const ESPERA_DEL_FLUJO_POR_OMISION_S = 1800
-export const esperaDelTurnoS = (tipo: TipoDePieza | undefined, agente: string, direccion: string | null | undefined): number | null =>
-  reservaPorTurnoDe(tipo, agente, direccion) === RESERVA_POR_TURNO_DE_LA_GRAN_IDEA_USD ? (PLAZO_DEL_TURNO_DE_LA_GRAN_IDEA_MIN + 5) * 60 : null
+export const esperaDelTurnoS = (tipo: TipoDePieza | undefined, agente: string, direccion: string | null | undefined): number | null => {
+  const propio = plazoPropioDelTurnoMin(tipo, agente, direccion)
+  return propio === null ? null : (propio + 5) * 60
+}
