@@ -5,6 +5,7 @@ import { POST as desarchivar } from '@/app/api/cadena/archivo/desarchivar/route'
 import { POST as recuperar } from '@/app/api/cadena/archivo/recuperar-pieza/route'
 import { POST as archivarPieza } from '@/app/api/cadena/archivo/archivar-pieza/route'
 import { POST as desarchivarPieza } from '@/app/api/cadena/archivo/desarchivar-pieza/route'
+import { POST as eliminar } from '@/app/api/cadena/archivo/eliminar/route'
 
 const base = vi.hoisted(() => ({ getSupabaseAdmin: vi.fn(() => { throw new Error('no debía tocar la base') }) }))
 vi.mock('@/lib/supabase', () => ({ getSupabaseAdmin: base.getSupabaseAdmin }))
@@ -15,7 +16,7 @@ describe('la llave interna', () => {
   beforeEach(() => { process.env.INTERNAL_API_KEY = 'llave-de-prueba'; base.getSupabaseAdmin.mockClear() })
   afterEach(() => { if (previa === undefined) delete process.env.INTERNAL_API_KEY; else process.env.INTERNAL_API_KEY = previa })
 
-  it.each([['archivar', archivar], ['desarchivar', desarchivar], ['recuperar-pieza', recuperar], ['archivar-pieza', archivarPieza], ['desarchivar-pieza', desarchivarPieza]])('🔴 %s sin llave responde 401', async (nombre, ruta) => {
+  it.each([['archivar', archivar], ['desarchivar', desarchivar], ['recuperar-pieza', recuperar], ['archivar-pieza', archivarPieza], ['desarchivar-pieza', desarchivarPieza], ['eliminar', eliminar]])('🔴 %s sin llave responde 401', async (nombre, ruta) => {
     const r = await ruta(new Request(`https://x.test/api/cadena/archivo/${nombre}`, { method: 'POST', body: '{}' }))
     expect(r.status).toBe(401)
     expect(base.getSupabaseAdmin).not.toHaveBeenCalled()

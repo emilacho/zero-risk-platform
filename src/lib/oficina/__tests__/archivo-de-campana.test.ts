@@ -165,9 +165,10 @@ describe('archivar', () => {
     expect(cuantas()).toEqual(antes)
   })
 
-  it.each(['activa', 'abierta', 'estrategia', 'calendario'])('🔴 una campaña %s no se archiva sin pausarla antes', async (estado) => {
-    const x = new DbFalsa().semilla('cadena_campanas', [{ id: K, client_id: C, estado }])
-    expect(await archivarCampana(d(x), { campana_id: K, dry_run: false }, AHORA)).toMatchObject({ status: 409, body: { error: 'campana_viva' } })
+  // 26-nov · Emilio (GO Lenovo 11:57Z): ya no hace falta pausar antes · una campaña en marcha se archiva directo (ver `archivar-y-eliminar-campana.test.ts`)
+  it('🔴 un estado que no es de campaña no se archiva', async () => {
+    const x = new DbFalsa().semilla('cadena_campanas', [{ id: K, client_id: C, estado: 'inventado' }])
+    expect(await archivarCampana(d(x), { campana_id: K, dry_run: false }, AHORA)).toMatchObject({ status: 409, body: { error: 'estado_desconocido' } })
   })
 
   it('sin campaña o con id inválido', async () => {

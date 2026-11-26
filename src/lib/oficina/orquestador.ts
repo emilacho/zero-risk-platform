@@ -199,6 +199,9 @@ async function aplicar(P: Puertos, enc: Encargo, pl: Plantilla, indice: number, 
   return { ...enc, estado_del_motor: nuevo, gasto_usd: nuevo.gasto_usd, estado: ambos.estado ?? enc.estado, imagen_generada: extra.imagen_generada ?? enc.imagen_generada }
 }
 
+/** los estados en que un encargo ya no pide turnos */
+export const ESTADOS_CERRADOS: readonly string[] = ['cerrado', 'cerrado_por_tope', 'fallido', 'aprobada']
+
 export async function avanzar(P: Puertos, encargoId: string): Promise<Respuesta> {
   let enc = await P.almacen.leerEncargo(encargoId)
   if (!enc) return r(404, { error: 'encargo_inexistente' })
@@ -897,6 +900,17 @@ export const PORTERO_NO_RESPONDE = 'PORTERO_NO_RESPONDE'
 export async function recibirResultado(P: Puertos, encargoId: string, n: number, res: ResultadoDeTurno): Promise<Respuesta> {
   const enc = await P.almacen.leerEncargo(encargoId)
   if (!enc) return r(404, { error: 'encargo_inexistente' })
+  // 26-nov · «Archivar» desde el tablero cierra los encargos EN CURSO de la campaña: el turno que ya había salido vuelve aquí y solo se anota lo que costó.
+  //   No se registra ni se avanza: un encargo cerrado no abre el turno siguiente (sin gasto nuevo)
+  if (ESTADOS_CERRADOS.includes(enc.estado)) {
+    await anotarCostoDeLaCopia(P, enc.id, res)
+    // 26-nov (Lenovo 15:12Z) · el turno que volvió ya no está en vuelo: se cierra como «muerto», para que «Eliminar» no lo siga esperando.
+    // Se relee el encargo DESPUÉS de anotar el costo: guardar con lo leído antes pisaría el gasto recién sumado
+    const abierto = await P.almacen.turnoAbierto(enc.id)
+    const ahora = abierto && abierto.n === n ? await P.almacen.leerEncargo(enc.id) : null
+    if (abierto && ahora) await P.almacen.guardar({ encargo_id: ahora.id, estado_del_motor: ahora.estado_del_motor, gasto_usd: ahora.gasto_usd, turno: { ...abierto, estado: 'muerto', error: 'el encargo ya estaba cerrado: turno ignorado' } })
+    return r(200, { accion: 'cerrado', estado: enc.estado, con_desacuerdo: enc.con_desacuerdo, turno_ignorado: n })
+  }
   const pl = await plantillaDe(P, enc)
   const abierto = await P.almacen.turnoAbierto(enc.id)
   if (!abierto || abierto.n !== n) {

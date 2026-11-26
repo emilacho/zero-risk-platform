@@ -59,6 +59,8 @@ export const tablasDelArchivo = <D>(db: { from(t: string): D }) => ({
   campanas: () => db.from('cadena_campanas'),
   filas: () => db.from('cadena_calendario_filas'),
   esperas: () => db.from('cadena_esperas'),
+  /** 26-nov · «Eliminar» mira si la campaña tiene una llamada todavía en vuelo */
+  corridas: () => db.from('cadena_corridas'),
 })
 
 /** lee el eslogan del manual vigente; un contenido ilegible no tumba la lectura */
