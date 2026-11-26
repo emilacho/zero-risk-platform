@@ -103,7 +103,8 @@ describe('la elegibilidad', () => {
     // ronda 69 · decisión explícita: + los dos agentes de diseño de la oficina (sin efectos propios de Vercel); el texto editorial y el descubrimiento siguen fuera
     // 06-nov · DALE (a) de Emilio: + el redactor del plan
     // 21-nov · GO de Lenovo (opción A): + el agente de los 4 pasos largos de la cadena, solo con la cabecera de saltar el editor
-    expect(AGENTES_CON_VUELTA_POR_EL_CORREDOR).toEqual(['campaign-brief-agent', 'carousel-designer', 'design-visual-storyteller', 'director-gran-idea', 'jefe-marketing', 'social-media-strategist'])
+    // 26-nov · GO de Lenovo 12:18Z: + la dirección de las mesas de pieza (`creative-director-mesa`), sus `integrar` del video pasan los 800 s
+    expect(AGENTES_CON_VUELTA_POR_EL_CORREDOR).toEqual(['campaign-brief-agent', 'carousel-designer', 'creative-director-mesa', 'design-visual-storyteller', 'director-gran-idea', 'jefe-marketing', 'social-media-strategist'])
     expect(vueltaPorElCorredorElegible(pedido({ agent: 'content-creator', callback_mode: 'runner' }) as never)).toMatchObject({ elegible: false })
   })
   it('🔴 21-nov · la revisión editorial solo deja de impedir la vuelta por el corredor con la cabecera de saltar el editor, y solo para agentes de la lista', () => {

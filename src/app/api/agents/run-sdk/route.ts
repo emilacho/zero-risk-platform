@@ -194,7 +194,11 @@ export function validarLimitesDeMirarAfuera(body: unknown): { ok: true; valor: {
 // 21-nov · GO de Lenovo (opción A del mapa de CC4) · + `social-media-strategist`, el agente de los 4 pasos largos de la cadena (estrategia, calendario,
 // fechas especiales, fichas): al máximo pasa de los 800 s de Vercel. Está en la lista de revisión editorial, así que SOLO entra cuando el pedido trae
 // `x-skip-editor-middleware: 1` (la cadena siempre la manda · `pasos.ts`): con la cabecera el editor nunca corre, ni por Vercel ni por el corredor.
-export const AGENTES_CON_VUELTA_POR_EL_CORREDOR: readonly string[] = ['campaign-brief-agent', 'carousel-designer', 'design-visual-storyteller', 'director-gran-idea', 'jefe-marketing', 'social-media-strategist']
+// 26-nov · GO Lenovo 12:18Z (un reel del cliente piloto, encargo 2a4bf4b5) · + `creative-director-mesa`, la dirección de las mesas de pieza: sus `integrar` del video duraron 1 036 s y
+// 842 s; por Vercel la vuelta murió a los 800 s, el empleado terminó y cobró, y la mesa cerró por tope. No persiste descubrimiento, no pasa por revisión editorial
+// (`creative-director` sí está en EDITOR_WHITELIST, pero el slug normalizado `creative-director-mesa` no coincide) y no emite brand_section/fidelity.
+// `video-editor` NO entra: pasa por revisión editorial y su máximo medido es 535 s (39 llamadas desde el 15-oct, ninguna pasa los 800 s).
+export const AGENTES_CON_VUELTA_POR_EL_CORREDOR: readonly string[] = ['campaign-brief-agent', 'carousel-designer', 'creative-director-mesa', 'design-visual-storyteller', 'director-gran-idea', 'jefe-marketing', 'social-media-strategist']
 
 export function resolveCallbackMode(body: RunSdkInput): string | null {
   const ctx = (body.context ?? {}) as Record<string, unknown>
