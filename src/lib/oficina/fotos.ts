@@ -26,6 +26,8 @@ export interface FotoEtiquetada {
   captura_web?: boolean
   /** 17-nov · la captura es del PROPIO cliente (su web o su red): referencia de estilo, pero su texto, usuario y enlace NO van a «no copiar» (observación CC6 a #1139) */
   del_cliente?: boolean
+  /** 26-nov · el tipo de la fila (`client_social_images.tipo`: web_imagen, video_captura, post_image…): de dónde salió la foto propia (la tarjeta lo dice) */
+  tipo?: string | null
 }
 export interface PedidoDeFoto {
   /** lo que protagoniza el brief (p. ej. el producto); si está vacío no se filtra por producto */

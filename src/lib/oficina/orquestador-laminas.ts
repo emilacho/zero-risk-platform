@@ -24,6 +24,7 @@ import { chequearPrompts, citasExisten, elegirVersion, veredictoDeImagenes, type
 import { reglasDeInvencion } from './prompts-sin-invencion'
 import { CORRECCIONES_DE_LARGO } from './salida'
 import type { Estado, Ficha, Paso, Plantilla } from './tipos'
+import { fotoPorId } from './id-de-foto'
 
 export type FamiliaDeLaminas = 'carrusel' | 'kit'
 /** la plantilla es de varias láminas si su clase (dato de la plantilla · fila #19) dibuja láminas (el resto de las familias las atiende el orquestador de la sala 1) */
@@ -59,7 +60,7 @@ export function imagenesAMirarL(e: Estado): Array<{ indice: number; url: string;
   // las fotos reales de confianza no alta se miran UNA vez (la primera)
   if (!datos(e, 'observacion_imagen')) {
     arr<ImagenDecidida>(direccion(e)?.imagenes).filter((i) => i.modo === 'real' && confianzaDeLaFoto(b.F.fotos, i.foto_id) !== 'alta').forEach((i, k) => {
-      const f = b.F.fotos.find((x) => x.id === i.foto_id)
+      const f = fotoPorId(b.F.fotos, i.foto_id)
       if (f?.url) out.push({ indice: BASE_INDICE_REAL + k, url: f.url, ref: i.ref })
     })
   }
@@ -270,8 +271,8 @@ function elegirVersionRef(e: Estado): SalidaCodigoL {
   const usos: NonNullable<Cambios['usos_de_fotos']> = []
   for (const i of arr<ImagenDecidida>(direccion(e)?.imagenes)) {
     if (i.modo === 'real') {
-      const f = b.F.fotos.find((x) => x.id === i.foto_id)
-      if (f?.url && i.foto_id) { porRef[i.ref] = { origen: 'real', url: f.url, foto_id: i.foto_id }; usos.push({ foto_id: i.foto_id, rol: i.ref }) }
+      const f = fotoPorId(b.F.fotos, i.foto_id)
+      if (f?.url) { porRef[i.ref] = { origen: 'real', url: f.url, foto_id: f.id }; usos.push({ foto_id: f.id, rol: i.ref }) }
     } else if (i.modo === 'generada') {
       const el = elegirVersion(aceptadas[i.ref] ?? [], pref)
       const it = el === null ? null : items.find((x) => x.indice === el)
@@ -560,7 +561,8 @@ function direccionVisual(v: Record<string, unknown>, b: BaseL, e: Estado, pl: Pl
   const generarSiFalta = pl.limites.generar_cuando_no_hay_foto === true
   const sinImagen = new Set<string>(rolesSinImagen(pl.limites))
   const efectivas: ImagenDecidida[] = imgs.map((i) => {
-    let modo = i.modo, foto = i.foto_id
+    // 26-nov · 🟡 CC6 a #1287 · la candidata nombrada por su COMIENZO se guarda con su id entero (`id-de-foto.ts`): desde aquí las láminas leen ids enteros
+    let modo = i.modo, foto = modo === 'real' ? fotoPorId(cand, i.foto_id)?.id ?? i.foto_id : i.foto_id
     // el CÓDIGO decide lo que no se confía al modelo: una foto real tiene que ser una de las candidatas
     if (modo === 'real' && !cand.some((c) => c.id === foto)) { fichas.push(fichaNueva(`vd-foto-invalida-${i.ref}`, 'chequeo', 'imagen', 'sugerencia', `el curador eligió la foto «${foto ?? '(sin id)'}» para «${i.ref}», que no es una candidata: se genera una imagen`, 'candidatas de la sala')); modo = 'generada'; foto = undefined }
     // NUNCA UNA LÁMINA VACÍA (criterio de Emilio 27-oct): sin foto apta la imagen se GENERA con el contexto del cliente, rotulada; solo las láminas tipográficas de marca (cta/cierre, dato de plantilla) salen sin imagen. Apagado por omisión (`generar_cuando_no_hay_foto`).

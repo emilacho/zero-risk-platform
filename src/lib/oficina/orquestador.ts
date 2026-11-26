@@ -57,6 +57,7 @@ import { ESQUEMA_CORRECCION_IMAGEN, PASO_CORREGIR_IMAGEN, pedidoDeLaCorreccion, 
 import { CLAVE_DE_LA_DURACION, duracionDeLaPieza, segundosDelEncargo, topesPorSegundoDeVideo, type DuracionDeLaPieza } from './video/duracion-de-la-pieza'
 import { estadoInicial, type Estado, type Ficha, type Paso, type Plantilla, type Siguiente } from './tipos'
 import { costoDelTurno } from './costo-del-turno'
+import { fotoPorId } from './id-de-foto'
 
 export interface Respuesta { status: number; cuerpo: Record<string, unknown> }
 const r = (status: number, cuerpo: Record<string, unknown>): Respuesta => ({ status, cuerpo })
@@ -77,7 +78,7 @@ function imagenesAMirar(e: Estado): Array<{ indice: number; url: string }> {
   }
   if (modo === 'real') {
     const id = (datos(e, 'visual_direction')?.decision as { foto_id?: string } | undefined)?.foto_id
-    const f = base(e).F.fotos.find((x) => x.id === id)
+    const f = fotoPorId(base(e).F.fotos, id)
     return f?.url ? [{ indice: 0, url: f.url }] : []
   }
   return []
@@ -655,8 +656,9 @@ async function ejecutarCodigo(P: Puertos, enc: Encargo, pl: Plantilla, paso: Pas
         return { res: { costo_usd: 0, artefacto: { origen: 'generada', url: el.url, generation_id: el.generation_id, ancho: 1024, alto: 1024, nota } } }
       }
       if (modo === 'real') {
-        const id = (vd.decision as { foto_id?: string }).foto_id
-        const f = b.F.fotos.find((x) => x.id === id)
+        const idDicho = (vd.decision as { foto_id?: string }).foto_id
+        const f = fotoPorId(b.F.fotos, idDicho)
+        const id = f?.id ?? idDicho
         // control ③ también para la foto real: si el curador la miró y el código la rechazó, se DESCARTA (queda declarado), no se entrega
         const obs = datos(e, 'observacion_imagen')
         if (obs && !((obs.veredicto as { pasan?: number[] } | undefined)?.pasan ?? []).includes(0)) {
@@ -1089,7 +1091,8 @@ function procesarValor(paso: Paso, v: Record<string, unknown>, enc: Encargo, e: 
       const politica = String(pl.limites.politica_imagen_generada ?? 'permitida')
       const fichas: Ficha[] = []
       let modo = dec.modo
-      let fotoId = dec.foto_id
+      // 26-nov · 🟡 CC6 a #1287 · el curador puede nombrar la candidata por su COMIENZO: se guarda el id entero (`id-de-foto.ts`); desde aquí todo lee ids enteros
+      let fotoId = modo === 'real' ? fotoPorId(cand, dec.foto_id)?.id ?? dec.foto_id : dec.foto_id
       // el CÓDIGO decide lo que no se confía al modelo: una foto real tiene que ser una de las candidatas; «ninguna» no se acepta si la política permite generar
       if (modo === 'real' && !cand.some((c) => c.id === fotoId)) {
         fichas.push(fichaNueva('vd-foto-invalida', 'chequeo', 'imagen', 'sugerencia', `el curador eligió la foto «${fotoId ?? '(sin id)'}», que no es una candidata: se genera una imagen`, 'candidatas de la sala'))

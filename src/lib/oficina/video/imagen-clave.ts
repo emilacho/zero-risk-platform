@@ -15,6 +15,7 @@ import type { Estado } from '../tipos'
 import type { PersonajeDeLaHoja, Plano } from './guion'
 import { MAX_FOTOS_POR_IMAGEN } from '../../imagen-sobre-foto'
 import { faseDeLaProduccion } from './propuestas'
+import { fotoPorId } from '../id-de-foto'
 
 export const PASO_IMAGENES_CLAVE = 'imagenes_clave'
 /** el mismo paso con la propuesta aprobada (orden acordado con CC1: mesa → imagenes_clave → borrador_video → aprobar_propuestas → imagenes_clave_final → pedido…) */
@@ -129,7 +130,7 @@ export interface PedidoDeImagenClave {
  * de la misma hoja piden lo MISMO. `rotar: false` (no se sabe qué fotos muestran el protagonista): solo lleva foto el plano que la nombra; los demás se generan. Puro.
  */
 /** 17-nov · fila 3 de CC1: el plano de ambiente que nombra una foto propia APTA la lleva (no rota: solo la que nombra) */
-const fotoNombradaApta = (p: PlanoDeLaHoja, aptas: FotoDeReferencia[]): FotoDeReferencia | null => (esTexto(p.foto_id) ? aptas.find((f) => f.id === p.foto_id!.trim()) ?? null : null)
+const fotoNombradaApta = (p: PlanoDeLaHoja, aptas: FotoDeReferencia[]): FotoDeReferencia | null => (esTexto(p.foto_id) ? fotoPorId(aptas, p.foto_id) ?? null : null)
 
 export interface FotosDelPlano {
   /** la imagen 1 (la base): la foto del plano; sin ella, la primera foto de sus personajes o de lo que nombra */
@@ -153,7 +154,8 @@ export function fotosDelPlano(p: Pick<PlanoDeLaHoja, 'fotos_extra' | 'personajes
   const items: Array<{ foto: FotoDeReferencia; que: string }> = []
   const lineas: string[] = []
   const sin_foto: string[] = []
-  const de = (id: string): FotoDeReferencia | null => propias.find((f) => f.id === id.trim()) ?? null
+  // 26-nov · los ids de `fotos_extra`, las heredadas y los personajes los escribe un agente: valen acortados (`id-de-foto.ts`)
+  const de = (id: string): FotoDeReferencia | null => fotoPorId(propias, id) ?? null
   const poner = (f: FotoDeReferencia | null, que: string): boolean => {
     if (!f || items.length >= MAX_FOTOS_POR_IMAGEN || items.some((x) => x.foto.id === f.id)) return false
     items.push({ foto: f, que }); return true
@@ -300,7 +302,7 @@ export function tareaDeLaRevisionDeImagenesClave(o: { imagenes: ImagenClaveDelPl
   for (const im of vistas) {
     images.push(im.url)
     lineas.push(`- imagen ${images.length}: imagen clave del plano ${im.n}${im.foto_referencia_id ? ` (hecha sobre la foto real «${im.foto_referencia_id}»)` : ''}`)
-    const real = im.foto_referencia_id ? o.fotos.find((f) => f.id === im.foto_referencia_id) : undefined
+    const real = im.foto_referencia_id ? fotoPorId(o.fotos, im.foto_referencia_id) : undefined
     if (!real?.url) continue
     const ya = fotoEn.get(real.id)
     if (ya) lineas.push(`  (la vara del producto del plano ${im.n} es la foto REAL «${real.id}», ya mostrada como imagen ${ya})`)
