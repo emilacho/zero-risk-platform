@@ -25,6 +25,7 @@ interface Consulta extends PromiseLike<Lectura> {
   neq(c: string, v: unknown): Consulta
   in(c: string, v: unknown[]): Consulta
   is(c: string, v: unknown): Consulta
+  not(c: string, op: string, v: unknown): Consulta
   gte(c: string, v: unknown): Consulta
   gt(c: string, v: unknown): Consulta
   lt(c: string, v: unknown): Consulta
@@ -294,10 +295,48 @@ export const TABLAS_DE_LA_CAMPANA = [
 export type DbConFuncion = Db & { rpc(fn: string, args: Record<string, unknown>): PromiseLike<Lectura> }
 
 /** POST /api/cadena/archivo/eliminar: `{ campana_id, dry_run }` */
-export async function eliminarCampana(db: DbConFuncion, cuerpo: unknown): Promise<Respuesta> {
+/** 26-nov (Lenovo 15:12Z) · el motivo que queda si «Eliminar» tuvo que detener la campaña y no llegó a borrarla (había trabajo en vuelo) */
+export const MOTIVO_DE_ELIMINAR = 'detenida para eliminarla desde el tablero'
+/** un turno de agente que tomó su flujo hace más que esto ya no cuenta como en vuelo (el brazo de video es el más largo: 45 min) */
+export const MINUTOS_EN_VUELO = 45
+/** cuánto espera «Eliminar», en el mismo pedido, a que vuelva lo que estaba en vuelo; después contesta «intenta en unos minutos» */
+export const ESPERA_POR_LO_EN_VUELO_MS = 180_000
+export const CADA_CUANTO_MIRAR_MS = 10_000
+const ESTADOS_FUERA_DE_MARCHA = ['cerrada', 'reemplazada']
+
+/**
+ * lo que está EN VUELO para la campaña: un turno de la oficina que un flujo ya tomó (corre un agente o un brazo), reciente y que no es la
+ * espera del dueño, o una llamada de la cadena todavía dentro de su plazo. Borrar con esto afuera perdería lo que gastó al volver.
+ */
+async function loEnVuelo(db: Db, campana: string, ahora: Date): Promise<{ turnos: number; corridas: number } | Respuesta> {
+  const enc = await db.from('oficina_encargos').select('id').eq('campana_id', campana)
+  if (enc.error) return falla(enc.error.message)
+  const ids = filasDe(enc).map((e) => String(e.id))
+  let turnos = 0
+  if (ids.length) {
+    const desde = new Date(ahora.getTime() - MINUTOS_EN_VUELO * 60_000).toISOString()
+    const t = await db.from('oficina_turnos').select('id').in('encargo_id', ids).eq('estado', 'corriendo').neq('tipo', 'dueno').not('workflow_execution_id', 'is', null).gte('inicio', desde)
+    if (t.error) return falla(t.error.message)
+    turnos = filasDe(t).length
+  }
+  const k = await tablasDelArchivo(db).corridas().select('id').eq('campana_id', campana).eq('estado', 'en_curso').gt('plazo_en', ahora.toISOString())
+  if (k.error) return falla(k.error.message)
+  return { turnos, corridas: filasDe(k).length }
+}
+
+export type OpcionesDeEliminar = { ahora?: () => Date; esperar?: (ms: number) => Promise<void>; esperaMs?: number }
+
+export async function eliminarCampana(db: DbConFuncion, cuerpo: unknown, o: OpcionesDeEliminar = {}): Promise<Respuesta> {
+  const reloj = o.ahora ?? (() => new Date())
+  const esperar = o.esperar ?? ((ms: number) => new Promise<void>((h) => setTimeout(h, ms)))
   const l = await leerCampana(db, cuerpo)
   if (esRespuesta(l)) return l
   const { c } = l
+  // 26-nov (Lenovo 15:12Z) · si está en marcha o tiene encargos en curso, primero se detiene (lo mismo que «Archivar»), en el mismo pedido
+  const enCurso = await db.from('oficina_encargos').select('id').eq('campana_id', c.id).in('estado', ENCARGOS_EN_CURSO)
+  if (enCurso.error) return falla(enCurso.error.message)
+  const enMarcha = !c.archivada_en && !ESTADOS_FUERA_DE_MARCHA.includes(String(c.estado))
+  const detener = enMarcha || filasDe(enCurso).length > 0
   if (l.cuerpo.dry_run !== false) {
     const cuenta: Record<string, number> = {}
     for (const t of TABLAS_DE_LA_CAMPANA) {
@@ -308,7 +347,24 @@ export async function eliminarCampana(db: DbConFuncion, cuerpo: unknown): Promis
     const enc = await db.from('oficina_encargos').select('id').eq('campana_id', c.id)
     if (enc.error) return falla(enc.error.message)
     cuenta.oficina_encargos = filasDe(enc).length
-    return { status: 200, body: { ok: true, dry_run: true, campana_id: c.id, estado_actual: c.estado, borraria: cuenta } }
+    const vuelo = await loEnVuelo(db, String(c.id), reloj())
+    if (esRespuesta(vuelo)) return vuelo
+    return { status: 200, body: { ok: true, dry_run: true, campana_id: c.id, estado_actual: c.estado, detendria_antes: detener, en_vuelo: vuelo, borraria: cuenta } }
+  }
+  if (detener) {
+    const a = await archivarCampana(db, { campana_id: c.id, dry_run: false, motivo: MOTIVO_DE_ELIMINAR }, reloj())
+    if (a.status !== 200) return a
+  }
+  // lo que ya estaba en vuelo vuelve solo (el encargo cerrado anota su costo y no abre otro turno): se espera un rato, sin gastar
+  const tope = reloj().getTime() + (o.esperaMs ?? ESPERA_POR_LO_EN_VUELO_MS)
+  for (;;) {
+    const vuelo = await loEnVuelo(db, String(c.id), reloj())
+    if (esRespuesta(vuelo)) return vuelo
+    if (vuelo.turnos + vuelo.corridas === 0) break
+    if (reloj().getTime() >= tope) {
+      return { status: 409, body: { ok: false, error: 'trabajo_en_curso', detalle: 'hay trabajo en curso, intenta en unos minutos', detenida: detener, en_vuelo: vuelo } }
+    }
+    await esperar(CADA_CUANTO_MIRAR_MS)
   }
   const r = await db.rpc('cadena_eliminar_campana', { p_campana: c.id })
   if (r.error) return falla(r.error.message)

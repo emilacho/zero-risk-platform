@@ -904,6 +904,11 @@ export async function recibirResultado(P: Puertos, encargoId: string, n: number,
   //   No se registra ni se avanza: un encargo cerrado no abre el turno siguiente (sin gasto nuevo)
   if (ESTADOS_CERRADOS.includes(enc.estado)) {
     await anotarCostoDeLaCopia(P, enc.id, res)
+    // 26-nov (Lenovo 15:12Z) · el turno que volvió ya no está en vuelo: se cierra como «muerto», para que «Eliminar» no lo siga esperando.
+    // Se relee el encargo DESPUÉS de anotar el costo: guardar con lo leído antes pisaría el gasto recién sumado
+    const abierto = await P.almacen.turnoAbierto(enc.id)
+    const ahora = abierto && abierto.n === n ? await P.almacen.leerEncargo(enc.id) : null
+    if (abierto && ahora) await P.almacen.guardar({ encargo_id: ahora.id, estado_del_motor: ahora.estado_del_motor, gasto_usd: ahora.gasto_usd, turno: { ...abierto, estado: 'muerto', error: 'el encargo ya estaba cerrado: turno ignorado' } })
     return r(200, { accion: 'cerrado', estado: enc.estado, con_desacuerdo: enc.con_desacuerdo, turno_ignorado: n })
   }
   const pl = await plantillaDe(P, enc)

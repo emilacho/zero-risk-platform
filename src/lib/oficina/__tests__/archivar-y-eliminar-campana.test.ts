@@ -11,7 +11,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { abrirEncargo, avanzar, recibirResultado } from '../orquestador'
 import { CARRUSEL_IG_V1 } from '../plantillas/carrusel-ig-v1'
 import { TARGET_STEP_PRODUCIR } from '../sobre'
-import { archivarCampana, eliminarCampana, MOTIVO_DEL_TABLERO, TABLAS_DE_LA_CAMPANA, type Db, type DbConFuncion } from '../archivo-de-campana'
+import { archivarCampana, eliminarCampana, ESPERA_POR_LO_EN_VUELO_MS, MINUTOS_EN_VUELO, MOTIVO_DE_ELIMINAR, MOTIVO_DEL_TABLERO, TABLAS_DE_LA_CAMPANA, type Db, type DbConFuncion } from '../archivo-de-campana'
 import { DbFalsa } from './dbfalsa'
 import { CLIENTE, PARTE, crearMemoria } from './memoria'
 
@@ -111,6 +111,10 @@ describe('② el turno que ya había salido', () => {
     expect(M.gastos.filter((g) => g.ref_id === 'ex-afuera')).toEqual([{ concepto: 'modelo', ref_tabla: 'agent_invocations', ref_id: 'ex-afuera', cost_usd: 0.4, base: 'usage' }])
     expect(JSON.stringify(M.encargos.get(id)!.estado_del_motor.vueltas)).toBe(motor)
     expect(M.encargos.get(id)!.estado).toBe('cerrado')
+    // 26-nov (Lenovo 15:12Z) · el turno que volvió queda «muerto» (ya no está en vuelo) y el gasto recién anotado NO se pisa
+    expect(M.turnos.get(id)!.get(n)).toMatchObject({ estado: 'muerto' })
+    expect(M.encargos.get(id)!.gasto_usd).toBeCloseTo(0.4, 6)
+    expect(M.encargos.get(id)!.estado_del_motor.gasto_usd).toBeCloseTo(0.4, 6)
     // y un «siguiente» después tampoco abre nada
     const r2 = await avanzar(M.P, id)
     expect(r2.cuerpo).toMatchObject({ accion: 'cerrado', estado: 'cerrado' })
@@ -174,6 +178,121 @@ describe('③ eliminar', () => {
     expect(rpc).not.toHaveBeenCalled()
     const { db: db2 } = conFuncion(semilla(), vi.fn<Rpc>(async () => ({ data: { ok: false, error: 'sin_campana' }, error: null })))
     expect((await eliminarCampana(db2, { campana_id: K, dry_run: false })).status).toBe(404)
+  })
+})
+
+describe('⑤ eliminar una campaña en marcha (Lenovo 15:12Z): primero la detiene, espera lo que está en vuelo y después borra', () => {
+  type Rpc = (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message: string } | null }>
+  const T0 = new Date('2026-11-26T15:30:00Z').getTime()
+  /** un reloj falso: `esperar` adelanta el tiempo (y puede cambiar la base, como el turno que vuelve) */
+  const reloj = (alEsperar?: (x: DbFalsa) => void, x?: DbFalsa) => {
+    let t = T0
+    const esperar = vi.fn(async (ms: number) => { t += ms; if (alEsperar && x) alEsperar(x) })
+    return { ahora: () => new Date(t), esperar }
+  }
+  const enMarcha = (turnos: Record<string, unknown>[] = [], corridas: Record<string, unknown>[] = []) => activa()
+    .semilla('oficina_turnos', turnos)
+    .semilla('cadena_corridas', corridas)
+  /** lo que la función de la base «ve» cuando la llaman: así se prueba el ORDEN (detener antes de borrar) */
+  const conFuncion = (x: DbFalsa) => {
+    const vio: Record<string, unknown> = {}
+    const rpc = vi.fn<Rpc>(async () => {
+      vio.campana = { ...filas(x, 'cadena_campanas')[0] }
+      vio.encargos = filas(x, 'oficina_encargos').filter((e) => e.campana_id === K).map((e) => `${e.id}:${e.estado}`)
+      vio.esperas = filas(x, 'cadena_esperas').map((e) => e.estado)
+      return { data: { ok: true, borradas: {} }, error: null }
+    })
+    return { db: Object.assign(x, { rpc }) as unknown as DbConFuncion, rpc, vio }
+  }
+  const hace = (min: number) => new Date(T0 - min * 60_000).toISOString()
+  const turno = (o: Record<string, unknown>) => ({ id: 1, encargo_id: 'e-paso', n: 3, tipo: 'agente', estado: 'corriendo', workflow_execution_id: 'ex-1', inicio: hace(2), ...o })
+
+  it('🔴 una activa con encargos en curso: la detiene (como «Archivar») ANTES de llamar al borrado, en el mismo pedido', async () => {
+    const x = enMarcha()
+    const { db, rpc, vio } = conFuncion(x)
+    const r = reloj()
+    const res = await eliminarCampana(db, { campana_id: K, dry_run: false }, r)
+    expect(res).toMatchObject({ status: 200, body: { ok: true, dry_run: false } })
+    expect(rpc).toHaveBeenCalledTimes(1)
+    expect(vio.campana).toMatchObject({ estado: 'reemplazada', archivo_motivo: MOTIVO_DE_ELIMINAR, estado_antes_de_archivar: 'activa' })
+    expect(vio.encargos).toEqual(['e-paso:cerrado', 'e-abierto:cerrado', 'e-hecho:aprobada'])
+    expect(vio.esperas).toEqual(['cancelada'])
+    expect(r.esperar).not.toHaveBeenCalled()
+  })
+
+  it('🔴 con un agente en vuelo que no vuelve: la deja detenida, NO borra y dice «hay trabajo en curso, intenta en unos minutos»', async () => {
+    const x = enMarcha([turno({})])
+    const { db, rpc } = conFuncion(x)
+    const r = reloj()
+    const res = await eliminarCampana(db, { campana_id: K, dry_run: false }, r)
+    expect(res).toMatchObject({ status: 409, body: { ok: false, error: 'trabajo_en_curso', detalle: 'hay trabajo en curso, intenta en unos minutos', detenida: true, en_vuelo: { turnos: 1, corridas: 0 } } })
+    expect(rpc).not.toHaveBeenCalled()
+    expect(filas(x, 'cadena_campanas')[0]).toMatchObject({ estado: 'reemplazada' })
+    expect(filas(x, 'oficina_encargos').find((e) => e.id === 'e-paso')).toMatchObject({ estado: 'cerrado' })
+    // esperó lo prometido, mirando cada tanto, y nada más
+    expect(r.esperar.mock.calls.reduce((s, [ms]) => s + ms, 0)).toBe(ESPERA_POR_LO_EN_VUELO_MS)
+  })
+
+  it('🔴 si lo que estaba en vuelo vuelve mientras espera, borra', async () => {
+    const x = enMarcha([turno({})])
+    const { db, rpc } = conFuncion(x)
+    const r = reloj((b) => { filas(b, 'oficina_turnos')[0].estado = 'muerto' }, x)
+    const res = await eliminarCampana(db, { campana_id: K, dry_run: false }, r)
+    expect(res.status).toBe(200)
+    expect(rpc).toHaveBeenCalledTimes(1)
+    expect(r.esperar).toHaveBeenCalledTimes(1)
+  })
+
+  it('🔴 una llamada de la cadena dentro de su plazo también es trabajo en vuelo', async () => {
+    const x = enMarcha([], [{ id: 9, campana_id: K, estado: 'en_curso', plazo_en: new Date(T0 + 60 * 60_000).toISOString() }])
+    const { db, rpc } = conFuncion(x)
+    const res = await eliminarCampana(db, { campana_id: K, dry_run: false }, reloj())
+    expect(res).toMatchObject({ status: 409, body: { error: 'trabajo_en_curso', en_vuelo: { turnos: 0, corridas: 1 } } })
+    expect(rpc).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['la espera del dueño', turno({ tipo: 'dueno' })],
+    ['un turno que ningún flujo tomó', turno({ workflow_execution_id: null })],
+    [`un turno tomado hace más de ${MINUTOS_EN_VUELO} min`, turno({ inicio: hace(MINUTOS_EN_VUELO + 1) })],
+    ['un turno ya terminado', turno({ estado: 'hecho' })],
+    ['un turno de otra campaña', turno({ encargo_id: 'e-ajeno' })],
+  ])('🔴 %s NO frena el borrado', async (_, t) => {
+    const x = enMarcha([t], [{ id: 9, campana_id: K, estado: 'en_curso', plazo_en: hace(1) }])
+    const { db, rpc } = conFuncion(x)
+    const r = reloj()
+    expect((await eliminarCampana(db, { campana_id: K, dry_run: false }, r)).status).toBe(200)
+    expect(rpc).toHaveBeenCalledTimes(1)
+    expect(r.esperar).not.toHaveBeenCalled()
+  })
+
+  it('🔴 sin dry_run:false dice que la detendría y qué hay en vuelo, sin escribir', async () => {
+    const x = enMarcha([turno({})])
+    const { db, rpc } = conFuncion(x)
+    const antes = foto(x)
+    const res = await eliminarCampana(db, { campana_id: K }, reloj())
+    expect(res.body).toMatchObject({ dry_run: true, detendria_antes: true, en_vuelo: { turnos: 1, corridas: 0 } })
+    expect(rpc).not.toHaveBeenCalled()
+    expect(foto(x)).toBe(antes)
+  })
+
+  it.each(['pausada', 'estrategia', 'calendario', 'necesita_humano'])('🔴 una campaña %s SIN encargos en curso también se detiene antes (sus esperas vivas se cancelan)', async (estado) => {
+    const x = new DbFalsa()
+      .semilla('cadena_campanas', [{ id: K, client_id: C, estado, creada_en: '2026-11-20T00:00:00Z', seco: false }])
+      .semilla('cadena_esperas', [{ id: 1, campana_id: K, estado: 'viva' }])
+    const { db, rpc, vio } = conFuncion(x)
+    expect((await eliminarCampana(db, { campana_id: K, dry_run: false }, reloj())).status).toBe(200)
+    expect(rpc).toHaveBeenCalledTimes(1)
+    expect(vio.esperas).toEqual(['cancelada'])
+    expect(vio.campana).toMatchObject({ estado: 'reemplazada', estado_antes_de_archivar: estado })
+  })
+
+  it('🔴 una campaña ya archivada y sin encargos en curso no se vuelve a archivar: se borra directo', async () => {
+    const x = new DbFalsa().semilla('cadena_campanas', [{ id: K, client_id: C, estado: 'reemplazada', archivada_en: '2026-11-25T00:00:00Z', archivo_motivo: 'antes', seco: false }])
+    const { db, rpc, vio } = conFuncion(x)
+    expect((await eliminarCampana(db, { campana_id: K, dry_run: false }, reloj())).status).toBe(200)
+    expect(rpc).toHaveBeenCalledTimes(1)
+    expect(vio.campana).toMatchObject({ archivo_motivo: 'antes' })
   })
 })
 
