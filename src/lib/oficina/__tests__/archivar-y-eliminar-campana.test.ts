@@ -63,6 +63,25 @@ describe('① archivar una campaña en marcha', () => {
     expect(filas(x, 'oficina_encargos')).toHaveLength(4)
   })
 
+  /** a7 de CC6 (26-nov 14:54Z): el UPDATE vuelve a filtrar por «en curso»; un encargo que terminó entre la lectura y el UPDATE se queda como terminó */
+  it('🔴 un encargo que termina entre la lectura y el cierre NO pasa a cerrado', async () => {
+    const x = activa()
+    const base = d(x)
+    const conCarrera = { from: (t: string) => {
+      const q = base.from(t) as unknown as { update: (p: unknown) => unknown }
+      if (t !== 'oficina_encargos') return q
+      const update = q.update.bind(q)
+      q.update = (p: unknown) => { const f = filas(x, 'oficina_encargos').find((e) => e.id === 'e-paso'); if (f) f.estado = 'aprobada'; return update(p) }
+      return q
+    } } as unknown as Db
+    const r = await archivarCampana(conCarrera, { campana_id: K, dry_run: false, motivo: MOTIVO_DEL_TABLERO }, AHORA)
+    expect(r.status).toBe(200)
+    const e = (id: string) => filas(x, 'oficina_encargos').find((f) => f.id === id)
+    expect(e('e-paso')).toMatchObject({ estado: 'aprobada' })
+    expect(e('e-paso')).not.toHaveProperty('archivada_en')
+    expect(e('e-abierto')).toMatchObject({ estado: 'cerrado' })
+  })
+
   it('🔴 si falla la lectura de los encargos en curso, lo dice y no archiva', async () => {
     const x = activa()
     x.fallar.oficina_encargos = 'caída'
@@ -96,6 +115,21 @@ describe('② el turno que ya había salido', () => {
     const r2 = await avanzar(M.P, id)
     expect(r2.cuerpo).toMatchObject({ accion: 'cerrado', estado: 'cerrado' })
     expect(r2.cuerpo).not.toHaveProperty('turno')
+  })
+
+  /** o3 de CC6 (26-nov 14:54Z): cada estado terminal, uno por uno (quitar uno de la lista no puede pasar callado) */
+  it.each(['cerrado', 'cerrado_por_tope', 'fallido', 'aprobada'] as const)('🔴 un turno que vuelve sobre un encargo «%s» no registra ni abre otro', async (estado) => {
+    const M = crearMemoria({ parte, plantilla: CARRUSEL_IG_V1, fuentes: { fotos: [] } })
+    const a = await abrirEncargo(M.P, { cuerpo: { parte_id: PARTE, brief_id: 'BRF-0100', dry_run: true, familia: 'carrusel_ig_v1' }, client_id: CLIENTE, target_step_id: TARGET_STEP_PRODUCIR })
+    const id = String(a.cuerpo.encargo_id)
+    const n = ((await avanzar(M.P, id)).cuerpo.turno as { n: number }).n
+    M.encargos.get(id)!.estado = estado
+    const motor = JSON.stringify(M.encargos.get(id)!.estado_del_motor.vueltas)
+    const r = await recibirResultado(M.P, id, n, { texto: 'material', costo_usd: 0.1, workflow_execution_id: `ex-${estado}` })
+    expect(r.cuerpo).toMatchObject({ accion: 'cerrado', estado, turno_ignorado: n })
+    expect(r.cuerpo).not.toHaveProperty('turno')
+    expect(JSON.stringify(M.encargos.get(id)!.estado_del_motor.vueltas)).toBe(motor)
+    expect(M.encargos.get(id)!.estado).toBe(estado)
   })
 })
 
@@ -195,6 +229,18 @@ describe('④ la función de la base borra todo lo que tiene llave a la campaña
     expect(sql).toMatch(/^COMMIT;/m)
     expect(sql).toMatch(/REVOKE ALL ON FUNCTION public\.cadena_eliminar_campana\(uuid\) FROM PUBLIC, anon, authenticated/)
     expect(sql).toMatch(/GRANT EXECUTE ON FUNCTION public\.cadena_eliminar_campana\(uuid\) TO service_role/)
+  })
+  /** m1 de CC6 (26-nov 14:54Z): sin esto, quitar el borrado de la bandeja dejaba la ④ verde y tarjetas huérfanas en la bandeja de Emilio */
+  it('🔴 borra las tarjetas de la bandeja de la campaña: las de sus encargos (columna y metadata) y las de su gran idea', () => {
+    expect(sql).toMatch(/DELETE FROM public\.hitl_queue WHERE id = ANY \(v_hitl\)/)
+    const junta = sql.slice(sql.indexOf('INTO v_hitl'), sql.indexOf(') x;'))
+    expect(junta).toMatch(/SELECT hitl_queue_id AS h FROM public\.oficina_encargos WHERE id = ANY \(v_enc\)/)
+    expect(junta).toMatch(/metadata->>'oficina_encargo_id' = ANY \(v_enc::text\[\]\)/)
+    expect(junta).toMatch(/JOIN public\.cadena_conceptos k ON k\.hitl_id = q\.id::text WHERE k\.campana_id = p_campana/)
+    // se juntan ANTES de borrar los encargos y los conceptos (después ya no habría de dónde leerlas)
+    const pos = (t: string) => sql.indexOf(`DELETE FROM public.${t} `)
+    expect(sql.indexOf('INTO v_hitl')).toBeLessThan(pos('oficina_encargos'))
+    expect(sql.indexOf('INTO v_hitl')).toBeLessThan(pos('cadena_conceptos'))
   })
   it('🔴 no toca el plan, las partes, el cerebro ni las llamadas a los agentes', () => {
     for (const t of ['client_historical_outputs', 'agent_invocations', 'cerebro_', 'client_brain', 'storage.']) expect(sql).not.toMatch(new RegExp(`DELETE FROM (public\\.)?${t.replace('.', '\\.')}`))
