@@ -561,7 +561,8 @@ function direccionVisual(v: Record<string, unknown>, b: BaseL, e: Estado, pl: Pl
   const generarSiFalta = pl.limites.generar_cuando_no_hay_foto === true
   const sinImagen = new Set<string>(rolesSinImagen(pl.limites))
   const efectivas: ImagenDecidida[] = imgs.map((i) => {
-    let modo = i.modo, foto = i.foto_id
+    // 26-nov · 🟡 CC6 a #1287 · la candidata nombrada por su COMIENZO se guarda con su id entero (`id-de-foto.ts`): desde aquí las láminas leen ids enteros
+    let modo = i.modo, foto = modo === 'real' ? fotoPorId(cand, i.foto_id)?.id ?? i.foto_id : i.foto_id
     // el CÓDIGO decide lo que no se confía al modelo: una foto real tiene que ser una de las candidatas
     if (modo === 'real' && !cand.some((c) => c.id === foto)) { fichas.push(fichaNueva(`vd-foto-invalida-${i.ref}`, 'chequeo', 'imagen', 'sugerencia', `el curador eligió la foto «${foto ?? '(sin id)'}» para «${i.ref}», que no es una candidata: se genera una imagen`, 'candidatas de la sala')); modo = 'generada'; foto = undefined }
     // NUNCA UNA LÁMINA VACÍA (criterio de Emilio 27-oct): sin foto apta la imagen se GENERA con el contexto del cliente, rotulada; solo las láminas tipográficas de marca (cta/cierre, dato de plantilla) salen sin imagen. Apagado por omisión (`generar_cuando_no_hay_foto`).

@@ -227,6 +227,18 @@ describe('rama FOTO REAL', () => {
     const fin = M.encargos.get(id)!.estado_del_motor.artefactos['imagen_final'].datos as { origen: string; url: string; nota: string }
     expect(fin).toMatchObject({ origen: 'real', url: 'https://fotos.test/ef0921ad.jpg' }); expect(fin.nota).toMatch(/recortar/)
   })
+  it('26-nov · 🟡 CC6 a #1287 · el curador nombra la candidata por su COMIENZO (`ef09`): queda la foto real con su id entero, se mira, se entrega con su url y se registra su uso', async () => {
+    const M = crearMemoria({ parte: PARTE_OTRO_PRODUCTO })
+    const id = await abierto(M)
+    const { pasos } = await correr(M, id, guion('ef09'))
+    expect(pasos).toEqual(['paquete', 'direccion_visual', 'mirar', 'texto', 'revision_jefe'])
+    const e = M.encargos.get(id)!.estado_del_motor
+    expect(e.fichas.some((f) => f.id === 'vd-foto-invalida')).toBe(false)
+    expect((datos(e, 'visual_direction')?.decision as { modo: string; foto_id: string })).toMatchObject({ modo: 'real', foto_id: 'ef0921ad' })
+    expect(M.llamadas.imagen).toBe(0)
+    expect(M.usos).toEqual([{ foto_id: 'ef0921ad', rol: 'pieza' }])
+    expect(e.artefactos['imagen_final'].datos).toMatchObject({ origen: 'real', foto_id: 'ef0921ad', url: 'https://fotos.test/ef0921ad.jpg' })
+  })
   it('«tomada» sobre una foto REAL no se puede re-imaginar (no hay imagen generada): bandeja «imagen por rehacer» y cero imágenes generadas', async () => {
     const M = crearMemoria({ parte: PARTE_OTRO_PRODUCTO })
     M.revisorTexto = () => ({ ok: true, texto: 'La foto no me convence.', costo_usd: 0.1, modelo: 'sim' })

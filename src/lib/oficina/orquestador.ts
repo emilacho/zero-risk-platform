@@ -1077,7 +1077,8 @@ function procesarValor(paso: Paso, v: Record<string, unknown>, enc: Encargo, e: 
       const politica = String(pl.limites.politica_imagen_generada ?? 'permitida')
       const fichas: Ficha[] = []
       let modo = dec.modo
-      let fotoId = dec.foto_id
+      // 26-nov · 🟡 CC6 a #1287 · el curador puede nombrar la candidata por su COMIENZO: se guarda el id entero (`id-de-foto.ts`); desde aquí todo lee ids enteros
+      let fotoId = modo === 'real' ? fotoPorId(cand, dec.foto_id)?.id ?? dec.foto_id : dec.foto_id
       // el CÓDIGO decide lo que no se confía al modelo: una foto real tiene que ser una de las candidatas; «ninguna» no se acepta si la política permite generar
       if (modo === 'real' && !cand.some((c) => c.id === fotoId)) {
         fichas.push(fichaNueva('vd-foto-invalida', 'chequeo', 'imagen', 'sugerencia', `el curador eligió la foto «${fotoId ?? '(sin id)'}», que no es una candidata: se genera una imagen`, 'candidatas de la sala'))

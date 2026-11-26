@@ -421,6 +421,21 @@ describe('SALA 2 · las imágenes por rol y los 3 controles', () => {
     expect(M.llamadas.renderPedidos[0].slides[0].background_image_url).toMatch(/fotos\.test/)
     expect(ultima.cuerpo).toMatchObject({ estado: 'cerrado' })
   })
+  it('26-nov · 🟡 CC6 a #1287 · la candidata nombrada por su COMIENZO: la lámina queda real con el id entero, se mira, se dibuja con su foto y se registra su uso', async () => {
+    const { M, id } = await abiertoC({ dry_run: false })
+    let foto = ''
+    const { ultima } = await correr(M, id, guionCarrusel({
+      direccion_visual: (_n, t) => { foto = /^- (\S+): muestra/m.exec(t)![1]; return { texto: j({ resumen: 'foto real', imagenes: [{ ref: 'hook', modo: 'real', foto_id: foto.slice(0, 5), motivo: 'sirve' }], reglas_de_imagen: { obligatorio: [], prohibido: [] } }) } },
+      mirar: (_n, t) => ({ texto: observacion(indicesDe(t)) }),
+    }))
+    expect(foto.length).toBeGreaterThan(5)
+    expect(M.encargos.get(id)!.estado_del_motor.fichas.some((f) => f.id.startsWith('vd-foto-invalida'))).toBe(false)
+    expect((arte(M, id, 'visual_direction').imagenes as Array<{ ref: string; modo: string; foto_id?: string }>)[0]).toMatchObject({ ref: 'hook', modo: 'real', foto_id: foto })
+    expect(M.llamadas.imagen).toBe(0)
+    expect(M.usos).toEqual([{ foto_id: foto, rol: 'hook' }])
+    expect(M.llamadas.renderPedidos[0].slides[0].background_image_url).toBe(`https://fotos.test/${foto}.jpg`)
+    expect(ultima.cuerpo).toMatchObject({ estado: 'cerrado' })
+  })
   it('una foto que NO es candidata: el código manda generar (no confía en el modelo)', async () => {
     const { M, id } = await abiertoC()
     await correr(M, id, guionCarrusel({ direccion_visual: () => ({ texto: j({ resumen: 'x', imagenes: [{ ref: 'hook', modo: 'real', foto_id: 'no-existe', motivo: 'm' }], reglas_de_imagen: REGLAS }) }) }))

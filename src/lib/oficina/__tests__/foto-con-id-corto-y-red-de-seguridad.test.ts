@@ -105,6 +105,16 @@ describe('🔴 al traducir la mesa: id entero o RED DE SEGURIDAD (puntos 1 y 3)'
       expect(r.avisos).toEqual([`la foto «${id}» de «pieza» ${causa}: la lámina se genera con su escena`])
     }
   })
+  it('🟡 CC6 a #1287 (m14) · una dirección que no empieza con http(s):// no sirve: la red dispara; http y https valen (la regla del borrador)', () => {
+    for (const url of ['/storage/a.jpg', 'ftp://f.test/a.jpg', 'fotos.test/a.jpg']) {
+      const r = fotosResueltas(traducirPieza(pieza(`foto:${UUID_A}`), 'post'), [{ id: UUID_A, url }])
+      expect(r.tr.imagenes[0]).toMatchObject({ modo: 'generada' })
+      expect(r.avisos).toEqual([`la foto «${UUID_A}» de «pieza» no tiene url: la lámina se genera con su escena`])
+    }
+    for (const url of ['http://f.test/a.jpg', 'HTTPS://f.test/a.jpg']) {
+      expect(fotosResueltas(traducirPieza(pieza('foto:bf597cd8'), 'post'), [{ id: UUID_A, url }]).tr.imagenes[0]).toMatchObject({ modo: 'real', foto_id: UUID_A })
+    }
+  })
   it('sin la lista de fotos queda como lo escribió el equipo (compatibilidad)', () => {
     const tr = traducirPieza(pieza('foto:zzzz9999'), 'post')
     expect(fotosResueltas(tr, null).tr).toBe(tr)
@@ -123,7 +133,7 @@ const propuesta = (i: number, imagenDeLaDos: string) => {
   const laminas = LAMINAS_OK.map(([rol, t, x, img], k) => [rol, k === 0 ? `Título ${i + 1}` : t, x, k === 1 ? imagenDeLaDos : img])
   return [`# Propuesta ${i + 1} · Camino ${i + 1}`, `Concepto: camino ${i + 1} · Por qué: porque sí ${i + 1}`, seccionesDeLaminas(laminas), '## Pie', `Pie ${i + 1}.`, '## Etiquetas', '#plato #hoy'].join('\n')
 }
-const INGENIERO = '## P1-hook\nprompt uno: plate on wood\n## P2-hook\nprompt dos: steam\n## P3-hook\nprompt tres: the cook'
+const INGENIERO = '## P1-hook\nPrompt: prompt uno: plate on wood\nReferencia: foto:062e foto:1e20\n## P2-hook\nprompt dos: steam\n## P3-hook\nprompt tres: the cook'
 const CON_INGENIERO = DIRECTORIO.map((t) => (t.agente === 'design-image-prompt-engineer' ? { ...t, pertinente_en: [...t.pertinente_en, `carrusel:${CONDICION_PROMPTS}`] } : t))
 
 describe('🔴 de punta a punta: el id acortado ya no deja la lámina sin imagen, y la que no existe se genera', () => {
@@ -143,6 +153,9 @@ describe('🔴 de punta a punta: el id acortado ya no deja la lámina sin imagen
     expect(real(0)).toMatchObject({ modo: 'real', foto_id: '062ec4fa' })
     expect(real(1)).toMatchObject({ modo: 'real', foto_id: '062ec4fa' })
     expect(real(2)).toMatchObject({ modo: 'generada' })
+    // 🟡 CC6 a #1287 (m7, m8) · las fotos de referencia que el ingeniero nombró acortadas quedan con su id entero
+    const pv = pi.propuestas[0].artefactos!.prompts_validos as { por_ref: Record<string, { prompts: Array<{ prompt: string; foto_de_referencia?: string; otras_fotos_de_referencia?: string[] }> }> }
+    expect(pv.por_ref.hook.prompts[0]).toMatchObject({ prompt: 'prompt uno: plate on wood', foto_de_referencia: '062ec4fa', otras_fotos_de_referencia: ['1e201f00'] })
     expect(pi.avisos.some((x) => x.includes('la foto «zzzz9999» de «problem» no está entre las fotos propias del cliente: la lámina se genera con su escena'))).toBe(true)
     // el borrador: la lámina 2 de P1 y P2 lleva la foto propia; la de P3, una generada; ninguna «no tiene url»
     const b = e.artefactos[ARTEFACTO_BORRADOR_IMAGEN]?.datos as unknown as BorradoresDeImagen

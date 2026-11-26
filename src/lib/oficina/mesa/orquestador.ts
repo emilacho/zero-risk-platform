@@ -588,7 +588,7 @@ const idsDeLasFotos = (b: { F?: { fotos?: Array<{ id: string; url?: string | nul
  * 26-nov · GO Lenovo 15:23Z (imágenes · puntos 1 y 3) · LA FOTO QUE NOMBRÓ EL EQUIPO, RESUELTA UNA VEZ AL TRADUCIR LA MESA. Puro.
  *  · El equipo acorta el id (`foto:bf597cd8`): se guarda el id ENTERO si es el comienzo de UNA sola foto propia (`id-de-foto.ts`, la misma regla del video).
  *    Vale para la foto real de cada lámina y para las fotos de referencia que nombró el ingeniero de prompts.
- *  · RED DE SEGURIDAD: una foto real que no se resuelve (ambigua o inexistente) o que no tiene dirección https no deja la lámina «sin dibujar»: la lámina pasa a
+ *  · RED DE SEGURIDAD: una foto real que no se resuelve (ambigua o inexistente) o cuya dirección no empieza con http(s):// (la misma regla del borrador, `esHttp`) no deja la lámina «sin dibujar»: la lámina pasa a
  *    GENERARSE con su escena (lo que la dirección dijo que se ve) y queda un aviso con la causa real. Nunca se adivina la foto.
  *  · Sin la lista de fotos (`null`), todo queda como lo escribió el equipo (compatibilidad).
  */

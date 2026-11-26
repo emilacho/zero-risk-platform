@@ -154,7 +154,8 @@ export function fotosDelPlano(p: Pick<PlanoDeLaHoja, 'fotos_extra' | 'personajes
   const items: Array<{ foto: FotoDeReferencia; que: string }> = []
   const lineas: string[] = []
   const sin_foto: string[] = []
-  const de = (id: string): FotoDeReferencia | null => propias.find((f) => f.id === id.trim()) ?? null
+  // 26-nov · los ids de `fotos_extra`, las heredadas y los personajes los escribe un agente: valen acortados (`id-de-foto.ts`)
+  const de = (id: string): FotoDeReferencia | null => fotoPorId(propias, id) ?? null
   const poner = (f: FotoDeReferencia | null, que: string): boolean => {
     if (!f || items.length >= MAX_FOTOS_POR_IMAGEN || items.some((x) => x.foto.id === f.id)) return false
     items.push({ foto: f, que }); return true
