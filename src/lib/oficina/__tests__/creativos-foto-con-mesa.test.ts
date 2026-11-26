@@ -211,12 +211,14 @@ describe('por la puerta y la mesa reales (en seco)', () => {
   })
   it('foto propia: la mesa deja `visual_direction`, `prompts_validos` y `pieza_post` con la forma de la sala 1, la cola entrega la foto real y la jefatura revisa la pieza', async () => {
     const x = montar()
-    const m = await correrLaMesa(x, 'foto:f-01')
+    // 26-nov · la foto real tiene que existir entre las del cliente (antes `f-01`, que no existe: la pieza salía «real» SIN imagen, el error que arregla la red de seguridad).
+    // La mesa la nombra ACORTADA, como lo hizo el equipo de verdad el 26-nov: se guarda el id entero
+    const m = await correrLaMesa(x, 'foto:062e')
     const e = m.enc().estado_del_motor
-    expect(datos(e, 'visual_direction')?.decision).toMatchObject({ modo: 'real', foto_id: 'f-01' })
+    expect(datos(e, 'visual_direction')?.decision).toMatchObject({ modo: 'real', foto_id: '062ec4fa' })
     expect(validar(ESQUEMAS['pieza_post.v1'], datos(e, 'pieza_post'))).toEqual([])
     expect(datos(e, 'pieza_post')?.texto_en_imagen).toMatchObject({ titular: 'El plato de hoy' })
-    expect(datos(e, 'imagen_final')).toMatchObject({ origen: 'real', foto_id: 'f-01' })
+    expect(datos(e, 'imagen_final')).toMatchObject({ origen: 'real', foto_id: '062ec4fa', url: 'https://fotos.test/062ec4fa.jpg' })
     expect(x.M.llamadas.imagen).toBe(0)
     // la jefatura (no un agente de la línea de siempre) es lo siguiente que pide trabajo
     const t = m.r.cuerpo.turno as { paso?: string } | undefined

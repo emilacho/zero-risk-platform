@@ -29,8 +29,10 @@ describe('la tarjeta de propuestas en imagen (contrato §2)', () => {
     const d = propuestasDeLaDecision(ENC, motor({ propuestas_imagen: propuestasImagen() }), PASOS)!
     expect(d).toMatchObject({ encargo_id: 'enc-1', brief_id: 'F1-S1-ig-r1', ronda: 1, quedan_vueltas: 2, familia: 'imagen', clase: 'post_img' })
     expect(d.lista.map((p) => [p.id, p.nombre, p.segundos, p.video_url])).toEqual([['P1', 'El plato de hoy', null, null], ['P2', 'La olla', null, null], ['P3', 'La mesa', null, null]])
-    expect(d.lista[0].planos).toEqual([{ n: 1, desde: null, hasta: null, foto_propia: true, rol: 'pieza', dice: null, se_ve: 'el plato sobre la mesa de madera', texto_en_pantalla: 'Hoy en la casa\nEl plato de hoy\nEscríbenos', producto: null, imagen_url: null, imagenes: [] }])
+    expect(d.lista[0].planos).toEqual([{ n: 1, desde: null, hasta: null, foto_propia: true, origen_de_la_foto: 'foto propia', rol: 'pieza', dice: null, se_ve: 'el plato sobre la mesa de madera', texto_en_pantalla: 'Hoy en la casa\nEl plato de hoy\nEscríbenos', producto: null, imagen_url: null, imagenes: [] }])
     expect(d.lista[1].planos[0].foto_propia).toBe(false)
+    // 26-nov · GO Lenovo (punto 4) · la tarjeta dice de dónde salió la imagen; una foto real vieja sin fuente dice «foto propia»
+    expect(d.lista[1].planos[0].origen_de_la_foto).toBe('imagen generada')
     expect(d.lista[0].texto_de_la_publicacion).toEqual({ texto_base: null, pie_de_foto: 'Hoy te esperamos.', hashtags: ['#platodeldia'], llamado: 'Escríbenos' })
     expect(d.lista[0]).toMatchObject({ concepto: 'el plato de cerca', por_que: 'el plato vende solo', costo: { borrador_usd: null, final_usd: null } })
   })

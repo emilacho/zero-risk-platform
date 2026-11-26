@@ -12,6 +12,7 @@
  *  · La tarjeta (CC5) lee `borrador_imagen.propuestas[i].laminas[j]` por `n` (`direccion/decisiones-propuestas.ts`).
  */
 import { datos } from '../ayudas'
+import { avisoDeFotoQueNoSirve, fotoPorId } from '../id-de-foto'
 import { fotosDeReferencia, fotosPorImagen, otrasFotosDeLaImagen, type FotoDeReferencia } from '../foto-de-referencia'
 import { armarLaminasDeCarrusel, armarLaminasDeKit, type ElementoDeCopyKit, type ElementoDeEstructura, type ImagenDeRef, type Lamina } from '../laminas'
 import type { Cambios, Encargo, FuentesCompletas, Puertos } from '../puertos'
@@ -87,9 +88,10 @@ function planDeLaPropuesta(e: Estado, p: PropuestaDeImagen, fotos: FuentesComple
   // la foto propia: tal cual
   for (const i of imagenes) {
     if (i.modo !== 'real' || !i.foto_id) continue
-    const f = fotos.find((x) => x.id === i.foto_id)
-    if (esHttp(f?.url)) porRef[i.ref] = { origen: 'real', url: f!.url as string, foto_id: i.foto_id }
-    else errores.push(`la foto «${i.foto_id}» de «${i.ref}» no tiene url`)
+    // 26-nov · el id acortado por el equipo se resuelve con la regla de toda la oficina (`id-de-foto.ts`); el error dice la causa real, no siempre «no tiene url»
+    const f = fotoPorId(fotos, i.foto_id)
+    if (f && esHttp(f.url)) porRef[i.ref] = { origen: 'real', url: f.url, foto_id: f.id }
+    else errores.push(avisoDeFotoQueNoSirve(i.foto_id, i.ref, fotos))
   }
   // la generada: con el primer prompt válido de ESTA propuesta y la foto de referencia apta que nombró el ingeniero (como el final), hasta el máximo de la plantilla
   const generadas = imagenes.filter((i) => i.modo === 'generada')

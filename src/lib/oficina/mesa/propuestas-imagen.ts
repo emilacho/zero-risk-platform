@@ -25,7 +25,7 @@ export interface LaminaDeLaPropuesta {
   /** la dirección visual de esa lámina (lo que la mesa dijo que se ve) */
   se_ve?: string
   /** `ImagenDeRef` sin url: la url sale del borrador */
-  foto?: { origen: 'real' | 'generada'; foto_id?: string }
+  foto?: { origen: 'real' | 'generada'; foto_id?: string; /** 26-nov · de dónde salió la foto propia, en palabras de la tarjeta («imagen de tu web», «cuadro de tu video», «foto propia») */ fuente?: string }
 }
 export interface PropuestaDeImagen {
   id: string

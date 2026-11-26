@@ -40,6 +40,7 @@ import { COTAS, FAMILIAS_MESA, esDeLaCadena, esperaDelTurnoS, reservaPorTurnoDe,
 import { bloqueDelPerfil } from '../../perfil-del-publico/lectores'
 import { modoDeLaPlantilla } from './un-autor'
 import type { FuentesCompletas } from '../puertos'
+import { avisoDeFotoQueNoSirve, fotoPorId, fuenteDeLaFoto, idEnteroDeFoto } from '../id-de-foto'
 import { CAUSA_LEGIBLE, causaExterna, cerroPorCausaExterna, PREFIJO_TURNO_EN_PAUSA, type PausaExterna } from './causa-externa'
 
 /** 19-nov · ADENDA 1 · P2b: el perfil del público de la mesa de piezas: el mismo bloque que leen la jefatura y los pedidos de la oficina (vigente, sin leer o ninguno, DICHO) */
@@ -484,8 +485,9 @@ async function cerrarLaMesa(P: Puertos, enc: Encargo, pl: Plantilla, indice: num
     let hayGeneradasEnAlguna = false
     tp.resultado.propuestas.forEach((p, i) => {
       const t = tp.traducciones[i]
-      const a = artefactosDeImagen(t.tr, est.tipo, ingeniero, delIngeniero, ingeniero ? delIngeniero?.texto ?? '' : null, (ref) => refDelIngeniero(p.id, ref))
+      const a = artefactosDeImagen(t.tr, est.tipo, ingeniero, delIngeniero, ingeniero ? delIngeniero?.texto ?? '' : null, (ref) => refDelIngeniero(p.id, ref), idsDeLasFotos(b))
       p.artefactos = a.otros
+      p.laminas = laminasConLaFotoResuelta(p.laminas, a.otros, idsDeLasFotos(b))
       hayGeneradasEnAlguna = hayGeneradasEnAlguna || a.hayGeneradas
       tp.resultado.avisos.push(...a.avisos)
     })
@@ -525,7 +527,7 @@ async function cerrarLaMesa(P: Puertos, enc: Encargo, pl: Plantilla, indice: num
     if (est.marcas.parada_unica) tr.avisos.push(...textosDeConcepto(textoPieza).map((t) => PREFIJO_AVISO_DE_CONCEPTO + t))
     const ingeniero = ingenieroDePrompts(est.directorio_congelado, est.tipo)?.agente ?? null
     const delIngeniero = aporteDePrompts(libro, ingeniero)
-    const a = artefactosDeImagen(tr, est.tipo, ingeniero, delIngeniero, ingeniero ? delIngeniero?.texto ?? '' : null)
+    const a = artefactosDeImagen(tr, est.tipo, ingeniero, delIngeniero, ingeniero ? delIngeniero?.texto ?? '' : null, undefined, idsDeLasFotos(b))
     Object.assign(otros, a.otros)
     avisosDePrompts.push(...a.avisos)
     hayGeneradas = a.hayGeneradas
@@ -539,9 +541,13 @@ async function cerrarLaMesa(P: Puertos, enc: Encargo, pl: Plantilla, indice: num
  * `textoDelIngeniero`: null = no hay ingeniero en el directorio; '' = lo hay pero no dejó instrucción (cada imagen lo avisa). `refIng`: con qué ref ve el ingeniero cada imagen
  * (con propuestas, «P2-hook»: `refDelIngeniero`); el artefacto guarda el ref de la pieza, como siempre. Puro.
  */
-function artefactosDeImagen(tr: Traduccion, tipo: string, ingeniero: string | null, delIngeniero: Aporte | null, textoDelIngeniero: string | null, refIng: (ref: string) => string = (ref) => ref): { otros: Record<string, Record<string, unknown>>; avisos: string[]; hayGeneradas: boolean } {
+function artefactosDeImagen(trLeida: Traduccion, tipo: string, ingeniero: string | null, delIngeniero: Aporte | null, textoDelIngeniero: string | null, refIng: (ref: string) => string = (ref) => ref, fotosDelCliente: ReadonlyArray<{ id: string; url?: string | null }> | null = null): { otros: Record<string, Record<string, unknown>>; avisos: string[]; hayGeneradas: boolean } {
   const otros: Record<string, Record<string, unknown>> = {}
   const avisosDePrompts: string[] = []
+  const r = fotosResueltas(trLeida, fotosDelCliente)
+  const tr = r.tr
+  const entero = r.entero
+  avisosDePrompts.push(...r.avisos)
   {
     const imagenes = tr.imagenes
     const generadas = imagenes.filter((i) => i.modo === 'generada') as Array<{ ref: string; modo: 'generada'; descripcion: string; concepto?: ConceptoDeImagen }>
@@ -556,6 +562,10 @@ function artefactosDeImagen(tr: Traduccion, tipo: string, ingeniero: string | nu
     // Sprint 1 · mejora 4 · el modelo recibe la instrucción del ingeniero de prompts (escrita sobre ESTA integración); lo que no dejó, la descripción de la dirección con aviso
     // Sprint 1 · mejora 2 (CC1) · sin instrucción del ingeniero, la descripción de la dirección va CON el contexto de la pieza; la del ingeniero la reemplaza entera
     const pb = promptsParaElBrazo(generadas.map((g) => ({ ref: refIng(g.ref), descripcion: pedidoDeImagen(g.descripcion, g.concepto) })), textoDelIngeniero)
+    for (const p of Object.values(pb.por_ref)) {
+      if (p.foto_de_referencia) p.foto_de_referencia = entero(p.foto_de_referencia)
+      if (p.otras_fotos_de_referencia) p.otras_fotos_de_referencia = p.otras_fotos_de_referencia.map(entero)
+    }
     avisosDePrompts.push(...pb.avisos)
     otros.prompts_validos = { por_ref: Object.fromEntries(generadas.map((g) => { const p = pb.por_ref[refIng(g.ref)]; return [g.ref, { indices: [0], prompts: [{ prompt: p.prompt, idea_en_una_linea: g.descripcion.slice(0, 120), ...conConcepto(g), ...(p.foto_de_referencia ? { foto_de_referencia: p.foto_de_referencia } : {}) }], origen: pb.del_ingeniero.includes(refIng(g.ref)) ? 'ingeniero_de_prompts' : 'direccion' }] })), ninguno: false, ...(delIngeniero ? { ingeniero: { agente: ingeniero, aporte: delIngeniero.id } } : {}) }
     // 19-nov · «lo real es el set» · las otras fotos que nombró el ingeniero viajan con su prompt (en línea aparte: la de arriba lleva un corte viejo registrado)
@@ -570,6 +580,52 @@ function artefactosDeImagen(tr: Traduccion, tipo: string, ingeniero: string | nu
     return { otros, avisos: avisosDePrompts, hayGeneradas }
   }
 }
+
+/** 26-nov · las fotos propias del encargo (id y dirección): con ellas se resuelve la foto que nombró el equipo */
+const idsDeLasFotos = (b: { F?: { fotos?: Array<{ id: string; url?: string | null; tipo?: string | null }> } }): Array<{ id: string; url?: string | null; tipo?: string | null }> => b.F?.fotos ?? []
+
+/**
+ * 26-nov · GO Lenovo 15:23Z (imágenes · puntos 1 y 3) · LA FOTO QUE NOMBRÓ EL EQUIPO, RESUELTA UNA VEZ AL TRADUCIR LA MESA. Puro.
+ *  · El equipo acorta el id (`foto:bf597cd8`): se guarda el id ENTERO si es el comienzo de UNA sola foto propia (`id-de-foto.ts`, la misma regla del video).
+ *    Vale para la foto real de cada lámina y para las fotos de referencia que nombró el ingeniero de prompts.
+ *  · RED DE SEGURIDAD: una foto real que no se resuelve (ambigua o inexistente) o que no tiene dirección https no deja la lámina «sin dibujar»: la lámina pasa a
+ *    GENERARSE con su escena (lo que la dirección dijo que se ve) y queda un aviso con la causa real. Nunca se adivina la foto.
+ *  · Sin la lista de fotos (`null`), todo queda como lo escribió el equipo (compatibilidad).
+ */
+export function fotosResueltas(tr: Traduccion, fotos: ReadonlyArray<{ id: string; url?: string | null }> | null): { tr: Traduccion; entero: (id: string) => string; avisos: string[] } {
+  if (!fotos) return { tr, entero: (id) => id, avisos: [] }
+  const ids = fotos.map((f) => f.id)
+  const entero = (id: string): string => idEnteroDeFoto(id, ids)
+  const avisos: string[] = []
+  const imagenes = tr.imagenes.map((i): Traduccion['imagenes'][number] => {
+    if (i.modo !== 'real') return i
+    const f = fotoPorId(fotos, i.foto_id)
+    if (f && esDireccionHttps(f.url)) return { ...i, foto_id: f.id }
+    const escena = i.concepto?.que_se_ve || i.concepto?.idea || `la imagen de «${i.ref}»`
+    avisos.push(`${avisoDeFotoQueNoSirve(i.foto_id, i.ref, fotos)}: la lámina se genera con su escena`)
+    return { ref: i.ref, modo: 'generada', descripcion: escena, ...(i.concepto ? { concepto: i.concepto } : {}) }
+  })
+  return { tr: { ...tr, imagenes }, entero, avisos }
+}
+
+/**
+ * 26-nov · la tarjeta ve la imagen de cada lámina como quedó DESPUÉS de resolver (id entero, o generada por la red de seguridad) y, si es foto propia,
+ * de dónde salió (`fuenteDeLaFoto`: «imagen de tu web», «cuadro de tu video», «foto propia»). Se cruza por la ref de la lámina (`rol`). Puro.
+ */
+export function laminasConLaFotoResuelta<L extends { rol?: string; foto?: { origen: 'real' | 'generada'; foto_id?: string; fuente?: string } }>(laminas: L[], otros: Record<string, Record<string, unknown>>, fotos: ReadonlyArray<{ id: string; tipo?: string | null }>): L[] {
+  const imagenes = ((otros.visual_direction?.imagenes ?? []) as Array<{ ref: string; modo: string; foto_id?: string }>)
+  return laminas.map((l) => {
+    const i = imagenes.find((x) => x.ref === l.rol)
+    if (!i || !l.foto) return l
+    if (i.modo === 'real' && i.foto_id) {
+      const f = fotos.find((x) => x.id === i.foto_id)
+      return { ...l, foto: { origen: 'real', foto_id: i.foto_id, ...(f ? { fuente: fuenteDeLaFoto(f.tipo) } : {}) } }
+    }
+    return i.modo === 'generada' ? { ...l, foto: { origen: 'generada' } } : l
+  })
+}
+
+const esDireccionHttps =(u: unknown): boolean => typeof u === 'string' && /^https?:\/\//i.test(u.trim())
 
 /**
  * 17-nov · tramo B · la FOTO con mesa: la cola de la sala 1 (`imagen`, `elegir_version`, `acabado_imagen`, `chequeos`, `jefatura`, entrega) lee

@@ -5,6 +5,7 @@
 import { FORMATOS_DEL_BRAZO, RESOLUCION_APROBADA, armarPedido, fichaPorOmision, type CatalogoDeModelos } from '../../video/parametros'
 import type { BriefLeido } from '../brief'
 import type { FotoEtiquetada } from '../fotos'
+import { resolverIdDeFoto } from '../id-de-foto'
 import { promptDelGuion, type TraduccionDeGuion } from './guion'
 
 /** ¿este brief es de video? (reel · short · video · tiktok); un carrusel, un kit o una imagen no lo son aunque nombren «video» de paso */
@@ -48,13 +49,10 @@ export interface PedidoDeVideoDeLaOficina {
  * o si es la ÚNICA propia cuyo id empieza con esos caracteres. Si empiezan así varias, es ambigua: no se adivina. Corrige un dato; no es una verificación nueva. Puro.
  */
 export function buscarFotoPropia(id: string, propias: ReadonlyArray<{ id: string; url: string }>): { url: string } | { ambigua: number } | null {
-  const k = id.trim().toLowerCase()
-  if (!k) return null
-  const exacta = propias.find((f) => f.id.toLowerCase() === k)
-  if (exacta) return { url: exacta.url }
-  const empiezan = propias.filter((f) => f.id.toLowerCase().startsWith(k))
-  if (empiezan.length === 1) return { url: empiezan[0].url }
-  return empiezan.length > 1 ? { ambigua: empiezan.length } : null
+  // 26-nov · la regla vive ahora en `id-de-foto.ts` y la usa toda la oficina (antes solo el video)
+  const r = resolverIdDeFoto(id, propias.map((f) => f.id))
+  if (r.ok) return { url: propias.find((f) => f.id === r.id)!.url }
+  return r.motivo === 'ambigua' ? { ambigua: r.cuantas } : null
 }
 
 /** las fotos PROPIAS con dirección https: las únicas que pueden viajar al modelo */

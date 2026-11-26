@@ -22,6 +22,7 @@ import { cabeLaVuelta, quedaVueltaDelPaso } from '../orquestador-video'
 import { costoDeVolver, loQueSigueDespuesDelPaso } from '../topes-por-duracion'
 import type { Estado, Ficha, Paso, Plantilla } from '../tipos'
 import { calidadDeLaFase, PASO_IMAGENES_CLAVE_FINAL, PASO_REVISAR_IMAGENES_CLAVE } from '../video/imagen-clave'
+import { fotoPorId } from '../id-de-foto'
 
 export const PASO_CORREGIR_IMAGEN = 'corregir_imagen'
 export const PASO_EDITAR_IMAGEN = 'editar_imagen'
@@ -170,7 +171,7 @@ export function tareaDeLaCorreccion(e: Estado, o: { contrato: string; errorDeFor
   const reales = new Set<string>()
   for (const i of loteDe(c)) {
     const lineas = vistasDe(i, c.donde).map((k) => { images.push(i.versiones[k].url); return `  · imagen ${images.length}: versión ${k}${i.versiones[k].vuelta ? ` (editada en la vuelta ${i.versiones[k].vuelta})` : ' (generada)'}` })
-    const real = i.foto_real_id ? o.fotos.find((f) => f.id === i.foto_real_id) : undefined
+    const real = i.foto_real_id ? fotoPorId(o.fotos, i.foto_real_id) : undefined
     // cada foto real va una sola vez en el pedido (la misma cuenta que `loteDe`)
     const yaVista = !!real && reales.has(real.id)
     if (real && !yaVista) { images.push(real.url); reales.add(real.id) }
@@ -258,7 +259,7 @@ interface FotoConUrl { id: string; url?: string | null }
 function otrasDeLaImagen(e: Estado, i: ImagenEnCorreccion, propias: FotoConUrl[], real: FotoDeReferencia | null): FotoDeReferencia[] {
   // la imagen clave guarda las otras fotos que viajaron con su base (personajes, productos, lugares): son las mismas que viajan con la edición
   if (dondeDe(e) === 'video') {
-    return arr<string>(i.item.otras_referencias_ids).flatMap((id) => { const u = propias.find((f) => f.id === id)?.url; return u && id !== real?.id ? [{ id, url: u }] : [] })
+    return arr<string>(i.item.otras_referencias_ids).flatMap((id) => { const u = fotoPorId(propias, id)?.url; return u && id !== real?.id ? [{ id, url: u }] : [] })
   }
   const pv = datos(e, 'prompts_validos')
   const porRef = (pv?.por_ref ?? null) as Record<string, { prompts?: Array<{ foto_de_referencia?: string; otras_fotos_de_referencia?: string[] }> }> | null
@@ -303,7 +304,7 @@ export async function editarImagenes(P: Puertos, enc: Encargo, pl?: Pick<Plantil
       gastos.push({ concepto: 'imagen', ref_tabla: 'agent_image_generations', ref_id: ya.generation_id, cost_usd: ya.costo_usd, base: 'usage' })
       continue
     }
-    const realUrl = i.foto_real_id ? propias.find((f) => f.id === i.foto_real_id)?.url : undefined
+    const realUrl = i.foto_real_id ? fotoPorId(propias, i.foto_real_id)?.url : undefined
     const real: FotoDeReferencia | null = i.foto_real_id && realUrl ? { id: i.foto_real_id, url: realUrl } : null
     const otras = fotosDeLaEdicion(real, otrasDeLaImagen(e, i, propias, real))
     const g = await P.imagen({ prompt: promptDeLaCorreccion(i.prompt, p.cambios), client_id: enc.client_id, encargo_id: enc.id, dry_run: false, foto: { id: `version-${p.base}`, url: base.url }, ...(otras.length ? { otras_fotos: otras } : {}), ...(calidad ? { size: calidad.size, quality: calidad.quality } : {}), llave })

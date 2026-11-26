@@ -26,7 +26,7 @@ export const DESTRABA_CORTO_PROPUESTAS_IMAGEN = 'fabricar la pieza'
 export const COSTO_NOTA_PROPUESTAS = 'aprobar fabrica la elegida dentro del tope ya fijado del encargo; pedir cambios vuelve a correr la mesa y los borradores dentro del mismo tope'
 
 /** en imagen (contrato §2) cada lámina viaja como un plano: `desde`/`hasta`/`producto`/`dice` van null y `foto_propia` dice si es la foto del cliente */
-export interface PlanoDeLaTarjeta { n: number; desde: number | null; hasta: number | null; foto_propia?: boolean | null; rol: string | null; dice: string | null; se_ve: string; texto_en_pantalla: string | null; producto: boolean | null; imagen_url: string | null; imagenes: string[] }
+export interface PlanoDeLaTarjeta { n: number; desde: number | null; hasta: number | null; foto_propia?: boolean | null; /** 26-nov · de dónde salió la imagen, en palabras de la tarjeta («imagen de tu web», «cuadro de tu video», «foto propia», «imagen generada»); null = sin imagen */ origen_de_la_foto?: string | null; rol: string | null; dice: string | null; se_ve: string; texto_en_pantalla: string | null; producto: boolean | null; imagen_url: string | null; imagenes: string[] }
 /** lo que la mesa no escribió va `null` (nunca 0 ni texto vacío: la tarjeta lo muestra con guion rojo · pedido de CC5) */
 export interface PropuestaDeLaTarjeta { id: string; nombre: string; concepto: string | null; segundos: number | null; red: string | null; objetivo: string | null; por_que: string | null; video_url: string | null; costo: { borrador_usd: number | null; final_usd: number | null } | null; planos: PlanoDeLaTarjeta[] }
 export interface TextoDeLaPublicacion { texto_base: string | null; pie_de_foto: string | null; hashtags: string[]; llamado: string | null }
@@ -85,6 +85,13 @@ function vueltasQueQuedan(motor: Fila, pasos: Fila[] | null): number {
  * Cada lámina viaja como un plano (`desde`/`hasta`/`producto`/`dice` null); `texto_en_pantalla` = eyebrow, headline, body y cta sin vacíos, unidos con salto;
  * `imagenes` = [png_url] si existe, si no [imagen_url], si no []; `foto_propia` = la foto es del cliente. Lo que no existe va null: nada se inventa.
  */
+/** 26-nov · GO Lenovo 15:23Z (punto 4) · la fuente que dejó la mesa (foto propia) o «imagen generada»; una foto real vieja sin fuente dice «foto propia» */
+const origenDeLaFoto = (foto: Record<string, unknown> | null): string | null => {
+  if (!foto) return null
+  if (foto.origen === 'generada') return 'imagen generada'
+  return foto.origen === 'real' ? (typeof foto.fuente === 'string' && foto.fuente.trim() ? foto.fuente.trim() : 'foto propia') : null
+}
+
 export function propuestasDeImagenDeLaDecision(enc: { id: string; brief_id: string }, motor: Fila, pasos: Fila[] | null): PropuestasDeLaDecision | null {
   const pi = datosDe(motor, ARTEFACTO_PROPUESTAS_IMAGEN)
   const props = lista(pi?.propuestas)
@@ -102,7 +109,7 @@ export function propuestasDeImagenDeLaDecision(enc: { id: string; brief_id: stri
       const imagenes = png ? [png] : img ? [img] : []
       const textos = ['eyebrow', 'headline', 'body', 'cta'].map((k) => texto(l[k])).filter((x): x is string => !!x)
       const foto = esObjeto(l.foto) ? l.foto : null
-      return { n, desde: null, hasta: null, foto_propia: foto ? foto.origen === 'real' : null, rol: texto(l.rol), dice: null, se_ve: String(l.se_ve ?? ''), texto_en_pantalla: textos.length ? textos.join('\n') : null, producto: null, imagen_url: imagenes[0] ?? null, imagenes }
+      return { n, desde: null, hasta: null, foto_propia: foto ? foto.origen === 'real' : null, origen_de_la_foto: origenDeLaFoto(foto), rol: texto(l.rol), dice: null, se_ve: String(l.se_ve ?? ''), texto_en_pantalla: textos.length ? textos.join('\n') : null, producto: null, imagen_url: imagenes[0] ?? null, imagenes }
     })
     const c = esObjeto(p.copy) ? p.copy : null
     const hashtags = Array.isArray(c?.hashtags) ? c.hashtags.filter((x): x is string => typeof x === 'string' && !!x.trim()) : []

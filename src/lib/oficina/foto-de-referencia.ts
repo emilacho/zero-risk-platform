@@ -6,6 +6,7 @@
  * encargo no salgan de la misma foto. Sin candidata apta → null y la imagen se genera como siempre. Pura.
  */
 import { MAX_FOTOS_POR_IMAGEN } from '../imagen-sobre-foto'
+import { fotoPorId } from './id-de-foto'
 
 export interface FotoDeReferencia { id: string; url: string }
 
@@ -49,9 +50,11 @@ export function otrasFotosDeLaImagen(propias: FotoConUrl[], base: FotoDeReferenc
   const lista = propiasDeEsta.length ? propiasDeEsta : deLaPieza.filter((x): x is string => typeof x === 'string' && !!x.trim())
   const otras: FotoDeReferencia[] = []
   const no_aptas: string[] = []
-  for (const id of lista) {
+  for (const dicho of lista) {
+    // 26-nov · el id acortado por el equipo vale si es el comienzo de UNA sola foto propia (`id-de-foto.ts`)
+    const id = fotoPorId(propias, dicho)?.id ?? dicho
     if (id === base?.id || otras.some((o) => o.id === id)) continue
-    const url = propias.find((f) => f.id === id)?.url
+    const url = fotoPorId(propias, id)?.url
     if (typeof url !== 'string' || !url.trim()) { if (propiasDeEsta.length && !no_aptas.includes(id)) no_aptas.push(id); continue }
     if (otras.length < MAX_OTRAS_FOTOS) otras.push({ id, url })
   }
@@ -72,7 +75,7 @@ export function fotosPorImagen(aptas: FotoDeReferencia[], pedidas: Array<string 
   const no_aptas: Array<{ i: number; id: string }> = []
   const respetadas = pedidas.map((id, i) => {
     if (!id) return null
-    const f = aptas.find((x) => x.id === id) ?? null
+    const f = fotoPorId(aptas, id) ?? null
     if (!f) no_aptas.push({ i, id })
     return f
   })

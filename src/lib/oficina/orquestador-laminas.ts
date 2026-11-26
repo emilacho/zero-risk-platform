@@ -24,6 +24,7 @@ import { chequearPrompts, citasExisten, elegirVersion, veredictoDeImagenes, type
 import { reglasDeInvencion } from './prompts-sin-invencion'
 import { CORRECCIONES_DE_LARGO } from './salida'
 import type { Estado, Ficha, Paso, Plantilla } from './tipos'
+import { fotoPorId } from './id-de-foto'
 
 export type FamiliaDeLaminas = 'carrusel' | 'kit'
 /** la plantilla es de varias láminas si su clase (dato de la plantilla · fila #19) dibuja láminas (el resto de las familias las atiende el orquestador de la sala 1) */
@@ -59,7 +60,7 @@ export function imagenesAMirarL(e: Estado): Array<{ indice: number; url: string;
   // las fotos reales de confianza no alta se miran UNA vez (la primera)
   if (!datos(e, 'observacion_imagen')) {
     arr<ImagenDecidida>(direccion(e)?.imagenes).filter((i) => i.modo === 'real' && confianzaDeLaFoto(b.F.fotos, i.foto_id) !== 'alta').forEach((i, k) => {
-      const f = b.F.fotos.find((x) => x.id === i.foto_id)
+      const f = fotoPorId(b.F.fotos, i.foto_id)
       if (f?.url) out.push({ indice: BASE_INDICE_REAL + k, url: f.url, ref: i.ref })
     })
   }
@@ -270,8 +271,8 @@ function elegirVersionRef(e: Estado): SalidaCodigoL {
   const usos: NonNullable<Cambios['usos_de_fotos']> = []
   for (const i of arr<ImagenDecidida>(direccion(e)?.imagenes)) {
     if (i.modo === 'real') {
-      const f = b.F.fotos.find((x) => x.id === i.foto_id)
-      if (f?.url && i.foto_id) { porRef[i.ref] = { origen: 'real', url: f.url, foto_id: i.foto_id }; usos.push({ foto_id: i.foto_id, rol: i.ref }) }
+      const f = fotoPorId(b.F.fotos, i.foto_id)
+      if (f?.url) { porRef[i.ref] = { origen: 'real', url: f.url, foto_id: f.id }; usos.push({ foto_id: f.id, rol: i.ref }) }
     } else if (i.modo === 'generada') {
       const el = elegirVersion(aceptadas[i.ref] ?? [], pref)
       const it = el === null ? null : items.find((x) => x.indice === el)
