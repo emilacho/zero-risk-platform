@@ -158,6 +158,25 @@ describe('④ la función de la base borra todo lo que tiene llave a la campaña
     return [...out].sort()
   }
   const borra = (t: string) => new RegExp(`DELETE FROM public\\.${t}\\b`).test(sql)
+  /** TODAS las llaves foráneas de las migraciones: hija → padre, y si el padre borra en cascada o pone null (entonces el orden no importa) */
+  const llaves = () => {
+    const out: Array<{ hija: string; padre: string; suave: boolean }> = []
+    let tabla: string | null = null
+    for (const linea of todas.split('\n')) {
+      const t = /(?:CREATE TABLE(?: IF NOT EXISTS)?|ALTER TABLE(?: IF EXISTS)?(?: ONLY)?)\s+public\.([a-z_]+)/.exec(linea)
+      if (t) tabla = t[1]
+      const r = /REFERENCES\s+public\.([a-z_]+)/.exec(linea)
+      if (r && tabla) out.push({ hija: tabla, padre: r[1], suave: /ON DELETE (CASCADE|SET NULL)/.test(linea) })
+    }
+    return out
+  }
+  /** 🔴 de CC6 (26-nov 12:23Z): `oficina_turnos` iba antes que artefactos, fichas y gastos, que lo apuntan sin cascada → la transacción entera se caía */
+  it('🔴 entre las tablas que se borran, cada hija va ANTES que su padre (salvo cascada o null)', () => {
+    const pos = (t: string) => sql.indexOf(`DELETE FROM public.${t} `)
+    const entreBorradas = llaves().filter((k) => k.hija !== k.padre && !k.suave && borra(k.hija) && borra(k.padre))
+    expect(entreBorradas.map((k) => `${k.hija}→${k.padre}`)).toEqual(expect.arrayContaining(['oficina_artefactos→oficina_turnos', 'oficina_fichas→oficina_turnos', 'oficina_gastos→oficina_turnos']))
+    for (const k of entreBorradas) expect(pos(k.hija), `${k.hija} antes que ${k.padre}`).toBeLessThan(pos(k.padre))
+  })
 
   it('🔴 cada tabla con llave a la campaña se borra (y la lista del código es la misma)', () => {
     const hijas = conLlaveA('cadena_campanas')

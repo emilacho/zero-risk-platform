@@ -28,13 +28,14 @@ BEGIN
     UNION SELECT q.id FROM public.hitl_queue q JOIN public.cadena_conceptos k ON k.hitl_id = q.id::text WHERE k.campana_id = p_campana
   ) x;
 
-  -- la oficina: primero lo que cuelga de cada encargo, después los encargos
+  -- la oficina: primero lo que cuelga de cada encargo (cada hijo antes que su padre), después los encargos
   DELETE FROM public.oficina_mesa_aportes WHERE encargo_id = ANY (v_enc); GET DIAGNOSTICS v_n = ROW_COUNT; v_r := v_r || jsonb_build_object('oficina_mesa_aportes', v_n);
-  DELETE FROM public.oficina_turnos WHERE encargo_id = ANY (v_enc); GET DIAGNOSTICS v_n = ROW_COUNT; v_r := v_r || jsonb_build_object('oficina_turnos', v_n);
   DELETE FROM public.oficina_artefactos WHERE encargo_id = ANY (v_enc); GET DIAGNOSTICS v_n = ROW_COUNT; v_r := v_r || jsonb_build_object('oficina_artefactos', v_n);
   DELETE FROM public.oficina_fichas WHERE encargo_id = ANY (v_enc); GET DIAGNOSTICS v_n = ROW_COUNT; v_r := v_r || jsonb_build_object('oficina_fichas', v_n);
   DELETE FROM public.oficina_gastos WHERE encargo_id = ANY (v_enc); GET DIAGNOSTICS v_n = ROW_COUNT; v_r := v_r || jsonb_build_object('oficina_gastos', v_n);
   DELETE FROM public.oficina_uso_de_fotos WHERE encargo_id = ANY (v_enc); GET DIAGNOSTICS v_n = ROW_COUNT; v_r := v_r || jsonb_build_object('oficina_uso_de_fotos', v_n);
+  -- los turnos van DESPUÉS de artefactos, fichas y gastos: esas tres los apuntan (`turno_id`, sin cascada)
+  DELETE FROM public.oficina_turnos WHERE encargo_id = ANY (v_enc); GET DIAGNOSTICS v_n = ROW_COUNT; v_r := v_r || jsonb_build_object('oficina_turnos', v_n);
   DELETE FROM public.oficina_encargos WHERE id = ANY (v_enc); GET DIAGNOSTICS v_n = ROW_COUNT; v_r := v_r || jsonb_build_object('oficina_encargos', v_n);
   DELETE FROM public.hitl_queue WHERE id = ANY (v_hitl); GET DIAGNOSTICS v_n = ROW_COUNT; v_r := v_r || jsonb_build_object('hitl_queue', v_n);
 
