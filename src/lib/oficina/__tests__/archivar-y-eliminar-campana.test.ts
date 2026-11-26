@@ -368,6 +368,11 @@ describe('④ la función de la base borra todo lo que tiene llave a la campaña
     expect(tras).toMatch(/REVOKE ALL ON FUNCTION public\.cadena_eliminar_campana\(uuid\) FROM PUBLIC, anon, authenticated/)
     expect(tras).toMatch(/GRANT EXECUTE ON FUNCTION public\.cadena_eliminar_campana\(uuid\) TO service_role/)
     expect(tras).not.toMatch(/SECURITY INVOKER/)
+    // … y nadie vuelve a abrirla: en NINGUNA migración un GRANT de la función va a un rol que no sea service_role (s10 de CC6, 26-nov)
+    const otorgadaA = [...(todas + '\n' + sql).matchAll(/GRANT\s+[A-Z, ]+?\s+ON\s+FUNCTION\s+public\.cadena_eliminar_campana\s*\([^)]*\)\s+TO\s+([^;]+);/gi)]
+      .flatMap((m) => m[1].split(',').map((r) => r.trim().toLowerCase()))
+    expect(otorgadaA.length).toBeGreaterThan(0)
+    expect(otorgadaA.filter((r) => r !== 'service_role'), 'la función de dueña solo la llama service_role').toEqual([])
   })
 
   it('🔴 la campaña se borra al final, en una sola transacción, y solo la llama service_role', () => {
