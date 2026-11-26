@@ -148,6 +148,10 @@ describe('prepararProduccionConIa', () => {
     const caida = await prepararProduccionConIa(base(t, { fallaEn: 'client_sede_datos' }).db, C1)
     expect(caida).toMatchObject({ ok: false, error: 'lectura_fallida' })
     expect(!caida.ok && caida.detalle).toContain('client_sede_datos')
+    // (CC6 p12) también la lista de sedes: si cae en silencio, el pedido saldría sin sedes, que es justo el error de v6
+    const caidaSedes = await prepararProduccionConIa(base(t, { fallaEn: 'client_sedes' }).db, C1)
+    expect(caidaSedes).toMatchObject({ ok: false, error: 'lectura_fallida' })
+    expect(!caidaSedes.ok && caidaSedes.detalle).toContain('client_sedes')
   })
   it('un cliente sin fotos propias prepara igual y lo declara', async () => {
     const { db } = base({ client_social_images: [] })

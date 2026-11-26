@@ -54,6 +54,32 @@ describe('encargo 17 · la sección nace sin vigencia', () => {
     expect(tarjeta).toMatchObject({ type: TIPO_DE_BANDEJA_DE_LA_SECCION, status: 'pending', output_id, client_id: C })
     expect(String(tarjeta.output_preview)).toBe(PROSA.trim()) // Emilio LEE ENTERO lo que aprueba: nada se recorta
   })
+  it('🔴 (CC6 p7) con un texto de MÁS de 1500 caracteres, la tarjeta lleva el texto ENTERO: ningún recorte en la vista previa', async () => {
+    const db = armarDb()
+    const LARGA = `${PROSA} `.repeat(5).trim()
+    expect(LARGA.length).toBeGreaterThan(1500)
+    const r = await guardarBorradorDeLaSeccion(db, { client_id: C, texto: LARGA, version_base: 3, dry_run: false })
+    if (!r.ok || !r.hitl_id) throw new Error(`no se guardó el borrador largo: ${JSON.stringify(r)}`)
+    const tarjeta = db.tablas['hitl_queue'].find((f) => String(f.id) === r.hitl_id)!
+    expect(String(tarjeta.output_preview)).toBe(LARGA)
+    expect(String(tarjeta.output_preview).length).toBeGreaterThan(1500)
+  })
+  it('🔴 (CC6 p18) la puerta `escribir` de la ruta guarda borrador y tarjeta, y NO escribe ninguna versión del manual', async () => {
+    const db = armarDb()
+    const { POST } = await import('@/app/api/manual/produccion-con-ia/route')
+    const res = await POST(new Request('https://app.test/api/manual/produccion-con-ia', {
+      method: 'POST', headers: { 'x-api-key': 'k', 'content-type': 'application/json' },
+      body: JSON.stringify({ client_id: C, accion: 'escribir', dry_run: false, texto: PROSA, version_base: 3, workflow_id: 'wf-17', workflow_execution_id: 'ex-17' }),
+    }))
+    expect(res.status).toBe(200)
+    const j = await res.json()
+    expect(j).toMatchObject({ ok: true, dry_run: false, sin_vigencia: true })
+    // la promesa central del encargo: por la puerta `escribir` NINGUNA versión del manual nace
+    expect(db.tablas['client_brand_books']).toHaveLength(1)
+    expect(db.tablas['client_brand_books'][0]).toMatchObject({ id: 'b3', version: 3 })
+    expect(db.tablas['client_historical_outputs'].find((f) => String(f.id) === String(j.output_id))).toMatchObject({ output_type: TIPO_DE_BORRADOR_DE_LA_SECCION, status: 'draft', client_id: C })
+    expect(db.tablas['hitl_queue'].find((f) => String(f.id) === String(j.hitl_id))).toMatchObject({ type: TIPO_DE_BANDEJA_DE_LA_SECCION, status: 'pending', client_id: C })
+  })
   it('en seco valida todo y no guarda nada', async () => {
     const db = armarDb()
     const r = await guardarBorradorDeLaSeccion(db, { client_id: C, texto: PROSA, version_base: 3, dry_run: true })
