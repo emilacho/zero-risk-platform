@@ -342,6 +342,34 @@ describe('④ la función de la base borra todo lo que tiene llave a la campaña
     const pos = (t: string) => sql.indexOf(`DELETE FROM public.${t} `)
     for (const t of hijas) { expect(borra(t), t).toBe(true); expect(pos(t)).toBeLessThan(pos('oficina_encargos')) }
   })
+  /**
+   * 🔴 26-nov 18:02Z (Emilio, campaña 36e66179): la función corría con los permisos de service_role, que NO tiene DELETE en los libros
+   * que solo se agregan → «permission denied» en su primer DELETE y no borraba nada. Esta prueba lee los GRANT de las migraciones:
+   * si alguna tabla que la función borra no da DELETE a service_role, la función TIENE que correr como su dueña (SECURITY DEFINER),
+   * con search_path fijo y la llamada cerrada a PUBLIC, anon y authenticated.
+   */
+  it('🔴 si borra en tablas sin DELETE para service_role, corre como su dueña (SECURITY DEFINER) y nadie más la llama', () => {
+    const borradas = [...sql.matchAll(/DELETE FROM public\.([a-z_]+)/g)].map((m) => m[1])
+    /** lo que cada tabla le da a service_role según sus GRANT explícitos (sin GRANT explícito: no se sabe y no se juzga) */
+    const daA = (t: string) => {
+      const g = [...todas.matchAll(new RegExp(`GRANT\\s+([A-Z, ]+?)\\s+ON\\s+(?:TABLE\\s+)?public\\.${t}\\s+TO\\s+service_role`, 'gi'))].map((m) => m[1].toUpperCase())
+      return g.length ? g.join(',') : null
+    }
+    const sinDelete = borradas.filter((t) => { const g = daA(t); return g !== null && !/\bDELETE\b|\bALL\b/.test(g) })
+    // la lectura de los GRANT funciona: estos 3 son libros que solo se agregan, a propósito
+    expect(sinDelete).toEqual(expect.arrayContaining(['oficina_artefactos', 'oficina_mesa_aportes', 'cadena_pedidos_de_campana']))
+    const conFuncion = readdirSync(DIR).filter((f) => f.endsWith('.sql') && f >= '202611261300').sort().map((f) => readFileSync(path.join(DIR, f), 'utf8')).join('\n')
+    const definer = /ALTER FUNCTION public\.cadena_eliminar_campana\(uuid\) SECURITY DEFINER|CREATE OR REPLACE FUNCTION public\.cadena_eliminar_campana[\s\S]*?SECURITY DEFINER[\s\S]*?AS \$\$/
+    expect(conFuncion, `borra ${sinDelete.join(', ')} sin DELETE para service_role: tiene que ser SECURITY DEFINER`).toMatch(definer)
+    // con search_path fijo (una función de dueño sin search_path fijo se puede secuestrar) …
+    const tras = conFuncion.slice(conFuncion.search(definer))
+    expect(tras).toMatch(/cadena_eliminar_campana\(uuid\) SET search_path = public, pg_temp/)
+    // … y la llamada cerrada a todos menos service_role, DESPUÉS de volverla de dueña
+    expect(tras).toMatch(/REVOKE ALL ON FUNCTION public\.cadena_eliminar_campana\(uuid\) FROM PUBLIC, anon, authenticated/)
+    expect(tras).toMatch(/GRANT EXECUTE ON FUNCTION public\.cadena_eliminar_campana\(uuid\) TO service_role/)
+    expect(tras).not.toMatch(/SECURITY INVOKER/)
+  })
+
   it('🔴 la campaña se borra al final, en una sola transacción, y solo la llama service_role', () => {
     expect(sql.indexOf('DELETE FROM public.cadena_campanas ')).toBeGreaterThan(sql.indexOf('DELETE FROM public.cadena_pedidos_de_campana '))
     expect(sql).toMatch(/^BEGIN;/m)
