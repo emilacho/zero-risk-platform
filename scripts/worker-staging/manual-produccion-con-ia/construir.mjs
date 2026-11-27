@@ -8,7 +8,8 @@
 //    cabecera (`x-api-key` comparada contra $env.INTERNAL_API_KEY en ⓪; NUNCA SALA_DISPATCH_KEY; jamás escrita en este JSON).
 //    Llave ausente, errada o entorno sin la variable → ⓪ lanza y NADA corre (🔴 2 de CC6 en #1275).
 //  · ⓪ llave y cuerpo → ① preparar (la puerta lee el cerebro entero y arma el pedido) → con `dry_run` NINGÚN paso de
-//    modelo corre (fin seco con los conteos) → ② el AGENTE por flujo (`run-sdk`, creative-director-mesa (encargo 17: convierte manual en instrucciones de producción, trabaja en español), tope US$ 0,80; si el
+//    modelo corre (fin seco con los conteos) → ② el AGENTE por flujo (`run-sdk`, creative-director-mesa (encargo 17: convierte manual en instrucciones de producción, trabaja en español), tope US$ 0,80, `force_restart: true`
+//    (adenda 27-nov: el punto de control del corredor guarda por flujo+cliente+paso SIN distinguir ejecuciones y una corrida nueva devolvía el texto viejo del 23-nov; esta puerta siempre quiere escritura fresca); si el
 //    cerebro falla, el corredor detiene el paso «esperando al cerebro», encargo 15) → ③ escribir (encargo 17: BORRADOR con
 //    tarjeta en la bandeja, SIN vigencia: la versión del manual la crea la aprobación de Emilio) → fin.
 //  · Ningún nodo que pague tiene retryOnFail · toda llamada HTTP entrega siempre salida (neverError) y una GUARDA decide.
@@ -49,7 +50,7 @@ const nodes = [
   code(N.guarda, 'n1-guarda.js', x(3)),
   cond(N.ifSigue, '={{ $json.sigue }}', x(4)),
   cond(N.ifSeco, '={{ $json.dry_run === false }}', x(5)),
-  http(N.agenteRun, `${VERCEL}/api/agents/run-sdk`, x(6, -150), { headers: [LLAVE_INTERNA], body: '={{ JSON.stringify({ agent: "creative-director-mesa", client_id: $json.client_id, workflow_id: $json.workflow_id, workflow_execution_id: $json.workflow_execution_id, step_name: "manual-produccion-con-ia", task: $json.insumos.task, force_restart: false, dry_run: false, max_budget_usd: 0.8, thinking_mode: "disabled" }) }}', timeout: 800000 }),
+  http(N.agenteRun, `${VERCEL}/api/agents/run-sdk`, x(6, -150), { headers: [LLAVE_INTERNA], body: '={{ JSON.stringify({ agent: "creative-director-mesa", client_id: $json.client_id, workflow_id: $json.workflow_id, workflow_execution_id: $json.workflow_execution_id, step_name: "manual-produccion-con-ia", task: $json.insumos.task, force_restart: true, dry_run: false, max_budget_usd: 0.8, thinking_mode: "disabled" }) }}', timeout: 800000 }),
   code(N.vuelta, 'n2-vuelta.js', x(7, -150)),
   cond(N.ifTexto, '={{ $json.sigue }}', x(8, -150)),
   http(N.escribir, `${VERCEL}/api/manual/produccion-con-ia`, x(9, -300), { headers: [LLAVE_INTERNA], body: '={{ JSON.stringify({ accion: "escribir", client_id: $json.client_id, texto: $json.texto, version_base: $json.insumos.version_base, dry_run: false, workflow_id: $json.workflow_id, workflow_execution_id: $json.workflow_execution_id }) }}', timeout: 120000 }),
