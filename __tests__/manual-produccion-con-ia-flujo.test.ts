@@ -3,7 +3,9 @@
  * de la cabecera con INTERNAL_API_KEY (firma de Cerebro: NUNCA SALA_DISPATCH_KEY) y se DETIENE antes de `preparar`
  * con llave vacía, llave errada o entorno sin la variable. US$ 0: el código del nodo corre con un entorno falso, sin n8n.
  */
+import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 
@@ -51,6 +53,29 @@ describe('⓪ Entrada · llave (n0-entrada.js)', () => {
   it('los 4 nodos de código del flujo compilan', () => {
     for (const f of ['n0-entrada.js', 'n1-guarda.js', 'n2-vuelta.js', 'n3-fin.js']) {
       expect(() => new Function('$input', '$', '$env', '$workflow', '$execution', fs.readFileSync(path.join(DIR, f), 'utf8')), f).not.toThrow()
+    }
+  })
+})
+
+describe('② Agente · run-sdk (construir.mjs) · escritura fresca', () => {
+  it('🔴 (ADENDA 27-nov) el nodo ② manda `force_restart: true`: el corredor NUNCA devuelve el punto de control de una corrida vieja', () => {
+    // el flujo CONSTRUIDO (no el texto fuente): `--salida` escribe el mismo JSON que iría a n8n, sin tocar nada vivo
+    const salida = fs.mkdtempSync(path.join(os.tmpdir(), 'e17-flujo-construido-'))
+    try {
+      execFileSync(process.execPath, [path.join(DIR, 'construir.mjs'), `--salida=${salida}`], { stdio: 'pipe' })
+      const flujo = JSON.parse(fs.readFileSync(path.join(salida, 'manual-produccion-con-ia.json'), 'utf8'))
+      const agente = flujo.nodes.find((n: { name: string }) => n.name === '② Agente · run-sdk') as { parameters: { jsonBody: string } } | undefined
+      expect(agente, 'el nodo ② existe en el flujo construido').toBeTruthy()
+      // el cuerpo REAL que el nodo manda a run-sdk: se evalúa la expresión n8n con un $json de muestra
+      const expr = String(agente!.parameters.jsonBody).replace(/^=\{\{/, '').replace(/\}\}$/, '')
+      const $json = { client_id: 'c-x', workflow_id: 'wf-x', workflow_execution_id: 'ex-x', insumos: { task: 'pedido' } }
+      const body = JSON.parse(new Function('$json', `return (${expr})`)($json))
+      // 27-nov: la llave del punto de control es (flujo, cliente, paso) sin ejecución; con `false` una corrida nueva recibió el texto viejo del 23-nov
+      expect(body.force_restart).toBe(true)
+      // lo certificado por CC6 no cambia: el agente de la mesa, el tope 0,80 y el paso con nombre
+      expect(body).toMatchObject({ agent: 'creative-director-mesa', max_budget_usd: 0.8, step_name: 'manual-produccion-con-ia', dry_run: false })
+    } finally {
+      fs.rmSync(salida, { recursive: true, force: true })
     }
   })
 })
