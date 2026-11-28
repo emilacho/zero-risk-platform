@@ -506,6 +506,17 @@ export function crearPuertos(db: Db, env: Entorno, f: Fetch = fetch, ahora: () =
       if (r.error) return { ok: false, error: r.error.message }
       return { ok: true, output_id: String((r.data as Fila).id) }
     },
+    // 27-nov · RETOMAR · la tarjeta vieja «SIN DIBUJAR» de una pieza que se retoma: la misma marca que el reloj de las reemplazadas; solo si sigue pendiente
+    async cerrarTarjetaReemplazada(p) {
+      const cuando = new Date().toISOString()
+      const por = 'sistema · pieza retomada'
+      const u = (await db.from('hitl_queue').update({
+        status: 'rejected', resolved_by: por, reviewer: por, resolved_at: cuando, decided_at: cuando, resolution_notes: `Reemplazada: ${p.motivo}`,
+        decision: { decision: 'rejected', por, cuando, vencida: true, reemplazada: true, motivo: p.motivo },
+      }).eq('id', p.hitl_id).eq('status', 'pending').select('id')) as { data: Fila[] | null; error: { message: string } | null }
+      if (u.error) return { ok: false, error: u.error.message }
+      return { ok: true, cerrada: (u.data?.length ?? 0) > 0 }
+    },
     async bandeja(p) {
       const s = (await db.from('client_historical_outputs').select('client_id').eq('id', p.output_id).limit(1)) as { data: Fila[] | null; error: { message: string } | null }
       if (s.error) return { ok: false, error: s.error.message }

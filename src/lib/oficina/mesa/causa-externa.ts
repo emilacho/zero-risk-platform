@@ -63,6 +63,10 @@ export function causaExterna(r: { error?: unknown; upstream_status?: unknown; pe
 /** la nota del libro de un turno que cayó por causa externa: NO empieza con `turno_fallido`, así nunca se cuenta como intento del agente */
 export const PREFIJO_TURNO_EN_PAUSA = 'turno_en_pausa'
 export const PREFIJO_TURNO_FALLIDO = 'turno_fallido'
+/** 27-nov · la nota que deja «retomar mesa cortada» (`retomar.ts`): desde ella los intentos de cada agente vuelven a contar desde cero */
+export const PREFIJO_TURNO_RETOMADO = 'turno_retomado'
+/** 27-nov · la nota de un turno que el vigía dio por muerto sin respuesta («sin vuelta en N min»): la forma de un CORTE (p. ej. el de 800 s, arreglado en #1286) */
+export const esNotaDeCorteSinVuelta = (a: { tipo: string; texto: string }): boolean => a.tipo === 'nota' && /^turno_fallido:\s*sin vuelta en \d+ min/.test(a.texto)
 
 /**
  * ¿esta nota del libro cuenta como un intento fallido del agente? · solo un `turno_fallido` cuya causa NO es externa.

@@ -42,7 +42,12 @@ export interface PropuestaDeImagen {
    *  `pieza_post`): al aprobarse pasan tal cual. Campo del motor; la tarjeta no lo lee */
   artefactos?: Record<string, Record<string, unknown>>
 }
-export interface PropuestasDeImagen { ronda: number; clase: ClaseDeImagen; avisos: string[]; propuestas: PropuestaDeImagen[]; citas: string }
+export interface PropuestasDeImagen {
+  ronda: number; clase: ClaseDeImagen; avisos: string[]; propuestas: PropuestaDeImagen[]; citas: string
+  /** 27-nov · «redibujar» (`retomar.ts`): cuántas veces se volvió a dibujar ESTA ronda sobre las mismas propuestas, y por qué (la última). El borrador va a otra carpeta: la salida nueva nunca es la vieja */
+  redibujo?: number
+  redibujado?: { en: string; motivo: string }
+}
 
 const sinVacios = <T extends Record<string, unknown>>(o: T): T => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined && v !== '' && !(Array.isArray(v) && !v.length))) as T
 const fotoDe = (img: ImagenPedida | undefined): LaminaDeLaPropuesta['foto'] =>

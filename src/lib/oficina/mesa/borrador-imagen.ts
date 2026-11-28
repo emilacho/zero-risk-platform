@@ -35,7 +35,7 @@ const COSTO_ESTIMADO_DESCONOCIDO_USD = 0.25
 
 export interface LaminaDelBorrador { n: number; png_url?: string; imagen_url?: string }
 export interface BorradorDeImagenDeLaPropuesta { id: string; costo_usd: number; laminas: LaminaDelBorrador[]; errores?: string[] }
-export interface BorradoresDeImagen { fase: 'borrador'; ronda: number; calidad: string; propuestas: BorradorDeImagenDeLaPropuesta[]; costo_usd: number; tope_usd?: number; omitido?: string; simulado?: boolean }
+export interface BorradoresDeImagen { fase: 'borrador'; ronda: number; calidad: string; propuestas: BorradorDeImagenDeLaPropuesta[]; costo_usd: number; tope_usd?: number; omitido?: string; simulado?: boolean; /** 27-nov · el redibujo de esta ronda (`retomar.ts`); ausente = el primer dibujo */ redibujo?: number }
 
 /** la calidad del borrador (DATO): `limites.imagen_borrador.quality` (y `size` si lo dice); mal escrita o ausente → `low` (nunca frena) */
 export function calidadDelBorradorDeImagen(limites: Record<string, unknown> | null | undefined): { quality: string; size?: string } {
@@ -169,7 +169,7 @@ export async function correrBorradorDeImagen(P: Puertos, enc: Encargo, pl: Plant
       if (!armado.slides.length) errores.push('no hay láminas que dibujar en el borrador')
       else {
         const F = base.F
-        const r = await P.renderLaminas({ client_id: enc.client_id, encargo_id: enc.id, plataforma: base.plataforma ?? 'instagram', marca: F.marca!, slug: F.slug!, slides: armado.slides as never, subcarpeta: `oficina/${enc.id}/borrador/${p.id}-r${pi.ronda}`, dry_run: enc.dry_run })
+        const r = await P.renderLaminas({ client_id: enc.client_id, encargo_id: enc.id, plataforma: base.plataforma ?? 'instagram', marca: F.marca!, slug: F.slug!, slides: armado.slides as never, subcarpeta: `oficina/${enc.id}/borrador/${p.id}-r${pi.ronda}${pi.redibujo ? `-d${pi.redibujo}` : ''}`, dry_run: enc.dry_run })
         if (!r.ok) errores.push(`no se pudieron dibujar las láminas del borrador: ${r.error}`)
         else if (r.urls.length !== armado.slides.length) errores.push(`el dibujo devolvió ${r.urls.length} lámina(s) y se pidieron ${armado.slides.length}`)
         else armado.ns.forEach((n, k) => { const l = laminas.find((x) => x.n === n); if (l && esHttp(r.urls[k])) l.png_url = r.urls[k] })
@@ -177,7 +177,7 @@ export async function correrBorradorDeImagen(P: Puertos, enc: Encargo, pl: Plant
     }
     propuestas.push({ id: p.id, costo_usd: r4(costo), laminas, ...(errores.length ? { errores } : {}) })
   }
-  return { artefacto: { fase: 'borrador', ronda: pi.ronda, calidad: calidad.quality, propuestas, costo_usd: r4(cobrado), tope_usd: tope, ...(enc.dry_run ? { simulado: true } : {}) }, gastos, imagen_generada: hubo }
+  return { artefacto: { fase: 'borrador', ronda: pi.ronda, calidad: calidad.quality, propuestas, costo_usd: r4(cobrado), tope_usd: tope, ...(pi.redibujo ? { redibujo: pi.redibujo } : {}), ...(enc.dry_run ? { simulado: true } : {}) }, gastos, imagen_generada: hubo }
 }
 
 /**
