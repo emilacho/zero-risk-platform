@@ -86,6 +86,7 @@ const NOTA_DEL_DIRECTOR = /variante\s+[a-z0-9]\b|titular nativo|descripci[oó]n 
 export function limpiarTexto(v: string, parrafos = false): string {
   const sin = String(v ?? '')
     .replace(/`/g, '')
+    .replace(NOTA_EN_CURSIVA, '')
     .replace(/\*\*|__/g, '')
     .replace(/\s*\([^()]*(?:≤|<=|\bcar\.|\bcaracteres\b|\bm[aá]x\.)[^()]*\)/gi, '')
     .replace(/≤\s*/g, '')
@@ -100,8 +101,15 @@ export function sinRotuloDelDirector(v: string): string {
   return m[2].trim()
 }
 
+/** 28-nov · GO Lenovo · una ficha de diseño (tabla markdown: «| Bloque | Contenido |» con su «|---|») es para quien compone, no se dibuja */
+const FICHA_EN_TABLA = /\|\s*:?-{3,}|^\s*\|[^|\n]*\|[^|\n]*\|/m
+
 /** ¿esto sigue siendo una nota del director aunque se haya limpiado? (no se dibuja) */
-export const esNotaDelDirector = (v: string): boolean => NOTA_DEL_DIRECTOR.test(v)
+export const esNotaDelDirector = (v: string): boolean => NOTA_DEL_DIRECTOR.test(v) || FICHA_EN_TABLA.test(v)
+
+/** 28-nov · GO Lenovo · las notas en cursiva entre paréntesis («*(publicar si … antes del 6-dic)*»): el director habla al equipo; `limpiarTexto` las quita y quien llama avisa */
+const NOTA_EN_CURSIVA = /\s*(?:\*|_)\([^()]*\)(?:\*|_)/g
+export const notasEnCursiva = (v: string): string[] => [...String(v ?? '').matchAll(NOTA_EN_CURSIVA)].map((m) => m[0].trim())
 
 interface Variante { letra: string; texto: string; elegida: boolean }
 const ELEGIDA = /\((?:elegid[ao]|final|recomendad[ao]|principal)\)|\[(?:elegid[ao]|final)\]|[✓✔]|←\s*(?:elegid[ao]|final|recomendad[ao])/i
@@ -372,6 +380,7 @@ function traducir(md: string, tipo: TipoDePieza, o: OpcionesDeTraduccion): Tradu
       // P1 · solo texto final: sin markdown, sin límites entre paréntesis y sin notas del director
       const limpio = (campo: string, v: string, parrafos = false): string => {
         let t = limpiarTexto(v, parrafos)
+        for (const n of notasEnCursiva(v)) avisos.push(`lámina ${i + 1}: el ${campo} traía la nota «${n}» del director y no se dibujó`)
         // 11-nov · fila #20 · una nota del director usada como RÓTULO («Texto en imagen: Oferta de la semana») ya no vacía el campo: se quita el rótulo y queda el texto
         const r = sinRotuloDelDirector(t)
         if (r !== t) { avisos.push(`lámina ${i + 1}: el ${campo} traía el rótulo «${t.slice(0, t.length - r.length).replace(/[\s:–—-]+$/, '')}» del director; se dibujó solo el texto`); t = r }
@@ -412,6 +421,7 @@ function traducir(md: string, tipo: TipoDePieza, o: OpcionesDeTraduccion): Tradu
     alternativas.push(...leidos.alternativas); avisos.push(...leidos.avisos)
     const limpio = (campo: string, v: string, parrafos = false): string => {
       const t = limpiarTexto(v, parrafos)
+      for (const n of notasEnCursiva(v)) avisos.push(`el ${campo} traía la nota «${n}» del director y no se escribió sobre la imagen`)
       if (t && esNotaDelDirector(t)) { avisos.push(`el ${campo} traía una nota del director y no se escribió sobre la imagen`); return '' }
       return t
     }
@@ -458,6 +468,7 @@ function traducir(md: string, tipo: TipoDePieza, o: OpcionesDeTraduccion): Tradu
       if (!headline && c.suelto) { const [primera, ...resto] = c.suelto.split('\n'); headline = primera; body = body || resto.join(' ').trim() }
       const limpio = (campo: string, v: string, parrafos = false): string => {
         const t = limpiarTexto(v, parrafos)
+        for (const n of notasEnCursiva(v)) avisos.push(`«${refC}»: el ${campo} traía la nota «${n}» del director y no se dibujó`)
         if (t && esNotaDelDirector(t)) { avisos.push(`«${refC}»: el ${campo} traía una nota del director y no se dibujó`); return '' }
         return t
       }

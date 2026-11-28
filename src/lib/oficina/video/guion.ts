@@ -8,7 +8,7 @@
  * Puro: sin base, sin red, sin modelo.
  */
 import { fichaPorOmision } from '../../video/parametros'
-import { limpiarPie, limpiarTexto } from '../mesa/traductor'
+import { esNotaDelDirector, limpiarPie, limpiarTexto, notasEnCursiva } from '../mesa/traductor'
 
 /**
  * 16-nov · Sprint 2 · S2-1 (CC1) · HOJA DE PLANOS · los roles que un plano cumple en la historia (método rea-video, reescrito). Es una GUÍA para la mesa, no una
@@ -346,7 +346,10 @@ export function traducirGuion(md: string, o: { preguntasHechas?: number; maxPreg
     const mov = limpiarTexto(c.movimiento ?? '')
     if (mov) p.movimiento = mov
     const txt = limpiarTexto(c.texto_en_pantalla ?? '')
-    if (txt) p.texto_en_pantalla = txt
+    for (const n of notasEnCursiva(c.texto_en_pantalla ?? '')) avisos.push(`plano ${i + 1}: el texto en pantalla traía la nota «${n}» del director y no se compone`)
+    // 28-nov · GO Lenovo · una ficha o nota del director no se compone sobre el video
+    if (txt && esNotaDelDirector(txt)) avisos.push(`plano ${i + 1}: el texto en pantalla traía una nota del director y no se compone`)
+    else if (txt) p.texto_en_pantalla = txt
     // 18-nov · el plano puede nombrar varias fotos: la primera es la del plano; las demás viajan como referencia
     const fotosDelPlano = /\bfoto:/i.test(String(c.foto ?? '')) ? leerFotos(c.foto) : [leerFoto(c.foto)].filter((x): x is string => !!x)
     if (fotosDelPlano[0]) p.foto_id = fotosDelPlano[0]

@@ -271,6 +271,9 @@ const CONVENCION_DEL_POST = [
   'Lo que escribes en Sobre-título, Título, Texto y Llamado es EXACTAMENTE lo que se compone sobre la imagen: una sola versión final por campo. El pie («## Pie») es el texto de publicación final, sin hashtags (van solo en «## Etiquetas») y con la voz del manual.',
 ].join('\n')
 
+/** 28-nov · GO Lenovo · lo que va en los campos del cuadro es lo que se ve; la ficha de diseño, las tipografías y las condiciones de publicación tienen otro lugar */
+export const LO_QUE_SE_DIBUJA = 'Lo que escribes en Sobre-título, Título, Texto, Llamado y Firma es EXACTAMENTE lo que se dibuja: una sola versión final por campo, sin tablas, sin markdown y sin notas entre paréntesis. La ficha de diseño (tipografías, tamaños, colores, posiciones) va en «Qué se ve» o «Ambiente»; las alternativas y las condiciones de publicación (fechas, permisos), bajo «## Alternativas» (no se dibujan).'
+
 export const CONVENCION_DE_LA_PIEZA = (tipo: TipoDePieza, video?: ParametrosDelVideo): string => tipo === 'brief' ? CONVENCION_DEL_BRIEF : tipo === 'concepto' ? CONVENCION_DEL_CONCEPTO : tipo === 'video' ? convencionDelGuion(video) : tipo === 'carrusel'
   ? [
       'Escribe la PIEZA COMPLETA con esta convención ligera (no es un formulario: es para que el equipo de dibujo la lea):',
@@ -315,6 +318,7 @@ export const CONVENCION_DE_LA_PIEZA = (tipo: TipoDePieza, video?: ParametrosDelV
       'A3 usé: <qué tomaste de ese aporte>',
       'A5 descarté: <por qué no lo usaste>',
       '```',
+      LO_QUE_SE_DIBUJA,
     ].join('\n')
 
 /** «de 8 a 15 s» · la duración que admite la plantilla (dato; sin él, la del modelo) */
