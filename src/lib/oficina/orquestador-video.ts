@@ -31,6 +31,8 @@ import { aplicarTopesPorDuracion, costoDeVolver } from './topes-por-duracion'
 import { CLAVE_DE_LA_DURACION, duracionAbierta } from './video/duracion-de-la-pieza'
 import { armarPedidoDeLaOficina, buscarFotoPropia, formatoDeEntrega, formatoDeVideo, fotosPropiasConDireccion, pedidosParaCotizar, type PedidoDeVideoDeLaOficina } from './video/pedido'
 import { avisoDeLaMiradaALaMesa, leerMirada, miradaLegible, nombreDelCuadro, PASO_MIRAR_VIDEO, tareaDeLaMirada, type CuadroDelVideo, type MiradaDelVideo, type SenalesDelVideo } from './video/mirada'
+import { fotosPorEscena, nombreDeLaFotoDelGuion } from './video/guion-grafico'
+import type { CuadroDelGuionSacado } from './video/cuadros'
 import { CONTRATOS_EN_TEXTO } from './pedidos'
 import { fotosDeReferencia, type FotoDeReferencia } from './foto-de-referencia'
 import { avisoDeLaRevisionALaMesa, calidadDeLaFase, faseDeProduccion, imagenesClaveVigentes, leerRevisionDeImagenesClave, pedidosDeImagenClave, PASO_IMAGENES_CLAVE, PASO_REVISAR_IMAGENES_CLAVE, SEGUNDOS_PARA_DOS_CUADROS, tareaDeLaRevisionDeImagenesClave, type ImagenClaveDelPlano, type ImagenesClave, type PlanoDeLaHoja } from './video/imagen-clave'
@@ -529,8 +531,26 @@ async function cuadrosDelVideo(P: Puertos, enc: Encargo): Promise<SalidaCodigoV>
   const cuadros: CuadroDelVideo[] = c.cuadros.map((x) => ({ plano: x.plano, segundo: x.segundo, ...(x.parte ? { parte: x.parte } : {}), url: gu.urls[nombreDelCuadro(x)] })).filter((x) => !!x.url)
   if (!cuadros.length) return sin('el almacén no devolvió la dirección de ningún cuadro')
   const faltan = g.planos.filter((p) => !cuadros.some((x) => x.plano === p.n)).map((p) => p.n)
+  const guion_grafico = await fotosDelGuionGrafico(P, enc, c.guion_grafico ?? [], cuadros)
   // cada pasada reemplaza las fichas de la mirada anterior (la de una vuelta a la mesa no arrastra la ficha vieja)
-  return { res: { costo_usd: 0, artefacto: { cuadros, hay_cuadros: true, duracion_s: c.duracion_s, senales: c.senales ?? null, ...(faltan.length ? { planos_sin_cuadro: faltan } : {}) }, reemplazar_fichas: { origen: 'chequeo' as const, donde: 'mirada' } } }
+  return { res: { costo_usd: 0, artefacto: { cuadros, hay_cuadros: true, duracion_s: c.duracion_s, senales: c.senales ?? null, ...(faltan.length ? { planos_sin_cuadro: faltan } : {}), ...(guion_grafico.length ? { guion_grafico, fotos_por_escena: fotosPorEscena(c.duracion_s ?? g.segundos) } : {}) }, reemplazar_fichas: { origen: 'chequeo' as const, donde: 'mirada' } } }
+}
+
+/**
+ * 28-nov · GO Lenovo 09:54Z · las fotos del guion gráfico de la pieza terminada (ver `video/guion-grafico.ts`), guardadas junto a los cuadros de la mirada.
+ * La que es el mismo cuadro de la mirada usa su dirección (no se guarda dos veces). Si guardar falla, la pieza se ve como hoy: nunca frena ni deja ficha. US$ 0
+ */
+async function fotosDelGuionGrafico(P: Puertos, enc: Encargo, fotos: CuadroDelGuionSacado[], guardados: CuadroDelVideo[]): Promise<Array<{ plano: number; segundo: number; url: string }>> {
+  if (!fotos.length) return []
+  const deLaMirada = (f: CuadroDelGuionSacado) => (f.de_la_mirada ? guardados.find((x) => x.plano === f.plano && x.segundo === f.segundo)?.url ?? null : null)
+  const nuevas = fotos.filter((f) => !deLaMirada(f))
+  let urls: Record<string, string> = {}
+  if (nuevas.length) {
+    const gu = await P.guardarArchivos(`oficina/${enc.client_id}/${enc.id}/guion-grafico-${enc.estado_del_motor.pasos_ejecutados}`, nuevas.map((f) => ({ nombre: nombreDeLaFotoDelGuion(f), bytes: f.bytes, tipo: 'image/jpeg' })))
+    if (!gu.ok) return []
+    urls = gu.urls
+  }
+  return fotos.map((f) => ({ plano: f.plano, segundo: f.segundo, url: deLaMirada(f) ?? urls[nombreDeLaFotoDelGuion(f)] })).filter((x): x is { plano: number; segundo: number; url: string } => !!x.url)
 }
 
 /** el pedido del agente que mira (solo el paso `mirar_video`; null = no es un paso de video con pedido propio) */

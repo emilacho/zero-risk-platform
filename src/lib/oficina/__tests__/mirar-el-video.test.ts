@@ -22,7 +22,7 @@ import { AGENTE_QUE_MIRA_EL_VIDEO } from '../plantillas/video-mesa'
 import { VIDEO_MESA_ANTES_DE_S2_3 as VIDEO_MESA } from './video-mesa-antes-de-s2-3'
 import type { PuertoDeVideo } from '../puertos'
 import { TARGET_STEP_PRODUCIR } from '../sobre'
-import { sacarCuadros, duracionDeLaSalida } from '../video/cuadros'
+import { sacarCuadros, duracionDeLaSalida, type CuadroDelGuionSacado } from '../video/cuadros'
 import type { Plano } from '../video/guion'
 import { instantesPorPlano, leerMirada, CUADROS_POR_PLANO, MAX_CUADROS_DEL_VIDEO, PASO_MIRAR_VIDEO, tareaDeLaMirada } from '../video/mirada'
 import { procesarSalida } from '../salida'
@@ -157,7 +157,7 @@ const MIRADA_BIEN = JSON.stringify({ coincide: true, orden_respetado: true, falt
 const MIRADA_MAL = JSON.stringify({ coincide: false, orden_respetado: true, faltantes: [{ plano: 1, que_falta: 'no se ve la fachada: sale una calle vacía' }], por_plano: [{ plano: 1, se_ve: 'una calle vacía' }, { plano: 2, se_ve: 'manos trabajando' }], para_la_mesa: 'el plano 1 tiene que mostrar la fachada con el letrero' })
 
 /** recorre el encargo ENTERO: mesa → brazo → cuadros → mirada (y, si el video vuelve, otra vez mesa → brazo → mirada) hasta la jefatura. `mirada(k)` = la k-ésima respuesta del agente (desde 0) */
-async function recorrer(C: Cliente, o: { mirada: (k: number) => string; sinSacador?: boolean; costoVideo?: number; costoIntegrar?: number; tope?: number; costoReal?: number }) {
+async function recorrer(C: Cliente, o: { mirada: (k: number) => string; sinSacador?: boolean; /** 28-nov · lo que el sacador devuelve como guion gráfico de la pieza */ guion?: (planos: Plano[]) => CuadroDelGuionSacado[]; /** 28-nov · guardar el guion gráfico falla */ guardarGuionFalla?: boolean; costoVideo?: number; costoIntegrar?: number; tope?: number; costoReal?: number }) {
   const costoVideo = o.costoVideo ?? 2.12
   const plantilla = o.tope ? { ...VIDEO_MESA, limites: { ...VIDEO_MESA.limites, tope_encargo_usd: o.tope } } : VIDEO_MESA
   const M = crearMemoria({ parte: parteDe(C), plantilla, fuentes: { fotos: C.fotos } })
@@ -174,7 +174,10 @@ async function recorrer(C: Cliente, o: { mirada: (k: number) => string; sinSacad
   const descargar = M.P.descargar
   M.P.descargar = async (url) => { descargados.push(url); return descargar(url) }
   const sacados: Array<{ planos: Plano[]; bytes: number }> = []
-  if (!o.sinSacador) M.P.sacarCuadros = async (bytes, planos) => { sacados.push({ planos, bytes: bytes.length }); return { duracion_s: 12, cuadros: instantesPorPlano(planos, 12).map((x) => ({ ...x, bytes: Buffer.from(`jpg-${x.plano}`) })) } }
+  if (!o.sinSacador) M.P.sacarCuadros = async (bytes, planos) => { sacados.push({ planos, bytes: bytes.length }); return { duracion_s: 12, cuadros: instantesPorPlano(planos, 12).map((x) => ({ ...x, bytes: Buffer.from(`jpg-${x.plano}`) })), ...(o.guion ? { guion_grafico: o.guion(planos) } : {}) } }
+  const guardar = M.P.guardarArchivos
+  const rutasGuardadas: string[] = []
+  M.P.guardarArchivos = async (ruta, archivos) => { rutasGuardadas.push(ruta); if (o.guardarGuionFalla && /guion-grafico-/.test(ruta)) return { ok: false, error: "el almacén no respondió" }; return guardar(ruta, archivos) }
   const sobres: Array<{ imagenes: string[]; contexto: Array<{ titulo: string; texto: string }> }> = []
   M.P.jefatura = async (s) => { const x = s as unknown as { payload: { imagenes?: string[]; contexto?: Array<{ titulo: string; texto: string }> } }; sobres.push({ imagenes: x.payload?.imagenes ?? [], contexto: x.payload?.contexto ?? [] }); return { estado: 'esperando', review_id: 'rev-1' } as never }
   const a = await abrirEncargo(M.P, { cuerpo: { parte_id: PARTE, brief_id: C.fila, dry_run: false, familia: 'video_mesa' }, client_id: C.client, target_step_id: TARGET_STEP_PRODUCIR })
@@ -199,7 +202,7 @@ async function recorrer(C: Cliente, o: { mirada: (k: number) => string; sinSacad
     turnos.push(...r.turnos)
   }
   const avisos = MS.filas.filter((x) => x.encargo_id === id && x.tipo === 'devuelve' && x.de === 'oficina-creativa')
-  return { M, id, enc: M.encargos.get(id)!, fin: r.ultima, miradas, sobres, sacados, descargados, enviados, avisos, turnos }
+  return { M, id, enc: M.encargos.get(id)!, fin: r.ultima, miradas, sobres, sacados, descargados, enviados, avisos, turnos, rutasGuardadas }
 }
 
 describe.each(CLIENTES)('%s · el camino real: el video se mira antes de la jefatura', (_n, C) => {
@@ -443,5 +446,49 @@ describe('la migración 202611111730', () => {
       expect(sentencias.match(/UPDATE public\.oficina_tipos_de_grupo SET pasos = /g)).toHaveLength(1)
       expect(sentencias.match(/UPDATE public\.oficina_tipos_de_grupo SET pasos = \$pasos\$[\s\S]*?\$pasos\$::jsonb, indicaciones = \$ind\$[\s\S]*?\$ind\$::jsonb WHERE familia = 'video_mesa';/g)).toHaveLength(1)
     }
+  })
+})
+
+/**
+ * 28-nov · GO Lenovo 09:54Z (Emilio aprobó el boceto) · el guion gráfico de la pieza: las fotos que el sacador trae aparte se guardan en el artefacto de los cuadros,
+ * por el camino real, sin cambiar lo que mira el agente ni lo que recibe la jefatura. La que es el mismo cuadro de la mirada no se guarda dos veces.
+ */
+describe('el guion gráfico de la pieza viaja con los cuadros (camino real)', () => {
+  const C = CLIENTES[0][1]
+  const jpg = (s: string) => Buffer.from(`jpg-${s}`)
+  // el plano 1 reusa el cuadro del medio de la mirada (segundo 2); el plano 2 trae dos fotos nuevas
+  const guion = () => [{ plano: 1, segundo: 2, k: 1, bytes: jpg('m'), de_la_mirada: 'medio' as const }, { plano: 2, segundo: 5, k: 1, bytes: jpg('a') }, { plano: 2, segundo: 10, k: 2, bytes: jpg('b') }]
+  it('🔴 las fotos quedan en `guion_grafico` con su escena y su segundo; la reusada lleva la dirección del cuadro de la mirada', async () => {
+    const r = await recorrer(C, { mirada: () => MIRADA_BIEN, guion })
+    const cv = r.enc.estado_del_motor.artefactos['cuadros_video'].datos as { cuadros: Array<{ plano: number; segundo: number; url: string }>; guion_grafico?: Array<{ plano: number; segundo: number; url: string }>; fotos_por_escena?: number }
+    expect(cv.guion_grafico?.map((x) => [x.plano, x.segundo])).toEqual([[1, 2], [2, 5], [2, 10]])
+    expect(cv.guion_grafico?.[0].url).toBe(cv.cuadros.find((x) => x.plano === 1 && x.segundo === 2)!.url)
+    expect(cv.guion_grafico?.[1].url).toMatch(new RegExp(`^https://bucket\\.test/oficina/${C.client}/${r.id}/guion-grafico-\\d+/guion-plano-2-1\\.jpg$`))
+    expect(cv.guion_grafico?.[2].url).toMatch(/\/guion-plano-2-2\.jpg$/)
+    // la regla con la duración medida (12 s → 1 por escena)
+    expect(cv.fotos_por_escena).toBe(1)
+    // solo las nuevas se guardan (una sola tanda aparte)
+    expect(r.rutasGuardadas.filter((x) => /guion-grafico-/.test(x))).toHaveLength(1)
+    expect(r.M.llamadas.archivos.filter((x) => /^guion-plano-/.test(x))).toEqual(['guion-plano-2-1.jpg', 'guion-plano-2-2.jpg'])
+    // lo que mira el agente y lo que recibe la jefatura no cambian: los 6 cuadros de la mirada y los del medio
+    expect(cv.cuadros).toHaveLength(6)
+    expect(r.miradas[0].task).not.toContain('guion-plano-')
+    for (const s of r.sobres) for (const u of s.imagenes) expect(u).not.toMatch(/guion-grafico-/)
+    expect(r.fin.cuerpo.accion).toBe('esperar_jefatura')
+  })
+  it('🔴 si guardar el guion gráfico falla, la pieza sigue igual que hoy: sin `guion_grafico`, sin ficha y con la mirada intacta', async () => {
+    const r = await recorrer(C, { mirada: () => MIRADA_BIEN, guion, guardarGuionFalla: true })
+    const cv = r.enc.estado_del_motor.artefactos['cuadros_video'].datos as Record<string, unknown>
+    expect(cv.guion_grafico).toBeUndefined()
+    expect(cv.fotos_por_escena).toBeUndefined()
+    expect(cv.hay_cuadros).toBe(true)
+    expect(r.enc.estado_del_motor.fichas.filter((f) => f.donde === 'mirada' && f.estado === 'abierta')).toHaveLength(0)
+    expect(r.fin.cuerpo.accion).toBe('esperar_jefatura')
+  })
+  it('sin fotos del guion gráfico (un sacador viejo) el artefacto queda como antes', async () => {
+    const r = await recorrer(C, { mirada: () => MIRADA_BIEN })
+    const cv = r.enc.estado_del_motor.artefactos['cuadros_video'].datos as Record<string, unknown>
+    expect(cv.guion_grafico).toBeUndefined()
+    expect(r.rutasGuardadas.some((x) => /guion-grafico-/.test(x))).toBe(false)
   })
 })
