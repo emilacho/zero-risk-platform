@@ -292,6 +292,11 @@ export interface Puertos {
   salida(p: { client_id: string; titulo: string; contenido: Record<string, unknown>; metadata: Record<string, unknown> }): Promise<{ ok: true; output_id: string } | { ok: false; error: string }>
   /** fila de la bandeja con `output_id` y `expires_at`; NO se llama en dry_run */
   bandeja(p: { client_id: string; output_id: string; titulo: string; vista_previa: string; metadata: Record<string, unknown>; expires_at: string | null }): Promise<{ ok: true; id: string } | { ok: false; error: string }>
+  /**
+   * 27-nov · RETOMAR (`retomar.ts`) · cierra la tarjeta vieja de una pieza que se retoma («SIN DIBUJAR»): queda `rejected` con `decision.reemplazada`, como el reloj de las
+   * decisiones reemplazadas (`cerrar-decisiones-reemplazadas.ts`). Solo si sigue `pending` (si el dueño decidió en ese instante, gana el dueño). Opcional: sin él no se retoma una pieza con tarjeta.
+   */
+  cerrarTarjetaReemplazada?(p: { hitl_id: string; motivo: string }): Promise<{ ok: true; cerrada: boolean } | { ok: false; error: string }>
   /** hilo de #oficina-creativa o aviso a #alertas; NUNCA lanza (un fallo de Slack no frena un encargo) */
   avisar(p: { canal: 'hilo' | 'alertas'; encargo_id: string; texto: string; dry_run: boolean }): Promise<void>
   /**

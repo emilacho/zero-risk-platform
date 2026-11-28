@@ -21,13 +21,19 @@ import { esRellenoDelBanco, type RellenoPendiente } from './de-la-cadena'
 import { faltanCitasDe, idasYVueltas, participacion, pedidosSinContestar, verificarCitas } from './libro'
 import { COTAS, profundidadMaximaDe, turnosMaximosDe, type Accion, type Aporte, type EstadoMesa, type TipoDePieza } from './tipos'
 import { esDeUnAutor, hayObjeciones, revisoresDe } from './un-autor'
-import { cuentaComoIntentoFallido } from './causa-externa'
+import { cuentaComoIntentoFallido, PREFIJO_TURNO_RETOMADO } from './causa-externa'
 
 export interface ContextoDeLaMesa { gasto_usd: number; tope_usd: number; hayImagenGenerada: boolean; /** 18-nov · relleno del banco (CC1): el capítulo de la gran idea que no llega a su cuota (null/ausente = nada que rellenar) */ relleno_del_banco?: RellenoPendiente | null; /** 17-nov · GO Lenovo · la cota de la mesa (dato de la plantilla): lo gastado por sus turnos y lo permitido (cota × pasadas) */ cota_de_la_mesa?: { gastado: number; permitido: number }; /** 17-nov · T7b · lo que sigue es EXACTO (sale de los pasos de la plantilla, como en el video): la integración final tampoco pasa del TOPE (el motor frena en el tope, no en el techo; pasarlo cortaría el encargo después) */ techo_es_el_tope?: boolean; /** lo que queda por gastar DESPUÉS de la mesa; el calendario no dibuja ni pasa por la jefatura de la pieza: 0 */ reserva_posterior_usd?: number; /** 31-oct · la mesa de concepto: cuántas integraciones mínimas (rondas) antes de dar por buena la pieza; por omisión 1 (las demás mesas) */ rondas_minimas?: number; /** T8 · el tipo de pieza (el video reserva lo del brazo); sin él, carrusel/kit */ tipo?: TipoDePieza; /** 17-nov · «creativos en cada paso» · cuántas RONDAS de aportes tiene la mesa (dato `limites.rondas_de_la_mesa`): hechas esas integraciones, los especialistas ya no aportan ni contestan pedidos; la dirección sí cierra (citas, prompts, pregunta del traductor). Sin él, sin límite de rondas (lo de siempre) */ rondas_max?: number }
 
 export const techoDe = (tope: number): number => +(tope * COTAS.TECHO_SOBRE_TOPE).toFixed(6)
 // 24-nov · retomar donde se cayó: un turno caído por causa EXTERNA (saldo, proveedor, red) no es un intento del agente (antes 15 caídas por saldo agotaron a toda la mesa)
-const fallosDe = (libro: Aporte[], agente: string): number => libro.filter((a) => a.de === agente && cuentaComoIntentoFallido(a)).length
+// 27-nov · GO Lenovo 18:25Z · «retomar mesa cortada» (`retomar.ts`): la nota `turno_retomado` marca que la causa del corte se corrigió; los intentos se cuentan DESDE ella
+const desdeLaRetomada = (libro: Aporte[]): Aporte[] => {
+  let i = libro.length - 1
+  while (i >= 0 && !(libro[i].tipo === 'nota' && libro[i].texto.startsWith(`${PREFIJO_TURNO_RETOMADO}:`))) i--
+  return i < 0 ? libro : libro.slice(i + 1)
+}
+const fallosDe = (libro: Aporte[], agente: string): number => desdeLaRetomada(libro).filter((a) => a.de === agente && cuentaComoIntentoFallido(a)).length
 const ultimaIntegracion = (libro: Aporte[]): Aporte | null => [...libro].reverse().find((a) => a.tipo === 'integra') ?? null
 
 /** lo que la pieza todavía gastará después de la mesa (imagen + observador + jefatura; en el video, el brazo + la jefatura; en las mesas de la cadena, lo que diga `posterior`, 0): la mesa no puede gastárselo conversando */
