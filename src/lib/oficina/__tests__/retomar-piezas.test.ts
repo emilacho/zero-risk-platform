@@ -17,6 +17,8 @@ import type { Plantilla } from '../tipos'
 import type { PropuestaDeImagen } from '../mesa/propuestas-imagen'
 import { CLIENTE, PARTE, crearMemoria, type Memoria } from './memoria'
 import { crearMesaEnMemoria } from './mesa-memoria'
+import { DbFalsa } from './dbfalsa'
+import { crearPuertos } from '../adaptadores'
 import { BRIEF_CARRUSEL, CITAS_COMPLETAS, LAMINAS_OK, POR_OMISION, jugar, montar, parteCon, seccionesDeLaminas, type Turno } from './mesa-arnes'
 
 type R = { status: number; cuerpo: Record<string, unknown> }
@@ -233,5 +235,110 @@ describe('🔴 retomar mesa cortada · el MISMO libro, la dirección vuelve a in
     expect(esNotaDeCorteSinVuelta({ tipo: 'nota', texto: 'turno_fallido: respuesta vacía' })).toBe(false)
     expect(esNotaDeCorteSinVuelta({ tipo: 'aporta', texto: `turno_fallido: ${SIN_VUELTA}` })).toBe(false)
     expect(esNotaDeCorteSinVuelta({ tipo: 'nota', texto: `x turno_fallido: ${SIN_VUELTA}` })).toBe(false)
+  })
+})
+
+// ── 🟡 CC6 a #1290 (28-nov) · lo que sobrevivió: el puerto real, «gana el dueño», la cadena, las fotos re-resueltas y las defensas
+describe('🟡 CC6 · el puerto real `cerrarTarjetaReemplazada` (c1–c3): solo la pendiente, `rejected` con `decision.reemplazada`', () => {
+  const montarBandeja = () => {
+    const db = new DbFalsa().semilla('hitl_queue', [
+      { id: 'h-pendiente', status: 'pending', decision: null },
+      { id: 'h-del-dueno', status: 'approved', decision: { decision: 'approved', por: 'emilio' } },
+    ])
+    return { db, P: crearPuertos(db, { baseUrl: 'https://app.test', internalKey: 'k' }, (async () => new Response('{}', { status: 404 })) as typeof fetch) }
+  }
+  const fila = (db: DbFalsa, id: string) => db.tablas['hitl_queue'].find((f) => f.id === id)!
+  it('la pendiente queda `rejected`, reemplazada, con el motivo y quién la cerró', async () => {
+    const { db, P } = montarBandeja()
+    expect(await P.cerrarTarjetaReemplazada!({ hitl_id: 'h-pendiente', motivo: 'se redibuja: x' })).toEqual({ ok: true, cerrada: true })
+    expect(fila(db, 'h-pendiente')).toMatchObject({
+      status: 'rejected', resolved_by: 'sistema · pieza retomada', reviewer: 'sistema · pieza retomada', resolution_notes: 'Reemplazada: se redibuja: x',
+      decision: { decision: 'rejected', por: 'sistema · pieza retomada', vencida: true, reemplazada: true, motivo: 'se redibuja: x' },
+    })
+  })
+  it('GANA EL DUEÑO: la que el dueño ya decidió no se toca y vuelve `cerrada: false`; una que no existe, igual', async () => {
+    const { db, P } = montarBandeja()
+    const antes = JSON.stringify(fila(db, 'h-del-dueno'))
+    expect(await P.cerrarTarjetaReemplazada!({ hitl_id: 'h-del-dueno', motivo: 'x' })).toEqual({ ok: true, cerrada: false })
+    expect(JSON.stringify(fila(db, 'h-del-dueno'))).toBe(antes)
+    expect(await P.cerrarTarjetaReemplazada!({ hitl_id: 'h-no-existe', motivo: 'x' })).toEqual({ ok: true, cerrada: false })
+  })
+})
+
+describe('🟡 CC6 · «gana el dueño» en redibujar y retomar: si la tarjeta ya no estaba pendiente, 409 y nada se toca', () => {
+  it('redibujar sobre la pieza cerrada cuya tarjeta el dueño acaba de decidir', async () => {
+    const { M, id } = await hastaElDueno()
+    const e = enc(M, id)
+    const abierto = turnosDe(M, id).find((t) => t.estado === 'corriendo')!
+    await M.P.almacen.guardar({ encargo_id: id, estado_del_motor: e.estado_del_motor, gasto_usd: e.estado_del_motor.gasto_usd, estado: 'cerrado', hitl_queue_id: 'tarjeta-decidida', turno: { ...abierto, estado: 'muerto' } })
+    M.P.cerrarTarjetaReemplazada = async () => ({ ok: true, cerrada: false })
+    const antes = JSON.stringify(enc(M, id))
+    expect(await redibujarPropuestas(M.P, id, { motivo: MOTIVO })).toMatchObject({ status: 409, cuerpo: { error: 'el_dueno_decidio' } })
+    expect(JSON.stringify(enc(M, id))).toBe(antes)
+  })
+  it('retomar la mesa cortada cuya tarjeta el dueño acaba de decidir: ni la nota se escribe', async () => {
+    const m = await hastaIntegrar()
+    await cortarYCerrar(m, 'tarjeta-decidida')
+    m.M.P.cerrarTarjetaReemplazada = async () => ({ ok: true, cerrada: false })
+    const filas = m.MS.filas.length
+    const antes = JSON.stringify(m.M.encargos.get(m.id))
+    expect(await retomarMesaCortada(m.M.P, m.id, { causa_corregida: CAUSA })).toMatchObject({ status: 409, cuerpo: { error: 'el_dueno_decidio' } })
+    expect(m.MS.filas).toHaveLength(filas)
+    expect(JSON.stringify(m.M.encargos.get(m.id))).toBe(antes)
+  })
+})
+
+describe('🟡 CC6 · retomar: la mesa de la cadena (t4), un turno corriendo (t8) y la pausa externa que queda (t10)', () => {
+  it('t4 · una mesa de la cadena (`sala_ref.tipo_de_mesa`) no se retoma por aquí: 409 `de_la_cadena`', async () => {
+    const m = await hastaIntegrar()
+    await cortarYCerrar(m)
+    m.M.encargos.get(m.id)!.sala_ref = { tipo_de_mesa: 'concepto' } as never
+    const filas = m.MS.filas.length
+    expect(await retomarMesaCortada(m.M.P, m.id, { causa_corregida: CAUSA })).toMatchObject({ status: 409, cuerpo: { error: 'de_la_cadena' } })
+    expect(m.MS.filas).toHaveLength(filas)
+  })
+  it('t8 · con un turno corriendo no se retoma: 409 `trabajando`', async () => {
+    const m = await hastaIntegrar()
+    await cortarYCerrar(m)
+    m.M.turnos.get(m.id)!.set(m.t.n, { ...m.M.turnos.get(m.id)!.get(m.t.n)!, estado: 'corriendo' })
+    expect(await retomarMesaCortada(m.M.P, m.id, { causa_corregida: CAUSA })).toMatchObject({ status: 409, cuerpo: { error: 'trabajando' } })
+  })
+  it('t10 · una pausa externa que quedó puesta se borra: la mesa vuelve a pedir el turno (no queda en pausa)', async () => {
+    const m = await hastaIntegrar()
+    await cortarYCerrar(m)
+    const e = m.M.encargos.get(m.id)!
+    const est = estadoDeLaMesa(e.estado_del_motor)!
+    const pausa = { causa: 'red', motivo: 'fetch failed', agente: m.t.agente, tipo: 'integrar', paso: m.t.paso, n: m.t.n, en: '2026-11-26T09:00:00Z' }
+    e.estado_del_motor = { ...e.estado_del_motor, artefactos: { ...e.estado_del_motor.artefactos, mesa: { ...e.estado_del_motor.artefactos.mesa, datos: { ...est, pausa_externa: pausa } as never } } }
+    const r = (await retomarMesaCortada(m.M.P, m.id, { causa_corregida: CAUSA })) as R
+    expect(r.cuerpo.accion).toBe('esperar')
+    expect(tt(r).paso).toMatch(/^mesa:integrar:/)
+    expect(estadoDeLaMesa(m.M.encargos.get(m.id)!.estado_del_motor)!.pausa_externa ?? null).toBeNull()
+  })
+})
+
+describe('🟡 CC6 · redibujar re-resuelve las fotos guardadas acortadas (r10) y deja versión nueva de las propuestas (r9)', () => {
+  it('la propuesta guardada ANTES del #1287 con `062e` queda con el id entero en la dirección visual y en la lámina, con su fuente', async () => {
+    const { M, id } = await hastaElDueno()
+    const e = enc(M, id).estado_del_motor
+    const art = e.artefactos[ARTEFACTO_PROPUESTAS_IMAGEN]!
+    const pi = structuredClone(art.datos) as unknown as PropuestasDeImagen
+    // así quedaron guardadas la foto y la historia del 26-nov: el comienzo del uuid
+    const p0 = pi.propuestas[0]
+    const imgs = (p0.artefactos as unknown as { visual_direction: { imagenes: Array<{ ref: string; modo: string; foto_id?: string }> } }).visual_direction.imagenes
+    const real = imgs.find((x) => x.modo === 'real')!
+    real.foto_id = '062e'
+    const lamina = p0.laminas.find((l) => l.rol === real.ref)!
+    lamina.foto = { origen: 'real', foto_id: '062e' }
+    enc(M, id).estado_del_motor = { ...e, artefactos: { ...e.artefactos, [ARTEFACTO_PROPUESTAS_IMAGEN]: { ...art, datos: pi as never } } }
+    const versionAntes = art.version
+    expect((await redibujarPropuestas(M.P, id, { motivo: MOTIVO })).cuerpo.accion).toBe('esperar_dueno')
+    const despues = enc(M, id).estado_del_motor.artefactos[ARTEFACTO_PROPUESTAS_IMAGEN]!
+    expect(despues.version).toBe(versionAntes + 1)
+    const q0 = (despues.datos as unknown as PropuestasDeImagen).propuestas[0]
+    expect((q0.artefactos as unknown as { visual_direction: { imagenes: Array<{ ref: string; foto_id?: string }> } }).visual_direction.imagenes.find((x) => x.ref === real.ref)!.foto_id).toBe('062ec4fa')
+    const l = q0.laminas.find((x) => x.rol === real.ref)!
+    expect(l.foto).toMatchObject({ origen: 'real', foto_id: '062ec4fa' })
+    expect(l.foto).toHaveProperty('fuente')
   })
 })

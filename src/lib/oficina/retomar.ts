@@ -16,6 +16,7 @@
 import { datos } from './ayudas'
 import { avanzar, plantillaDe, type Respuesta } from './orquestador'
 import { fotoPorId } from './id-de-foto'
+import { baseDeLaminas } from './orquestador-laminas'
 import { ARTEFACTO_PROPUESTAS_IMAGEN, type PropuestaDeImagen, type PropuestasDeImagen } from './mesa/propuestas-imagen'
 import { FUNCION_BORRADOR_IMAGEN } from './mesa/borrador-imagen'
 import { estadoDeLaMesa, laminasConLaFotoResuelta } from './mesa/orquestador'
@@ -36,9 +37,10 @@ const motivoValido = (m: unknown): string | null => (typeof m === 'string' && m.
 const CERRADOS_RETOMABLES: readonly string[] = ['cerrado', 'cerrado_por_tope', 'fallido']
 
 type FotoDelEncargo = { id: string; url?: string | null; tipo?: string | null }
+/** las fotos propias del encargo: la MISMA fuente con que la mesa resolvió las propuestas al cerrar (`idsDeLasFotos(baseDeLaminas(...))` en `mesa/orquestador.ts`) */
 const fotosDelEncargo = (e: Estado): FotoDelEncargo[] => {
-  const F = (datos(e, 'encargo') as { F?: { fotos?: unknown } } | undefined)?.F
-  return Array.isArray(F?.fotos) ? (F!.fotos as FotoDelEncargo[]) : []
+  const fotos = (baseDeLaminas(e) as { F?: { fotos?: unknown } } | undefined)?.F?.fotos
+  return Array.isArray(fotos) ? (fotos as FotoDelEncargo[]) : []
 }
 
 /** una propuesta con sus fotos re-resueltas (el id entero, regla de `id-de-foto.ts`) y el origen de la foto en cada lámina · pura */
@@ -52,12 +54,16 @@ export function propuestaConFotosResueltas(p: PropuestaDeImagen, fotos: Readonly
   return { ...p, artefactos: otros as PropuestaDeImagen['artefactos'], laminas: laminasConLaFotoResuelta(p.laminas, otros, fotos) }
 }
 
-/** la tarjeta vieja de la pieza se cierra como reemplazada; sin puerto (y con tarjeta) no se retoma: quedarían dos tarjetas de la misma pieza */
+/**
+ * la tarjeta vieja de la pieza se cierra como reemplazada; sin puerto (y con tarjeta) no se retoma: quedarían dos tarjetas de la misma pieza.
+ * GANA EL DUEÑO (🟡 CC6 a #1290): si la tarjeta ya no estaba pendiente (el dueño decidió en ese instante), no se retoma y no se toca nada · 409 `el_dueno_decidio`
+ */
 async function cerrarLaTarjetaVieja(P: Puertos, enc: Encargo, motivo: string): Promise<Respuesta | null> {
   if (!enc.hitl_queue_id) return null
   if (!P.cerrarTarjetaReemplazada) return r(409, { error: 'sin_puerto_de_la_bandeja', detalle: 'la pieza tiene una tarjeta y en este entorno no se puede cerrar como reemplazada: no se retoma' })
   const c = await P.cerrarTarjetaReemplazada({ hitl_id: enc.hitl_queue_id, motivo })
-  return c.ok ? null : r(500, { error: 'bandeja', detalle: c.error })
+  if (!c.ok) return r(500, { error: 'bandeja', detalle: c.error })
+  return c.cerrada ? null : r(409, { error: 'el_dueno_decidio', detalle: 'la tarjeta de la pieza ya no está pendiente (el dueño la decidió): no se retoma' })
 }
 
 /**
